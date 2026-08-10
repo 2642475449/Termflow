@@ -1,0 +1,148 @@
+import type { ITheme } from "@xterm/xterm";
+import type { ThemeMode } from "@/store";
+
+export const TERMINAL_MINIMUM_CONTRAST_RATIO = 4.5;
+
+export type TerminalColorScheme = "light" | "dark";
+
+export interface TerminalThemeConfig {
+  colorScheme: TerminalColorScheme;
+  cssBackground: string;
+  minimumContrastRatio: number;
+  theme: ITheme;
+}
+
+export const TERMINAL_THEMES: Record<ThemeMode, TerminalThemeConfig> = {
+  "dark-starry": {
+    colorScheme: "dark",
+    cssBackground: "#0b1016",
+    minimumContrastRatio: TERMINAL_MINIMUM_CONTRAST_RATIO,
+    theme: {
+      background: "#0b1016",
+      foreground: "#dbe4f0",
+      cursor: "#5c7ba3",
+      cursorAccent: "#0b1016",
+      selectionBackground: "rgba(92,123,163,0.2)",
+      selectionForeground: "#dbe4f0",
+      scrollbarSliderBackground: "rgba(219,228,240,0.2)",
+      scrollbarSliderHoverBackground: "rgba(219,228,240,0.38)",
+      scrollbarSliderActiveBackground: "rgba(219,228,240,0.52)",
+      black: "#0b1016",
+      red: "#f87171",
+      green: "#4ade80",
+      yellow: "#fbbf24",
+      blue: "#5c7ba3",
+      magenta: "#728bb0",
+      cyan: "#6b92c5",
+      white: "#dbe4f0",
+      brightBlack: "#5f6d82",
+      brightRed: "#fca5a5",
+      brightGreen: "#86efac",
+      brightYellow: "#fde68a",
+      brightBlue: "#89a7cc",
+      brightMagenta: "#93a9ca",
+      brightCyan: "#9ab5d8",
+      brightWhite: "#eef4fb",
+    },
+  },
+  "dark-mocha": {
+    colorScheme: "dark",
+    cssBackground: "#1e1e2e",
+    minimumContrastRatio: TERMINAL_MINIMUM_CONTRAST_RATIO,
+    theme: {
+      background: "#1e1e2e",
+      foreground: "#cdd6f4",
+      cursor: "#f5bd69",
+      cursorAccent: "#1e1e2e",
+      selectionBackground: "rgba(245,189,105,0.2)",
+      selectionForeground: "#cdd6f4",
+      scrollbarSliderBackground: "rgba(205,214,244,0.2)",
+      scrollbarSliderHoverBackground: "rgba(205,214,244,0.38)",
+      scrollbarSliderActiveBackground: "rgba(205,214,244,0.52)",
+      black: "#1e1e2e",
+      red: "#f38ba8",
+      green: "#a6e3a1",
+      yellow: "#f9e2af",
+      blue: "#89b4fa",
+      magenta: "#cba6f7",
+      cyan: "#94e2d5",
+      white: "#cdd6f4",
+      brightBlack: "#6c7086",
+      brightRed: "#f5c2d1",
+      brightGreen: "#b4e8c0",
+      brightYellow: "#faebd0",
+      brightBlue: "#a8ccf7",
+      brightMagenta: "#ddd0f7",
+      brightCyan: "#b0e8df",
+      brightWhite: "#e8e6f0",
+    },
+  },
+  "light-glass": {
+    colorScheme: "light",
+    cssBackground: "#ffffff",
+    minimumContrastRatio: TERMINAL_MINIMUM_CONTRAST_RATIO,
+    theme: {
+      background: "#ffffff",
+      foreground: "#1f2a44",
+      cursor: "#4f6cf7",
+      cursorAccent: "#ffffff",
+      selectionBackground: "rgba(79,108,247,0.16)",
+      selectionForeground: "#1f2a44",
+      scrollbarSliderBackground: "rgba(31,42,68,0.18)",
+      scrollbarSliderHoverBackground: "rgba(31,42,68,0.32)",
+      scrollbarSliderActiveBackground: "rgba(31,42,68,0.48)",
+      black: "#1f2a44",
+      red: "#dc2626",
+      green: "#16a34a",
+      yellow: "#b7791f",
+      blue: "#4f6cf7",
+      magenta: "#6d8bff",
+      cyan: "#2563eb",
+      white: "#6b7a90",
+      brightBlack: "#9cabc0",
+      brightRed: "#ef4444",
+      brightGreen: "#22c55e",
+      brightYellow: "#d97706",
+      brightBlue: "#7f97ff",
+      brightMagenta: "#90a6ff",
+      brightCyan: "#60a5fa",
+      brightWhite: "#1f2a44",
+    },
+  },
+  "light-warm": {
+    colorScheme: "light",
+    cssBackground: "#faf8f5",
+    minimumContrastRatio: TERMINAL_MINIMUM_CONTRAST_RATIO,
+    theme: {
+      background: "#faf8f5",
+      foreground: "#3d3228",
+      cursor: "#c2713a",
+      cursorAccent: "#ffffff",
+      selectionBackground: "rgba(194,113,58,0.15)",
+      selectionForeground: "#3d3228",
+      scrollbarSliderBackground: "rgba(61,50,40,0.18)",
+      scrollbarSliderHoverBackground: "rgba(61,50,40,0.32)",
+      scrollbarSliderActiveBackground: "rgba(61,50,40,0.48)",
+      black: "#3d3228",
+      red: "#dc2626",
+      green: "#6b8e5e",
+      yellow: "#c2956a",
+      blue: "#6366f1",
+      magenta: "#a855f7",
+      cyan: "#0891b2",
+      white: "#7c6f64",
+      brightBlack: "#b5a99a",
+      brightRed: "#ef4444",
+      brightGreen: "#86ab7a",
+      brightYellow: "#d4a574",
+      brightBlue: "#818cf8",
+      brightMagenta: "#c084fc",
+      brightCyan: "#22d3ee",
+      brightWhite: "#3d3228",
+    },
+  },
+};
+
+export function getTerminalTheme(theme: ThemeMode): TerminalThemeConfig {
+  return TERMINAL_THEMES[theme];
+}

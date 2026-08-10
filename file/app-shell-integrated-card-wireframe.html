@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Termflow - 融底卡片化布局线稿</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg: #f3f5f8;
+      --bg-grid: rgba(41, 52, 72, 0.05);
+      --surface: rgba(255, 255, 255, 0.78);
+      --surface-strong: #ffffff;
+      --panel: rgba(255, 255, 255, 0.9);
+      --line: #d8dee8;
+      --line-strong: #c5cedb;
+      --text: #1f2937;
+      --text-2: #5d6878;
+      --text-3: #96a0ae;
+      --accent: #5b7cff;
+      --accent-soft: rgba(91, 124, 255, 0.08);
+      --shadow: 0 16px 40px rgba(31, 41, 55, 0.08);
+      --radius-lg: 18px;
+      --radius-md: 14px;
+      --radius-sm: 10px;
+      --radius-tab: 18px;
+    }
+
+    body {
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--text);
+      min-height: 100vh;
+      background:
+        linear-gradient(var(--bg-grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px),
+        radial-gradient(circle at 16% 12%, rgba(91, 124, 255, 0.08), transparent 24%),
+        radial-gradient(circle at 82% 18%, rgba(91, 124, 255, 0.07), transparent 22%),
+        linear-gradient(180deg, #f9fbfd 0%, var(--bg) 100%);
+      background-size: 32px 32px, 32px 32px, auto, auto, auto;
+      padding: 28px;
+    }
+
+    button {
+      font: inherit;
+      border: 0;
+      background: none;
+    }
+
+    .page {
+      max-width: 1520px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: minmax(980px, 1fr) 300px;
+      gap: 20px;
+      align-items: start;
+    }
+
+    .canvas {
+      border: 1px solid var(--line);
+      border-radius: 26px;
+      overflow: hidden;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.42));
+      box-shadow: var(--shadow);
+      min-height: 900px;
+      position: relative;
+    }
+
+    .titlebar {
+      height: 44px;
+      display: grid;
+      grid-template-columns: 220px 180px 1fr 108px;
+      align-items: center;
+      gap: 14px;
+      padding: 0 14px;
+      border-bottom: 1px solid rgba(197, 206, 219, 0.75);
+      background: rgba(255, 255, 255, 0.34);
+      backdrop-filter: blur(8px);
+    }
+
+    .brand,
+    .window-actions,
+    .project-switcher,
+    .global-search {
+      height: 30px;
+      border-radius: 9px;
+      border: 1px dashed var(--line);
+      display: flex;
+      align-items: center;
+    }
+
+    .brand {
+      gap: 10px;
+      padding: 0 12px;
+      background: rgba(255, 255, 255, 0.3);
+    }
+
+    .brand-mark {
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      border: 1px solid var(--line-strong);
+      background: linear-gradient(135deg, #eef3ff, #ffffff);
+    }
+
+    .brand span {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    .project-switcher,
+    .global-search {
+      padding: 0 12px;
+      color: var(--text-2);
+      font-size: 12px;
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .window-actions {
+      justify-content: flex-end;
+      gap: 6px;
+      border-style: solid;
+      border-color: transparent;
+      background: transparent;
+    }
+
+    .win-dot {
+      width: 12px;
+      height: 12px;
+      border: 1px solid var(--line-strong);
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.55);
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: 48px 280px minmax(0, 1fr);
+      min-height: 812px;
+      gap: 0;
+    }
+
+    .rail {
+      border-right: 1px solid rgba(197, 206, 219, 0.62);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 0;
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .rail-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .rail-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 9px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.35);
+      position: relative;
+    }
+
+    .rail-btn.active::before {
+      content: "";
+      position: absolute;
+      left: -9px;
+      top: 4px;
+      bottom: 4px;
+      width: 2px;
+      border-radius: 999px;
+      background: var(--accent);
+    }
+
+    .sidebar-shell,
+    .main-shell {
+      padding: 14px;
+    }
+
+    .sidebar-card,
+    .main-card {
+      height: 100%;
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--line);
+      background: var(--panel);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .sidebar-card::before,
+    .main-card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.26), transparent 22%);
+    }
+
+    .sidebar-head {
+      padding: 14px 14px 10px;
+      border-bottom: 1px solid rgba(216, 222, 232, 0.9);
+    }
+
+    .sidebar-toolbar {
+      display: grid;
+      grid-template-columns: 1fr 28px;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .input-placeholder,
+    .mini-btn,
+    .tab-pill,
+    .meta-pill,
+    .section-chip {
+      border: 1px dashed var(--line-strong);
+      background: rgba(255, 255, 255, 0.72);
+    }
+
+    .input-placeholder {
+      height: 32px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      color: var(--text-3);
+      font-size: 12px;
+    }
+
+    .mini-btn {
+      height: 32px;
+      border-radius: 10px;
+    }
+
+    .section-tabs {
+      display: flex;
+      gap: 8px;
+    }
+
+    .section-chip {
+      height: 28px;
+      padding: 0 12px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      color: var(--text-2);
+      font-size: 11px;
+    }
+
+    .section-chip.active {
+      color: var(--accent);
+      border-style: solid;
+      background: var(--accent-soft);
+    }
+
+    .sidebar-body {
+      padding: 12px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .sub-block {
+      border: 1px solid rgba(216, 222, 232, 0.9);
+      border-radius: var(--radius-md);
+      background: rgba(255, 255, 255, 0.64);
+      padding: 10px;
+    }
+
+    .sub-block-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-3);
+    }
+
+    .list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .list-row {
+      min-height: 42px;
+      border-radius: 12px;
+      border: 1px dashed var(--line);
+      background: rgba(255, 255, 255, 0.6);
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 8px;
+      padding: 0 10px;
+    }
+
+    .list-row.active {
+      border-style: solid;
+      border-color: rgba(91, 124, 255, 0.28);
+      background: rgba(91, 124, 255, 0.08);
+    }
+
+    .list-copy {
+      display: grid;
+      gap: 4px;
+    }
+
+    .line-lg,
+    .line-md,
+    .line-sm {
+      border-radius: 999px;
+      background: linear-gradient(90deg, #dde3eb, #e7ecf3);
+    }
+
+    .line-lg {
+      width: 84%;
+      height: 10px;
+    }
+
+    .line-md {
+      width: 54%;
+      height: 8px;
+    }
+
+    .line-sm {
+      width: 36px;
+      height: 8px;
+    }
+
+    .main-card {
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .tabbar {
+      padding: 14px 14px 0;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.56), rgba(255, 255, 255, 0.26));
+      position: relative;
+    }
+
+    .tabbar::after {
+      content: "";
+      position: absolute;
+      left: 14px;
+      right: 14px;
+      bottom: 0;
+      height: 1px;
+      background: rgba(216, 222, 232, 0.9);
+    }
+
+    .tab-track {
+      display: flex;
+      gap: 10px;
+      align-items: end;
+      padding: 0 2px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .tab-pill {
+      width: 156px;
+      height: 40px;
+      border: 1px solid rgba(197, 206, 219, 0.95);
+      border-bottom: 0;
+      border-radius: var(--radius-tab) var(--radius-tab) 0 0;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(245, 248, 252, 0.72));
+      position: relative;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      overflow: hidden;
+    }
+
+    .tab-pill::after {
+      content: "";
+      width: 68%;
+      height: 8px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #dbe2eb, #e9edf4);
+    }
+
+    .tab-pill.active {
+      border-style: solid;
+      background:
+        linear-gradient(180deg, #ffffff 0%, rgba(255, 255, 255, 0.96) 100%);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.95),
+        0 -2px 0 rgba(255, 255, 255, 0.9);
+      position: relative;
+    }
+
+    .tab-pill.active::before {
+      content: "";
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      top: 0;
+      height: 2px;
+      border-radius: 999px;
+      background: var(--accent);
+    }
+
+    .tab-pill.active::after {
+      background: linear-gradient(90deg, #c7d6ff, #dfe7ff);
+    }
+
+    .tab-pill.is-secondary {
+      transform: translateY(2px);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(244, 247, 251, 0.66));
+    }
+
+    .tab-pill.is-tertiary {
+      width: 170px;
+      transform: translateY(4px);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.68), rgba(241, 245, 250, 0.58));
+    }
+
+    .main-body {
+      padding: 14px;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 12px;
+      min-height: 0;
+    }
+
+    .page-head {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 12px;
+      padding: 4px 2px 0;
+    }
+
+    .page-title {
+      display: grid;
+      gap: 8px;
+    }
+
+    .meta-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .meta-pill {
+      width: 82px;
+      height: 24px;
+      border-radius: 999px;
+    }
+
+    .editor-card {
+      min-height: 0;
+      border-radius: 16px;
+      border: 1px solid rgba(216, 222, 232, 0.95);
+      background:
+        linear-gradient(rgba(216, 222, 232, 0.52) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(216, 222, 232, 0.52) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 249, 252, 0.96));
+      background-size: 32px 32px, 32px 32px, auto;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .editor-card::before {
+      content: "主工作区卡片";
+      position: absolute;
+      top: 14px;
+      left: 16px;
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      color: var(--text-3);
+    }
+
+    .editor-content {
+      position: absolute;
+      inset: 54px 16px 16px;
+      display: grid;
+      grid-template-rows: repeat(9, 1fr);
+      gap: 12px;
+    }
+
+    .editor-line {
+      border-radius: 12px;
+      border: 1px dashed rgba(197, 206, 219, 0.95);
+      background: rgba(255, 255, 255, 0.48);
+    }
+
+    .bottom-tools {
+      display: grid;
+      grid-template-columns: 1fr 220px;
+      gap: 12px;
+    }
+
+    .tool-strip,
+    .inspector {
+      min-height: 68px;
+      border-radius: 14px;
+      border: 1px solid rgba(216, 222, 232, 0.95);
+      background: rgba(255, 255, 255, 0.68);
+      padding: 10px 12px;
+    }
+
+    .tool-strip {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .tool-dot {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      border: 1px dashed var(--line);
+      background: rgba(255, 255, 255, 0.76);
+    }
+
+    .inspector {
+      display: grid;
+      gap: 8px;
+      align-content: center;
+    }
+
+    .statusbar {
+      height: 34px;
+      border-top: 1px solid rgba(197, 206, 219, 0.75);
+      background: rgba(255, 255, 255, 0.26);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+    }
+
+    .status-left,
+    .status-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-chip {
+      width: 72px;
+      height: 20px;
+      border-radius: 999px;
+      border: 1px dashed var(--line);
+      background: rgba(255, 255, 255, 0.54);
+    }
+
+    .notes {
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.86);
+      box-shadow: 0 12px 30px rgba(31, 41, 55, 0.06);
+      padding: 18px;
+      position: sticky;
+      top: 28px;
+    }
+
+    .notes h1 {
+      font-size: 18px;
+      margin-bottom: 10px;
+    }
+
+    .notes p {
+      color: var(--text-2);
+      font-size: 13px;
+      line-height: 1.7;
+      margin-bottom: 12px;
+    }
+
+    .note-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .note-item {
+      border: 1px dashed var(--line-strong);
+      border-radius: 14px;
+      padding: 12px;
+      background: rgba(249, 251, 253, 0.95);
+    }
+
+    .note-item strong {
+      display: block;
+      font-size: 12px;
+      margin-bottom: 6px;
+    }
+
+    .note-item span {
+      display: block;
+      font-size: 12px;
+      line-height: 1.7;
+      color: var(--text-2);
+    }
+
+    .legend {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+      display: grid;
+      gap: 8px;
+    }
+
+    .legend-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      font-size: 12px;
+      color: var(--text-2);
+    }
+
+    .legend-box,
+    .legend-line {
+      flex-shrink: 0;
+    }
+
+    .legend-box {
+      width: 20px;
+      height: 14px;
+      border-radius: 5px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.85);
+    }
+
+    .legend-line {
+      width: 20px;
+      height: 2px;
+      border-radius: 999px;
+      background: var(--accent);
+    }
+
+    @media (max-width: 1320px) {
+      .page {
+        grid-template-columns: 1fr;
+      }
+
+      .notes {
+        position: static;
+      }
+    }
+
+    @media (max-width: 1080px) {
+      body {
+        padding: 16px;
+      }
+
+      .canvas {
+        overflow-x: auto;
+      }
+
+      .titlebar,
+      .workspace,
+      .statusbar {
+        min-width: 1040px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <section class="canvas" aria-label="Termflow 融底卡片化布局线稿">
+      <header class="titlebar">
+        <div class="brand">
+          <div class="brand-mark"></div>
+          <span>Termflow</span>
+        </div>
+        <div class="project-switcher">项目切换</div>
+        <div class="global-search">全局搜索 / 命令入口</div>
+        <div class="window-actions">
+          <div class="win-dot"></div>
+          <div class="win-dot"></div>
+          <div class="win-dot"></div>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <aside class="rail" aria-label="主导航 rail">
+          <div class="rail-group">
+            <div class="rail-btn active"></div>
+            <div class="rail-btn"></div>
+            <div class="rail-btn"></div>
+          </div>
+          <div class="rail-group">
+            <div class="rail-btn"></div>
+          </div>
+        </aside>
+
+        <section class="sidebar-shell" aria-label="左侧主卡片">
+          <div class="sidebar-card">
+            <div class="sidebar-head">
+              <div class="sidebar-toolbar">
+                <div class="input-placeholder">新建 / 搜索 / 筛选</div>
+                <button class="mini-btn" aria-label="更多"></button>
+              </div>
+              <div class="section-tabs">
+                <div class="section-chip active">会话</div>
+                <div class="section-chip">Git</div>
+                <div class="section-chip">文件</div>
+              </div>
+            </div>
+
+            <div class="sidebar-body">
+              <div class="sub-block">
+                <div class="sub-block-title">
+                  <span>置顶分组</span>
+                  <span>2</span>
+                </div>
+                <div class="list">
+                  <div class="list-row active">
+                    <div class="list-copy">
+                      <div class="line-lg"></div>
+                      <div class="line-md"></div>
+                    </div>
+                    <div class="line-sm"></div>
+                  </div>
+                  <div class="list-row">
+                    <div class="list-copy">
+                      <div class="line-lg"></div>
+                      <div class="line-md"></div>
+                    </div>
+                    <div class="line-sm"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="sub-block">
+                <div class="sub-block-title">
+                  <span>主列表</span>
+                  <span>最近项目 / Git / 会话</span>
+                </div>
+                <div class="list">
+                  <div class="list-row">
+                    <div class="list-copy">
+                      <div class="line-lg"></div>
+                      <div class="line-md"></div>
+                    </div>
+                    <div class="line-sm"></div>
+                  </div>
+                  <div class="list-row">
+                    <div class="list-copy">
+                      <div class="line-lg"></div>
+                      <div class="line-md"></div>
+                    </div>
+                    <div class="line-sm"></div>
+                  </div>
+                  <div class="list-row">
+                    <div class="list-copy">
+                      <div class="line-lg"></div>
+                      <div class="line-md"></div>
+                    </div>
+                    <div class="line-sm"></div>
+                  </div>
+                  <div class="list-row">
+                    <div class="list-copy">
+                      <div class="line-lg"></div>
+                      <div class="line-md"></div>
+                    </div>
+                    <div class="line-sm"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="main-shell" aria-label="中央主工作区卡片">
+          <div class="main-card">
+            <div class="tabbar">
+              <div class="tab-track">
+                <div class="tab-pill active"></div>
+                <div class="tab-pill is-secondary"></div>
+                <div class="tab-pill is-tertiary"></div>
+              </div>
+            </div>
+
+            <div class="main-body">
+              <div class="page-head">
+                <div class="page-title">
+                  <div class="line-lg" style="width: 34%; height: 12px;"></div>
+                  <div class="line-md" style="width: 22%;"></div>
+                </div>
+                <div class="meta-row">
+                  <div class="meta-pill"></div>
+                  <div class="meta-pill"></div>
+                </div>
+              </div>
+
+              <div class="editor-card">
+                <div class="editor-content">
+                  <div class="editor-line"></div>
+                  <div class="editor-line"></div>
+                  <div class="editor-line"></div>
+                  <div class="editor-line"></div>
+                  <div class="editor-line"></div>
+                  <div class="editor-line"></div>
+                  <div class="editor-line"></div>
+                  <div class="editor-line"></div>
+                  <div class="editor-line"></div>
+                </div>
+              </div>
+
+              <div class="bottom-tools">
+                <div class="tool-strip">
+                  <div class="tool-dot"></div>
+                  <div class="tool-dot"></div>
+                  <div class="tool-dot"></div>
+                  <div class="tool-dot"></div>
+                  <div class="line-lg" style="width: 180px; height: 10px;"></div>
+                </div>
+                <div class="inspector">
+                  <div class="line-lg" style="width: 70%;"></div>
+                  <div class="line-md" style="width: 46%;"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="statusbar">
+        <div class="status-left">
+          <div class="status-chip"></div>
+          <div class="status-chip"></div>
+          <div class="status-chip"></div>
+        </div>
+        <div class="status-right">
+          <div class="status-chip" style="width: 54px;"></div>
+          <div class="status-chip" style="width: 88px;"></div>
+        </div>
+      </footer>
+    </section>
+
+    <aside class="notes">
+      <h1>线稿说明</h1>
+      <p>这版不是高保真视觉稿，而是把你的核心诉求先落成结构线稿：外层底色统一，真正承担功能的区域再用大圆角卡片收口。</p>
+
+      <div class="note-list">
+        <div class="note-item">
+          <strong>1. 标题栏 / Rail / 状态栏融入背景</strong>
+          <span>这三块保留结构，但不单独做厚重卡片，只用轻边线和透明层保持秩序感。</span>
+        </div>
+        <div class="note-item">
+          <strong>2. Sidebar 做第一张主卡片</strong>
+          <span>把项目、Git、会话等高频导航集中在一张圆角卡片内，外层不再做强切割。</span>
+        </div>
+        <div class="note-item">
+          <strong>3. 主工作区做第二张主卡片</strong>
+          <span>Tab 条和正文融成一体，让视觉焦点明确，减少多层盒子造成的碎片感。</span>
+        </div>
+        <div class="note-item">
+          <strong>4. 列表项只做弱高亮</strong>
+          <span>单条记录不再继续卡片化，避免视觉噪音过多，保持扫描效率。</span>
+        </div>
+      </div>
+
+      <div class="legend">
+        <div class="legend-row">
+          <span class="legend-box"></span>
+          <span>虚线矩形：功能占位块</span>
+        </div>
+        <div class="legend-row">
+          <span class="legend-line"></span>
+          <span>蓝色细线：当前激活态</span>
+        </div>
+        <div class="legend-row">
+          <span class="legend-box" style="border-style: solid; background: var(--accent-soft);"></span>
+          <span>浅色块：推荐保留的卡片层</span>
+        </div>
+      </div>
+    </aside>
+  </div>
+</body>
+</html>

@@ -1,0 +1,1594 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Idea - 功能灵感记录</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f0f0f;
+      color: #e0e0e0;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+    }
+
+    header {
+      margin-bottom: 2rem;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    h1 span {
+      color: #888;
+      font-weight: 400;
+      font-size: 0.85rem;
+      margin-left: 0.5rem;
+    }
+
+    .filters {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .filter-btn {
+      padding: 0.35rem 0.7rem;
+      background: transparent;
+      border: 1px solid #2a2a2a;
+      border-radius: 4px;
+      color: #666;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .filter-btn.active {
+      border-color: #444;
+      color: #ccc;
+      background: #1a1a1a;
+    }
+
+    .filter-btn:hover {
+      color: #aaa;
+    }
+
+    .stats {
+      font-size: 0.75rem;
+      color: #555;
+      margin-bottom: 1rem;
+    }
+
+    .idea-list {
+      list-style: none;
+    }
+
+    .idea-item {
+      border-bottom: 1px solid #1a1a1a;
+    }
+
+    .idea-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.7rem 0;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+
+    .idea-header:hover {
+      opacity: 0.8;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .status-dot:hover {
+      transform: scale(1.3);
+    }
+
+    .status-dot.pending { background: #f59e0b; }
+    .status-dot.doing { background: #3b82f6; }
+    .status-dot.done { background: #22c55e; }
+
+    .idea-text {
+      flex: 1;
+      font-size: 0.88rem;
+      color: #ccc;
+    }
+
+    .idea-item.done .idea-text {
+      text-decoration: line-through;
+      color: #555;
+    }
+
+    .idea-date {
+      font-size: 0.7rem;
+      color: #444;
+      white-space: nowrap;
+    }
+
+    .expand-icon {
+      font-size: 0.65rem;
+      color: #444;
+      transition: transform 0.2s;
+      width: 16px;
+      text-align: center;
+    }
+
+    .idea-item.expanded .expand-icon {
+      transform: rotate(90deg);
+    }
+
+    .prototype-panel {
+      display: none;
+      padding: 0.8rem 1rem 0.8rem 1.5rem;
+      margin-bottom: 0.5rem;
+      background: #141414;
+      border-left: 2px solid #2a2a2a;
+      border-radius: 0 4px 4px 0;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      color: #999;
+      animation: slideDown 0.2s ease;
+    }
+
+    .idea-item.expanded .prototype-panel {
+      display: block;
+    }
+
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .prototype-panel h4 {
+      color: #bbb;
+      font-size: 0.85rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .prototype-panel p {
+      margin-bottom: 0.4rem;
+    }
+
+    .prototype-panel ul {
+      padding-left: 1.2rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .prototype-panel li {
+      margin-bottom: 0.2rem;
+    }
+
+    .prototype-panel .mockup {
+      background: #1a1a1a;
+      border: 1px solid #222;
+      border-radius: 4px;
+      padding: 0.8rem;
+      font-family: monospace;
+      font-size: 0.75rem;
+      color: #666;
+      white-space: pre;
+      overflow-x: auto;
+      margin-top: 0.5rem;
+    }
+
+    /* 动态演示样式 */
+    .demo-sidebar {
+      background: #141414;
+      border: 1px solid #222;
+      border-radius: 6px;
+      overflow: hidden;
+      margin-top: 0.8rem;
+      width: 240px;
+    }
+
+    .demo-sidebar-header {
+      padding: 0.5rem 0.7rem;
+      border-bottom: 1px solid #222;
+      font-size: 0.72rem;
+      color: #666;
+    }
+
+    .demo-session-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 0.7rem;
+      font-size: 0.75rem;
+      color: #999;
+      transition: background 0.2s;
+    }
+
+    .demo-session-item:hover {
+      background: #1a1a1a;
+    }
+
+    .demo-session-item .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #333;
+    }
+
+    .demo-session-item.active .dot {
+      background: #3b82f6;
+      box-shadow: 0 0 6px #3b82f660;
+    }
+
+    .demo-session-item .label {
+      flex: 1;
+    }
+
+    .demo-session-item.active .label {
+      color: #3b82f6;
+    }
+
+    .demo-spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid #333;
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: demo-spin 0.8s linear infinite;
+    }
+
+    @keyframes demo-spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .demo-pulse {
+      animation: demo-pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes demo-pulse {
+      0%, 100% { opacity: 0.6; }
+      50% { opacity: 1; }
+    }
+
+    .demo-typing {
+      display: inline-flex;
+      gap: 3px;
+      align-items: center;
+      height: 14px;
+    }
+
+    .demo-typing span {
+      width: 4px;
+      height: 4px;
+      background: #3b82f6;
+      border-radius: 50%;
+      animation: demo-bounce 1.2s ease-in-out infinite;
+    }
+
+    .demo-typing span:nth-child(2) { animation-delay: 0.15s; }
+    .demo-typing span:nth-child(3) { animation-delay: 0.3s; }
+
+    @keyframes demo-bounce {
+      0%, 60%, 100% { transform: translateY(0); }
+      30% { transform: translateY(-4px); }
+    }
+
+    .demo-btn {
+      padding: 0.25rem 0.5rem;
+      background: #222;
+      border: 1px solid #333;
+      border-radius: 4px;
+      color: #888;
+      font-size: 0.68rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .demo-btn:hover {
+      background: #2a2a2a;
+      color: #bbb;
+    }
+
+    /* 三段式布局演示 */
+    .demo-three-panel {
+      display: flex;
+      background: #141414;
+      border: 1px solid #222;
+      border-radius: 6px;
+      overflow: hidden;
+      margin-top: 0.8rem;
+      height: 220px;
+    }
+
+    .demo-nav-bar {
+      width: 42px;
+      background: #0d0d0d;
+      border-right: 1px solid #222;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 0.5rem 0;
+      gap: 0.3rem;
+    }
+
+    .demo-nav-icon {
+      position: relative;
+      width: 34px;
+      height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      color: #555;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .demo-nav-icon:hover {
+      color: #999;
+      background: #1a1a1a;
+    }
+
+    .demo-nav-icon.active {
+      color: #3b82f6;
+      background: #1a1a2a;
+    }
+
+    .demo-badge {
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      background: #ef4444;
+      color: #fff;
+      font-size: 0.55rem;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+    }
+
+    .demo-content-area {
+      flex: 1;
+      border-right: 1px solid #222;
+      overflow: hidden;
+    }
+
+    .demo-panel {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .demo-panel-header {
+      padding: 0.5rem 0.7rem;
+      border-bottom: 1px solid #222;
+      font-size: 0.72rem;
+      color: #666;
+      font-weight: 500;
+    }
+
+    .demo-file-item, .demo-git-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.35rem 0.7rem;
+      font-size: 0.72rem;
+      color: #999;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .demo-file-item:hover, .demo-git-item:hover {
+      background: #1a1a1a;
+    }
+
+    .demo-file-icon {
+      font-size: 0.75rem;
+    }
+
+    .demo-git-status {
+      width: 16px;
+      height: 16px;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.6rem;
+      font-weight: 600;
+    }
+
+    .demo-git-status.m { background: #f59e0b20; color: #f59e0b; }
+    .demo-git-status.a { background: #22c55e20; color: #22c55e; }
+
+    .demo-terminal {
+      width: 180px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .demo-terminal-header {
+      padding: 0.5rem 0.7rem;
+      border-bottom: 1px solid #222;
+      font-size: 0.72rem;
+      color: #666;
+    }
+
+    .demo-terminal-content {
+      flex: 1;
+      padding: 0.5rem 0.7rem;
+      font-family: monospace;
+      font-size: 0.7rem;
+      color: #22c55e;
+    }
+
+    /* 任务面板演示 */
+    .demo-task-panel {
+      background: #141414;
+      border: 1px solid #222;
+      border-radius: 6px;
+      overflow: hidden;
+      margin-top: 0.8rem;
+      width: 260px;
+    }
+
+    .demo-task-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.5rem 0.7rem;
+      border-bottom: 1px solid #222;
+      font-size: 0.72rem;
+      color: #888;
+    }
+
+    .demo-task-count {
+      background: #1a2a3a;
+      color: #3b82f6;
+      padding: 0.1rem 0.4rem;
+      border-radius: 3px;
+      font-size: 0.65rem;
+    }
+
+    .demo-task-list {
+      padding: 0.3rem 0;
+      max-height: 160px;
+      overflow-y: auto;
+    }
+
+    .demo-task-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.35rem 0.7rem;
+      font-size: 0.72rem;
+      color: #666;
+      transition: background 0.15s;
+    }
+
+    .demo-task-item:hover {
+      background: #1a1a1a;
+    }
+
+    .demo-task-item.completed {
+      color: #22c55e;
+    }
+
+    .demo-task-item.running {
+      color: #3b82f6;
+      background: #0d1a2a;
+    }
+
+    .demo-task-item.pending {
+      color: #555;
+    }
+
+    .demo-task-icon {
+      width: 16px;
+      height: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.7rem;
+    }
+
+    .demo-task-text {
+      flex: 1;
+    }
+
+    .demo-task-progress {
+      height: 3px;
+      background: #1a1a1a;
+    }
+
+    .demo-task-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #3b82f6, #22c55e);
+      transition: width 0.5s ease;
+    }
+
+    /* 设置面板演示 */
+    .demo-settings-panel {
+      background: #141414;
+      border: 1px solid #222;
+      border-radius: 6px;
+      overflow: hidden;
+      margin-top: 0.8rem;
+      width: 320px;
+    }
+
+    .demo-settings-tabs {
+      display: flex;
+      border-bottom: 1px solid #222;
+      background: #0d0d0d;
+    }
+
+    .demo-settings-tab {
+      padding: 0.4rem 0.7rem;
+      font-size: 0.68rem;
+      color: #555;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .demo-settings-tab:hover {
+      color: #888;
+    }
+
+    .demo-settings-tab.active {
+      color: #3b82f6;
+      border-bottom: 2px solid #3b82f6;
+    }
+
+    .demo-editor-area {
+      padding: 0.4rem 0;
+      font-family: monospace;
+      font-size: 0.7rem;
+      min-height: 120px;
+    }
+
+    .demo-editor-line {
+      padding: 0.1rem 0.7rem;
+      color: #888;
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .demo-editor-line.active-line {
+      background: #1a1a2a;
+    }
+
+    .demo-line-num {
+      color: #444;
+      width: 20px;
+      text-align: right;
+    }
+
+    .demo-keyword {
+      color: #c678dd;
+    }
+
+    .demo-cursor {
+      color: #3b82f6;
+      animation: blink 1s infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+
+    .demo-editor-status {
+      display: flex;
+      gap: 1rem;
+      padding: 0.3rem 0.7rem;
+      border-top: 1px solid #222;
+      font-size: 0.6rem;
+      color: #444;
+    }
+
+    /* MCP 面板演示 */
+    .demo-mcp-panel {
+      background: #141414;
+      border: 1px solid #222;
+      border-radius: 6px;
+      overflow: hidden;
+      margin-top: 0.8rem;
+      width: 280px;
+    }
+
+    .demo-mcp-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.5rem 0.7rem;
+      border-bottom: 1px solid #222;
+      font-size: 0.72rem;
+      color: #888;
+    }
+
+    .demo-mcp-list {
+      padding: 0.3rem 0;
+    }
+
+    .demo-mcp-item {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.5rem 0.7rem;
+      transition: background 0.15s;
+    }
+
+    .demo-mcp-item:hover {
+      background: #1a1a1a;
+    }
+
+    .demo-mcp-status {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .demo-mcp-item.connected .demo-mcp-status {
+      background: #22c55e;
+      box-shadow: 0 0 6px #22c55e60;
+    }
+
+    .demo-mcp-item.error .demo-mcp-status {
+      background: #ef4444;
+      box-shadow: 0 0 6px #ef444460;
+    }
+
+    .demo-mcp-info {
+      flex: 1;
+    }
+
+    .demo-mcp-name {
+      font-size: 0.75rem;
+      color: #ccc;
+    }
+
+    .demo-mcp-detail {
+      font-size: 0.62rem;
+      color: #555;
+    }
+
+    .demo-mcp-tag {
+      font-size: 0.58rem;
+      padding: 0.15rem 0.4rem;
+      border-radius: 3px;
+      background: #22c55e20;
+      color: #22c55e;
+    }
+
+    .demo-mcp-tag.error {
+      background: #ef444420;
+      color: #ef4444;
+    }
+
+    /* 主页演示 */
+    .demo-homepage {
+      background: #141414;
+      border: 1px solid #222;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-top: 0.8rem;
+      width: 380px;
+    }
+
+    .demo-welcome {
+      margin-bottom: 1rem;
+    }
+
+    .demo-welcome-text {
+      display: block;
+      font-size: 1rem;
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .demo-welcome-sub {
+      font-size: 0.72rem;
+      color: #555;
+    }
+
+    .demo-stats-row {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .demo-stat-card {
+      flex: 1;
+      background: #1a1a1a;
+      border: 1px solid #222;
+      border-radius: 6px;
+      padding: 0.5rem;
+      text-align: center;
+    }
+
+    .demo-stat-card.highlight {
+      border-color: #f59e0b40;
+      background: #1a1500;
+    }
+
+    .demo-stat-value {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .demo-stat-card.highlight .demo-stat-value {
+      color: #f59e0b;
+    }
+
+    .demo-stat-label {
+      font-size: 0.6rem;
+      color: #555;
+      margin-top: 0.2rem;
+    }
+
+    .demo-heatmap-container {
+      background: #1a1a1a;
+      border: 1px solid #222;
+      border-radius: 6px;
+      padding: 0.6rem;
+      margin-bottom: 0.8rem;
+    }
+
+    .demo-heatmap-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+      font-size: 0.68rem;
+      color: #666;
+    }
+
+    .demo-heatmap-legend {
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.58rem;
+      color: #444;
+    }
+
+    .demo-heatmap-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+    }
+
+    .demo-heatmap-dot.l1 { background: #0e4429; }
+    .demo-heatmap-dot.l2 { background: #006d32; }
+    .demo-heatmap-dot.l3 { background: #26a641; }
+    .demo-heatmap-dot.l4 { background: #39d353; }
+
+    .demo-heatmap {
+      display: grid;
+      grid-template-columns: repeat(52, 1fr);
+      gap: 2px;
+    }
+
+    .demo-heatmap-cell {
+      width: 100%;
+      aspect-ratio: 1;
+      border-radius: 2px;
+      background: #161b22;
+      transition: all 0.15s;
+      cursor: pointer;
+    }
+
+    .demo-heatmap-cell:hover {
+      outline: 1px solid #555;
+    }
+
+    .demo-heatmap-cell.l1 { background: #0e4429; }
+    .demo-heatmap-cell.l2 { background: #006d32; }
+    .demo-heatmap-cell.l3 { background: #26a641; }
+    .demo-heatmap-cell.l4 { background: #39d353; }
+
+    .demo-badges {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .demo-badge-item {
+      padding: 0.3rem 0.6rem;
+      background: #1a1a1a;
+      border: 1px solid #222;
+      border-radius: 20px;
+      font-size: 0.65rem;
+      color: #444;
+      cursor: default;
+    }
+
+    .demo-badge-item.earned {
+      color: #ccc;
+      border-color: #333;
+    }
+
+    /* 语音输入演示 */
+    .demo-voice-panel {
+      background: #141414;
+      border: 1px solid #222;
+      border-radius: 8px;
+      overflow: hidden;
+      margin-top: 0.8rem;
+      width: 280px;
+    }
+
+    .demo-voice-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.5rem 0.7rem;
+      border-bottom: 1px solid #222;
+      font-size: 0.72rem;
+      color: #888;
+    }
+
+    .demo-voice-status {
+      font-size: 0.62rem;
+      color: #22c55e;
+    }
+
+    .demo-voice-status.recording {
+      color: #ef4444;
+      animation: demo-pulse 1s infinite;
+    }
+
+    .demo-voice-visual {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      padding: 1.2rem;
+      position: relative;
+    }
+
+    .demo-voice-waves {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      height: 40px;
+    }
+
+    .demo-voice-bar {
+      width: 4px;
+      height: 8px;
+      background: #333;
+      border-radius: 2px;
+      transition: height 0.1s ease;
+    }
+
+    .demo-voice-waves.active .demo-voice-bar {
+      background: #3b82f6;
+      animation: voiceWave 0.8s ease-in-out infinite;
+    }
+
+    .demo-voice-waves.active .demo-voice-bar:nth-child(1) { animation-delay: 0s; }
+    .demo-voice-waves.active .demo-voice-bar:nth-child(2) { animation-delay: 0.1s; }
+    .demo-voice-waves.active .demo-voice-bar:nth-child(3) { animation-delay: 0.2s; }
+    .demo-voice-waves.active .demo-voice-bar:nth-child(4) { animation-delay: 0.3s; }
+    .demo-voice-waves.active .demo-voice-bar:nth-child(5) { animation-delay: 0.4s; }
+    .demo-voice-waves.active .demo-voice-bar:nth-child(6) { animation-delay: 0.5s; }
+    .demo-voice-waves.active .demo-voice-bar:nth-child(7) { animation-delay: 0.4s; }
+    .demo-voice-waves.active .demo-voice-bar:nth-child(8) { animation-delay: 0.3s; }
+    .demo-voice-waves.active .demo-voice-bar:nth-child(9) { animation-delay: 0.2s; }
+    .demo-voice-waves.active .demo-voice-bar:nth-child(10) { animation-delay: 0.1s; }
+    .demo-voice-waves.active .demo-voice-bar:nth-child(11) { animation-delay: 0s; }
+    .demo-voice-waves.active .demo-voice-bar:nth-child(12) { animation-delay: 0.1s; }
+
+    @keyframes voiceWave {
+      0%, 100% { height: 8px; }
+      50% { height: 32px; }
+    }
+
+    .demo-voice-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: #1a1a1a;
+      border: 2px solid #333;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #666;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .demo-voice-icon:hover {
+      border-color: #3b82f6;
+      color: #3b82f6;
+    }
+
+    .demo-voice-icon.recording {
+      border-color: #ef4444;
+      color: #ef4444;
+      background: #1a0000;
+      animation: demo-pulse 1s infinite;
+    }
+
+    .demo-voice-hint {
+      text-align: center;
+      font-size: 0.65rem;
+      color: #444;
+      padding: 0 0.7rem;
+    }
+
+    .demo-voice-result {
+      margin: 0.5rem 0.7rem 0.7rem;
+      padding: 0.5rem;
+      background: #1a1a1a;
+      border-radius: 4px;
+      min-height: 32px;
+    }
+
+    .demo-voice-text {
+      font-size: 0.72rem;
+      color: #555;
+    }
+
+    .demo-voice-text.active {
+      color: #ccc;
+    }
+
+    .empty {
+      text-align: center;
+      padding: 3rem 0;
+      color: #333;
+      font-size: 0.85rem;
+    }
+
+    .legend {
+      margin-top: 2rem;
+      padding-top: 1rem;
+      border-top: 1px solid #1a1a1a;
+      display: flex;
+      gap: 1.5rem;
+      font-size: 0.7rem;
+      color: #444;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Idea <span>记录你的奇思妙想</span></h1>
+    </header>
+
+    <div class="filters">
+      <button class="filter-btn active" data-filter="all" onclick="setFilter('all')">全部</button>
+      <button class="filter-btn" data-filter="pending" onclick="setFilter('pending')">待实现</button>
+      <button class="filter-btn" data-filter="doing" onclick="setFilter('doing')">进行中</button>
+      <button class="filter-btn" data-filter="done" onclick="setFilter('done')">已完成</button>
+    </div>
+
+    <div class="stats" id="stats"></div>
+
+    <ul class="idea-list" id="ideaList"></ul>
+
+    <div class="legend">
+      <div class="legend-item"><div class="status-dot pending"></div> 待实现</div>
+      <div class="legend-item"><div class="status-dot doing"></div> 进行中</div>
+      <div class="legend-item"><div class="status-dot done"></div> 已完成</div>
+    </div>
+  </div>
+
+  <script>
+    // ===== 在这里添加你的想法 =====
+    // 格式: { text, status, date, prototype(可选) }
+    const ideas = [
+      {
+        text: "顶部栏搜索框 + 双击 Shift 快捷搜索",
+        status: "done",
+        date: "06-10 23:47:04",
+        prototype: `
+          <h4>全局搜索框</h4>
+          <p>在顶部栏右侧添加搜索框，与左侧功能区用分隔符隔开。同时支持双击 Shift 快捷键唤出搜索面板，快速搜索会话、文件、命令。</p>
+          <ul>
+            <li>顶部栏搜索框，左侧用竖线分隔符与功能区分开</li>
+            <li>双击 Shift 唤出全屏搜索面板（类似 JetBrains 全局搜索）</li>
+            <li>搜索支持：会话记录、文件名、命令历史</li>
+            <li>搜索结果分组展示，支持键盘上下选择、回车跳转</li>
+            <li>Esc 或点击外部关闭搜索面板</li>
+          </ul>
+          <div style="margin-top:0.8rem;">
+            <div style="background:#0d0d0d;border:1px solid #222;border-radius:6px;padding:0.5rem 0.8rem;display:flex;align-items:center;gap:0.6rem;width:400px;">
+              <span style="font-size:0.72rem;color:#666;">Termflow</span>
+              <span style="font-size:0.72rem;color:#444;">会话</span>
+              <span style="font-size:0.72rem;color:#444;">设置</span>
+              <span style="width:1px;height:16px;background:#333;margin:0 0.3rem;"></span>
+              <div style="flex:1;display:flex;align-items:center;gap:0.4rem;background:#1a1a1a;border:1px solid #333;border-radius:4px;padding:0.25rem 0.5rem;cursor:pointer;" onclick="document.getElementById('searchOverlay').style.display='flex'">
+                <span style="color:#555;font-size:0.72rem;">🔍</span>
+                <span style="color:#444;font-size:0.72rem;">搜索...</span>
+                <span style="margin-left:auto;font-size:0.58rem;color:#444;background:#222;padding:0.1rem 0.3rem;border-radius:3px;">Shift Shift</span>
+              </div>
+            </div>
+          </div>
+          <div id="searchOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);align-items:flex-start;justify-content:center;padding-top:15%;z-index:999;" onclick="if(event.target===this)this.style.display='none'">
+            <div style="background:#141414;border:1px solid #333;border-radius:8px;width:420px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.5);">
+              <div style="display:flex;align-items:center;gap:0.5rem;padding:0.7rem 1rem;border-bottom:1px solid #222;">
+                <span style="color:#555;">🔍</span>
+                <input type="text" placeholder="搜索会话、文件、命令..." style="flex:1;background:transparent;border:none;outline:none;color:#ccc;font-size:0.85rem;" oninput="document.getElementById('searchResults').style.display=this.value?'block':'none'">
+                <span style="font-size:0.6rem;color:#444;background:#222;padding:0.15rem 0.4rem;border-radius:3px;">Esc</span>
+              </div>
+              <div id="searchResults" style="display:none;padding:0.3rem 0;">
+                <div style="padding:0.3rem 0.8rem;font-size:0.62rem;color:#555;text-transform:uppercase;">会话</div>
+                <div style="display:flex;align-items:center;gap:0.5rem;padding:0.45rem 0.8rem;cursor:pointer;background:#1a2a3a;" onmouseover="this.style.background='#1a2a3a'" onmouseout="this.style.background='#1a2a3a'">
+                  <span style="font-size:0.72rem;color:#3b82f6;">💬</span>
+                  <span style="font-size:0.78rem;color:#ccc;">终端美化配置</span>
+                  <span style="margin-left:auto;font-size:0.6rem;color:#444;">2 小时前</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:0.5rem;padding:0.45rem 0.8rem;cursor:pointer;" onmouseover="this.style.background='#1a1a1a'" onmouseout="this.style.background='transparent'">
+                  <span style="font-size:0.72rem;color:#3b82f6;">💬</span>
+                  <span style="font-size:0.78rem;color:#ccc;">API 接口调试</span>
+                  <span style="margin-left:auto;font-size:0.6rem;color:#444;">昨天</span>
+                </div>
+                <div style="padding:0.3rem 0.8rem;font-size:0.62rem;color:#555;text-transform:uppercase;margin-top:0.3rem;">文件</div>
+                <div style="display:flex;align-items:center;gap:0.5rem;padding:0.45rem 0.8rem;cursor:pointer;" onmouseover="this.style.background='#1a1a1a'" onmouseout="this.style.background='transparent'">
+                  <span style="font-size:0.72rem;color:#f59e0b;">📄</span>
+                  <span style="font-size:0.78rem;color:#ccc;">App.tsx</span>
+                  <span style="margin-left:auto;font-size:0.6rem;color:#444;">src/</span>
+                </div>
+              </div>
+              <div style="padding:0.5rem 0.8rem;border-top:1px solid #222;display:flex;gap:1rem;font-size:0.6rem;color:#444;">
+                <span>↑↓ 选择</span>
+                <span>↵ 跳转</span>
+                <span>Esc 关闭</span>
+              </div>
+            </div>
+          </div>
+          <p style="margin-top:0.5rem;font-size:0.72rem;color:#555;">↑ 点击搜索框或模拟双击 Shift 打开搜索面板，输入任意内容查看结果</p>
+        `
+      },
+      {
+        text: "会话栏：归档按钮左侧添加置顶标签",
+        status: "done",
+        date: "06-10 23:42:45",
+        prototype: `
+          <h4>会话置顶标签</h4>
+          <p>在会话栏中，每个会话项的操作区域（归档按钮左侧）新增一个置顶小标签，点击可将重要会话固定在列表顶部。</p>
+          <ul>
+            <li>置顶图标显示在归档按钮左侧</li>
+            <li>未置顶时图标灰色，hover 显示"置顶"提示</li>
+            <li>置顶后图标高亮，会话自动移到列表顶部</li>
+            <li>支持多个置顶会话，按置顶时间排序</li>
+            <li>置顶会话背景微带高亮区分</li>
+          </ul>
+          <div class="demo-sidebar" style="width:260px;">
+            <div class="demo-sidebar-header">+ 新建会话</div>
+            <div class="demo-session-item" style="background:#1a1a2a;border-left:2px solid #3b82f6;">
+              <div class="dot" style="background:#3b82f6;"></div>
+              <span class="label" style="color:#3b82f6;">终端美化配置</span>
+              <span onclick="this.style.color=this.style.color==='rgb(251, 191, 36)'?'#444':'rgb(251, 191, 36)'" style="font-size:0.7rem;color:#fbbf26;cursor:pointer;" title="取消置顶">📌</span>
+              <span style="font-size:0.65rem;color:#444;cursor:pointer;" title="归档">📦</span>
+            </div>
+            <div class="demo-session-item">
+              <div class="dot"></div>
+              <span class="label">API 接口调试</span>
+              <span onclick="this.style.color=this.style.color==='rgb(251, 191, 36)'?'#444':'rgb(251, 191, 36)'" style="font-size:0.7rem;color:#444;cursor:pointer;" title="置顶">📌</span>
+              <span style="font-size:0.65rem;color:#444;cursor:pointer;" title="归档">📦</span>
+            </div>
+            <div class="demo-session-item">
+              <div class="dot"></div>
+              <span class="label">数据库迁移</span>
+              <span onclick="this.style.color=this.style.color==='rgb(251, 191, 36)'?'#444':'rgb(251, 191, 36)'" style="font-size:0.7rem;color:#444;cursor:pointer;" title="置顶">📌</span>
+              <span style="font-size:0.65rem;color:#444;cursor:pointer;" title="归档">📦</span>
+            </div>
+          </div>
+          <p style="margin-top:0.5rem;font-size:0.72rem;color:#555;">↑ 点击 📌 图标切换置顶状态，置顶会话自动置顶并高亮显示</p>
+        `
+      },
+      {
+        text: "设置页：语音输入（阿里云 STT）",
+        status: "done",
+        date: "06-04 07:20:25",
+        prototype: `
+          <h4>语音输入功能</h4>
+          <p>集成阿里云语音转文字服务，按快捷键即可在光标位置输入语音转文字内容，提升输入效率。</p>
+          <ul>
+            <li>快捷键触发：按住 Ctrl+Space 开始录音</li>
+            <li>松开按键自动识别并插入文字</li>
+            <li>实时显示录音波形动画</li>
+            <li>支持中英文自动识别</li>
+            <li>设置中配置阿里云 API Key</li>
+          </ul>
+          <div class="demo-voice-panel">
+            <div class="demo-voice-header">
+              <span>语音输入</span>
+              <span class="demo-voice-status">就绪</span>
+            </div>
+            <div class="demo-voice-visual">
+              <div class="demo-voice-waves" id="voiceWaves">
+                <div class="demo-voice-bar"></div>
+                <div class="demo-voice-bar"></div>
+                <div class="demo-voice-bar"></div>
+                <div class="demo-voice-bar"></div>
+                <div class="demo-voice-bar"></div>
+                <div class="demo-voice-bar"></div>
+                <div class="demo-voice-bar"></div>
+                <div class="demo-voice-bar"></div>
+                <div class="demo-voice-bar"></div>
+                <div class="demo-voice-bar"></div>
+                <div class="demo-voice-bar"></div>
+                <div class="demo-voice-bar"></div>
+              </div>
+              <div class="demo-voice-icon" onclick="toggleVoice()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                  <line x1="12" y1="19" x2="12" y2="23"></line>
+                  <line x1="8" y1="23" x2="16" y2="23"></line>
+                </svg>
+              </div>
+            </div>
+            <div class="demo-voice-hint">按住 Ctrl+Space 开始说话</div>
+            <div class="demo-voice-result">
+              <span class="demo-voice-text">识别结果将显示在这里...</span>
+            </div>
+          </div>
+          <p style="margin-top:0.5rem;font-size:0.72rem;color:#555;">↑ 动态演示：点击麦克风图标模拟录音波形动画</p>
+        `
+      },
+      {
+        text: "主页：Heatmap 开发日历 + 成就面板",
+        status: "done",
+        date: "06-04 07:13:25",
+        prototype: `
+          <h4>开发者成就主页</h4>
+          <p>将主页从简单提示语升级为开发者成就展示中心，用 Heatmap Calendar 可视化开发活动，让每次编码都有成就感。</p>
+          <ul>
+            <li>GitHub 风格的 Heatmap 日历（365天活动热力图）</li>
+            <li>统计面板：总会话数、总消息数、活跃天数</li>
+            <li>本周/本月活动趋势</li>
+            <li>连续活跃天数（Streak）计数器</li>
+            <li>成就徽章系统（首次使用、100条消息等）</li>
+          </ul>
+          <div class="demo-homepage">
+            <div class="demo-welcome">
+              <span class="demo-welcome-text">欢迎回来，开发者</span>
+              <span class="demo-welcome-sub">Termflow 项目已就绪</span>
+            </div>
+            <div class="demo-stats-row">
+              <div class="demo-stat-card">
+                <div class="demo-stat-value">127</div>
+                <div class="demo-stat-label">总会话</div>
+              </div>
+              <div class="demo-stat-card">
+                <div class="demo-stat-value">1.2k</div>
+                <div class="demo-stat-label">消息数</div>
+              </div>
+              <div class="demo-stat-card">
+                <div class="demo-stat-value">45</div>
+                <div class="demo-stat-label">活跃天数</div>
+              </div>
+              <div class="demo-stat-card highlight">
+                <div class="demo-stat-value">🔥 7</div>
+                <div class="demo-stat-label">连续天数</div>
+              </div>
+            </div>
+            <div class="demo-heatmap-container">
+              <div class="demo-heatmap-header">
+                <span>开发活动</span>
+                <span class="demo-heatmap-legend">
+                  <span>少</span>
+                  <span class="demo-heatmap-dot l1"></span>
+                  <span class="demo-heatmap-dot l2"></span>
+                  <span class="demo-heatmap-dot l3"></span>
+                  <span class="demo-heatmap-dot l4"></span>
+                  <span>多</span>
+                </span>
+              </div>
+              <div class="demo-heatmap" id="heatmap"></div>
+            </div>
+            <div class="demo-badges">
+              <div class="demo-badge-item earned">🏆 首次使用</div>
+              <div class="demo-badge-item earned">💬 百条消息</div>
+              <div class="demo-badge-item earned">📅 周活跃</div>
+              <div class="demo-badge-item">🎯 千条消息</div>
+            </div>
+          </div>
+          <p style="margin-top:0.5rem;font-size:0.72rem;color:#555;">↑ 动态演示：Heatmap 随机生成活动数据，徽章可 hover 查看详情</p>
+        `
+      },
+      {
+        text: "设置页：CLAUDE.md 编辑器",
+        status: "done",
+        date: "06-04 07:06:37",
+        prototype: `
+          <h4>CLAUDE.md 编辑器</h4>
+          <p>在设置页面中集成 CLAUDE.md 文件编辑功能，让用户可以直接管理 AI 的行为指令。</p>
+          <ul>
+            <li>语法高亮编辑器（Markdown + 指令块）</li>
+            <li>实时预览渲染效果</li>
+            <li>多级配置：全局 / 项目级 / 本地</li>
+            <li>内置模板和代码片段</li>
+            <li>修改后自动提示重启生效</li>
+          </ul>
+          <div class="demo-settings-panel">
+            <div class="demo-settings-tabs">
+              <span class="demo-settings-tab active">全局配置</span>
+              <span class="demo-settings-tab">项目配置</span>
+              <span class="demo-settings-tab">本地配置</span>
+            </div>
+            <div class="demo-editor-area">
+              <div class="demo-editor-line"><span class="demo-line-num">1</span><span class="demo-keyword">#</span> Global Instructions</div>
+              <div class="demo-editor-line"><span class="demo-line-num">2</span></div>
+              <div class="demo-editor-line"><span class="demo-line-num">3</span><span class="demo-keyword">##</span> 编码规范</div>
+              <div class="demo-editor-line"><span class="demo-line-num">4</span>- 使用 TypeScript 严格模式</div>
+              <div class="demo-editor-line"><span class="demo-line-num">5</span>- 优先使用 Ant Design 组件</div>
+              <div class="demo-editor-line active-line"><span class="demo-line-num">6</span>- 样式使用 TailwindCSS<span class="demo-cursor">|</span></div>
+              <div class="demo-editor-line"><span class="demo-line-num">7</span></div>
+            </div>
+            <div class="demo-editor-status">
+              <span>Markdown</span>
+              <span>UTF-8</span>
+              <span>行 6, 列 24</span>
+            </div>
+          </div>
+          <p style="margin-top:0.5rem;font-size:0.72rem;color:#555;">↑ 动态演示：带语法高亮的 Markdown 编辑器</p>
+        `
+      },
+      {
+        text: "设置页：MCP 服务器管理",
+        status: "done",
+        date: "06-04 07:06:37",
+        prototype: `
+          <h4>MCP 服务器管理</h4>
+          <p>在设置中集成 MCP (Model Context Protocol) 服务器配置，让 AI 编辑器具备扩展能力。</p>
+          <ul>
+            <li>可视化添加/删除 MCP 服务器</li>
+            <li>支持 stdio / SSE / WebSocket 三种传输方式</li>
+            <li>服务器状态监控（连接中/已连接/错误）</li>
+            <li>工具列表展示和权限配置</li>
+            <li>一键测试连接</li>
+          </ul>
+          <div class="demo-mcp-panel">
+            <div class="demo-mcp-header">
+              <span>MCP 服务器</span>
+              <button class="demo-btn">+ 添加服务器</button>
+            </div>
+            <div class="demo-mcp-list">
+              <div class="demo-mcp-item connected">
+                <div class="demo-mcp-status"></div>
+                <div class="demo-mcp-info">
+                  <div class="demo-mcp-name">filesystem</div>
+                  <div class="demo-mcp-detail">stdio · 3 个工具</div>
+                </div>
+                <span class="demo-mcp-tag">已连接</span>
+              </div>
+              <div class="demo-mcp-item connected">
+                <div class="demo-mcp-status"></div>
+                <div class="demo-mcp-info">
+                  <div class="demo-mcp-name">github</div>
+                  <div class="demo-mcp-detail">SSE · 8 个工具</div>
+                </div>
+                <span class="demo-mcp-tag">已连接</span>
+              </div>
+              <div class="demo-mcp-item error">
+                <div class="demo-mcp-status"></div>
+                <div class="demo-mcp-info">
+                  <div class="demo-mcp-name">database</div>
+                  <div class="demo-mcp-detail">stdio · 连接超时</div>
+                </div>
+                <span class="demo-mcp-tag error">错误</span>
+              </div>
+            </div>
+          </div>
+          <p style="margin-top:0.5rem;font-size:0.72rem;color:#555;">↑ 动态演示：MCP 服务器列表，带状态指示和工具统计</p>
+        `
+      },
+      {
+        text: "右侧侧边栏：任务进度追踪面板",
+        status: "pending",
+        date: "06-04 07:03:27",
+        prototype: `
+          <h4>任务进度追踪面板</h4>
+          <p>在右侧新增侧边栏，实时展示 Claude Code 执行任务的进度状态。类似 Claude Code 原生的 Task List 功能。</p>
+          <ul>
+            <li>显示当前任务的子任务列表</li>
+            <li>三种状态：已完成 ✓、进行中 ⟳、待执行 ○</li>
+            <li>进行中任务高亮显示 + 动画</li>
+            <li>支持折叠/展开任务详情</li>
+            <li>任务完成后自动滚动到下一个</li>
+          </ul>
+          <div class="demo-task-panel">
+            <div class="demo-task-header">
+              <span>任务进度</span>
+              <span class="demo-task-count">3/7</span>
+            </div>
+            <div class="demo-task-list">
+              <div class="demo-task-item completed">
+                <span class="demo-task-icon">✓</span>
+                <span class="demo-task-text">读取项目结构</span>
+              </div>
+              <div class="demo-task-item completed">
+                <span class="demo-task-icon">✓</span>
+                <span class="demo-task-text">分析依赖关系</span>
+              </div>
+              <div class="demo-task-item completed">
+                <span class="demo-task-icon">✓</span>
+                <span class="demo-task-text">创建数据库 Schema</span>
+              </div>
+              <div class="demo-task-item running demo-pulse">
+                <span class="demo-task-icon"><div class="demo-spinner" style="width:12px;height:12px;border-width:2px;"></div></span>
+                <span class="demo-task-text">编写 API 接口...</span>
+              </div>
+              <div class="demo-task-item pending">
+                <span class="demo-task-icon">○</span>
+                <span class="demo-task-text">实现前端组件</span>
+              </div>
+              <div class="demo-task-item pending">
+                <span class="demo-task-icon">○</span>
+                <span class="demo-task-text">添加单元测试</span>
+              </div>
+              <div class="demo-task-item pending">
+                <span class="demo-task-icon">○</span>
+                <span class="demo-task-text">打包发布</span>
+              </div>
+            </div>
+            <div class="demo-task-progress">
+              <div class="demo-task-bar" style="width:42%"></div>
+            </div>
+          </div>
+          <p style="margin-top:0.5rem;font-size:0.72rem;color:#555;">↑ 动态演示：任务进度实时更新，进行中任务带旋转动画</p>
+        `
+      },
+      {
+        text: "三段式布局：导航栏 + 会话/文件 + 终端",
+        status: "done",
+        date: "06-04 14:30:25",
+        prototype: `
+          <h4>三段式布局重构</h4>
+          <p>将现有两段式布局升级为三段式，最左侧新增图标导航栏，提升功能扩展性。</p>
+          <ul>
+            <li>最左侧：图标导航栏（会话、文件、Git）</li>
+            <li>中间：根据选中图标切换内容面板</li>
+            <li>右侧：终端/编辑区域保持不变</li>
+            <li>导航栏支持 Tooltip 提示和快捷键</li>
+            <li>图标状态指示（如 Git 有变更时显示小红点）</li>
+          </ul>
+          <div class="demo-three-panel">
+            <div class="demo-nav-bar">
+              <div class="demo-nav-icon active" title="会话 (Ctrl+1)" onclick="switchPanel('session')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+              </div>
+              <div class="demo-nav-icon" title="文件 (Ctrl+2)" onclick="switchPanel('file')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+              </div>
+              <div class="demo-nav-icon" title="Git (Ctrl+3)" onclick="switchPanel('git')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><path d="M6 21V9a9 9 0 0 0 9 9"></path></svg>
+                <span class="demo-badge">3</span>
+              </div>
+            </div>
+            <div class="demo-content-area">
+              <div class="demo-panel demo-panel-session">
+                <div class="demo-panel-header">会话列表</div>
+                <div class="demo-session-item active"><div class="dot"></div><span class="label">终端美化配置</span></div>
+                <div class="demo-session-item"><div class="dot"></div><span class="label">API 接口调试</span></div>
+                <div class="demo-session-item"><div class="dot"></div><span class="label">数据库迁移</span></div>
+              </div>
+              <div class="demo-panel demo-panel-file" style="display:none">
+                <div class="demo-panel-header">文件管理</div>
+                <div class="demo-file-item"><span class="demo-file-icon">📁</span> src</div>
+                <div class="demo-file-item"><span class="demo-file-icon">📁</span> components</div>
+                <div class="demo-file-item" style="padding-left:1.5rem"><span class="demo-file-icon">📄</span> App.tsx</div>
+                <div class="demo-file-item"><span class="demo-file-icon">📁</span> styles</div>
+                <div class="demo-file-item"><span class="demo-file-icon">📄</span> package.json</div>
+              </div>
+              <div class="demo-panel demo-panel-git" style="display:none">
+                <div class="demo-panel-header">Git 变更</div>
+                <div class="demo-git-item"><span class="demo-git-status m">M</span> src/App.tsx</div>
+                <div class="demo-git-item"><span class="demo-git-status a">A</span> src/utils.ts</div>
+                <div class="demo-git-item"><span class="demo-git-status m">M</span> package.json</div>
+              </div>
+            </div>
+            <div class="demo-terminal">
+              <div class="demo-terminal-header">Terminal</div>
+              <div class="demo-terminal-content">$ npm run dev</div>
+            </div>
+          </div>
+          <p style="margin-top:0.5rem;font-size:0.72rem;color:#555;">↑ 点击左侧图标切换面板：会话 / 文件 / Git</p>
+        `
+      },
+      {
+        text: "会话栏添加任务执行加载动画",
+        status: "done",
+        date: "06-04 10:15:42",
+        prototype: `
+          <h4>会话栏加载状态</h4>
+          <p>当会话中有任务正在执行时，左侧会话栏应显示加载动画，让用户直观感知当前状态。</p>
+          <ul>
+            <li>会话项右侧显示旋转加载图标</li>
+            <li>支持脉冲呼吸灯效果（背景微闪）</li>
+            <li>加载中的会话自动置顶</li>
+            <li>鼠标悬停显示"任务执行中..."提示</li>
+          </ul>
+          <div class="demo-sidebar">
+            <div class="demo-sidebar-header">+ 新建会话</div>
+            <div class="demo-session-item active demo-pulse" title="任务执行中...">
+              <div class="dot"></div>
+              <span class="label">终端美化配置</span>
+              <div class="demo-spinner"></div>
+            </div>
+            <div class="demo-session-item">
+              <div class="dot"></div>
+              <span class="label">API 接口调试</span>
+            </div>
+            <div class="demo-session-item">
+              <div class="dot"></div>
+              <span class="label">数据库迁移</span>
+            </div>
+          </div>
+          <p style="margin-top:0.5rem;font-size:0.72rem;color:#555;">↑ 动态演示：第一个会话显示旋转加载 + 脉冲效果</p>
+        `
+      },
+    ];
+    // ==============================
+
+    let currentFilter = 'all';
+
+    function cycleStatus(index) {
+      const order = ['pending', 'doing', 'done'];
+      const current = order.indexOf(ideas[index].status);
+      ideas[index].status = order[(current + 1) % 3];
+      render();
+    }
+
+    function toggleExpand(index) {
+      const item = document.querySelector(`[data-index="${index}"]`);
+      if (item) {
+        item.classList.toggle('expanded');
+      }
+    }
+
+    function setFilter(filter) {
+      currentFilter = filter;
+      document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.filter === filter);
+      });
+      render();
+    }
+
+    function render() {
+      const filtered = currentFilter === 'all'
+        ? ideas
+        : ideas.filter(i => i.status === currentFilter);
+
+      const counts = { pending: 0, doing: 0, done: 0 };
+      ideas.forEach(i => counts[i.status]++);
+
+      document.getElementById('stats').textContent =
+        `共 ${ideas.length} 条想法 · 待实现 ${counts.pending} · 进行中 ${counts.doing} · 已完成 ${counts.done}`;
+
+      const list = document.getElementById('ideaList');
+      if (filtered.length === 0) {
+        list.innerHTML = '<div class="empty">暂无想法</div>';
+        return;
+      }
+
+      list.innerHTML = filtered.map((idea, _) => {
+        const realIndex = ideas.indexOf(idea);
+        const hasPrototype = idea.prototype && idea.prototype.trim();
+        return `
+          <li class="idea-item ${idea.status}" data-index="${realIndex}">
+            <div class="idea-header" onclick="${hasPrototype ? `toggleExpand(${realIndex})` : ''}">
+              <div class="status-dot ${idea.status}" onclick="event.stopPropagation(); cycleStatus(${realIndex})" title="点击切换状态"></div>
+              <span class="idea-text">${escapeHtml(idea.text)}</span>
+              <span class="idea-date">${idea.date}</span>
+              ${hasPrototype ? '<span class="expand-icon">▶</span>' : ''}
+            </div>
+            ${hasPrototype ? `<div class="prototype-panel">${idea.prototype}</div>` : ''}
+          </li>`;
+      }).join('');
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // 三段式布局面板切换
+    function switchPanel(panel) {
+      // 更新导航图标状态
+      document.querySelectorAll('.demo-nav-icon').forEach(icon => icon.classList.remove('active'));
+      event.currentTarget.classList.add('active');
+
+      // 切换面板显示
+      document.querySelectorAll('.demo-panel').forEach(p => p.style.display = 'none');
+      document.querySelector(`.demo-panel-${panel}`).style.display = 'flex';
+    }
+
+    // 生成 Heatmap 数据
+    function generateHeatmap() {
+      const heatmap = document.getElementById('heatmap');
+      if (!heatmap) return;
+
+      heatmap.innerHTML = '';
+      const levels = ['', 'l1', 'l2', 'l3', 'l4'];
+
+      for (let week = 0; week < 52; week++) {
+        for (let day = 0; day < 7; day++) {
+          const cell = document.createElement('div');
+          cell.className = 'demo-heatmap-cell';
+
+          // 随机生成活动等级，越近的日期活动越高
+          const recency = week / 52;
+          const rand = Math.random();
+          let level = 0;
+          if (rand < 0.3 + recency * 0.3) level = 1;
+          if (rand < 0.15 + recency * 0.2) level = 2;
+          if (rand < 0.05 + recency * 0.15) level = 3;
+          if (rand < 0.02 + recency * 0.08) level = 4;
+
+          if (level > 0) cell.classList.add(levels[level]);
+
+          // Tooltip
+          const contributions = level * Math.floor(Math.random() * 5 + 1);
+          cell.title = contributions > 0 ? `${contributions} 次贡献` : '无贡献';
+
+          heatmap.appendChild(cell);
+        }
+      }
+    }
+
+    // 初始化 Heatmap
+    generateHeatmap();
+
+    // 语音输入演示
+    function toggleVoice() {
+      const icon = document.querySelector('.demo-voice-icon');
+      const waves = document.getElementById('voiceWaves');
+      const status = document.querySelector('.demo-voice-status');
+      const text = document.querySelector('.demo-voice-text');
+
+      if (icon.classList.contains('recording')) {
+        // 停止录音
+        icon.classList.remove('recording');
+        waves.classList.remove('active');
+        status.classList.remove('recording');
+        status.textContent = '就绪';
+        text.classList.add('active');
+        text.textContent = '你好，这是一段语音识别的演示结果';
+      } else {
+        // 开始录音
+        icon.classList.add('recording');
+        waves.classList.add('active');
+        status.classList.add('recording');
+        status.textContent = '录音中...';
+        text.classList.remove('active');
+        text.textContent = '正在识别...';
+      }
+    }
+
+    render();
+  </script>
+</body>
+</html>

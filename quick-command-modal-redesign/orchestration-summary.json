@@ -1,0 +1,126 @@
+{
+  "project": {
+    "name": "快捷命令弹窗改版",
+    "operation": "create",
+    "deviceType": "desktop",
+    "dashboardMode": false,
+    "designRead": "桌面工具弹窗 / 终端重度用户 / 克制专业 / 中低密度 / 避免二次选择和层级断裂",
+    "designDials": {
+      "layoutVariance": 2,
+      "motionIntensity": 1,
+      "visualDensity": 3
+    },
+    "styleDefinitionBrief": "延续 Termflow 现有浅色玻璃系桌面风格，降低配置噪音，把智能体选择合并为结果型动作选项。",
+    "styleContinuityAnchors": {
+      "colorSystem": "浅蓝白中性色为基底，主色使用克制的品牌蓝，状态色仅用于语义提示。",
+      "shapeSystem": "小圆角与轻描边，不使用夸张胶囊形态。",
+      "typographySystem": "Inter 与系统中文字体混排，标题稳，说明与提示偏轻。",
+      "spacingSystem": "24px 外层节奏，字段间 18-20px，标签与控件 8px。",
+      "componentLanguage": "卡片和面板以描边与浅底区分，不依赖重阴影。",
+      "surfaceAndDepth": "主体层次靠边框、轻投影和蒙层实现，弹窗是唯一明显浮层。",
+      "imageryAndIconography": "纯界面型页面，不使用装饰图像，图标保持线性简洁。",
+      "interactionTone": "反馈克制、重点明确，避免为了强调而增加额外表单层级。"
+    },
+    "sharedProjectShellContract": "两页保持同一设置页容器、标题区、快捷命令列表区域与配色体系，仅在右上主操作后的状态内容变化。"
+  },
+  "designSource": {
+    "operatingMode": "free-explore",
+    "libraryIdentity": null,
+    "brandCssPath": "d:\\3.project\\Termflow\\quick-command-modal-redesign\\colors_and_type.css",
+    "brandPrefix": "termflow"
+  },
+  "pages": [
+    {
+      "nodeId": "page-shortcut-command-list",
+      "pageIndex": 1,
+      "title": "快捷命令列表",
+      "htmlSrc": "pages/shortcut-command-list.html",
+      "pageType": "task-driven",
+      "businessScenario": "快捷命令设置页基础态",
+      "visualNorthStar": "像桌面产品里的真实设置页，而不是一张孤立组件截图。",
+      "compositionPattern": "标题说明 + 列表面板 + 右上主操作",
+      "continuityAnchors": [
+        "顶部说明区与主列表都位于同一浅色面板系统中",
+        "右上主操作按钮是打开弹窗的唯一强主按钮"
+      ],
+      "componentPlan": [],
+      "imagePlan": [],
+      "chartsRequired": false,
+      "stateGroupId": "quick-command-create-modal",
+      "stateRole": "base",
+      "sharedShellContract": [
+        "页面背景与外层容器",
+        "标题和说明文案区",
+        "快捷命令列表卡片",
+        "顶部操作栏位置",
+        "列表项排版和状态标签",
+        "主色与边框系统"
+      ],
+      "mutableRegions": [
+        "主操作后的界面状态"
+      ]
+    },
+    {
+      "nodeId": "page-shortcut-command-modal",
+      "pageIndex": 2,
+      "title": "添加快捷命令",
+      "htmlSrc": "pages/shortcut-command-modal.html",
+      "pageType": "task-driven",
+      "businessScenario": "添加快捷命令弹窗展开态",
+      "visualNorthStar": "把‘操作类型即结果’做成直观的一次选择，并用真实页面上下文托住弹窗层级。",
+      "compositionPattern": "基础页壳 + 居中弹窗 + 蒙层",
+      "continuityAnchors": [
+        "保留同一基础页背景与列表层级",
+        "仅改变操作区与中心浮层，不改动页面骨架"
+      ],
+      "componentPlan": [],
+      "imagePlan": [],
+      "chartsRequired": false,
+      "stateGroupId": "quick-command-create-modal",
+      "stateRole": "derived",
+      "baseStatePageId": "page-shortcut-command-list",
+      "derivedFromHtmlSrc": "pages/shortcut-command-list.html",
+      "sharedShellContract": [
+        "页面背景与外层容器",
+        "标题和说明文案区",
+        "快捷命令列表卡片",
+        "顶部操作栏位置",
+        "列表项排版和状态标签",
+        "主色与边框系统"
+      ],
+      "mutableRegions": [
+        "中心弹窗",
+        "主列表失焦表现",
+        "顶部操作按钮的当前状态"
+      ]
+    }
+  ],
+  "assets": [],
+  "wiringPlan": [],
+  "hiddenInteractionPlan": [
+    {
+      "sourcePageId": "page-shortcut-command-list",
+      "domId": "open-create-command",
+      "targetPageId": "page-shortcut-command-modal",
+      "reason": "打开弹窗"
+    },
+    {
+      "sourcePageId": "page-shortcut-command-modal",
+      "domId": "modal-close",
+      "targetPageId": "page-shortcut-command-list",
+      "reason": "关闭弹窗"
+    },
+    {
+      "sourcePageId": "page-shortcut-command-modal",
+      "domId": "modal-cancel",
+      "targetPageId": "page-shortcut-command-list",
+      "reason": "取消"
+    },
+    {
+      "sourcePageId": "page-shortcut-command-modal",
+      "domId": "modal-backdrop-close",
+      "targetPageId": "page-shortcut-command-list",
+      "reason": "关闭蒙层"
+    }
+  ]
+}

@@ -1,0 +1,623 @@
+{
+  "skillProvenance": {
+    "name": "solo-design",
+    "version": "2026.07.06.8",
+    "version_source": "skill-version.json",
+    "runtime_skill_dir": "c:\\Users\\26424\\.trae\\builtin\\design\\default\\skills\\solo-design",
+    "recorded_at": "2026-07-21T00:00:00.000Z"
+  },
+  "project": {
+    "name": "Termflow 官网",
+    "path": "d:\\3.project\\Termflow\\termflow-official-website",
+    "operation": "edit",
+    "deviceType": "desktop",
+    "language": "zh-CN",
+    "dashboardMode": false,
+    "intentProfile": {
+      "caseFamily": "free_exploration",
+      "graphicStrategy": null,
+      "sourceType": null,
+      "routingReason": "为项目创建全新官网首页，强调科技感、功能演示、下载入口与 GitHub 入口"
+    },
+    "replicationMode": null,
+    "sourceUrl": null,
+    "contextReadBudget": {
+      "workflowFileReadLimit": 1,
+      "largeWorkflowFilesCachedInSummary": [],
+      "restoreInputsCached": [],
+      "subAgentReadsFullSummary": false
+    },
+    "readBudgetLedger": [
+      {
+        "file": "workflows/create-project-free-fast.md",
+        "readCount": 1,
+        "limit": 1,
+        "reason": "initial route-locked workflow read",
+        "exceeded": false
+      }
+    ],
+    "dispatchPreflightManifest": [
+      {
+        "recorded_at": "2026-07-21T00:10:00.000Z",
+        "packetType": "FreePagePacket",
+        "taskLinePresent": true,
+        "outputPathPresent": true,
+        "sharedTemplate": "c:\\Users\\26424\\.trae\\builtin\\design\\default\\skills\\solo-design\\workflows\\page-generation-free-card.md",
+        "nodeId": "page-index",
+        "htmlSrc": "pages/index.html",
+        "cssFilePath": "d:\\3.project\\Termflow\\termflow-official-website\\colors_and_type.css",
+        "htmlFilePath": "d:\\3.project\\Termflow\\termflow-official-website\\pages\\index.html",
+        "brandPrefix": "termflow",
+        "aestheticsMode": "free-explore",
+        "toolDisciplineBlockPresent": true,
+        "fillHtmlHeadCommand": "node c:\\Users\\26424\\.trae\\builtin\\design\\default\\skills\\solo-design\\script\\fill-html-head.mjs d:\\3.project\\Termflow\\termflow-official-website\\colors_and_type.css d:\\3.project\\Termflow\\termflow-official-website\\pages\\index.html --title=\"Termflow 官网\" --lang=zh-CN --prefix=termflow",
+        "viewportMode": "document-scroll",
+        "completionSchemaExpected": "compact",
+        "restoreFieldsPresent": true,
+        "pageSliceOnly": true,
+        "requiredFieldsPresent": true,
+        "missingFields": [],
+        "fillHtmlHeadCommandValid": true,
+        "mobileNavigation": {
+          "required": false,
+          "appliesToThisPage": false,
+          "activeKey": null,
+          "contractPresent": false,
+          "structurePresent": false,
+          "canonicalHtmlIncluded": false,
+          "canonicalHtmlSource": null,
+          "structureHash": null,
+          "missingFields": []
+        },
+        "persistedToSummary": true
+      },
+      {
+        "recorded_at": "2026-07-21T03:44:00.000Z",
+        "packetType": "FreePagePacket",
+        "taskLinePresent": true,
+        "outputPathPresent": true,
+        "sharedTemplate": "c:\\Users\\26424\\.trae\\builtin\\design\\default\\skills\\solo-design\\workflows\\page-generation-template.md",
+        "nodeId": "page-index-logo-edition",
+        "htmlSrc": "pages/index-logo-edition.html",
+        "cssFilePath": "d:\\3.project\\Termflow\\termflow-official-website\\colors_and_type.css",
+        "htmlFilePath": "d:\\3.project\\Termflow\\termflow-official-website\\pages\\index-logo-edition.html",
+        "brandPrefix": "termflow",
+        "aestheticsMode": "free-explore",
+        "toolDisciplineBlockPresent": true,
+        "fillHtmlHeadCommand": "node c:\\Users\\26424\\.trae\\builtin\\design\\default\\skills\\solo-design\\script\\fill-html-head.mjs d:\\3.project\\Termflow\\termflow-official-website\\colors_and_type.css d:\\3.project\\Termflow\\termflow-official-website\\pages\\index-logo-edition.html --title=\"Termflow 官网 Logo 融合版\" --lang=zh-CN --prefix=termflow",
+        "viewportMode": "document-scroll",
+        "completionSchemaExpected": "full",
+        "restoreFieldsPresent": true,
+        "pageSliceOnly": true,
+        "requiredFieldsPresent": true,
+        "missingFields": [],
+        "fillHtmlHeadCommandValid": true,
+        "mobileNavigation": {
+          "required": false,
+          "appliesToThisPage": false,
+          "activeKey": null,
+          "contractPresent": false,
+          "structurePresent": false,
+          "canonicalHtmlIncluded": false,
+          "canonicalHtmlSource": null,
+          "structureHash": null,
+          "missingFields": []
+        },
+        "persistedToSummary": true
+      }
+    ],
+    "cssPreflightEvidence": {
+      "applies": true,
+      "status": "passed",
+      "command": "node c:\\Users\\26424\\.trae\\builtin\\design\\default\\skills\\solo-design\\script\\fill-html-head.mjs d:\\3.project\\Termflow\\termflow-official-website\\colors_and_type.css d:\\3.project\\Termflow\\termflow-official-website\\.preflight\\preflight.html --title=\"Preflight\" --lang=zh-CN --prefix=termflow",
+      "brandPrefix": "termflow",
+      "checks": {
+        "themeVars": "present",
+        "semanticTokenFallback": "present",
+        "themeInline": "present",
+        "tailwindCdn": "present",
+        "htmlClass": "present",
+        "semanticMappings": "resolved"
+      },
+      "retryCount": 0,
+      "blockingReason": null
+    },
+    "repairEntryEvidence": [
+      {
+        "repairPolicyRead": true,
+        "renderBlockingErrorPresent": true,
+        "softWarningOnly": false,
+        "ownerClassified": true,
+        "postValidationMutationDetected": false,
+        "validationErrorClasses": [
+          "restore-evidence"
+        ],
+        "repairBudget": {
+          "validationRunsSoFar": 1,
+          "maxValidationRuns": 3
+        },
+        "recorded_at": "2026-07-21T03:12:00.000Z"
+      }
+    ],
+    "finishReadinessEvidence": {
+      "validationReportSuccess": true,
+      "postValidationMutationDetected": false,
+      "pageSummaryTablePrepared": true,
+      "manualArtifactLinksIncluded": false,
+      "restoreEvidenceReviewPassed": true,
+      "deviceTypeConsistency": {
+        "summaryDeviceType": "desktop",
+        "designDeviceType": "desktop",
+        "status": "matched"
+      },
+      "mobileBackgroundCoverage": {
+        "status": "passed",
+        "unresolvedBodyVars": []
+      }
+    },
+    "referenceCaptureEvidence": {
+      "sourceType": null,
+      "sourceAuthority": null,
+      "providedImagePath": null,
+      "fullPageScreenshotEvidence": "not-needed",
+      "viewportScreenshotEvidence": null,
+      "browserSnapshotSections": [],
+      "webFetchStatus": "not-needed",
+      "visualSpecExcerptLength": 0,
+      "captureBlockingReason": null
+    },
+    "visualSpecExcerpt": null,
+    "restoreVisualCheckpoints": [
+      {
+        "id": "vc-01",
+        "priority": "high",
+        "sourceObservation": "首屏需以品牌名、定位和行动按钮建立强记忆点",
+        "targetImplementation": "首页首屏展示 Termflow 标题、副标题、主次 CTA 与数据标签",
+        "tolerance": "none",
+        "region": "hero"
+      },
+      {
+        "id": "vc-02",
+        "priority": "high",
+        "sourceObservation": "整体气质应是深色科技产品官网而不是普通模板页",
+        "targetImplementation": "使用深色渐变背景、细边框玻璃面板与低调网格氛围",
+        "tolerance": "small spacing variance",
+        "region": "hero"
+      },
+      {
+        "id": "vc-03",
+        "priority": "high",
+        "sourceObservation": "导航区需要品牌标识和简洁导航锚点",
+        "targetImplementation": "顶部导航含品牌 logo 与锚点菜单",
+        "tolerance": "small spacing variance",
+        "region": "header"
+      },
+      {
+        "id": "vc-04",
+        "priority": "high",
+        "sourceObservation": "需要用事实证据快速说明产品能力",
+        "targetImplementation": "首屏下方设置证据条，展示核心能力与技术基座",
+        "tolerance": "small spacing variance",
+        "region": "card"
+      },
+      {
+        "id": "vc-05",
+        "priority": "high",
+        "sourceObservation": "必须有像几秒短视频一样自动循环的演示区域",
+        "targetImplementation": "演示区包含 4 帧自动切换、时间轴和播放进度表现",
+        "tolerance": "none",
+        "region": "hero"
+      },
+      {
+        "id": "vc-06",
+        "priority": "medium",
+        "sourceObservation": "功能区需要覆盖多会话、语音输入、Git、检查点、快速命令和主题系统",
+        "targetImplementation": "功能网格完整呈现 6 类核心能力",
+        "tolerance": "small spacing variance",
+        "region": "card"
+      },
+      {
+        "id": "vc-07",
+        "priority": "medium",
+        "sourceObservation": "下载与 GitHub 入口需要存在，即使链接暂未提供",
+        "targetImplementation": "下载中心保留两个占位按钮并明确即将开放",
+        "tolerance": "small spacing variance",
+        "region": "actions"
+      },
+      {
+        "id": "vc-08",
+        "priority": "medium",
+        "sourceObservation": "页脚应包含简洁的产品收束信息",
+        "targetImplementation": "页脚提供产品定位、技术栈与版权式收尾",
+        "tolerance": "small spacing variance",
+        "region": "footer"
+      }
+    ],
+    "restorationContractLite": null,
+    "restoreEvidenceReview": {
+      "applies": true,
+      "reviewedPages": [
+        "page-index",
+        "page-index-logo-edition"
+      ],
+      "highPriorityCheckpointCount": 5,
+      "highPriorityMatchedCount": 5,
+      "highPriorityMissingCount": 0,
+      "highPriorityPartialWithoutDeviationCount": 0,
+      "allHighPriorityCheckpointsAcceptable": true,
+      "screenshotAuditUsed": false,
+      "screenshotAuditReason": null,
+      "blockingReason": null
+    },
+    "styleDefinitionBrief": "浅色冷感科技官网，像桌面上的智能工作台，用更轻盈的背景承接品牌与产品可信度。",
+    "designRead": "showcase / Claude Code 高频开发者 / 冷静前沿 / balanced / 避免黑底压迫感与通用 SaaS 卡片墙",
+    "designDials": {
+      "layoutVariance": 4,
+      "motionIntensity": 3,
+      "visualDensity": 3
+    },
+    "styleContinuityAnchors": {
+      "colorSystem": {
+        "primaryColorRole": "单一青色主色用于主按钮、关键高亮和品牌焦点",
+        "brandHuePolicy": "只使用一个主品牌色，背景改为冷白与浅雾蓝的轻科技体系",
+        "stateColors": "success warning error info 仅用于状态提示"
+      },
+      "shapeSystem": "大圆角玻璃卡片，按钮和面板保持 18-28px 的圆角体系",
+      "typographySystem": "标题冷静克制，正文偏产品说明风格，数值与标签可以使用更紧凑的等宽感节奏",
+      "spacingSystem": "首屏留白宽阔，内容区使用 24/32/48 递进节奏",
+      "componentLanguage": "玻璃面板、终端窗口、数据标签、证据型功能卡片",
+      "surfaceAndDepth": "浅色冷雾背景 + 细边框 + 极轻阴影，避免厚重投影和发光霓虹",
+      "imageryAndIconography": "优先使用线性科技图标、网格光束、终端和波形语言",
+      "interactionTone": "悬停与演示动效克制流畅，像产品本身在运行"
+    },
+    "specsConstraints": null,
+    "sharedProjectShellContract": null,
+    "generationTree": null
+  },
+  "designSource": {
+    "operatingMode": "free-explore",
+    "libraryIdentity": {
+      "name": null,
+      "id": null,
+      "version": null,
+      "scope": null,
+      "path": null,
+      "versionSource": null
+    },
+    "cssFilePath": "d:\\3.project\\Termflow\\termflow-official-website\\colors_and_type.css",
+    "brandPrefix": "termflow",
+    "themeMode": "dark",
+    "designDecisionSummary": "浅色科技感品牌表现，突出品牌识别、开发工作流与轻量演示氛围",
+    "componentContractKind": "compact-json",
+    "forbiddenInventedComponents": [],
+    "allowedComponents": [
+      "button",
+      "card",
+      "navigation",
+      "tag",
+      "footer"
+    ],
+    "styleConstraints": {
+      "radiusMax": 28,
+      "spacingBase": 8,
+      "fontSizeBody": 16,
+      "fontSizeMin": 12,
+      "controlHeightDefault": 44,
+      "controlHeightLarge": 52
+    },
+    "productContext": {
+      "kitType": "ai-desktop-workbench",
+      "productType": "Claude Code 桌面客户端"
+    },
+    "actualTokenNameReference": []
+  },
+  "pages": [
+    {
+      "nodeId": "page-index",
+      "slug": "index",
+      "title": "首页",
+      "htmlSrc": "pages/index.html",
+      "pageIndex": 1,
+      "stateGroupId": null,
+      "stateRole": null,
+      "baseStatePageId": null,
+      "sharedShellContract": [],
+      "mutableRegions": [],
+      "derivedFromHtmlSrc": null,
+      "derivationType": "original",
+      "sourcePageId": null,
+      "sourceHtmlSrc": null,
+      "pageType": "showcase",
+      "viewportMode": "document-scroll",
+      "businessScenario": "Termflow 官网首页，用于介绍产品能力并承接下载与代码仓库访问",
+      "visualNorthStar": "像一块正在运行的 AI 开发指挥台，第一屏同时传达速度、专业感与可落地能力。",
+      "compositionPattern": "Immersive Command Stage",
+      "continuityAnchors": [
+        "深空背景与青色主光",
+        "玻璃面板与细边框",
+        "终端感标签与数据证据",
+        "冷静克制的主 CTA"
+      ],
+      "libraryRestraintMode": false,
+      "uiKitPath": null,
+      "componentPlan": [],
+      "imagePlan": [
+        "termflow-logo.svg"
+      ],
+      "chartsRequired": false,
+      "miniProgramStyle": false,
+      "qualityRisks": [
+        "首屏内容过多导致层级混乱",
+        "演示区科技感不足像普通视频占位"
+      ],
+      "restoreEvidence": {
+        "referenceCaptureEvidenceUsed": false,
+        "sourceAuthority": null,
+        "visualCheckpointResults": [
+          {
+            "id": "vc-01",
+            "priority": "high",
+            "status": "matched",
+            "implementedIn": "hero",
+            "allowedDeviationRef": null,
+            "notes": "首屏已呈现品牌名、定位、CTA 与指标信息"
+          },
+          {
+            "id": "vc-02",
+            "priority": "high",
+            "status": "matched",
+            "implementedIn": "hero-stage",
+            "allowedDeviationRef": null,
+            "notes": "整体视觉采用深色科技基调与玻璃表面"
+          },
+          {
+            "id": "vc-03",
+            "priority": "high",
+            "status": "matched",
+            "implementedIn": "header",
+            "allowedDeviationRef": null,
+            "notes": "顶部导航已包含品牌标识与锚点菜单"
+          },
+          {
+            "id": "vc-04",
+            "priority": "high",
+            "status": "matched",
+            "implementedIn": "proof-bar",
+            "allowedDeviationRef": null,
+            "notes": "证据条已覆盖能力与技术信息"
+          },
+          {
+            "id": "vc-05",
+            "priority": "high",
+            "status": "matched",
+            "implementedIn": "demo-showcase",
+            "allowedDeviationRef": null,
+            "notes": "演示区含自动循环帧与进度指示"
+          },
+          {
+            "id": "vc-06",
+            "priority": "medium",
+            "status": "matched",
+            "implementedIn": "feature-grid",
+            "allowedDeviationRef": null,
+            "notes": "功能网格覆盖 6 类核心能力"
+          },
+          {
+            "id": "vc-07",
+            "priority": "medium",
+            "status": "matched",
+            "implementedIn": "download-hub",
+            "allowedDeviationRef": null,
+            "notes": "下载和 GitHub 按钮均已保留占位态"
+          },
+          {
+            "id": "vc-08",
+            "priority": "medium",
+            "status": "matched",
+            "implementedIn": "footer",
+            "allowedDeviationRef": null,
+            "notes": "页脚已完成收束信息"
+          }
+        ],
+        "sourceRegionCoverageResults": [
+          {
+            "sourceRegion": "hero",
+            "status": "mapped",
+            "implementedIn": "hero"
+          },
+          {
+            "sourceRegion": "header",
+            "status": "mapped",
+            "implementedIn": "header"
+          },
+          {
+            "sourceRegion": "proof-bar",
+            "status": "mapped",
+            "implementedIn": "proof-bar"
+          },
+          {
+            "sourceRegion": "demo-showcase",
+            "status": "mapped",
+            "implementedIn": "demo-showcase"
+          },
+          {
+            "sourceRegion": "feature-grid",
+            "status": "mapped",
+            "implementedIn": "feature-grid"
+          },
+          {
+            "sourceRegion": "download-hub",
+            "status": "mapped",
+            "implementedIn": "download-hub"
+          },
+          {
+            "sourceRegion": "footer",
+            "status": "mapped",
+            "implementedIn": "footer"
+          }
+        ],
+        "dominantReferenceImageUsedAsBody": false,
+        "componentRebuildEvidence": "页面主体为原创 HTML/CSS 结构实现，未使用整页参考图作为主体。"
+      }
+    },
+    {
+      "nodeId": "page-index-logo-edition",
+      "slug": "index-logo-edition",
+      "title": "首页 Logo 融合版",
+      "htmlSrc": "pages/index-logo-edition.html",
+      "pageIndex": 2,
+      "stateGroupId": null,
+      "stateRole": null,
+      "baseStatePageId": null,
+      "sharedShellContract": [],
+      "mutableRegions": [],
+      "derivedFromHtmlSrc": null,
+      "derivationType": "comparison-from-source",
+      "sourcePageId": "page-index",
+      "sourceHtmlSrc": "pages/index.html",
+      "pageType": "showcase",
+      "viewportMode": "document-scroll",
+      "businessScenario": "在现有官网首页基础上强化 Logo 融合度，提升品牌识别与首屏完整度",
+      "visualNorthStar": "让品牌标识从导航附件升级为首屏主叙事的一部分，像真正的产品品牌系统，而不是单独摆放的图形。",
+      "compositionPattern": "Immersive Command Stage",
+      "continuityAnchors": [
+        "深空背景与青色主光",
+        "玻璃面板与细边框",
+        "终端感标签与数据证据",
+        "冷静克制的主 CTA"
+      ],
+      "libraryRestraintMode": false,
+      "uiKitPath": null,
+      "componentPlan": [],
+      "imagePlan": [
+        "termflow-logo.svg"
+      ],
+      "chartsRequired": false,
+      "miniProgramStyle": false,
+      "qualityRisks": [
+        "logo 使用过多导致首屏拥挤",
+        "品牌强化破坏原有科技感节奏"
+      ],
+      "restoreEvidence": {
+        "referenceCaptureEvidenceUsed": false,
+        "sourceAuthority": null,
+        "visualCheckpointResults": [
+          {
+            "id": "vc-01",
+            "priority": "high",
+            "status": "matched",
+            "implementedIn": "hero",
+            "allowedDeviationRef": null,
+            "notes": "首屏保留品牌名、定位与行动按钮，并强化品牌区层级"
+          },
+          {
+            "id": "vc-02",
+            "priority": "high",
+            "status": "matched",
+            "implementedIn": "hero-stage",
+            "allowedDeviationRef": null,
+            "notes": "整体气质改为冷白浅色科技体系，避免黑底压迫感"
+          },
+          {
+            "id": "vc-03",
+            "priority": "high",
+            "status": "matched",
+            "implementedIn": "header",
+            "allowedDeviationRef": null,
+            "notes": "导航品牌区已增强 logo 识别与组合关系"
+          },
+          {
+            "id": "vc-04",
+            "priority": "high",
+            "status": "matched",
+            "implementedIn": "proof-bar",
+            "allowedDeviationRef": null,
+            "notes": "能力证据区仍完整保留"
+          },
+          {
+            "id": "vc-05",
+            "priority": "high",
+            "status": "matched",
+            "implementedIn": "demo-showcase",
+            "allowedDeviationRef": null,
+            "notes": "自动循环演示区已保留，并调整为浅色风格"
+          },
+          {
+            "id": "vc-06",
+            "priority": "medium",
+            "status": "matched",
+            "implementedIn": "feature-grid",
+            "allowedDeviationRef": null,
+            "notes": "功能网格继续覆盖核心能力"
+          },
+          {
+            "id": "vc-07",
+            "priority": "medium",
+            "status": "matched",
+            "implementedIn": "download-hub",
+            "allowedDeviationRef": null,
+            "notes": "下载区保留占位入口，并纳入品牌 logo 收束"
+          },
+          {
+            "id": "vc-08",
+            "priority": "medium",
+            "status": "matched",
+            "implementedIn": "footer",
+            "allowedDeviationRef": null,
+            "notes": "页脚已强化品牌收尾信息"
+          }
+        ],
+        "sourceRegionCoverageResults": [
+          {
+            "sourceRegion": "hero",
+            "status": "mapped",
+            "implementedIn": "hero"
+          },
+          {
+            "sourceRegion": "header",
+            "status": "mapped",
+            "implementedIn": "header"
+          },
+          {
+            "sourceRegion": "proof-bar",
+            "status": "mapped",
+            "implementedIn": "proof-bar"
+          },
+          {
+            "sourceRegion": "demo-showcase",
+            "status": "mapped",
+            "implementedIn": "demo-showcase"
+          },
+          {
+            "sourceRegion": "feature-grid",
+            "status": "mapped",
+            "implementedIn": "feature-grid"
+          },
+          {
+            "sourceRegion": "download-hub",
+            "status": "mapped",
+            "implementedIn": "download-hub"
+          },
+          {
+            "sourceRegion": "footer",
+            "status": "mapped",
+            "implementedIn": "footer"
+          }
+        ],
+        "dominantReferenceImageUsedAsBody": false,
+        "componentRebuildEvidence": "新页面在原首页信息架构上重构了品牌区与浅色背景系统，主体仍为可编辑 HTML/CSS。"
+      }
+    }
+  ],
+  "assets": [
+    {
+      "filename": "termflow-logo.svg",
+      "role": "shared-brand",
+      "owningPage": "shared",
+      "semanticDescription": "Termflow 白色品牌标识",
+      "status": "reused"
+    }
+  ],
+  "wiringPlan": [],
+  "hiddenInteractionPlan": []
+}

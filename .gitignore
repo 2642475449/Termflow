@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build
+dist/
+src-tauri/target/*
+!src-tauri/target/release/
+src-tauri/target/release/*
+!src-tauri/target/release/bundle/
+src-tauri/target/release/bundle/*
+!src-tauri/target/release/bundle/nsis/
+src-tauri/target/release/bundle/nsis/*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local AI tooling and workspace state
+.agents/
+.claude/
+.corepack/
+.trae/
+.workbuddy/
+.mcp.json
+.claude/settings.local.json

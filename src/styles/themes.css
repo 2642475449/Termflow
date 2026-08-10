@@ -1,0 +1,234 @@
+/* ═══════════════════════════════════════════════════════════
+   4 套主题 CSS 变量
+   ═══════════════════════════════════════════════════════════ */
+
+/* ─── 亮色 A：清朗蓝白 ──────────────────────────────────── */
+[data-theme="light-glass"] {
+  --cs-bg-app: #f4f6fa;
+  --cs-bg-card: #ffffff;
+  --cs-bg-card-solid: #ffffff;
+  --cs-bg-sidebar: #f4f6fa;
+  --cs-bg-header: #f4f6fa;
+  --cs-bg-statusbar: #f4f6fa;
+  --cs-bg-content: #f4f6fa;
+  --cs-bg-body: var(--cs-bg-card-solid);
+  --cs-bg-elevated: var(--cs-bg-card-solid);
+  --cs-bg-hover: #edf2fb;
+  --cs-bg-active: rgba(79,108,247,0.1);
+  --cs-text-primary: #1f2a44;
+  --cs-text-secondary: #526178;
+  --cs-text-tertiary: #68778c;
+  --cs-text-quaternary: var(--cs-text-tertiary);
+  --cs-border: #dde6f1;
+  --cs-border-card: #dde7f2;
+  --cs-border-sidebar: #dde6f1;
+  --cs-border-secondary: var(--cs-border-card);
+  --cs-primary: #4f6cf7;
+  --cs-primary-light: rgba(79,108,247,0.08);
+  --cs-accent: #5b8def;
+  --cs-accent-primary: var(--cs-primary);
+  --cs-accent-green: #16a34a;
+  --cs-accent-yellow: #d97706;
+  --cs-scrollbar-thumb: rgba(79,108,247,0.16);
+  --cs-scrollbar-hover: rgba(79,108,247,0.24);
+  --cs-danger: #ef4444;
+  --cs-success: var(--cs-accent-green);
+  --cs-error: var(--cs-danger);
+  --cs-warning: var(--cs-accent-yellow);
+  --cs-danger-hover: rgba(239,68,68,0.1);
+  --cs-about-flow-base: #fcfdff;
+  --cs-about-flow-pale: #a3c2ff;
+  --cs-about-flow-vivid: #6d7ff2;
+  --cs-about-flow-cobalt: #2b52db;
+  --cs-about-flow-deep: #14296f;
+  --cs-about-flow-highlight: #e3edff;
+  --cs-about-flow-fallback: linear-gradient(104deg, #fcfdff 0%, #edf3ff 47%, #8fa9f6 70%, #14296f 100%);
+  --cs-about-flow-gloss: linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent 38%), radial-gradient(ellipse 78% 150% at 0% 50%, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.1) 48%, transparent 100%);
+  --cs-about-flow-footer: rgba(247, 250, 255, 0.78);
+  color-scheme: light;
+}
+
+[data-theme="light-glass"] body,
+[data-theme="light-glass"] #root {
+  background:
+    linear-gradient(rgba(224, 231, 242, 0.22) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(224, 231, 242, 0.22) 1px, transparent 1px),
+    radial-gradient(circle at 18% 10%, rgba(79, 108, 247, 0.05), transparent 24%),
+    radial-gradient(circle at 84% 14%, rgba(79, 108, 247, 0.04), transparent 20%),
+    linear-gradient(180deg, #f9fbfe 0%, #f4f6fa 100%) !important;
+  background-size: 36px 36px, 36px 36px, auto, auto, auto;
+  background-position: 0 14px, 14px 0, 0 0, 0 0, 0 0;
+}
+
+/* ─── 亮色 B：暖木书房 ──────────────────────────────────── */
+[data-theme="light-warm"] {
+  --cs-bg-app: #faf8f5;
+  --cs-bg-card: #ffffff;
+  --cs-bg-card-solid: #ffffff;
+  --cs-bg-sidebar: #f5f0ea;
+  --cs-bg-header: #faf8f5;
+  --cs-bg-statusbar: #f7f2ec;
+  --cs-bg-content: #faf8f5;
+  --cs-bg-body: var(--cs-bg-card-solid);
+  --cs-bg-elevated: var(--cs-bg-card-solid);
+  --cs-bg-hover: #f0ebe3;
+  --cs-bg-active: #ebe4da;
+  --cs-text-primary: #3d3228;
+  --cs-text-secondary: #665b51;
+  --cs-text-tertiary: #776b60;
+  --cs-text-quaternary: var(--cs-text-tertiary);
+  --cs-border: #e8e0d5;
+  --cs-border-card: #f0e9df;
+  --cs-border-sidebar: #e8e0d5;
+  --cs-border-secondary: var(--cs-border-card);
+  --cs-primary: #c2713a;
+  --cs-primary-light: rgba(194,113,58,0.08);
+  --cs-accent: #6b8e5e;
+  --cs-accent-primary: var(--cs-primary);
+  --cs-accent-green: #6b8e5e;
+  --cs-accent-yellow: #c2956a;
+  --cs-scrollbar-thumb: rgba(61,50,40,0.12);
+  --cs-scrollbar-hover: rgba(61,50,40,0.22);
+  --cs-danger: #dc2626;
+  --cs-success: var(--cs-accent-green);
+  --cs-error: var(--cs-danger);
+  --cs-warning: var(--cs-accent-yellow);
+  --cs-danger-hover: rgba(220,38,38,0.08);
+  --cs-about-flow-base: #fffdf9;
+  --cs-about-flow-pale: #efc7a4;
+  --cs-about-flow-vivid: #c2713a;
+  --cs-about-flow-cobalt: #99532d;
+  --cs-about-flow-deep: #56301f;
+  --cs-about-flow-highlight: #ffe5cc;
+  --cs-about-flow-fallback: linear-gradient(104deg, #fffdf9 0%, #f8eee4 47%, #d99663 72%, #56301f 100%);
+  --cs-about-flow-gloss: linear-gradient(180deg, rgba(255, 255, 255, 0.24), transparent 38%), radial-gradient(ellipse 78% 150% at 0% 50%, rgba(255, 253, 249, 0.3), rgba(194, 113, 58, 0.06) 48%, transparent 100%);
+  --cs-about-flow-footer: rgba(250, 246, 240, 0.82);
+  color-scheme: light;
+}
+
+[data-theme="light-warm"] body,
+[data-theme="light-warm"] #root {
+  background:
+    radial-gradient(circle at 18% 10%, rgba(194, 113, 58, 0.08), transparent 24%),
+    radial-gradient(circle at 82% 12%, rgba(107, 142, 94, 0.07), transparent 22%),
+    linear-gradient(180deg, #fdfbf8 0%, #faf8f5 100%) !important;
+}
+
+/* ─── 暗色 A：星空沉浸 ──────────────────────────────────── */
+[data-theme="dark-starry"] {
+  --cs-bg-app: #0b1016;
+  --cs-bg-card: #131a23;
+  --cs-bg-card-solid: #131a23;
+  --cs-bg-sidebar: #0f151d;
+  --cs-bg-header: #0f151d;
+  --cs-bg-statusbar: rgba(15,21,29,0.96);
+  --cs-bg-content: transparent;
+  --cs-bg-body: var(--cs-bg-app);
+  --cs-bg-elevated: var(--cs-bg-card-solid);
+  --cs-bg-hover: rgba(92,123,163,0.08);
+  --cs-bg-active: rgba(92,123,163,0.14);
+  --cs-text-primary: #dbe4f0;
+  --cs-text-secondary: #aab6c7;
+  --cs-text-tertiary: #8796aa;
+  --cs-text-quaternary: var(--cs-text-tertiary);
+  --cs-border: rgba(92,123,163,0.12);
+  --cs-border-card: rgba(92,123,163,0.15);
+  --cs-border-sidebar: rgba(92,123,163,0.1);
+  --cs-border-secondary: var(--cs-border-card);
+  --cs-primary: #5c7ba3;
+  --cs-primary-light: rgba(92,123,163,0.1);
+  --cs-accent: #6b92c5;
+  --cs-accent-primary: var(--cs-primary);
+  --cs-accent-green: #4ade80;
+  --cs-accent-yellow: #fbbf24;
+  --cs-scrollbar-thumb: rgba(92,123,163,0.2);
+  --cs-scrollbar-hover: rgba(92,123,163,0.32);
+  --cs-danger: #f87171;
+  --cs-success: var(--cs-accent-green);
+  --cs-error: var(--cs-danger);
+  --cs-warning: var(--cs-accent-yellow);
+  --cs-danger-hover: rgba(248,113,113,0.12);
+  --cs-about-flow-base: #101720;
+  --cs-about-flow-pale: #5c7ba3;
+  --cs-about-flow-vivid: #405b82;
+  --cs-about-flow-cobalt: #263f5d;
+  --cs-about-flow-deep: #090e14;
+  --cs-about-flow-highlight: #8da2ba;
+  --cs-about-flow-fallback: linear-gradient(104deg, #101720 0%, #162231 47%, #263f5d 70%, #090e14 100%);
+  --cs-about-flow-gloss: linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 38%), radial-gradient(ellipse 78% 150% at 0% 50%, rgba(92, 123, 163, 0.09), rgba(92, 123, 163, 0.03) 48%, transparent 100%);
+  --cs-about-flow-footer: rgba(15, 21, 29, 0.88);
+  color-scheme: dark;
+}
+
+[data-theme="dark-starry"] body,
+[data-theme="dark-starry"] #root {
+  background:
+    radial-gradient(circle at 18% 8%, rgba(92, 123, 163, 0.1), transparent 24%),
+    radial-gradient(circle at 84% 10%, rgba(107, 146, 197, 0.06), transparent 18%),
+    linear-gradient(180deg, #111821 0%, #0b1016 100%) !important;
+}
+
+/* ─── 暗色 B：摩卡棕夜 ──────────────────────────────────── */
+[data-theme="dark-mocha"] {
+  --cs-bg-app: #1e1e2e;
+  --cs-bg-card: #24243a;
+  --cs-bg-card-solid: #24243a;
+  --cs-bg-sidebar: #1a1a2c;
+  --cs-bg-header: #1a1a2c;
+  --cs-bg-statusbar: #191929;
+  --cs-bg-content: #1e1e2e;
+  --cs-bg-body: var(--cs-bg-content);
+  --cs-bg-elevated: var(--cs-bg-card-solid);
+  --cs-bg-hover: rgba(245,189,105,0.06);
+  --cs-bg-active: rgba(245,189,105,0.12);
+  --cs-text-primary: #cdd6f4;
+  --cs-text-secondary: #b5bdd7;
+  --cs-text-tertiary: #929ab3;
+  --cs-text-quaternary: var(--cs-text-tertiary);
+  --cs-border: #313244;
+  --cs-border-card: #3b3b52;
+  --cs-border-sidebar: #313244;
+  --cs-border-secondary: var(--cs-border-card);
+  --cs-primary: #f5bd69;
+  --cs-primary-light: rgba(245,189,105,0.1);
+  --cs-accent: #cba6f7;
+  --cs-accent-primary: var(--cs-primary);
+  --cs-accent-green: #a6e3a1;
+  --cs-accent-yellow: #f9e2af;
+  --cs-scrollbar-thumb: rgba(245,189,105,0.15);
+  --cs-scrollbar-hover: rgba(245,189,105,0.3);
+  --cs-danger: #f38ba8;
+  --cs-success: var(--cs-accent-green);
+  --cs-error: var(--cs-danger);
+  --cs-warning: var(--cs-accent-yellow);
+  --cs-danger-hover: rgba(243,139,168,0.12);
+  --cs-about-flow-base: #24243a;
+  --cs-about-flow-pale: #9a7448;
+  --cs-about-flow-vivid: #66517d;
+  --cs-about-flow-cobalt: #3f405f;
+  --cs-about-flow-deep: #191929;
+  --cs-about-flow-highlight: #b48a57;
+  --cs-about-flow-fallback: linear-gradient(104deg, #24243a 0%, #2c2b42 47%, #493f50 70%, #191929 100%);
+  --cs-about-flow-gloss: linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 38%), radial-gradient(ellipse 78% 150% at 0% 50%, rgba(245, 189, 105, 0.08), rgba(203, 166, 247, 0.025) 48%, transparent 100%);
+  --cs-about-flow-footer: rgba(30, 30, 46, 0.9);
+  color-scheme: dark;
+}
+
+[data-theme="dark-mocha"] body,
+[data-theme="dark-mocha"] #root {
+  background:
+    radial-gradient(circle at 18% 10%, rgba(245, 189, 105, 0.1), transparent 24%),
+    radial-gradient(circle at 82% 14%, rgba(203, 166, 247, 0.08), transparent 20%),
+    linear-gradient(180deg, #232338 0%, #1e1e2e 100%) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   通用覆盖 — 所有主题共享
+   ═══════════════════════════════════════════════════════════ */
+
+[data-theme] ::-webkit-scrollbar-thumb {
+  background: var(--cs-scrollbar-thumb) !important;
+}
+[data-theme] ::-webkit-scrollbar-thumb:hover {
+  background: var(--cs-scrollbar-hover) !important;
+}

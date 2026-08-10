@@ -1,0 +1,50 @@
+import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const tauriCliPath = require.resolve("@tauri-apps/cli/tauri.js");
+
+function normalizeCiValue(value) {
+  if (value == null) {
+    return value;
+  }
+
+  const normalized = String(value).trim().toLowerCase();
+
+  if (normalized === "1") {
+    return "true";
+  }
+
+  if (normalized === "0") {
+    return "false";
+  }
+
+  if (normalized === "true" || normalized === "false") {
+    return normalized;
+  }
+
+  return value;
+}
+
+const env = { ...process.env };
+const normalizedCi = normalizeCiValue(env.CI);
+
+if (normalizedCi == null) {
+  delete env.CI;
+} else {
+  env.CI = normalizedCi;
+}
+
+const child = spawn(process.execPath, [tauriCliPath, ...process.argv.slice(2)], {
+  env,
+  stdio: "inherit",
+});
+
+child.on("exit", (code, signal) => {
+  if (signal) {
+    process.kill(process.pid, signal);
+    return;
+  }
+
+  process.exit(code ?? 1);
+});

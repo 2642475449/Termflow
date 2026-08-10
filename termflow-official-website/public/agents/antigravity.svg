@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 184" role="img" aria-labelledby="title">
+  <title id="title">Google Antigravity</title>
+  <defs>
+    <clipPath id="antigravity-mark">
+      <path d="M1 172C17 159 28 138 37 112L54 54C64 19 78 0 100 0s36 19 46 54l17 58c9 26 20 47 36 60 4 4 4 9 1 11-4 3-9 1-13-2-22-18-35-42-45-70l-12-35c-7-20-17-30-30-30S77 56 70 76l-12 35c-10 28-23 52-45 70-4 3-9 5-13 2-3-2-3-7 1-11Z"/>
+    </clipPath>
+    <radialGradient id="green" cx="18%" cy="42%" r="52%">
+      <stop stop-color="#34a853"/>
+      <stop offset="1" stop-color="#34a853" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="yellow" cx="38%" cy="8%" r="48%">
+      <stop stop-color="#fbbc04"/>
+      <stop offset="1" stop-color="#fbbc04" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="red" cx="68%" cy="3%" r="52%">
+      <stop stop-color="#ea4335"/>
+      <stop offset="1" stop-color="#ea4335" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="purple" cx="76%" cy="43%" r="48%">
+      <stop stop-color="#8b5cf6"/>
+      <stop offset="1" stop-color="#8b5cf6" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <g clip-path="url(#antigravity-mark)">
+    <rect width="200" height="184" fill="#4285f4"/>
+    <rect width="200" height="184" fill="url(#green)"/>
+    <rect width="200" height="184" fill="url(#yellow)"/>
+    <rect width="200" height="184" fill="url(#red)"/>
+    <rect width="200" height="184" fill="url(#purple)"/>
+  </g>
+</svg>

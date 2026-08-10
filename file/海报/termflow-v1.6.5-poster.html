@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Termflow 1.6.5 发布海报</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        overflow: hidden;
+        font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+        color: #f3f7fb;
+        background:
+          radial-gradient(circle at 16% 22%, rgba(255, 79, 86, 0.18), transparent 22%),
+          radial-gradient(circle at 84% 78%, rgba(46, 214, 255, 0.16), transparent 24%),
+          linear-gradient(180deg, rgba(7, 14, 25, 0.98), rgba(2, 6, 13, 1));
+      }
+
+      body::before,
+      body::after {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      body::before {
+        background-image:
+          linear-gradient(rgba(0, 210, 255, 0.06) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(0, 210, 255, 0.06) 1px, transparent 1px);
+        background-size: 52px 52px;
+        opacity: 0.75;
+      }
+
+      body::after {
+        inset: auto 0 0;
+        height: 8px;
+        background: linear-gradient(90deg, #ff5f57 0%, #ff7047 40%, #2ed6ff 100%);
+        box-shadow:
+          0 0 20px rgba(255, 95, 87, 0.35),
+          0 0 26px rgba(46, 214, 255, 0.25);
+      }
+
+      .frame {
+        position: relative;
+        min-height: 100vh;
+        max-width: 1520px;
+        margin: 0 auto;
+        padding: 56px 56px 40px;
+      }
+
+      .corner {
+        position: absolute;
+        width: 28px;
+        height: 28px;
+        border-color: rgba(46, 214, 255, 0.82);
+      }
+
+      .corner.tl {
+        top: 24px;
+        left: 24px;
+        border-top: 2px solid rgba(46, 214, 255, 0.82);
+        border-left: 2px solid rgba(46, 214, 255, 0.82);
+      }
+
+      .corner.br {
+        right: 24px;
+        bottom: 24px;
+        border-right: 2px solid rgba(46, 214, 255, 0.82);
+        border-bottom: 2px solid rgba(46, 214, 255, 0.82);
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1.08fr) minmax(430px, 0.88fr);
+        gap: 56px;
+        align-items: center;
+        min-height: calc(100vh - 96px);
+      }
+
+      .meta {
+        color: #3ddcff;
+        font-size: 13px;
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+      }
+
+      .release {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 16px;
+        margin-top: 22px;
+        color: #778390;
+        font-size: 14px;
+        letter-spacing: 0.18em;
+      }
+
+      .badge {
+        padding: 10px 16px;
+        border: 1px solid rgba(255, 94, 99, 0.34);
+        border-radius: 10px;
+        background: rgba(255, 94, 99, 0.1);
+        color: #ff7278;
+        font-weight: 700;
+        box-shadow: 0 0 18px rgba(255, 70, 70, 0.18);
+      }
+
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: #ff6f74;
+        box-shadow: 0 0 14px rgba(255, 72, 72, 0.7);
+      }
+
+      .headline {
+        margin: 24px 0 0;
+        font-family: Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif;
+        font-weight: 900;
+        line-height: 0.9;
+        letter-spacing: -0.05em;
+      }
+
+      .headline.main {
+        font-size: clamp(72px, 9.4vw, 132px);
+        color: #ff4f56;
+      }
+
+      .headline.sub {
+        font-size: clamp(68px, 8vw, 118px);
+        color: #f3f7fb;
+      }
+
+      .desc {
+        margin-top: 28px;
+        color: #8390a0;
+        font-size: clamp(20px, 2vw, 28px);
+        max-width: 760px;
+      }
+
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+        margin-top: 40px;
+      }
+
+      .chip {
+        padding: 12px 18px;
+        border-radius: 10px;
+        border: 1px solid rgba(120, 140, 160, 0.22);
+        background: rgba(15, 24, 36, 0.72);
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        backdrop-filter: blur(14px);
+      }
+
+      .chip.cyan {
+        color: #40dfff;
+      }
+
+      .chip.red {
+        color: #ff5e63;
+      }
+
+      .chip.muted {
+        color: #d7dee8;
+      }
+
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-top: 110px;
+        color: #697686;
+        font-size: 14px;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+      }
+
+      .status .green {
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        background: #4ade80;
+        box-shadow: 0 0 16px rgba(74, 222, 128, 0.8);
+      }
+
+      .terminal {
+        justify-self: end;
+        width: min(100%, 600px);
+        border-radius: 18px;
+        border: 1px solid rgba(41, 193, 255, 0.28);
+        background: linear-gradient(180deg, rgba(7, 16, 28, 0.95), rgba(2, 8, 18, 0.98));
+        box-shadow:
+          0 0 0 1px rgba(0, 214, 255, 0.05),
+          0 24px 90px rgba(0, 0, 0, 0.45),
+          0 0 34px rgba(0, 174, 255, 0.08);
+        overflow: hidden;
+      }
+
+      .terminal-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px 20px;
+        border-bottom: 1px solid rgba(68, 89, 113, 0.35);
+        background: rgba(9, 18, 31, 0.92);
+      }
+
+      .lights {
+        display: flex;
+        gap: 8px;
+      }
+
+      .lights span {
+        width: 12px;
+        height: 12px;
+        border-radius: 999px;
+      }
+
+      .terminal-title {
+        color: #697686;
+        font-size: 12px;
+        letter-spacing: 0.24em;
+        text-transform: uppercase;
+      }
+
+      .terminal-body {
+        padding: 28px;
+        color: #cad5e0;
+        font-size: 15px;
+        line-height: 1.9;
+      }
+
+      .cmd {
+        color: #f3f7fb;
+        font-size: 31px;
+        font-weight: 600;
+      }
+
+      .warn {
+        color: #ffc54f;
+        font-size: 28px;
+        font-weight: 700;
+      }
+
+      .muted {
+        color: #778390;
+      }
+
+      .cyan {
+        color: #49defd;
+      }
+
+      .lime {
+        color: #8af66a;
+        font-weight: 700;
+      }
+
+      .red {
+        color: #ff7278;
+      }
+
+      .block {
+        margin-top: 16px;
+      }
+
+      .divider {
+        margin-top: 18px;
+        padding-top: 16px;
+        border-top: 1px solid rgba(62, 189, 233, 0.12);
+      }
+
+      @media (max-width: 1100px) {
+        body {
+          overflow: auto;
+        }
+
+        .frame {
+          padding: 32px 20px 40px;
+        }
+
+        .layout {
+          grid-template-columns: 1fr;
+          min-height: auto;
+        }
+
+        .terminal {
+          justify-self: stretch;
+        }
+
+        .status {
+          margin-top: 56px;
+          flex-wrap: wrap;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="frame">
+      <span class="corner tl"></span>
+      <span class="corner br"></span>
+
+      <div class="layout">
+        <section>
+          <div class="meta">// Termflow Release</div>
+
+          <div class="release">
+            <span class="badge">v1.6.5</span>
+            <span class="dot"></span>
+            <span>2026-06-05 RELEASED</span>
+          </div>
+
+          <h1 class="headline main">Claude Code</h1>
+          <h2 class="headline sub">桌面工作台</h2>
+
+          <div class="desc">
+            Termflow 1.6.5 把 Claude Code 的命令行体验装进图形界面，用多会话、嵌入式终端与项目级配置管理，组织更顺手的 AI 开发工作流。
+          </div>
+
+          <div class="chips">
+            <span class="chip cyan">Multi Session</span>
+            <span class="chip red">Embedded Terminal</span>
+            <span class="chip cyan">Skills / Commands / Hooks</span>
+            <span class="chip muted">Project Workspace</span>
+          </div>
+
+          <div class="status">
+            <span class="green"></span>
+            <span>Termflow Online</span>
+            <span>·</span>
+            <span>Claude Workflow Ready</span>
+          </div>
+        </section>
+
+        <aside class="terminal">
+          <div class="terminal-top">
+            <div class="lights">
+              <span style="background:#ff5f57"></span>
+              <span style="background:#febc2e"></span>
+              <span style="background:#28c840"></span>
+            </div>
+            <span class="terminal-title">termflow / release 1.6.5</span>
+          </div>
+
+          <div class="terminal-body">
+            <div class="cmd">$ termflow --about</div>
+            <div class="warn">Claude Code Session Manager</div>
+            <div><span class="cyan">*</span> UI shell for Claude Code <span class="muted">Tauri 2 + React 19</span></div>
+
+            <div class="block">
+              <div class="muted"># Core Capabilities</div>
+              <div><span class="cyan">*</span> multi-session workspace <span class="muted">tabs · sidebar · project windows</span></div>
+              <div><span class="cyan">*</span> embedded terminal <span class="muted">persistent PTY sessions</span></div>
+              <div><span class="cyan">*</span> config center <span class="muted">CLAUDE.md / Hooks / Commands / Skills</span></div>
+            </div>
+
+            <div class="block">
+              <div class="muted"># Workflow Signals</div>
+              <div><span class="lime">+</span> task notifications <span class="muted">permission request · assistant complete</span></div>
+              <div><span class="red">~</span> archived sessions <span class="muted">recover and manage project history</span></div>
+            </div>
+
+            <div class="divider">
+              <div class="cyan">$ open project · start session · keep context</div>
+              <div><span class="cyan">◉</span> <span class="muted">lighter shell, faster Claude workflow</span></div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,68 @@
+{
+  "data": [
+    {
+      "id": "page-shortcut-command-list",
+      "title": "快捷命令列表",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1783069330673,
+      "canvasData": {
+        "x": 0,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/shortcut-command-list.html",
+        "interactions": [
+          {
+            "domId": "open-create-command",
+            "targetPageId": "page-shortcut-command-modal",
+            "hideEdge": true,
+            "transitionLabel": "打开弹窗"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-shortcut-command-modal",
+      "title": "添加快捷命令",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1783069330673,
+      "canvasData": {
+        "x": 620,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/shortcut-command-modal.html",
+        "interactions": [
+          {
+            "domId": "modal-close",
+            "targetPageId": "page-shortcut-command-list",
+            "hideEdge": true,
+            "transitionLabel": "关闭弹窗"
+          },
+          {
+            "domId": "modal-cancel",
+            "targetPageId": "page-shortcut-command-list",
+            "hideEdge": true,
+            "transitionLabel": "取消"
+          },
+          {
+            "domId": "modal-backdrop-close",
+            "targetPageId": "page-shortcut-command-list",
+            "hideEdge": true,
+            "transitionLabel": "关闭蒙层"
+          }
+        ]
+      }
+    }
+  ],
+  "config": {
+    "autoLayout": true,
+    "deviceType": "desktop",
+    "projectName": "快捷命令弹窗改版",
+    "designLibrary": null
+  }
+}

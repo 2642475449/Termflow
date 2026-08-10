@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Preflight</title>
+    <style id="theme-vars">
+:root {
+  color-scheme: light;
+  --termflow-background: #f3f9ff;
+  --termflow-foreground: #102033;
+  --termflow-card: rgba(255, 255, 255, 0.86);
+  --termflow-card-foreground: #11233a;
+  --termflow-popover: rgba(255, 255, 255, 0.94);
+  --termflow-popover-foreground: #102033;
+  --termflow-primary: #1296b7;
+  --termflow-primary-foreground: #f7fdff;
+  --termflow-muted: #e7f0f8;
+  --termflow-muted-foreground: #607489;
+  --termflow-border: rgba(126, 152, 183, 0.24);
+  --termflow-input: rgba(177, 198, 223, 0.34);
+  --termflow-ring: rgba(18, 150, 183, 0.24);
+  --termflow-radius-sm: 12px;
+  --termflow-radius-md: 12px;
+  --termflow-radius-lg: 16px;
+  --termflow-state-success: #34d399;
+  --termflow-state-warning: #fbbf24;
+  --termflow-state-error: #fb7185;
+  --termflow-state-info: #38bdf8;
+}
+
+.dark {
+  color-scheme: light;
+  --termflow-background: #eef6ff;
+  --termflow-foreground: #102033;
+  --termflow-card: rgba(255, 255, 255, 0.9);
+  --termflow-card-foreground: #11233a;
+  --termflow-popover: rgba(255, 255, 255, 0.96);
+  --termflow-popover-foreground: #102033;
+  --termflow-primary: #1296b7;
+  --termflow-primary-foreground: #f7fdff;
+  --termflow-muted: #dfeaf5;
+  --termflow-muted-foreground: #64778b;
+  --termflow-border: rgba(126, 152, 183, 0.24);
+  --termflow-input: rgba(177, 198, 223, 0.34);
+  --termflow-ring: rgba(18, 150, 183, 0.24);
+  --termflow-radius-sm: 12px;
+  --termflow-radius-md: 12px;
+  --termflow-radius-lg: 16px;
+  --termflow-state-success: #34d399;
+  --termflow-state-warning: #fbbf24;
+  --termflow-state-error: #fb7185;
+  --termflow-state-info: #38bdf8;
+}
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-background: var(--termflow-background);
+    --color-foreground: var(--termflow-foreground);
+    --color-card: var(--termflow-card);
+    --color-card-foreground: var(--termflow-card-foreground);
+    --color-popover: var(--termflow-popover);
+    --color-popover-foreground: var(--termflow-popover-foreground);
+    --color-primary: var(--termflow-primary);
+    --color-primary-foreground: var(--termflow-primary-foreground);
+    --color-muted: var(--termflow-muted);
+    --color-muted-foreground: var(--termflow-muted-foreground);
+    --color-border: var(--termflow-border);
+    --color-input: var(--termflow-input);
+    --color-ring: var(--termflow-ring);
+    --radius-sm: var(--termflow-radius-sm);
+    --radius-md: var(--termflow-radius-md);
+    --radius-lg: var(--termflow-radius-lg);
+  }
+  @layer base {
+    body { background: var(--termflow-background); color: var(--termflow-foreground); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style id="semantic-token-fallback">
+      .bg-background { background-color: var(--termflow-background); }
+      .text-background { color: var(--termflow-background); }
+      .border-background { border-color: var(--termflow-background); }
+      .ring-background { --tw-ring-color: var(--termflow-background); }
+      .bg-foreground { background-color: var(--termflow-foreground); }
+      .text-foreground { color: var(--termflow-foreground); }
+      .border-foreground { border-color: var(--termflow-foreground); }
+      .ring-foreground { --tw-ring-color: var(--termflow-foreground); }
+      .bg-card { background-color: var(--termflow-card); }
+      .text-card { color: var(--termflow-card); }
+      .border-card { border-color: var(--termflow-card); }
+      .ring-card { --tw-ring-color: var(--termflow-card); }
+      .bg-card-foreground { background-color: var(--termflow-card-foreground); }
+      .text-card-foreground { color: var(--termflow-card-foreground); }
+      .border-card-foreground { border-color: var(--termflow-card-foreground); }
+      .ring-card-foreground { --tw-ring-color: var(--termflow-card-foreground); }
+      .bg-popover { background-color: var(--termflow-popover); }
+      .text-popover { color: var(--termflow-popover); }
+      .border-popover { border-color: var(--termflow-popover); }
+      .ring-popover { --tw-ring-color: var(--termflow-popover); }
+      .bg-popover-foreground { background-color: var(--termflow-popover-foreground); }
+      .text-popover-foreground { color: var(--termflow-popover-foreground); }
+      .border-popover-foreground { border-color: var(--termflow-popover-foreground); }
+      .ring-popover-foreground { --tw-ring-color: var(--termflow-popover-foreground); }
+      .bg-primary { background-color: var(--termflow-primary); }
+      .text-primary { color: var(--termflow-primary); }
+      .border-primary { border-color: var(--termflow-primary); }
+      .ring-primary { --tw-ring-color: var(--termflow-primary); }
+      .bg-primary-foreground { background-color: var(--termflow-primary-foreground); }
+      .text-primary-foreground { color: var(--termflow-primary-foreground); }
+      .border-primary-foreground { border-color: var(--termflow-primary-foreground); }
+      .ring-primary-foreground { --tw-ring-color: var(--termflow-primary-foreground); }
+      .bg-muted { background-color: var(--termflow-muted); }
+      .text-muted { color: var(--termflow-muted); }
+      .border-muted { border-color: var(--termflow-muted); }
+      .ring-muted { --tw-ring-color: var(--termflow-muted); }
+      .bg-muted-foreground { background-color: var(--termflow-muted-foreground); }
+      .text-muted-foreground { color: var(--termflow-muted-foreground); }
+      .border-muted-foreground { border-color: var(--termflow-muted-foreground); }
+      .ring-muted-foreground { --tw-ring-color: var(--termflow-muted-foreground); }
+      .bg-border { background-color: var(--termflow-border); }
+      .text-border { color: var(--termflow-border); }
+      .border-border { border-color: var(--termflow-border); }
+      .ring-border { --tw-ring-color: var(--termflow-border); }
+      .bg-input { background-color: var(--termflow-input); }
+      .text-input { color: var(--termflow-input); }
+      .border-input { border-color: var(--termflow-input); }
+      .ring-input { --tw-ring-color: var(--termflow-input); }
+      .bg-ring { background-color: var(--termflow-ring); }
+      .text-ring { color: var(--termflow-ring); }
+      .border-ring { border-color: var(--termflow-ring); }
+      .ring-ring { --tw-ring-color: var(--termflow-ring); }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body class="min-h-screen font-sans antialiased">
+    <main>
+    </main>
+    <script>lucide.createIcons();</script>
+</body>
+</html>

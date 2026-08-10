@@ -1,0 +1,30 @@
+pub mod ai;
+pub mod branch;
+pub mod checkpoint;
+pub mod clone;
+pub mod commit;
+pub mod conflict;
+pub mod diff;
+pub mod error;
+pub mod graph;
+pub mod remote;
+pub mod status;
+pub mod types;
+pub mod utils;
+pub mod watcher;
+
+// Re-export commands
+pub use ai::*;
+pub use branch::*;
+pub use checkpoint::*;
+pub use clone::*;
+pub use commit::*;
+pub use conflict::*;
+pub use diff::*;
+pub use graph::*;
+pub use remote::*;
+pub use status::*;
+pub use watcher::*;
+
+// Re-export watcher
+pub use watcher::GitWatcher;
