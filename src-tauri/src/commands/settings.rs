@@ -1,8 +1,18 @@
 use std::sync::Arc;
 
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 use crate::database::{Database, PersistentSettingsRecord};
+
+const PERSISTENT_THEME_UPDATED_EVENT: &str = "persistent-theme-updated";
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PersistentThemeUpdate {
+    light_theme: String,
+    dark_theme: String,
+    theme_category: String,
+}
 
 #[tauri::command]
 pub fn initialize_persistent_settings(
@@ -28,6 +38,16 @@ pub fn get_persistent_settings(
 pub fn save_persistent_settings(
     database: State<'_, Arc<Database>>,
     settings: PersistentSettingsRecord,
+    app: AppHandle,
 ) -> Result<(), String> {
-    database.save_persistent_settings_without_last_project(&settings)
+    database.save_persistent_settings_without_last_project(&settings)?;
+    let _ = app.emit(
+        PERSISTENT_THEME_UPDATED_EVENT,
+        PersistentThemeUpdate {
+            light_theme: settings.light_theme,
+            dark_theme: settings.dark_theme,
+            theme_category: settings.theme_category,
+        },
+    );
+    Ok(())
 }

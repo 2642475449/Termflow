@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { App as AntdApp, ConfigProvider, theme } from "antd";
+import { listen } from "@tauri-apps/api/event";
 import zhCN from "antd/locale/zh_CN";
 import zhTW from "antd/locale/zh_TW";
 import enUS from "antd/locale/en_US";
@@ -30,6 +31,34 @@ const THEME_COLORS: Record<ThemeMode, string> = {
 };
 
 const STARTUP_THEME_STORAGE_KEY = "termflow-startup-theme";
+const PERSISTENT_THEME_UPDATED_EVENT = "persistent-theme-updated";
+
+interface PersistentThemeUpdate {
+  lightTheme: ThemeMode;
+  darkTheme: ThemeMode;
+  themeCategory: "light" | "dark" | "system";
+}
+
+function isPersistentThemeUpdate(value: unknown): value is PersistentThemeUpdate {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const update = value as Record<string, unknown>;
+  const isThemeMode = (theme: unknown): theme is ThemeMode =>
+    theme === "light-glass" ||
+    theme === "light-warm" ||
+    theme === "dark-starry" ||
+    theme === "dark-mocha";
+
+  return (
+    isThemeMode(update.lightTheme) &&
+    isThemeMode(update.darkTheme) &&
+    (update.themeCategory === "light" ||
+      update.themeCategory === "dark" ||
+      update.themeCategory === "system")
+  );
+}
 
 function App() {
   const lightTheme = useAppStore((s) => s.lightTheme);
@@ -232,6 +261,41 @@ function App() {
       window.clearTimeout(timer);
     };
   }, [isVoiceOverlayWindow, persistentSettings, persistentSettingsReady]);
+
+  useEffect(() => {
+    if (!persistentSettingsReady) {
+      return;
+    }
+
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+
+    listen<unknown>(PERSISTENT_THEME_UPDATED_EVENT, (event) => {
+      if (!isPersistentThemeUpdate(event.payload)) {
+        return;
+      }
+
+      useAppStore.setState(event.payload);
+      // This update originated in another window and is already in SQLite. Mark
+      // it as persisted locally so it does not overwrite unrelated settings.
+      lastPersistedSnapshotRef.current = JSON.stringify(getPersistentSettingsSnapshot());
+    })
+      .then((nextUnlisten) => {
+        if (disposed) {
+          nextUnlisten();
+          return;
+        }
+        unlisten = nextUnlisten;
+      })
+      .catch((error) => {
+        console.error("Failed to listen for persistent theme updates:", error);
+      });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [persistentSettingsReady]);
 
   useEffect(() => {
     if (isVoiceOverlayWindow) {

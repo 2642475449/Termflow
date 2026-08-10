@@ -1296,7 +1296,7 @@ function SkillRow({
   const { t } = useTranslation();
   return (
     <div
-      className="flex items-center gap-4 px-4 py-3 transition-colors cursor-pointer"
+      className="flex items-start gap-4 px-4 py-3 transition-colors cursor-pointer"
       style={{ borderBottom: "1px solid var(--cs-border-card)" }}
       onMouseEnter={(e) => {
         e.currentTarget.style.background = "var(--cs-bg-hover)";
@@ -1309,7 +1309,7 @@ function SkillRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <AgentIcon agentId={skill.agent} size={16} />
-          <span className="text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>
+          <span className="min-w-0 break-words text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>
             {skill.name}
           </span>
           <Tag className="!m-0" color={skill.scope === "workspace" ? "blue" : "gold"}>
@@ -1324,8 +1324,8 @@ function SkillRow({
         <div className="text-[11px] mt-1 line-clamp-2" style={{ color: "var(--cs-text-tertiary)" }}>
           {skill.description || t("settings.shared.noDescription")}
         </div>
-        <div className="text-[10px] mt-1 flex items-center gap-3 flex-wrap" style={{ color: "var(--cs-text-tertiary)" }}>
-          <span className="inline-flex items-center gap-1">
+        <div className="text-[10px] mt-1 flex min-w-0 items-center gap-x-3 gap-y-1 flex-wrap" style={{ color: "var(--cs-text-tertiary)" }}>
+          <span className="inline-flex min-w-0 items-center gap-1 flex-wrap">
             {t("settings.skills.availableTo")}
             {skill.effectiveAgents.map((agent) => (
               <Tooltip key={agent} title={skillAgentLabel(agent, t)}>
@@ -1333,12 +1333,13 @@ function SkillRow({
               </Tooltip>
             ))}
           </span>
-          <span>{skill.folderName}</span>
-          <span>{skill.sourceDir}</span>
-          <span>{t("settings.shared.updatedAt", { value: formatSkillUpdatedAt(skill.updatedAt) ?? t("common.unknown") })}</span>
+          <span className="break-words">{skill.folderName}</span>
+          <span className="min-w-0 break-all">{skill.sourceDir}</span>
+          <span className="break-words">{t("settings.shared.updatedAt", { value: formatSkillUpdatedAt(skill.updatedAt) ?? t("common.unknown") })}</span>
         </div>
       </div>
       <Switch
+        className="mt-1 shrink-0"
         checked={skill.enabled}
         loading={toggling}
         onClick={(checked, event) => {
@@ -1346,6 +1347,57 @@ function SkillRow({
           onToggle(checked);
         }}
       />
+    </div>
+  );
+}
+
+function SkillAgentFilterButtons({
+  value,
+  total,
+  counts,
+  onChange,
+}: {
+  value: SkillAgentFilter;
+  total: number;
+  counts: Record<SkillAgent, number>;
+  onChange: (agent: SkillAgentFilter) => void;
+}) {
+  const { t } = useTranslation();
+  const options: Array<{ value: SkillAgentFilter; label: React.ReactNode }> = [
+    { value: "all", label: `${t("settings.skills.allAgents")} (${total})` },
+    ...SKILL_AGENTS.map((agent) => ({
+      value: agent,
+      label: <><AgentIcon agentId={agent} size={14} />{skillAgentLabel(agent, t)} ({counts[agent]})</>,
+    })),
+  ];
+
+  return (
+    <div
+      className="flex flex-wrap gap-1 rounded-lg p-1"
+      role="radiogroup"
+      aria-label={t("settings.skills.filterByAgent")}
+      style={{ background: "var(--cs-bg-hover)" }}
+    >
+      {options.map((option) => {
+        const active = option.value === value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(option.value)}
+            className="inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-md px-3 py-1 text-left text-sm transition-colors"
+            style={{
+              background: active ? "var(--cs-bg-card)" : "transparent",
+              color: active ? "var(--cs-text-primary)" : "var(--cs-text-secondary)",
+              boxShadow: active ? "0 1px 2px rgba(0,0,0,0.08)" : "none",
+            }}
+          >
+            {option.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -1724,17 +1776,11 @@ function SkillsPage() {
       >
         <div className="mb-3">
           <div className="text-xs mb-2" style={{ color: "var(--cs-text-tertiary)" }}>{t("settings.skills.filterByAgent")}</div>
-          <Segmented
-            block
+          <SkillAgentFilterButtons
             value={activeAgent}
-            onChange={(value) => setActiveAgent(value as SkillAgentFilter)}
-            options={[
-              { label: `${t("settings.skills.allAgents")} (${searchStatusFilteredSkills.length})`, value: "all" },
-              ...SKILL_AGENTS.map((agent) => ({
-                label: <span className="inline-flex items-center gap-1.5"><AgentIcon agentId={agent} size={14} />{skillAgentLabel(agent, t)} ({agentCounts[agent]})</span>,
-                value: agent,
-              })),
-            ]}
+            total={searchStatusFilteredSkills.length}
+            counts={agentCounts}
+            onChange={setActiveAgent}
           />
         </div>
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_auto]">
@@ -3489,6 +3535,46 @@ const emptyMcpForm: McpServerFormData = {
   cwd: "",
 };
 
+function McpServerTypePicker({
+  value,
+  options,
+  onChange,
+}: {
+  value: McpServerType;
+  options: Array<{ value: McpServerType; label: string }>;
+  onChange: (value: McpServerType) => void;
+}) {
+  return (
+    <div
+      className="flex flex-wrap gap-1 rounded-lg p-1"
+      role="radiogroup"
+      aria-label="MCP server type"
+      style={{ background: "var(--cs-bg-hover)" }}
+    >
+      {options.map((option) => {
+        const active = option.value === value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(option.value)}
+            className="min-h-8 max-w-full rounded-md px-3 py-1 text-left text-sm leading-5 transition-colors"
+            style={{
+              background: active ? "var(--cs-bg-card)" : "transparent",
+              color: active ? "var(--cs-text-primary)" : "var(--cs-text-secondary)",
+              boxShadow: active ? "0 1px 2px rgba(0,0,0,0.08)" : "none",
+            }}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function McpServersPage() {
   const { t } = useTranslation();
   const currentProject = useAppStore((s) => s.currentProject);
@@ -3750,6 +3836,18 @@ function McpServersPage() {
 
   const configPath =
     activeScope === "workspace" ? catalog?.workspaceConfigPath : catalog?.userConfigPath;
+  const serverTypeOptions: Array<{ value: McpServerType; label: string }> = [
+    { value: "stdio", label: t("settings.mcpServers.serverTypeStdio") },
+    { value: "http", label: t("settings.mcpServers.serverTypeHttp") },
+    ...(activeAgent === "codex" || activeAgent === "opencode" || activeAgent === "antigravity"
+      ? []
+      : [
+          { value: "sse" as const, label: t("settings.mcpServers.serverTypeSSE") },
+          ...(activeAgent === "qoder"
+            ? [{ value: "ws" as const, label: t("settings.mcpServers.serverTypeWs") }]
+            : []),
+        ]),
+  ];
 
   if (loading) {
     return (
@@ -3816,8 +3914,8 @@ function McpServersPage() {
               ]}
             />
           </div>
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="text-[11px] break-all" style={{ color: "var(--cs-text-tertiary)" }}>
+          <div className="flex w-full min-w-0 items-center gap-2 lg:w-auto lg:max-w-[50%]">
+            <span className="min-w-0 flex-1 text-[11px] break-all" style={{ color: "var(--cs-text-tertiary)" }}>
               {configPath || (activeScope === "workspace"
                 ? t("settings.mcpServers.workspaceConfigUnavailable")
                 : "")}
@@ -3880,16 +3978,16 @@ function McpServersPage() {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
                       <span
-                        className="text-sm font-medium truncate"
+                        className="min-w-0 text-sm font-medium truncate"
                         style={{ color: "var(--cs-text-primary)" }}
                       >
                         {server.name}
                       </span>
                       <Tag
                         color={isRemote ? "cyan" : "blue"}
-                        className="!m-0 !text-[10px]"
+                        className="!m-0 shrink-0 !text-[10px]"
                       >
                         {server.serverType === "stdio" ? "Stdio" : server.serverType.toUpperCase()}
                       </Tag>
@@ -3910,7 +4008,7 @@ function McpServersPage() {
                     {/* Test result */}
                     {hasTestResult && (
                       <div
-                        className="text-xs mt-1.5 flex items-center gap-1.5"
+                        className="text-xs mt-1.5 flex items-start gap-1.5 break-words"
                         style={{ color: testResult!.success ? "var(--cs-success)" : "var(--cs-error)" }}
                       >
                         {testResult!.success ? <CheckOutlined /> : <DeleteOutlined />}
@@ -3996,24 +4094,10 @@ function McpServersPage() {
             <label className="text-sm mb-1.5 block" style={{ color: "var(--cs-text-primary)" }}>
               {t("settings.mcpServers.serverType")}
             </label>
-            <Segmented
+            <McpServerTypePicker
               value={formData.serverType}
-              onChange={(val) =>
-                setFormData((prev) => ({ ...prev, serverType: val as McpServerType }))
-              }
-              options={[
-                { value: "stdio", label: t("settings.mcpServers.serverTypeStdio") },
-                ...(activeAgent === "codex" || activeAgent === "opencode" || activeAgent === "antigravity"
-                  ? [{ value: "http", label: t("settings.mcpServers.serverTypeHttp") }]
-                  : [
-                      { value: "http", label: t("settings.mcpServers.serverTypeHttp") },
-                      { value: "sse", label: t("settings.mcpServers.serverTypeSSE") },
-                      ...(activeAgent === "qoder"
-                        ? [{ value: "ws", label: t("settings.mcpServers.serverTypeWs") }]
-                        : []),
-                    ]),
-              ]}
-              block
+              onChange={(serverType) => setFormData((prev) => ({ ...prev, serverType }))}
+              options={serverTypeOptions}
             />
           </div>
 
