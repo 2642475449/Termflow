@@ -110,10 +110,10 @@ import packageJson from "../../package.json";
 
 const { Text } = Typography;
 
-// Fill these in when the public website and repository are ready.
+// Fill in the website URL when it is ready.
 const ABOUT_LINKS: Record<"website" | "github", string | null> = {
   website: null,
-  github: null,
+  github: "https://github.com/2642475449/Termflow",
 };
 
 type SettingsPage = "general" | "notifications" | "agents" | "terminal" | "voiceRecognition" | "shortcuts" | "skills" | "hooks" | "mcpServers" | "commands" | "quickCommands" | "claudeMd" | "dataPrivacy" | "archived" | "about";
