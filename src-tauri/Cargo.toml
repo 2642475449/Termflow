@@ -46,6 +46,7 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 notify = "7"
 notify-debouncer-mini = "0.5"
 regex = "1"
+tauri-plugin-updater = "2.10.0"
 
 [target.'cfg(windows)'.dependencies]
 tauri-winrt-notification = "0.7.2"

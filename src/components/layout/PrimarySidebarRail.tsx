@@ -1,5 +1,6 @@
 import { CodeOutlined, FolderOutlined, SettingOutlined, BranchesOutlined } from "@ant-design/icons";
-import { message, Popover, Tooltip } from "antd";
+import { check } from "@tauri-apps/plugin-updater";
+import { message, Modal, Popover, Tooltip } from "antd";
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ShortcutHint } from "@/components/ui/ShortcutHint";
@@ -70,6 +71,7 @@ function SettingsMenu({ onClose }: { onClose: () => void }) {
   const currentProject = useAppStore((s) => s.currentProject);
   const projectPath = currentProject?.path ?? null;
   const [activeSubmenu, setActiveSubmenu] = useState<SubmenuKey>(null);
+  const [checkingForUpdate, setCheckingForUpdate] = useState(false);
   const systemPrefersDark = useAppStore((s) => s.systemPrefersDark);
 
   const currentThemeLabel = t(`settings.general.appearance.${themeCategory}`);
@@ -88,11 +90,69 @@ function SettingsMenu({ onClose }: { onClose: () => void }) {
     onClose();
   };
 
-  const handleCheckVersion = () => {
-    message.info(t("settings.quickMenu.currentVersion", {
-      version: packageJson.version,
-    }));
-    onClose();
+  const handleCheckVersion = async () => {
+    if (checkingForUpdate) return;
+
+    const messageKey = "termflow-update";
+    setCheckingForUpdate(true);
+    message.info({
+      key: messageKey,
+      content: t("settings.quickMenu.checkingForUpdate"),
+    });
+
+    try {
+      const update = await check();
+
+      if (!update) {
+        message.success({
+          key: messageKey,
+          content: t("settings.quickMenu.upToDate", { version: packageJson.version }),
+        });
+        return;
+      }
+
+      message.destroy(messageKey);
+      Modal.confirm({
+        title: t("settings.quickMenu.updateAvailable", { version: update.version }),
+        content: (
+          <div className="space-y-3">
+            <p className="m-0 text-sm text-[var(--cs-text-secondary)]">
+              {t("settings.quickMenu.updateAvailableDescription", {
+                currentVersion: packageJson.version,
+                version: update.version,
+              })}
+            </p>
+            <p className="m-0 text-xs text-[var(--cs-text-tertiary)]">
+              {t("settings.quickMenu.installUpdateHint")}
+            </p>
+            <div>
+              <div className="mb-1 text-sm font-medium">{t("settings.quickMenu.releaseNotes")}</div>
+              <div className="max-h-44 overflow-y-auto whitespace-pre-wrap rounded-md bg-[var(--cs-bg-tertiary)] p-3 text-xs leading-5 text-[var(--cs-text-secondary)]">
+                {update.body || t("settings.quickMenu.noReleaseNotes")}
+              </div>
+            </div>
+          </div>
+        ),
+        okText: t("settings.quickMenu.installUpdate"),
+        cancelText: t("common.cancel"),
+        onOk: async () => {
+          message.info({
+            key: messageKey,
+            content: t("settings.quickMenu.downloadingUpdate"),
+          });
+          await update.downloadAndInstall();
+        },
+      });
+    } catch (error) {
+      console.error("Failed to check for application updates:", error);
+      message.error({
+        key: messageKey,
+        content: t("settings.quickMenu.updateCheckFailed"),
+      });
+    } finally {
+      setCheckingForUpdate(false);
+      onClose();
+    }
   };
 
   const handleSelectLanguage = (lang: Language) => {
@@ -149,7 +209,9 @@ function SettingsMenu({ onClose }: { onClose: () => void }) {
           />
 
           <MenuItem
-            label={t("settings.quickMenu.checkVersion", "检查版本")}
+            label={checkingForUpdate
+              ? t("settings.quickMenu.checkingForUpdate")
+              : t("settings.quickMenu.checkVersion", "检查更新")}
             onClick={handleCheckVersion}
           />
         </div>
