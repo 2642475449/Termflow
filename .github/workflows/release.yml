@@ -27,7 +27,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Install frontend dependencies
-        run: corepack pnpm install --frozen-lockfile
+        shell: pwsh
+        run: corepack pnpm install --frozen-lockfile --store-dir "$env:RUNNER_TEMP\pnpm-store"
 
       - uses: tauri-apps/tauri-action@v1
         env:
