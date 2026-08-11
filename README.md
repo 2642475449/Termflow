@@ -15,7 +15,7 @@
   <img src="https://img.shields.io/badge/Rust-000000?style=flat-square&logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
   <img src="https://img.shields.io/badge/Windows-0078D6?style=flat-square&logo=windows&logoColor=white" alt="Windows">
-  <img src="https://img.shields.io/badge/v1.8.15-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/v1.8.16-blue?style=flat-square" alt="Version">
 </p>
 
 ---
