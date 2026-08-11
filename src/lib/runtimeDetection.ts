@@ -1,14 +1,11 @@
 import type { ClaudeSessionMode } from "@/types";
+import { stripAnsiEscapeSequences } from "@/lib/textContent";
 
 export interface DetectedClaudeRuntimeState {
   model?: string | null;
   mode?: ClaudeSessionMode | null;
   silent?: boolean;
 }
-
-const ANSI_PATTERN =
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI stripping requires control chars.
-  /\u001b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
 
 const MODEL_CONTEXT_PATTERNS = [
   /\bmodel\s*[:=]\s*(claude[-\s]?(?:opus|sonnet|haiku)[\w.\- ]*)/i,
@@ -67,8 +64,7 @@ export function detectClaudeRuntimeState(chunk: string): DetectedClaudeRuntimeSt
 }
 
 function sanitizeChunk(chunk: string): string[] {
-  return chunk
-    .replace(ANSI_PATTERN, "")
+  return stripAnsiEscapeSequences(chunk)
     .split(/\r?\n/)
     .map((line) => line.replace(/\s+/g, " ").trim())
     .filter(Boolean)

@@ -77,6 +77,11 @@ describe("toast policy", () => {
     expect(guardToastText(content)).toBe(content);
   });
 
+  it("removes ANSI terminal sequences from toast text", () => {
+    expect(guardToastText("\u001b[31mfatal:\u001b[0m failed")).toBe("fatal: failed");
+    expect(createToastArgs("error", "\u001b[31mfailed\u001b[0m").message).toBe("failed");
+  });
+
   it("wraps text over the global limit with the complete content", () => {
     const content = "Receiving objects: 8% ".repeat(40);
     const guarded = guardToastText(content);

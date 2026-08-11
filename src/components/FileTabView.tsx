@@ -26,6 +26,7 @@ import {
 import MarkdownPreview from "@/components/markdown/MarkdownPreview";
 import { replaceMarkdownSourceBlock } from "@/components/markdown/markdownSourceBlocks";
 import { revealExplorerPath } from "@/lib/explorer";
+import { stripAnsiEscapeSequences } from "@/lib/textContent";
 import { useAppStore } from "@/store";
 import { useTranslation } from "react-i18next";
 
@@ -294,11 +295,12 @@ function FileTabView({ tabId, projectPath, path, isActive }: FileTabViewProps) {
 
       if (status.kind === "text") {
         const result = await readProjectFile(projectPath, path);
-        setContent(result.content);
+        const textContent = stripAnsiEscapeSequences(result.content);
+        setContent(textContent);
         setImageSrc(null);
         setPdfData(null);
         setImageLoadFailed(false);
-        setSavedContent(result.content);
+        setSavedContent(textContent);
         setReadOnly(result.readOnly);
         setSizeBytes(result.sizeBytes ?? status.sizeBytes ?? null);
         setLargeFile(result.largeFile ?? status.largeFile ?? false);

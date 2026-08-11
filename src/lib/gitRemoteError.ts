@@ -1,3 +1,5 @@
+import { stripAnsiEscapeSequences } from "./textContent";
+
 export type GitRemoteErrorKind =
   | "networkInterrupted"
   | "authenticationFailed"
@@ -11,8 +13,6 @@ export interface GitRemoteErrorSummary {
 }
 
 const GIT_PROGRESS_LINE = /^(?:remote:\s*)?(?:enumerating objects|counting objects|compressing objects|receiving objects|resolving deltas|total\s)/i;
-const ANSI_ESCAPE = /\u001b\[[0-?]*[ -/]*[@-~]/g;
-
 function truncateDetail(value: string, maxLength: number): string {
   if (value.length <= maxLength) return value;
   return `${value.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
@@ -22,7 +22,7 @@ export function summarizeGitRemoteError(
   rawMessage: string,
   maxLength = 180,
 ): GitRemoteErrorSummary {
-  const normalized = rawMessage.replace(ANSI_ESCAPE, "").replace(/\r/g, "\n").trim();
+  const normalized = stripAnsiEscapeSequences(rawMessage).replace(/\r/g, "\n").trim();
   const lower = normalized.toLowerCase();
 
   let kind: GitRemoteErrorKind = "generic";

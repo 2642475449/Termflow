@@ -43,6 +43,7 @@ import {
 } from "@/store";
 import { createSilentWavDataUrl, type MimoAuthMode } from "@/lib/mimoAsr";
 import { captureShortcutFromEvent, formatShortcutDisplay, parseShortcut } from "@/lib/shortcut";
+import { stripAnsiEscapeSequences } from "@/lib/textContent";
 import {
   createSkill,
   createCommand,
@@ -2517,7 +2518,11 @@ function CommandsPage() {
     setTestResult(null);
     try {
       const result = await runCommandTest(command.scope, command.id, projectPath);
-      setTestResult(result);
+      setTestResult({
+        ...result,
+        stdout: stripAnsiEscapeSequences(result.stdout),
+        stderr: stripAnsiEscapeSequences(result.stderr),
+      });
       if (result.success) {
         message.success(t("settings.commands.testRunSuccess", { name: command.name }));
       } else {
@@ -3774,14 +3779,14 @@ function McpServersPage() {
       setTestResult({
         name: server.name,
         success: result.success,
-        message: result.message,
+        message: stripAnsiEscapeSequences(result.message),
       });
     } catch (error) {
       console.error("Failed to test MCP server:", error);
       setTestResult({
         name: server.name,
         success: false,
-        message: String(error),
+        message: stripAnsiEscapeSequences(String(error)),
       });
     } finally {
       setTestingName(null);

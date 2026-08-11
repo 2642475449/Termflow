@@ -18,6 +18,7 @@ import type {
   NotificationInstance,
 } from "antd/es/notification/interface";
 import i18n from "@/i18n";
+import { stripAnsiEscapeSequences } from "@/lib/textContent";
 
 export type ToastLevel = "success" | "info" | "warning" | "error";
 
@@ -139,10 +140,14 @@ function ExpandableToastText({ text }: { text: string }) {
 }
 
 export function guardToastText(content: ReactNode): ReactNode {
-  if (typeof content !== "string" || content.length <= TOAST_TEXT_LIMIT) {
+  if (typeof content !== "string") {
     return content;
   }
-  return createElement(ExpandableToastText, { text: content });
+  const sanitizedContent = stripAnsiEscapeSequences(content);
+  if (sanitizedContent.length <= TOAST_TEXT_LIMIT) {
+    return sanitizedContent;
+  }
+  return createElement(ExpandableToastText, { text: sanitizedContent });
 }
 
 function isToastOptions(input: ToastInput): input is ToastOptions {
