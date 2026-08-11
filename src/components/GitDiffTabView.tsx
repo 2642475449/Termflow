@@ -1,29 +1,20 @@
 import { DiffEditor, loader } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
-import { Alert, Button, Empty, message } from "antd";
+import { Alert, Button, Empty } from "antd";
 import {
-  CheckOutlined,
   DownOutlined,
   ExportOutlined,
-  LoadingOutlined,
-  MinusOutlined,
   UpOutlined,
 } from "@ant-design/icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  gitDiffContent,
-  gitDiffHunks,
-  gitStageHunk,
-  gitUnstageHunk,
   openInAssociatedApplication,
 } from "@/lib/api";
 import {
-  findClosestGitHunkIndex,
   getAdjacentDiffIndex,
   getModifiedDiffTargetLine,
   type DiffNavigationDirection,
 } from "@/lib/gitDiffNavigation";
-import { requestGitStatusRefresh } from "@/lib/gitStatusEvents";
 import {
   disableMonacoCommandPalette,
   getMonacoLanguage,
@@ -31,7 +22,6 @@ import {
   getMonacoTypography,
 } from "@/lib/monaco";
 import { useAppStore } from "@/store";
-import type { GitDiffHunk } from "@/types";
 import { useTranslation } from "react-i18next";
 import MonacoContextMenu from "@/components/editors/MonacoContextMenu";
 
@@ -58,14 +48,10 @@ function GitDiffTabView({ tabId }: GitDiffTabViewProps) {
   const systemPrefersDark = useAppStore((s) => s.systemPrefersDark);
   const document = useAppStore((s) => s.gitDiffDocuments[tabId]);
   const currentProject = useAppStore((s) => s.currentProject);
-  const openGitDiffTab = useAppStore((s) => s.openGitDiffTab);
   const diffEditorRef = useRef<monaco.editor.IStandaloneDiffEditor | null>(null);
   const diffUpdateSubscriptionRef = useRef<monaco.IDisposable | null>(null);
   const [changeCount, setChangeCount] = useState(0);
   const [activeChangeIndex, setActiveChangeIndex] = useState(0);
-  const [hunks, setHunks] = useState<GitDiffHunk[]>([]);
-  const [hunksLoading, setHunksLoading] = useState(false);
-  const [hunkOperating, setHunkOperating] = useState(false);
 
   const isDark = useMemo(() => {
     if (themeCategory === "system") return systemPrefersDark;
@@ -78,12 +64,6 @@ function GitDiffTabView({ tabId }: GitDiffTabViewProps) {
   );
   const theme = useMemo(() => getMonacoThemeName(isDark), [isDark]);
   const typography = getMonacoTypography(Math.max(13, editorFontSize));
-  const activeHunk = useMemo(() => {
-    const lineChange = diffEditorRef.current?.getLineChanges()?.[activeChangeIndex];
-    if (!lineChange) return hunks.length === 1 ? hunks[0] : null;
-    const hunkIndex = findClosestGitHunkIndex(lineChange, hunks);
-    return hunkIndex >= 0 ? hunks[hunkIndex] : null;
-  }, [activeChangeIndex, changeCount, hunks]);
 
   const revealChange = useCallback((index: number) => {
     const editor = diffEditorRef.current;
@@ -140,100 +120,7 @@ function GitDiffTabView({ tabId }: GitDiffTabViewProps) {
     }
   }, [document]);
 
-  useEffect(() => {
-    let cancelled = false;
-    if (
-      !document
-      || document.isBinary
-      || !document.hunkActionsAvailable
-      || !currentProject
-    ) {
-      setHunks([]);
-      setHunksLoading(false);
-      return;
-    }
 
-    setHunksLoading(true);
-    void gitDiffHunks(currentProject.path, document.path, document.staged)
-      .then((result) => {
-        if (!cancelled) setHunks(result.hunks);
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setHunks([]);
-        message.error(
-          `${t("sidebar.gitLoadHunksFailed")}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      })
-      .finally(() => {
-        if (!cancelled) setHunksLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    currentProject,
-    document,
-    t,
-  ]);
-
-  const handleToggleCurrentHunk = useCallback(async () => {
-    if (!currentProject || !document || !activeHunk || hunkOperating) return;
-
-    const operation = document.staged ? gitUnstageHunk : gitStageHunk;
-    const successKey = document.staged
-      ? "sidebar.gitUnstageHunkSuccess"
-      : "sidebar.gitStageHunkSuccess";
-    const failureKey = document.staged
-      ? "sidebar.gitUnstageHunkFailed"
-      : "sidebar.gitStageHunkFailed";
-
-    setHunkOperating(true);
-    try {
-      await operation(currentProject.path, document.path, activeHunk.header);
-      message.success(t(successKey));
-      requestGitStatusRefresh(currentProject.path);
-    } catch (error) {
-      message.error(
-        `${t(failureKey)}: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      setHunkOperating(false);
-      return;
-    }
-
-    try {
-      const refreshed = await gitDiffContent(
-        currentProject.path,
-        document.path,
-        document.staged,
-        document.oldPath,
-      );
-      openGitDiffTab({
-        ...document,
-        path: refreshed.filePath,
-        originalContent: refreshed.originalContent,
-        modifiedContent: refreshed.modifiedContent,
-        originalLabel: refreshed.originalLabel,
-        modifiedLabel: refreshed.modifiedLabel,
-        isBinary: refreshed.isBinary,
-      });
-    } catch (error) {
-      console.error("Failed to refresh Git diff after hunk operation:", error);
-      message.warning(t("sidebar.gitDiffRefreshFailed"));
-    } finally {
-      setHunkOperating(false);
-    }
-  }, [
-    activeHunk,
-    currentProject,
-    document,
-    hunkOperating,
-    openGitDiffTab,
-    t,
-  ]);
 
   useEffect(
     () => () => {
@@ -298,7 +185,7 @@ function GitDiffTabView({ tabId }: GitDiffTabViewProps) {
                 type="text"
                 size="small"
                 icon={<UpOutlined />}
-                disabled={hunkOperating || activeChangeIndex <= 0}
+                disabled={activeChangeIndex <= 0}
                 aria-label={t("sidebar.gitPreviousChange")}
                 title={t("sidebar.gitPreviousChange")}
                 onClick={() => handleNavigateChange("previous")}
@@ -313,33 +200,11 @@ function GitDiffTabView({ tabId }: GitDiffTabViewProps) {
                 type="text"
                 size="small"
                 icon={<DownOutlined />}
-                disabled={hunkOperating || activeChangeIndex >= changeCount - 1}
+                disabled={activeChangeIndex >= changeCount - 1}
                 aria-label={t("sidebar.gitNextChange")}
                 title={t("sidebar.gitNextChange")}
                 onClick={() => handleNavigateChange("next")}
               />
-              {document.hunkActionsAvailable && (hunksLoading || activeHunk) && (
-                <Button
-                  type="text"
-                  size="small"
-                  loading={hunkOperating}
-                  disabled={hunksLoading || !activeHunk}
-                  icon={
-                    hunksLoading
-                      ? <LoadingOutlined />
-                      : document.staged
-                        ? <MinusOutlined />
-                        : <CheckOutlined />
-                  }
-                  onClick={() => void handleToggleCurrentHunk()}
-                >
-                  {t(
-                    document.staged
-                      ? "sidebar.gitUnstageHunk"
-                      : "sidebar.gitStageHunk",
-                  )}
-                </Button>
-              )}
             </div>
           )}
           <span className="max-w-[38vw] truncate" style={{ color: "var(--cs-text-tertiary)" }}>

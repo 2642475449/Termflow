@@ -35,7 +35,19 @@ if (normalizedCi == null) {
   env.CI = normalizedCi;
 }
 
-const child = spawn(process.execPath, [tauriCliPath, ...process.argv.slice(2)], {
+const tauriArgs = process.argv.slice(2);
+const signingPrivateKey = env.TAURI_SIGNING_PRIVATE_KEY?.trim();
+
+if (
+  tauriArgs[0] === "build" &&
+  !signingPrivateKey &&
+  !tauriArgs.includes("--no-sign")
+) {
+  tauriArgs.splice(1, 0, "--no-sign");
+  console.info("No signing private key configured; skipping updater artifact signing for this local build.");
+}
+
+const child = spawn(process.execPath, [tauriCliPath, ...tauriArgs], {
   env,
   stdio: "inherit",
 });

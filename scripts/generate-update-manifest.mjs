@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import packageJson from "../package.json" with { type: "json" };
 
@@ -58,6 +58,17 @@ const notes = readOption("--notes") ?? `Termflow v${version}`;
 
 if (!URL.canParse(installerUrl) || !installerUrl.startsWith("https://")) {
   throw new Error("--url must be an HTTPS URL.");
+}
+
+const [installerStat, signatureStat] = await Promise.all([
+  stat(artifactPath),
+  stat(signaturePath),
+]);
+
+if (signatureStat.mtimeMs < installerStat.mtimeMs) {
+  throw new Error(
+    `Update signature is older than the installer. Run pnpm tauri:build:signed before generating the manifest.\nInstaller: ${artifactPath}\nSignature: ${signaturePath}`,
+  );
 }
 
 const signature = (await readFile(signaturePath, "utf8")).trim();
