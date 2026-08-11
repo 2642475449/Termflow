@@ -1312,12 +1312,6 @@ function SkillRow({
           <span className="min-w-0 break-words text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>
             {skill.name}
           </span>
-          <Tag className="!m-0" color={skill.scope === "workspace" ? "blue" : "gold"}>
-            {scopeLabel(skill.scope, t)}
-          </Tag>
-          <Tag className="!m-0" color={skill.enabled ? "green" : "default"}>
-            {skill.enabled ? t("common.enabled") : t("common.disabled")}
-          </Tag>
           <Tag className="!m-0">{t("settings.skills.nativeSource", { agent: skillSourceLabel(skill, t) })}</Tag>
           {skill.hasNameConflict && <Tag className="!m-0" color="warning">{t("settings.skills.nameConflict")}</Tag>}
         </div>
@@ -1338,15 +1332,22 @@ function SkillRow({
           <span className="break-words">{t("settings.shared.updatedAt", { value: formatSkillUpdatedAt(skill.updatedAt) ?? t("common.unknown") })}</span>
         </div>
       </div>
-      <Switch
-        className="mt-1 shrink-0"
-        checked={skill.enabled}
-        loading={toggling}
-        onClick={(checked, event) => {
-          event?.stopPropagation();
-          onToggle(checked);
-        }}
-      />
+      <div className="mt-1 flex shrink-0 items-center gap-2">
+        <span
+          className="text-xs"
+          style={{ color: skill.enabled ? "var(--cs-success)" : "var(--cs-text-tertiary)" }}
+        >
+          {skill.enabled ? t("common.enabled") : t("common.disabled")}
+        </span>
+        <Switch
+          checked={skill.enabled}
+          loading={toggling}
+          onClick={(checked, event) => {
+            event?.stopPropagation();
+            onToggle(checked);
+          }}
+        />
+      </div>
     </div>
   );
 }
@@ -1434,9 +1435,6 @@ function SkillDetailPanel({
           <div className="flex items-center gap-2 flex-wrap">
             <Tag icon={<span className="inline-flex mr-1"><AgentIcon agentId={detail.skill.agent} size={13} /></span>}>
               {t("settings.skills.nativeSource", { agent: skillSourceLabel(detail.skill, t) })}
-            </Tag>
-            <Tag color={detail.skill.scope === "workspace" ? "blue" : "gold"}>
-              {scopeLabel(detail.skill.scope, t)}
             </Tag>
             <Tag color={detail.skill.enabled ? "green" : "default"}>
               {detail.skill.enabled ? t("common.enabled") : t("common.disabled")}
@@ -1688,12 +1686,12 @@ function SkillsPage() {
       : t("settings.skills.emptyFiltered");
 
     return (
-      <SettingSection title={`${currentScope === "workspace" ? t("settings.skills.workspaceSkills") : t("settings.skills.userSkills")} (${totalItems})`}>
+      <SettingSection title={`${t("settings.menu.skills")} (${totalItems})`}>
         <div className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
           <div className="min-w-0">
             <div className="text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>
               {activeAgent === "all"
-                ? (currentScope === "workspace" ? t("settings.skills.workspaceSkillsDesc") : t("settings.skills.userSkillsDesc"))
+                ? t("settings.skills.listDesc")
                 : t("settings.skills.agentScopeDesc", { agent: skillAgentLabel(activeAgent, t) })}
             </div>
             <div className="text-[11px] mt-1 break-all" style={{ color: "var(--cs-text-tertiary)" }}>
@@ -2946,9 +2944,6 @@ function HookRow({
           <span className="text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>
             {hook.name}
           </span>
-          <Tag className="!m-0" color={hook.scope === "workspace" ? "blue" : "gold"}>
-            {scopeLabel(hook.scope, t)}
-          </Tag>
           <Tag className="!m-0" color={hook.agent === "opencode" ? "green" : "geekblue"}>
             {hookAgentLabel(hook.agent, t)}
           </Tag>
@@ -3024,9 +3019,6 @@ function HookDetailPanel({
       ) : detail ? (
         <div className="space-y-4">
           <div className="flex items-center gap-2 flex-wrap">
-            <Tag color={detail.hook.scope === "workspace" ? "blue" : "gold"}>
-              {scopeLabel(detail.hook.scope, t)}
-            </Tag>
             <Tag color={detail.hook.agent === "opencode" ? "green" : "geekblue"}>
               {hookAgentLabel(detail.hook.agent, t)}
             </Tag>
@@ -3303,13 +3295,11 @@ function HooksPage() {
     });
 
     return (
-      <SettingSection title={`${currentScope === "workspace" ? t("settings.hooks.workspaceHooks") : t("settings.hooks.userHooks")} (${totalItems})`}>
+      <SettingSection title={`${t("settings.menu.hooks")} (${totalItems})`}>
         <div className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
           <div className="min-w-0">
             <div className="text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>
-              {currentScope === "workspace"
-                ? t("settings.hooks.workspaceHooksDesc", { agent: hookAgentLabel(activeAgent, t) })
-                : t("settings.hooks.userHooksDesc", { agent: hookAgentLabel(activeAgent, t) })}
+              {t("settings.hooks.listDesc", { agent: hookAgentLabel(activeAgent, t) })}
             </div>
             <div className="text-[11px] mt-1 break-all" style={{ color: "var(--cs-text-tertiary)" }}>
               {configPath || (currentScope === "workspace" ? t("settings.hooks.workspaceConfigUnavailable") : t("settings.hooks.userConfigUnavailable"))}
