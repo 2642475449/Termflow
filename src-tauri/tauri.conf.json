@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicegui/make-dialog/refs/heads/main/tauri/tauri.conf.json",
   "productName": "Termflow",
-  "version": "1.8.16",
+  "version": "1.8.17",
   "identifier": "com.termflow.desktop",
   "build": {
     "frontendDist": "../dist",
@@ -52,9 +52,9 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhBRDVFMzZGMTE1RDJBQzAKUldUQUtsMFJiK1BWaXV0QUh3MGhmeC9TVG1RRVFNUHd5b0YxaXN3OGFoUS9GWFlIWWR3NnNXNFMK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEExQTNCNDFCM0MzQTAwNUEKUldSYUFEbzhHN1Nqb2ZmNkROS2NLNXhxNzVaSjM2VGtyR1NrMTNWRVB2WkFtcVdKbUtHSmlqVkQK",
       "endpoints": [
-        "https://github.com/2642475449/Termflow/releases/latest/download/latest.json"
+        "https://termflow.jianglan.online/updates/latest.json"
       ],
       "windows": {
         "installMode": "passive"

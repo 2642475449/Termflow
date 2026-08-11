@@ -12,6 +12,12 @@ src-tauri/target/release/bundle/*
 !src-tauri/target/release/bundle/nsis/
 src-tauri/target/release/bundle/nsis/*
 
+# Self-hosted updater release manifests (uploaded to the update server)
+output/updates/
+
+# Local documentation
+docs/
+
 # IDE
 .vscode/
 .idea/

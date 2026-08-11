@@ -1182,7 +1182,6 @@ async function pasteClipboardIntoTerminal(
     const dataBase64 = await blobToBase64(clipboardImage.blob);
     const saved = await saveClipboardImage(dataBase64, clipboardImage.mimeType);
     await ptyInput(sessionId, quotePathForShell(saved.path));
-    message.success(t("terminal.imageInserted"));
     return;
   }
 

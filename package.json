@@ -1,7 +1,7 @@
 {
     "name":  "termflow",
     "private":  true,
-    "version":  "1.8.16",
+    "version":  "1.8.17",
     "license":  "MIT",
     "type":  "module",
     "scripts":  {
@@ -9,6 +9,8 @@
                     "build":  "tsc && vite build",
                     "preview":  "vite preview",
                     "tauri":  "node ./scripts/tauri-cli.mjs",
+                    "tauri:build:signed":  "node ./scripts/tauri-build-signed.mjs",
+                    "update:manifest":  "node ./scripts/generate-update-manifest.mjs",
                     "test":  "vitest run",
                     "validate:agent-lifecycle":  "node ./scripts/validate-agent-lifecycle.mjs"
                 },
