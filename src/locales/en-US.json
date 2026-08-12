@@ -577,7 +577,15 @@
     "cloneFailed": "Unable to clone repository",
     "cloneRepo": "Clone Git Repository",
     "noRecentProjects": "No recent projects yet",
-    "removeRecentProject": "Remove from recent projects"
+    "removeRecentProject": "Remove from recent projects",
+    "openProjectTitle": "Open Project",
+    "openProjectQuestion": "Where would you like to open '{{name}}'?",
+    "openInCurrentWindow": "Current Window",
+    "openInNewWindow": "New Window",
+    "rememberOpenChoice": "Remember my choice",
+    "openProjectRunningSessions": "The current project has {{count}} running session(s).",
+    "openProjectUnsavedFiles": "The current project has {{count}} unsaved file(s).",
+    "currentWindowCleanupWarning": "Opening in the current window ends running sessions and discards unsaved changes."
   },
   "tabBar": {
     "moveToSplit": "Split Tab",
@@ -749,6 +757,7 @@
       "commands": "Commands",
       "quickCommands": "Quick Commands",
       "claudeMd": "Agent Instructions",
+      "searchIndex": "Search Index",
       "dataPrivacy": "Data & Privacy",
       "about": "About",
       "searchPlaceholder": "Search settings",
@@ -914,6 +923,11 @@
       "startupSection": "Startup",
       "restoreLastProject": "Restore last project on launch",
       "restoreLastProjectDesc": "Automatically reopen the last active project when the app starts; if the path is missing, fall back to the launcher",
+      "projectOpenBehavior": "When opening another project",
+      "projectOpenBehaviorDesc": "Open in this window, a new window, or ask every time",
+      "projectOpenAsk": "Ask every time",
+      "projectOpenCurrent": "Current window",
+      "projectOpenNew": "New window",
       "notifications": "Notifications",
       "systemNotification": "System Notifications",
       "systemNotificationDesc": "When enabled, agent events trigger system notifications",
@@ -1429,6 +1443,16 @@
       "emptyAudio": "No speech detected",
       "noActiveTerminal": "Please activate a terminal tab before using voice input",
       "systemInputFailed": "System-level voice input failed. Make sure the target input is currently focused"
+    },
+    "searchIndex": {
+      "title": "Search Index",
+      "subtitle": "Manage local repository indexing and instant search",
+      "repositories": "Repositories",
+      "autoIndexTitle": "Index new folders",
+      "autoIndexDescription": "Automatically index new folders containing fewer than 50,000 files.",
+      "instantSearchTitle": "Index repositories for instant search",
+      "instantSearchDescription": "Build a local repository index to speed up project-wide text search. All index data stays on this device.",
+      "comingSoon": "Coming soon"
     },
     "usageData": {
       "title": "Data & Privacy",

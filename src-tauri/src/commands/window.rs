@@ -350,15 +350,21 @@ fn restorable_project_path(settings: &PersistentSettingsRecord) -> Option<String
 #[tauri::command]
 pub async fn open_project_window(
     path: String,
-    reuse_current_if_launcher: bool,
+    disposition: String,
     app: tauri::AppHandle,
     window: WebviewWindow,
     registry: State<'_, Arc<WindowRegistry>>,
+    manager: State<'_, Arc<PtyManager>>,
 ) -> Result<WindowProjectContext, String> {
     let project_path = ensure_existing_project_directory(&path)?;
     let project_name = project_name_from_path(&project_path);
-    let launched_from_launcher = reuse_current_if_launcher && registry.is_launcher(window.label());
-    let reuse_current_window = should_reuse_launcher_window(window.label(), launched_from_launcher);
+    let launched_from_launcher = registry.is_launcher(window.label());
+    let reuse_current_window = match disposition.as_str() {
+        "current_window" => true,
+        "new_window" => false,
+        "auto" => should_reuse_launcher_window(window.label(), launched_from_launcher),
+        _ => return Err(format!("Unsupported project open disposition: {disposition}")),
+    };
     let close_secondary_launcher = launched_from_launcher && !reuse_current_window;
 
     if let Some(existing_label) = registry.get_label_by_project(&project_path) {
@@ -374,6 +380,12 @@ pub async fn open_project_window(
     }
 
     if reuse_current_window {
+        let previous_context = registry.get_context(window.label());
+        if let Some(previous_project_path) = previous_context.project_path.as_deref() {
+            if previous_project_path != project_path {
+                manager.close_project_sessions(previous_project_path);
+            }
+        }
         let context = registry.bind_project(window.label(), project_path.clone(), project_name);
         let _ = window.set_title(&window_title(&context));
         let _ = app.emit_to(window.label(), "window-context-updated", &context);
@@ -406,6 +418,23 @@ pub async fn open_project_window(
         let _ = window.close();
     }
     Ok(context)
+}
+
+#[tauri::command]
+pub fn is_project_window_open(
+    path: String,
+    app: tauri::AppHandle,
+    registry: State<'_, Arc<WindowRegistry>>,
+) -> Result<bool, String> {
+    let project_path = ensure_existing_project_directory(&path)?;
+    let Some(label) = registry.get_label_by_project(&project_path) else {
+        return Ok(false);
+    };
+    if app.get_webview_window(&label).is_some() {
+        return Ok(true);
+    }
+    registry.release_window(&label);
+    Ok(false)
 }
 
 #[tauri::command]
@@ -707,7 +736,7 @@ mod tests {
     }
 
     #[test]
-    fn only_main_launcher_is_reused_for_a_project() {
+    fn auto_disposition_only_reuses_the_main_launcher() {
         assert!(should_reuse_launcher_window("main", true));
         assert!(!should_reuse_launcher_window(LAUNCHER_LABEL, true));
         assert!(!should_reuse_launcher_window("main", false));

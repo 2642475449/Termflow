@@ -577,7 +577,15 @@
     "cloneFailed": "無法複製儲存庫",
     "cloneRepo": "複製 Git 儲存庫",
     "noRecentProjects": "暫無最近專案",
-    "removeRecentProject": "從最近專案中移除"
+    "removeRecentProject": "從最近專案中移除",
+    "openProjectTitle": "開啟專案",
+    "openProjectQuestion": "你希望在哪裡開啟專案「{{name}}」？",
+    "openInCurrentWindow": "目前視窗",
+    "openInNewWindow": "新視窗",
+    "rememberOpenChoice": "記住我的選擇",
+    "openProjectRunningSessions": "目前專案有 {{count}} 個執行中的工作階段。",
+    "openProjectUnsavedFiles": "目前專案有 {{count}} 個尚未儲存的檔案。",
+    "currentWindowCleanupWarning": "在目前視窗開啟將結束執行中的工作階段，並捨棄未儲存的修改。"
   },
   "tabBar": {
     "moveToSplit": "分割標籤頁",
@@ -749,6 +757,7 @@
       "commands": "命令",
       "quickCommands": "快速命令",
       "claudeMd": "智慧體指令",
+      "searchIndex": "索引庫",
       "dataPrivacy": "資料與隱私",
       "about": "關於",
       "searchPlaceholder": "搜尋設定",
@@ -911,6 +920,11 @@
       "startupSection": "啟動",
       "restoreLastProject": "啟動時恢復上次專案",
       "restoreLastProjectDesc": "應用啟動後自動開啟上次活躍的專案；如果路徑失效則回到啟動頁",
+      "projectOpenBehavior": "開啟其他專案時",
+      "projectOpenBehaviorDesc": "選擇在目前視窗、新視窗開啟，或每次詢問",
+      "projectOpenAsk": "每次詢問",
+      "projectOpenCurrent": "目前視窗",
+      "projectOpenNew": "新視窗",
       "notifications": "通知",
       "systemNotification": "系統通知",
       "systemNotificationDesc": "啟用後，智慧體事件將觸發系統級通知",
@@ -1426,6 +1440,16 @@
       "emptyAudio": "未辨識到語音內容",
       "noActiveTerminal": "請先啟用一個終端機標籤頁再使用語音輸入",
       "systemInputFailed": "系統級語音輸入失敗，請確認目標輸入框目前處於啟用狀態"
+    },
+    "searchIndex": {
+      "title": "索引庫",
+      "subtitle": "管理程式碼庫的本機索引與即時搜尋",
+      "repositories": "程式碼庫",
+      "autoIndexTitle": "索引新資料夾",
+      "autoIndexDescription": "自動索引檔案數少於 50,000 的新資料夾。",
+      "instantSearchTitle": "索引程式碼庫以實現即時搜尋",
+      "instantSearchDescription": "為程式碼庫建立本機索引，加快專案全文搜尋速度。所有索引資料均儲存在本機。",
+      "comingSoon": "即將推出"
     },
     "usageData": {
       "title": "資料與隱私",

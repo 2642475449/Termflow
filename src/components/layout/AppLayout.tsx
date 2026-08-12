@@ -1055,7 +1055,7 @@ function AppLayout() {
         return;
       }
 
-      openProjectWindow(lastProjectPath, true).catch((error) => {
+      openProjectWindow(lastProjectPath, "auto").catch((error) => {
         console.error("Failed to restore last project on startup:", error);
       });
     }, 100);

@@ -7,6 +7,7 @@ import type {
   SessionLaunchOptions,
   GitCloneTask,
   PersistentSettings,
+  ProjectOpenBehavior,
   Session,
   TerminalQuickCommand,
   WindowMode,
@@ -227,6 +228,7 @@ export function getPersistentSettingsSnapshot(): PersistentSettings {
     themeCategory: state.themeCategory,
     language: state.language,
     startupRestoreLastProject: state.startupRestoreLastProject,
+    projectOpenBehavior: state.projectOpenBehavior,
     lastProjectPath: state.lastProject?.path ?? null,
     editorFontSize: state.editorFontSize,
     terminalFontSize: state.terminalFontSize,
@@ -263,6 +265,11 @@ export function applyPersistentSettingsToStore(settings: PersistentSettings) {
     startupRestoreLastProject: normalizeStartupRestoreLastProjectValue(
       settings.startupRestoreLastProject
     ),
+    projectOpenBehavior:
+      settings.projectOpenBehavior === "current_window" ||
+      settings.projectOpenBehavior === "new_window"
+        ? settings.projectOpenBehavior
+        : "ask",
     lastProject: lastProjectPath ? projectInfoFromPath(lastProjectPath) : null,
     editorFontSize: Math.max(10, Math.round(settings.editorFontSize || 14)),
     terminalFontSize: Math.max(10, Math.round(settings.terminalFontSize || 14)),
@@ -505,6 +512,7 @@ interface AppState {
   windowProject: ProjectInfo | null;
   lastProject: ProjectInfo | null;
   startupRestoreLastProject: boolean;
+  projectOpenBehavior: ProjectOpenBehavior;
   claudeCliInfo: ClaudeCliInfo | null;
   recentProjects: RecentProjectEntry[];
   // Project
@@ -635,6 +643,7 @@ interface AppState {
   setSystemPrefersDark: (value: boolean) => void;
   setLanguage: (lang: Language) => void;
   setStartupRestoreLastProject: (enabled: boolean) => void;
+  setProjectOpenBehavior: (behavior: ProjectOpenBehavior) => void;
   // Terminal actions
   setEditorFontSize: (size: number) => void;
   setTerminalFontSize: (size: number) => void;
@@ -1389,6 +1398,7 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
       windowProject: null,
       lastProject: null,
       startupRestoreLastProject: true,
+      projectOpenBehavior: "ask",
       claudeCliInfo: null,
       recentProjects: [],
       projectSessions: {},
@@ -2233,6 +2243,7 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
       setLanguage: (language) => set({ language }),
       setStartupRestoreLastProject: (startupRestoreLastProject) =>
         set({ startupRestoreLastProject }),
+      setProjectOpenBehavior: (projectOpenBehavior) => set({ projectOpenBehavior }),
       setEditorFontSize: (size) => set({ editorFontSize: size }),
       setTerminalFontSize: (size) => set({ terminalFontSize: size }),
       setTerminalCursorBlink: (blink) => set({ terminalCursorBlink: blink }),

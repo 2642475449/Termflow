@@ -211,6 +211,7 @@ pub fn run() {
             commands::settings::get_persistent_settings,
             commands::settings::save_persistent_settings,
             commands::window::open_project_window,
+            commands::window::is_project_window_open,
             commands::window::get_existing_project_paths,
             commands::window::get_window_project_context,
             commands::window::release_window_project_context,

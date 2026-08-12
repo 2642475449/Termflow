@@ -27,6 +27,7 @@ import {
   GlobalOutlined,
   GithubOutlined,
   SafetyCertificateOutlined,
+  DatabaseOutlined,
 } from "@ant-design/icons";
 import { Segmented, Typography, Tag, Select, Spin, Empty, Button, message, Switch, Input, Drawer, Modal, Popconfirm, Tooltip, Popover } from "antd";
 import { invoke } from "@tauri-apps/api/core";
@@ -100,6 +101,7 @@ import { AgentIcon } from "@/components/AgentIcon";
 import { AgentsPage } from "@/components/settings/AgentsPage";
 import { ArchivedSessionsPage } from "@/components/settings/ArchivedSessionsPage";
 import { DataPrivacyPage } from "@/components/settings/DataPrivacyPage";
+import { SearchIndexPage } from "@/components/settings/SearchIndexPage";
 import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
 import { NotificationsPage } from "@/components/settings/NotificationsPage";
 import {
@@ -117,7 +119,7 @@ const ABOUT_LINKS: Record<"website" | "github", string | null> = {
   github: "https://github.com/2642475449/Termflow",
 };
 
-type SettingsPage = "general" | "notifications" | "agents" | "terminal" | "voiceRecognition" | "shortcuts" | "skills" | "hooks" | "mcpServers" | "commands" | "quickCommands" | "claudeMd" | "dataPrivacy" | "archived" | "about";
+type SettingsPage = "general" | "notifications" | "agents" | "terminal" | "voiceRecognition" | "shortcuts" | "skills" | "hooks" | "mcpServers" | "commands" | "quickCommands" | "claudeMd" | "searchIndex" | "dataPrivacy" | "archived" | "about";
 
 interface SettingsMenuItem {
   key: SettingsPage;
@@ -160,6 +162,7 @@ const menuGroups: SettingsMenuGroup[] = [
     key: "data",
     labelKey: "settings.menu.groups.data",
     items: [
+      { key: "searchIndex", icon: <DatabaseOutlined />, labelKey: "settings.menu.searchIndex" },
       { key: "dataPrivacy", icon: <SafetyCertificateOutlined />, labelKey: "settings.menu.dataPrivacy" },
       { key: "archived", icon: <InboxOutlined />, labelKey: "settings.archived.title" },
     ],
@@ -396,11 +399,13 @@ function GeneralPage() {
   const systemPrefersDark = useAppStore((s) => s.systemPrefersDark);
   const language = useAppStore((s) => s.language);
   const startupRestoreLastProject = useAppStore((s) => s.startupRestoreLastProject);
+  const projectOpenBehavior = useAppStore((s) => s.projectOpenBehavior);
   const setLightTheme = useAppStore((s) => s.setLightTheme);
   const setDarkTheme = useAppStore((s) => s.setDarkTheme);
   const setThemeCategory = useAppStore((s) => s.setThemeCategory);
   const setLanguage = useAppStore((s) => s.setLanguage);
   const setStartupRestoreLastProject = useAppStore((s) => s.setStartupRestoreLastProject);
+  const setProjectOpenBehavior = useAppStore((s) => s.setProjectOpenBehavior);
 
   const langOptions = [
     { label: t("settings.languageName.zh_CN"), value: "zh_CN" },
@@ -522,6 +527,21 @@ function GeneralPage() {
           <Switch
             checked={startupRestoreLastProject}
             onChange={setStartupRestoreLastProject}
+          />
+        </SettingRow>
+        <SettingRow
+          label={t("settings.general.projectOpenBehavior")}
+          desc={t("settings.general.projectOpenBehaviorDesc")}
+        >
+          <Select
+            value={projectOpenBehavior}
+            style={{ width: 150 }}
+            options={[
+              { value: "ask", label: t("settings.general.projectOpenAsk") },
+              { value: "current_window", label: t("settings.general.projectOpenCurrent") },
+              { value: "new_window", label: t("settings.general.projectOpenNew") },
+            ]}
+            onChange={setProjectOpenBehavior}
           />
         </SettingRow>
       </SettingSection>
@@ -4825,6 +4845,7 @@ const pageComponents: Record<SettingsPage, React.FC> = {
   commands: CommandsPage,
   quickCommands: QuickCommandsPage,
   claudeMd: ClaudeMdPage,
+  searchIndex: SearchIndexPage,
   dataPrivacy: DataPrivacyPage,
   archived: ArchivedSessionsPage,
   about: AboutPage,

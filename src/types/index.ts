@@ -27,6 +27,7 @@ export interface PersistentSettings {
   themeCategory: string;
   language: string;
   startupRestoreLastProject: boolean;
+  projectOpenBehavior: ProjectOpenBehavior;
   lastProjectPath: string | null;
   editorFontSize: number;
   terminalFontSize: number;
@@ -368,6 +369,8 @@ export interface ClaudeMdDetail {
 }
 
 export type WindowMode = "launcher" | "project";
+export type ProjectOpenBehavior = "ask" | "current_window" | "new_window";
+export type ProjectOpenDisposition = "auto" | "current_window" | "new_window";
 
 export interface WindowProjectContext {
   windowLabel: string;

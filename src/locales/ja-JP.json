@@ -577,7 +577,15 @@
     "cloneFailed": "リポジトリをクローンできません",
     "cloneRepo": "Git リポジトリをクローン",
     "noRecentProjects": "最近のプロジェクトはまだありません",
-    "removeRecentProject": "最近のプロジェクトから削除"
+    "removeRecentProject": "最近のプロジェクトから削除",
+    "openProjectTitle": "プロジェクトを開く",
+    "openProjectQuestion": "プロジェクト「{{name}}」をどこで開きますか？",
+    "openInCurrentWindow": "現在のウィンドウ",
+    "openInNewWindow": "新しいウィンドウ",
+    "rememberOpenChoice": "選択を記憶する",
+    "openProjectRunningSessions": "現在のプロジェクトで {{count}} 件のセッションが実行中です。",
+    "openProjectUnsavedFiles": "現在のプロジェクトに {{count}} 件の未保存ファイルがあります。",
+    "currentWindowCleanupWarning": "現在のウィンドウで開くと、実行中のセッションが終了し、未保存の変更が破棄されます。"
   },
   "tabBar": {
     "moveToSplit": "タブを分割",
@@ -749,6 +757,7 @@
       "commands": "コマンド",
       "quickCommands": "Quick コマンド",
       "claudeMd": "エージェント指示",
+      "searchIndex": "検索インデックス",
       "dataPrivacy": "データとプライバシー",
       "about": "情報",
       "searchPlaceholder": "設定を検索",
@@ -911,6 +920,11 @@
       "startupSection": "起動",
       "restoreLastProject": "起動時に前回のプロジェクトを復元",
       "restoreLastProjectDesc": "アプリ起動時に最後にアクティブだったプロジェクトを自動で開きます。パスが見つからない場合はランチャーに戻ります",
+      "projectOpenBehavior": "別のプロジェクトを開くとき",
+      "projectOpenBehaviorDesc": "現在のウィンドウ、新しいウィンドウ、または毎回確認を選択します",
+      "projectOpenAsk": "毎回確認",
+      "projectOpenCurrent": "現在のウィンドウ",
+      "projectOpenNew": "新しいウィンドウ",
       "notifications": "通知",
       "systemNotification": "システム通知",
       "systemNotificationDesc": "有効にすると、エージェントイベントでシステム通知を表示します",
@@ -1426,6 +1440,16 @@
       "emptyAudio": "音声を検出できませんでした",
       "noActiveTerminal": "音声入力を使う前にターミナルタブをアクティブにしてください",
       "systemInputFailed": "システムレベルの音声入力に失敗しました。対象の入力欄にフォーカスがあることを確認してください"
+    },
+    "searchIndex": {
+      "title": "検索インデックス",
+      "subtitle": "リポジトリのローカルインデックスと即時検索を管理します",
+      "repositories": "リポジトリ",
+      "autoIndexTitle": "新しいフォルダーをインデックス化",
+      "autoIndexDescription": "ファイル数が 50,000 未満の新しいフォルダーを自動的にインデックス化します。",
+      "instantSearchTitle": "即時検索用にリポジトリをインデックス化",
+      "instantSearchDescription": "ローカルインデックスを作成してプロジェクト全体のテキスト検索を高速化します。すべてのデータはこのデバイスに保存されます。",
+      "comingSoon": "近日公開"
     },
     "usageData": {
       "title": "データとプライバシー",

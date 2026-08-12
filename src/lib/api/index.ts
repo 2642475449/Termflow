@@ -17,6 +17,7 @@ import type {
   FileTreeEntry,
   FileTreeListing,
   PersistentSettings,
+  ProjectOpenDisposition,
   ProjectFileContent,
   ProjectImagePayload,
   ProjectLinkTarget,
@@ -883,9 +884,13 @@ export async function getHookIngestConfig(): Promise<HookIngestConfig> {
 
 export async function openProjectWindow(
   path: string,
-  reuseCurrentIfLauncher = false
+  disposition: ProjectOpenDisposition = "auto"
 ): Promise<WindowProjectContext> {
-  return await invoke("open_project_window", { path, reuseCurrentIfLauncher });
+  return await invoke("open_project_window", { path, disposition });
+}
+
+export async function isProjectWindowOpen(path: string): Promise<boolean> {
+  return await invoke("is_project_window_open", { path });
 }
 
 export async function getExistingProjectPaths(paths: string[]): Promise<string[]> {

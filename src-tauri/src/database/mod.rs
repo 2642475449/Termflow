@@ -54,6 +54,10 @@ fn default_editor_font_size() -> i64 {
     14
 }
 
+fn default_project_open_behavior() -> String {
+    "ask".into()
+}
+
 fn default_feishu_notification_threshold_ms() -> i64 {
     300_000
 }
@@ -89,6 +93,8 @@ pub struct PersistentSettingsRecord {
     pub theme_category: String,
     pub language: String,
     pub startup_restore_last_project: bool,
+    #[serde(default = "default_project_open_behavior")]
+    pub project_open_behavior: String,
     pub last_project_path: Option<String>,
     #[serde(default = "default_editor_font_size")]
     pub editor_font_size: i64,
@@ -131,6 +137,7 @@ impl Default for PersistentSettingsRecord {
             theme_category: "dark".into(),
             language: "zh_CN".into(),
             startup_restore_last_project: true,
+            project_open_behavior: default_project_open_behavior(),
             last_project_path: None,
             editor_font_size: default_editor_font_size(),
             terminal_font_size: 14,
@@ -251,6 +258,8 @@ impl Database {
         settings.startup_restore_last_project =
             read_setting(&conn, "general.startupRestoreLastProject")?
                 .unwrap_or(settings.startup_restore_last_project);
+        settings.project_open_behavior = read_setting(&conn, "general.projectOpenBehavior")?
+            .unwrap_or(settings.project_open_behavior);
         settings.last_project_path =
             read_setting(&conn, "general.lastProjectPath")?.unwrap_or(settings.last_project_path);
         settings.editor_font_size =
@@ -337,6 +346,11 @@ impl Database {
             &conn,
             "general.startupRestoreLastProject",
             &settings.startup_restore_last_project,
+        )?;
+        write_setting(
+            &conn,
+            "general.projectOpenBehavior",
+            &settings.project_open_behavior,
         )?;
         if include_last_project {
             write_setting(
@@ -722,6 +736,14 @@ mod tests {
     #[test]
     fn persistent_settings_default_to_beijing_asr_region() {
         assert_eq!(PersistentSettingsRecord::default().asr_region, "beijing");
+    }
+
+    #[test]
+    fn persistent_settings_default_project_open_behavior_asks() {
+        assert_eq!(
+            PersistentSettingsRecord::default().project_open_behavior,
+            "ask"
+        );
     }
 
     #[test]

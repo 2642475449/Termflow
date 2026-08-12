@@ -1,4 +1,4 @@
-import type { AiAgentId, ClaudeCliInfo, Session, WindowMode, WindowProjectContext } from "@/types";
+import type { AiAgentId, ClaudeCliInfo, ProjectOpenBehavior, Session, WindowMode, WindowProjectContext } from "@/types";
 
 export type ThemeMode = "light-glass" | "light-warm" | "dark-starry" | "dark-mocha";
 export type ThemeCategory = "light" | "dark" | "system";
@@ -147,6 +147,7 @@ export interface AppState {
   windowProject: ProjectInfo | null;
   lastProject: ProjectInfo | null;
   startupRestoreLastProject: boolean;
+  projectOpenBehavior: ProjectOpenBehavior;
   claudeCliInfo: ClaudeCliInfo | null;
   // Project
   currentProject: ProjectInfo | null;
@@ -231,6 +232,7 @@ export interface AppState {
   setLanguage: (lang: Language) => void;
   setSystemPrefersDark: (value: boolean) => void;
   setStartupRestoreLastProject: (enabled: boolean) => void;
+  setProjectOpenBehavior: (behavior: ProjectOpenBehavior) => void;
   // Terminal actions
   setEditorFontSize: (size: number) => void;
   setTerminalFontSize: (size: number) => void;

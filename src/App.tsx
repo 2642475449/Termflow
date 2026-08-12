@@ -68,6 +68,7 @@ function App() {
   const lastProject = useAppStore((s) => s.lastProject);
   const language = useAppStore((s) => s.language);
   const startupRestoreLastProject = useAppStore((s) => s.startupRestoreLastProject);
+  const projectOpenBehavior = useAppStore((s) => s.projectOpenBehavior);
   const systemPrefersDark = useAppStore((s) => s.systemPrefersDark);
   const setSystemPrefersDark = useAppStore((s) => s.setSystemPrefersDark);
   const editorFontSize = useAppStore((s) => s.editorFontSize);
@@ -119,6 +120,7 @@ function App() {
       themeCategory,
       language,
       startupRestoreLastProject,
+      projectOpenBehavior,
       lastProjectPath: lastProject?.path ?? null,
       editorFontSize,
       terminalFontSize,
@@ -162,6 +164,7 @@ function App() {
       feishuNotificationEvents,
       agentPermissionDefaults,
       startupRestoreLastProject,
+      projectOpenBehavior,
       terminalCursorBlink,
       terminalFontSize,
       terminalLineHeight,

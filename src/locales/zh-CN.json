@@ -577,7 +577,15 @@
     "cloneFailed": "无法克隆仓库",
     "cloneRepo": "克隆 Git 仓库",
     "noRecentProjects": "暂无最近项目",
-    "removeRecentProject": "从最近项目中移除"
+    "removeRecentProject": "从最近项目中移除",
+    "openProjectTitle": "打开项目",
+    "openProjectQuestion": "你希望在哪里打开项目“{{name}}”？",
+    "openInCurrentWindow": "当前窗口",
+    "openInNewWindow": "新窗口",
+    "rememberOpenChoice": "记住我的选择",
+    "openProjectRunningSessions": "当前项目有 {{count}} 个正在运行的会话。",
+    "openProjectUnsavedFiles": "当前项目有 {{count}} 个未保存的文件。",
+    "currentWindowCleanupWarning": "在当前窗口打开将结束运行中的会话，并放弃未保存的修改。"
   },
   "tabBar": {
     "moveToSplit": "拆分标签页",
@@ -749,6 +757,7 @@
       "commands": "命令",
       "quickCommands": "快速命令",
       "claudeMd": "智能体指令",
+      "searchIndex": "索引库",
       "dataPrivacy": "数据与隐私",
       "about": "关于",
       "searchPlaceholder": "搜索设置",
@@ -914,6 +923,11 @@
       "startupSection": "启动",
       "restoreLastProject": "启动时恢复上次项目",
       "restoreLastProjectDesc": "应用启动后自动打开上次活跃的项目；如果路径失效则回到启动页",
+      "projectOpenBehavior": "打开其他项目时",
+      "projectOpenBehaviorDesc": "选择在当前窗口、新窗口打开，或每次询问",
+      "projectOpenAsk": "每次询问",
+      "projectOpenCurrent": "当前窗口",
+      "projectOpenNew": "新窗口",
       "notifications": "通知",
       "systemNotification": "系统通知",
       "systemNotificationDesc": "启用后，智能体事件将触发系统级通知",
@@ -1429,6 +1443,16 @@
       "emptyAudio": "未识别到语音内容",
       "noActiveTerminal": "请先激活一个终端标签页再使用语音输入",
       "systemInputFailed": "系统级语音输入失败，请确认目标输入框当前处于激活状态"
+    },
+    "searchIndex": {
+      "title": "索引库",
+      "subtitle": "管理代码库的本地索引与即时搜索",
+      "repositories": "代码库",
+      "autoIndexTitle": "索引新文件夹",
+      "autoIndexDescription": "自动索引文件数少于 50,000 的新文件夹。",
+      "instantSearchTitle": "索引代码库以实现即时搜索",
+      "instantSearchDescription": "为代码库建立本地索引，加快项目全文搜索速度。所有索引数据均保存在本地。",
+      "comingSoon": "即将推出"
     },
     "usageData": {
       "title": "数据与隐私",
