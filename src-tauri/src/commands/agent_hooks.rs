@@ -1,7 +1,6 @@
 use crate::qoder_config::qoder_user_config_root;
 use serde::Serialize;
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
@@ -91,18 +90,11 @@ fn install_codex_hook() -> Result<AgentHookStatus, String> {
         "PostToolUse",
         "Stop",
     ];
-    let event_labels = [
-        "user_prompt_submit",
-        "pre_tool_use",
-        "permission_request",
-        "post_tool_use",
-        "stop",
-    ];
     let mut config = read_json_object(&config_path)?;
     remove_owned_json_hooks(&mut config, &["SessionStart"])?;
     install_json_hooks(&mut config, &events, &command, 10, "")?;
     write_json(&config_path, &config)?;
-    install_codex_trust(&toml_path, &config_path, &command, &event_labels)?;
+    remove_legacy_codex_trust(&toml_path)?;
     Ok(AgentHookStatus {
         agent: "codex".into(),
         configured: true,
@@ -364,84 +356,25 @@ fn value_contains_owned_command(value: &Value) -> bool {
     }
 }
 
-fn install_codex_trust(
-    toml_path: &Path,
-    hooks_path: &Path,
-    command: &str,
-    event_labels: &[&str],
-) -> Result<(), String> {
-    let canonical_path = fs::canonicalize(hooks_path)
-        .unwrap_or_else(|_| hooks_path.to_path_buf())
-        .to_string_lossy()
-        .trim_start_matches(r"\\?\")
-        .to_string();
-    let mut path_variants = vec![canonical_path.clone()];
-    if cfg!(windows) {
-        let forward_path = canonical_path.replace('\\', "/");
-        if forward_path != canonical_path {
-            path_variants.push(forward_path);
-        }
-    }
-    let mut trust_blocks = Vec::new();
-    for event_label in event_labels {
-        let hash = codex_trusted_hash(event_label, command);
-        for source_path in &path_variants {
-            let key = format!("{source_path}:{event_label}:0:0");
-            trust_blocks.push(format!(
-                "[hooks.state.\"{}\"]\nenabled = true\ntrusted_hash = \"{}\"",
-                escape_toml(&key),
-                hash
-            ));
-        }
-    }
-    let blocks = trust_blocks.join("\n\n");
-
-    let mut content = fs::read_to_string(toml_path).unwrap_or_default();
-    if let (Some(start), Some(end)) = (content.find(TRUST_BEGIN), content.find(TRUST_END)) {
-        let end = end + TRUST_END.len();
-        content.replace_range(start..end, "");
-        content = content.trim_end().to_string();
-    }
-    if cfg!(windows) && !content.lines().any(|line| line.trim() == "[hooks.state]") {
-        if let Some(index) = content.find("[hooks.state.\"") {
-            content.insert_str(index, "[hooks.state]\n\n");
-        } else {
-            if !content.is_empty() {
-                content.push_str("\n\n");
-            }
-            content.push_str("[hooks.state]\n");
-        }
-    }
-    if !content.is_empty() && !content.ends_with("\n\n") {
-        content.push_str(if content.ends_with('\n') {
-            "\n"
-        } else {
-            "\n\n"
-        });
-    }
-    content.push_str(TRUST_BEGIN);
-    content.push('\n');
-    content.push_str(&blocks);
-    content.push('\n');
-    content.push_str(TRUST_END);
-    content.push('\n');
-    write_if_changed(toml_path, content.as_bytes())
-}
-
-fn codex_trusted_hash(event_label: &str, command: &str) -> String {
-    let command_json = serde_json::to_string(command).unwrap_or_else(|_| "\"\"".into());
-    // Codex keeps an explicit empty matcher in the normalized identity for
-    // matcher-aware events. UserPromptSubmit and Stop ignore matcher and omit
-    // it from their identity. This distinction is why only the three tool
-    // lifecycle hooks used to be reported as new on every launch.
-    let matcher_json = match event_label {
-        "pre_tool_use" | "permission_request" | "post_tool_use" => ",\"matcher\":\"\"",
-        _ => "",
+fn remove_legacy_codex_trust(toml_path: &Path) -> Result<(), String> {
+    let Ok(mut content) = fs::read_to_string(toml_path) else {
+        return Ok(());
     };
-    let identity = format!(
-        "{{\"event_name\":\"{event_label}\",\"hooks\":[{{\"async\":false,\"command\":{command_json},\"timeout\":10,\"type\":\"command\"}}]{matcher_json}}}"
-    );
-    format!("sha256:{:x}", Sha256::digest(identity.as_bytes()))
+    let Some(start) = content.find(TRUST_BEGIN) else {
+        return Ok(());
+    };
+    let Some(relative_end) = content[start..].find(TRUST_END) else {
+        return Ok(());
+    };
+    let mut end = start + relative_end + TRUST_END.len();
+    if content.as_bytes().get(end) == Some(&b'\r') {
+        end += 1;
+    }
+    if content.as_bytes().get(end) == Some(&b'\n') {
+        end += 1;
+    }
+    content.replace_range(start..end, "");
+    write_if_changed(toml_path, content.as_bytes())
 }
 
 fn read_json_object(path: &Path) -> Result<Value, String> {
@@ -481,10 +414,6 @@ fn node_command(script_path: &Path, agent: &str, event: Option<&str>) -> String 
         Some(event) => format!("node \"{escaped}\" {agent} {event}"),
         None => format!("node \"{escaped}\" {agent}"),
     }
-}
-
-fn escape_toml(value: &str) -> String {
-    value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
 fn managed_hook_script() -> &'static str {
@@ -681,10 +610,10 @@ export const TermflowStatusPlugin = async () => ({
 #[cfg(test)]
 mod tests {
     use super::{
-        codex_trusted_hash, definition_contains_owned_command, hook_action_contains_owned_command,
+        definition_contains_owned_command, hook_action_contains_owned_command,
         install_antigravity_hook_group, install_json_hooks, managed_hook_script,
-        opencode_plugin_source, remove_owned_json_hooks, resolve_opencode_config_root,
-        ANTIGRAVITY_HOOK_GROUP, QODER_HOOK_EVENTS,
+        opencode_plugin_source, remove_legacy_codex_trust, remove_owned_json_hooks,
+        resolve_opencode_config_root, ANTIGRAVITY_HOOK_GROUP, QODER_HOOK_EVENTS,
     };
     use serde_json::json;
     use std::path::PathBuf;
@@ -739,27 +668,33 @@ mod tests {
     }
 
     #[test]
-    fn codex_hash_matches_normalized_hook_identity() {
-        assert_eq!(
-            codex_trusted_hash("pre_tool_use", "node hook.cjs codex"),
-            "sha256:8ea4a875983589fbd84070b389d8b13e2875cb7471debfbcf85877b66e9c0141"
+    fn removes_only_the_legacy_termflow_codex_trust_block() {
+        let path = std::env::temp_dir().join(format!(
+            "termflow-codex-trust-migration-{}.toml",
+            std::process::id()
+        ));
+        let content = concat!(
+            "model = \"gpt-5\"\n\n",
+            "[hooks.state.\"user-owned\"]\n",
+            "enabled = true\n\n",
+            "# BEGIN TERMFLOW AGENT STATUS HOOKS\n",
+            "[hooks.state.\"managed\"]\n",
+            "enabled = true\n",
+            "trusted_hash = \"sha256:stale\"\n",
+            "# END TERMFLOW AGENT STATUS HOOKS\n\n",
+            "[projects.\"C:/project\"]\n",
+            "trust_level = \"trusted\"\n"
         );
-        assert_eq!(
-            codex_trusted_hash("permission_request", "node hook.cjs codex"),
-            "sha256:7d9efb71e053c878cf1a9a62f64e3433576c25492df12363fc370428d4284225"
-        );
-        assert_eq!(
-            codex_trusted_hash("post_tool_use", "node hook.cjs codex"),
-            "sha256:bb43fc7edecbdfd6fb1bef980340b6001be7bc937054baf15c805370788ea16a"
-        );
-        assert_eq!(
-            codex_trusted_hash("user_prompt_submit", "node hook.cjs codex"),
-            "sha256:8579f9962a622c3e82a0afdf1f89a9a7408b0d1cfda14c93923302b1fa143577"
-        );
-        assert_eq!(
-            codex_trusted_hash("stop", "node hook.cjs codex"),
-            "sha256:3cd3040f60b018587de1b1654d504b8cb4c049b1fd9399916535b570244929bf"
-        );
+        std::fs::write(&path, content).unwrap();
+
+        remove_legacy_codex_trust(&path).unwrap();
+
+        let migrated = std::fs::read_to_string(&path).unwrap();
+        assert!(migrated.contains("[hooks.state.\"user-owned\"]"));
+        assert!(migrated.contains("[projects.\"C:/project\"]"));
+        assert!(!migrated.contains("TERMFLOW AGENT STATUS HOOKS"));
+        assert!(!migrated.contains("[hooks.state.\"managed\"]"));
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]

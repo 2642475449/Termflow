@@ -504,14 +504,24 @@ pub fn ensure_voice_overlay_window(
         .ok_or_else(|| "语音悬浮窗未初始化".to_string())?;
 
     let (x, y) = voice_overlay_position(&app, &window)?;
-    let _ = overlay_window.set_size(Size::Physical(PhysicalSize::new(
-        VOICE_OVERLAY_WIDTH,
-        VOICE_OVERLAY_HEIGHT,
-    )));
-    let _ = overlay_window.set_position(Position::Physical(PhysicalPosition::new(x, y)));
-    let _ = overlay_window.set_always_on_top(true);
-    let _ = overlay_window.set_ignore_cursor_events(true);
-    let _ = overlay_window.show();
+    overlay_window
+        .set_size(Size::Physical(PhysicalSize::new(
+            VOICE_OVERLAY_WIDTH,
+            VOICE_OVERLAY_HEIGHT,
+        )))
+        .map_err(|error| format!("Failed to size voice overlay: {error}"))?;
+    overlay_window
+        .set_position(Position::Physical(PhysicalPosition::new(x, y)))
+        .map_err(|error| format!("Failed to position voice overlay: {error}"))?;
+    overlay_window
+        .set_always_on_top(true)
+        .map_err(|error| format!("Failed to keep voice overlay on top: {error}"))?;
+    overlay_window
+        .set_ignore_cursor_events(true)
+        .map_err(|error| format!("Failed to make voice overlay click-through: {error}"))?;
+    overlay_window
+        .show()
+        .map_err(|error| format!("Failed to show voice overlay: {error}"))?;
     overlay_state.set_owner(window.label());
     Ok(())
 }
@@ -565,14 +575,29 @@ fn voice_overlay_position(
         return Err("未找到当前显示器".into());
     };
 
-    let monitor_size = monitor.size();
-    let monitor_position = monitor.position();
-    let x = monitor_position.x + ((monitor_size.width as i32 - VOICE_OVERLAY_WIDTH as i32) / 2);
-    let y = monitor_position.y + monitor_size.height as i32
+    // Position relative to the Windows work area rather than the full monitor.
+    // The full monitor includes the taskbar, which can place the capsule under
+    // or beyond system chrome on high-DPI and non-default taskbar layouts.
+    let work_area = monitor.work_area();
+    Ok(voice_overlay_position_in_work_area(
+        work_area.position.x,
+        work_area.position.y,
+        work_area.size.width,
+        work_area.size.height,
+    ))
+}
+
+fn voice_overlay_position_in_work_area(
+    work_x: i32,
+    work_y: i32,
+    work_width: u32,
+    work_height: u32,
+) -> (i32, i32) {
+    let x = work_x + ((work_width as i32 - VOICE_OVERLAY_WIDTH as i32) / 2);
+    let y = work_y + work_height as i32
         - VOICE_OVERLAY_HEIGHT as i32
         - VOICE_OVERLAY_BOTTOM_MARGIN;
-
-    Ok((x, y.max(monitor_position.y)))
+    (x, y.max(work_y))
 }
 
 pub(crate) fn project_name_from_path(project_path: &str) -> String {
@@ -723,6 +748,22 @@ mod tests {
         assert!(should_reuse_launcher_window("main", true));
         assert!(!should_reuse_launcher_window(LAUNCHER_LABEL, true));
         assert!(!should_reuse_launcher_window("main", false));
+    }
+
+    #[test]
+    fn voice_overlay_is_centered_above_the_work_area_bottom() {
+        assert_eq!(
+            voice_overlay_position_in_work_area(0, 0, 1920, 1040),
+            (700, 848)
+        );
+    }
+
+    #[test]
+    fn voice_overlay_position_supports_offset_monitors() {
+        assert_eq!(
+            voice_overlay_position_in_work_area(-1920, 40, 1920, 1040),
+            (-1220, 888)
+        );
     }
 
     #[test]

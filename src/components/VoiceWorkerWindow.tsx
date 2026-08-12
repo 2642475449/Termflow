@@ -232,6 +232,13 @@ function VoiceWorkerWindow() {
     if (isOverlayActive) {
       ensureVoiceOverlayWindow().catch((error) => {
         console.error("voice worker failed to ensure overlay window:", error);
+        void emit("voice-worker-error", {
+          code: "overlay_show_failed",
+          message:
+            error instanceof Error && error.message
+              ? error.message
+              : String(error || "Failed to show the voice overlay."),
+        });
       });
       return;
     }

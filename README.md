@@ -18,6 +18,10 @@
   <img src="https://img.shields.io/badge/v1.8.17-blue?style=flat-square" alt="Version">
 </p>
 
+<p align="center">
+  <img src="public/images/termflow-overview.png" alt="Termflow 界面预览" width="100%">
+</p>
+
 ---
 
 ## 简介
@@ -34,18 +38,6 @@
 - 🎨 **多套主题**：深色、浅色与跟随系统切换
 - 💾 **会话持久化**：关闭应用后无缝恢复历史对话
 - 🌐 **多语言支持**：中文、英文、日语界面
-
-## 界面预览
-
-> 截图位已预留。后续将真实产品截图放入 `docs/images/`，并替换下方对应占位即可。
-
-| 主工作台 | Git 与检查点审阅 |
-| :-- | :-- |
-| `docs/images/workbench.png`<br>项目、会话与嵌入式终端 | `docs/images/git-checkpoints.png`<br>提交、差异与检查点审阅 |
-
-| 智能体与会话管理 | 外观与主题 |
-| :-- | :-- |
-| `docs/images/agents-sessions.png`<br>多智能体、多项目与会话上下文 | `docs/images/appearance.png`<br>主题与外观设置 |
 
 ## 为什么开源
 
