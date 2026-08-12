@@ -421,23 +421,6 @@ pub async fn open_project_window(
 }
 
 #[tauri::command]
-pub fn is_project_window_open(
-    path: String,
-    app: tauri::AppHandle,
-    registry: State<'_, Arc<WindowRegistry>>,
-) -> Result<bool, String> {
-    let project_path = ensure_existing_project_directory(&path)?;
-    let Some(label) = registry.get_label_by_project(&project_path) else {
-        return Ok(false);
-    };
-    if app.get_webview_window(&label).is_some() {
-        return Ok(true);
-    }
-    registry.release_window(&label);
-    Ok(false)
-}
-
-#[tauri::command]
 pub fn get_existing_project_paths(paths: Vec<String>) -> Vec<String> {
     paths
         .into_iter()

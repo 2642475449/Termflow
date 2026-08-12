@@ -4,14 +4,16 @@ import {
   DeleteOutlined,
   DownOutlined,
   FolderOutlined,
+  WarningOutlined,
   RightOutlined,
 } from "@ant-design/icons";
-import { Popover, message } from "antd";
+import { Button, Checkbox, Modal, Popover, message } from "antd";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useProjectLauncher } from "@/hooks/useProjectLauncher";
 import CloneRepositoryModal from "@/components/layout/CloneRepositoryModal";
 import { useAppStore } from "@/store";
+import { isSessionTurnRunning } from "@/lib/sessions";
 
 const PROJECT_SWATCHES = ["#34d399", "#a78bfa", "#60a5fa", "#f59e0b", "#f472b6", "#22d3ee"];
 const CURRENT_PROJECT_BACKGROUND =
@@ -44,8 +46,12 @@ function TitleBarProjectSwitcher() {
     removeRecentProject,
   } = useProjectLauncher();
   const upsertGitCloneTask = useAppStore((state) => state.upsertGitCloneTask);
+  const projectOpenBehavior = useAppStore((state) => state.projectOpenBehavior);
+  const setProjectOpenBehavior = useAppStore((state) => state.setProjectOpenBehavior);
   const [open, setOpen] = useState(false);
   const [cloneOpen, setCloneOpen] = useState(false);
+  const [pendingProjectPath, setPendingProjectPath] = useState<string | null>(null);
+  const [rememberOpenChoice, setRememberOpenChoice] = useState(false);
 
   const quickActions = useMemo(
     () => [
@@ -70,18 +76,47 @@ function TitleBarProjectSwitcher() {
   );
 
   async function handleQuickAction(action: (typeof quickActions)[number]) {
+    setOpen(false);
+    await waitForPopoverToClose();
     try {
       await action.onClick();
-      setOpen(false);
-    } catch {
-      setOpen(false);
-    }
+    } catch {}
   }
 
   async function handleOpenRecentProject(path: string) {
+    setOpen(false);
+    await waitForPopoverToClose();
+    if (currentProject?.path === path) return;
+
+    const state = useAppStore.getState();
+    const hasRunningSessions = state.sessions.some(isSessionTurnRunning);
+    const hasDirtyFiles = Object.values(state.tabsById).some((tab) => tab.dirty);
+    if (
+      projectOpenBehavior === "ask" ||
+      (projectOpenBehavior === "current_window" && (hasRunningSessions || hasDirtyFiles))
+    ) {
+      setRememberOpenChoice(false);
+      setPendingProjectPath(path);
+      return;
+    }
+
     try {
-      await openProject(path);
-      setOpen(false);
+      await openProject(path, projectOpenBehavior);
+    } catch (error) {
+      console.error("Failed to open project window:", error);
+      message.error(t("sidebar.projectWindowOpenFailed"));
+    }
+  }
+
+  async function confirmProjectOpen(choice: "current_window" | "new_window") {
+    const path = pendingProjectPath;
+    if (!path) return;
+    setPendingProjectPath(null);
+    if (rememberOpenChoice) {
+      setProjectOpenBehavior(choice);
+    }
+    try {
+      await openProject(path, choice);
     } catch (error) {
       console.error("Failed to open project window:", error);
       message.error(t("sidebar.projectWindowOpenFailed"));
@@ -310,8 +345,81 @@ function TitleBarProjectSwitcher() {
           message.success(t("projectLauncher.cloneStartedInBackground", { name: task.directoryName }));
         }}
       />
+      <Modal
+        open={pendingProjectPath !== null}
+        title={t("projectLauncher.openProjectTitle")}
+        centered
+        width={520}
+        destroyOnHidden
+        onCancel={() => setPendingProjectPath(null)}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button onClick={() => setPendingProjectPath(null)}>{t("common.cancel")}</Button>
+            <Button onClick={() => void confirmProjectOpen("current_window")}>
+              {t("projectLauncher.openInCurrentWindow")}
+            </Button>
+            <Button type="primary" onClick={() => void confirmProjectOpen("new_window")}>
+              {t("projectLauncher.openInNewWindow")}
+            </Button>
+          </div>
+        }
+      >
+        <div className="pt-1">
+          <div>
+            {t("projectLauncher.openProjectQuestion", {
+              name: pendingProjectPath?.split(/[\\/]/).pop() || pendingProjectPath || "",
+            })}
+          </div>
+          <ProjectOpenWarnings />
+          <Checkbox
+            className="mt-4"
+            checked={rememberOpenChoice}
+            onChange={(event) => setRememberOpenChoice(event.target.checked)}
+          >
+            {t("projectLauncher.rememberOpenChoice")}
+          </Checkbox>
+        </div>
+      </Modal>
     </>
   );
+}
+
+function ProjectOpenWarnings() {
+  const { t } = useTranslation();
+  const runningSessionCount = useAppStore((state) =>
+    state.sessions.filter(isSessionTurnRunning).length
+  );
+  const dirtyFileCount = useAppStore((state) => Object.values(state.tabsById).filter(
+    (tab) => tab.dirty
+  ).length);
+  if (runningSessionCount === 0 && dirtyFileCount === 0) return null;
+  return (
+    <div className="mt-3 flex items-start gap-2.5 text-xs leading-5">
+      <WarningOutlined
+        className="mt-[3px] shrink-0"
+        style={{ color: "var(--cs-warning)" }}
+      />
+      <div className="min-w-0">
+        <div style={{ color: "var(--cs-text-secondary)" }}>
+          {runningSessionCount > 0 ? (
+            <div>{t("projectLauncher.openProjectRunningSessions", { count: runningSessionCount })}</div>
+          ) : null}
+          {dirtyFileCount > 0 ? (
+            <div>{t("projectLauncher.openProjectUnsavedFiles", { count: dirtyFileCount })}</div>
+          ) : null}
+        </div>
+        <div className="mt-0.5" style={{ color: "var(--cs-warning)" }}>
+          {t("projectLauncher.currentWindowCleanupWarning")}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function waitForPopoverToClose() {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, 0);
+  });
 }
 
 export default TitleBarProjectSwitcher;

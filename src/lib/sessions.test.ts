@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Session } from "@/types";
 import {
   isEphemeralTerminalSession,
+  isSessionTurnRunning,
   isSessionVisibleInHistory,
   withoutEphemeralTerminalSessions,
   withoutSessionHistoryExcludedSessions,
@@ -62,5 +63,18 @@ describe("isEphemeralTerminalSession", () => {
     expect(withoutSessionHistoryExcludedSessions({
       "D:/project": [auxiliary, primary],
     })).toEqual({ "D:/project": [primary] });
+  });
+});
+
+describe("isSessionTurnRunning", () => {
+  it("counts only starting and running turns", () => {
+    expect(isSessionTurnRunning(session({ active: true, status: "starting" }))).toBe(true);
+    expect(isSessionTurnRunning(session({ active: true, status: "running" }))).toBe(true);
+  });
+
+  it("does not treat an idle live PTY as a running turn", () => {
+    expect(isSessionTurnRunning(session({ active: true, status: "waiting" }))).toBe(false);
+    expect(isSessionTurnRunning(session({ active: true, status: "completed" }))).toBe(false);
+    expect(isSessionTurnRunning(session({ active: true, status: "stopped" }))).toBe(false);
   });
 });

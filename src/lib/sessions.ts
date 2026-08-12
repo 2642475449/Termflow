@@ -14,6 +14,14 @@ export function isEphemeralTerminalSession(session: Session): boolean {
   );
 }
 
+/**
+ * A live PTY (`active`) can be idle at its prompt. Only these runtime states
+ * mean the agent is currently starting or executing a turn.
+ */
+export function isSessionTurnRunning(session: Session): boolean {
+  return session.status === "starting" || session.status === "running";
+}
+
 /** Auxiliary tasks live in the Dock and must not be duplicated in session history. */
 export function isSessionVisibleInHistory(session: Session): boolean {
   return !isEphemeralTerminalSession(session) && session.presentation !== "auxiliary";
