@@ -1363,6 +1363,7 @@
       "noReleaseNotes": "此版本暫無更新說明。",
       "installUpdate": "下載並安裝",
       "downloadingUpdate": "正在下載並安裝更新…",
+      "updateInstallFailed": "下載或安裝更新失敗，請稍後再試。",
       "updateCheckFailed": "檢查更新失敗，請稍後再試。",
       "language": "語言",
       "theme": "主題"

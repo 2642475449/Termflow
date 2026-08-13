@@ -1363,6 +1363,7 @@
       "noReleaseNotes": "このバージョンにはリリースノートがありません。",
       "installUpdate": "ダウンロードしてインストール",
       "downloadingUpdate": "アップデートをダウンロードしてインストール中…",
+      "updateInstallFailed": "アップデートをダウンロードまたはインストールできませんでした。しばらくしてからもう一度お試しください。",
       "updateCheckFailed": "アップデートを確認できませんでした。しばらくしてからもう一度お試しください。",
       "language": "言語",
       "theme": "テーマ"

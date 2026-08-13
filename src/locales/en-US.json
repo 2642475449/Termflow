@@ -1366,6 +1366,7 @@
       "noReleaseNotes": "No release notes were provided for this version.",
       "installUpdate": "Download and install",
       "downloadingUpdate": "Downloading and installing update…",
+      "updateInstallFailed": "Could not download or install the update. Please try again later.",
       "updateCheckFailed": "Could not check for updates. Please try again later.",
       "language": "Language",
       "theme": "Theme"
