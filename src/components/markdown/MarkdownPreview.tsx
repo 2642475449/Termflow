@@ -878,7 +878,7 @@ function MarkdownPreviewRenderer({
     blocks.push(
       <p
         key={`p-${blocks.length}`}
-        className="m-0 text-sm leading-7"
+        className="m-0 text-sm leading-6"
         style={{ color: "var(--cs-text-secondary)" }}
       >
         {renderInlineMarkdown(paragraph.join(" "), {
@@ -900,11 +900,11 @@ function MarkdownPreviewRenderer({
     blocks.push(
       <ListTag
         key={`ul-${blocks.length}`}
-        className="m-0 pl-5 space-y-2 text-sm leading-7"
+        className="m-0 pl-5 space-y-1 text-sm leading-6"
         style={{ color: "var(--cs-text-secondary)" }}
       >
         {listItems.map((item, index) => (
-          <li key={`${item.text}-${index}`} className="leading-7">
+          <li key={`${item.text}-${index}`} className="leading-6">
             {item.checked === null ? null : (
               <input
                 type="checkbox"
@@ -932,7 +932,7 @@ function MarkdownPreviewRenderer({
     blocks.push(
       <div
         key={`quote-${blocks.length}`}
-        className="rounded-r-xl px-4 py-3 text-sm leading-7"
+        className="rounded-r-xl px-4 py-2 text-sm leading-6"
         style={{
           color: "var(--cs-text-secondary)",
           borderLeft: "3px solid var(--cs-primary)",

@@ -295,6 +295,7 @@ export default function AuxiliaryDock({
                   {session ? (
                     <AgentActivityIcon
                       agentId={session.agentId ?? "claude"}
+                      active={session.active}
                       status={session.status}
                       size={15}
                     />

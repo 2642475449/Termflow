@@ -140,6 +140,7 @@ function SidebarSessionsPanel({
           <span className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center">
             <AgentActivityIcon
               agentId={session.agentId ?? "claude"}
+              active={session.active}
               status={session.status}
               size={17}
             />

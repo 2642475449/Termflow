@@ -1215,10 +1215,10 @@ html, body, #root {
 }
 
 .app-markdown-preview {
-  width: min(920px, 100%);
+  width: min(980px, 100%);
   margin: 0 auto;
   color: var(--cs-text-secondary);
-  line-height: 1.85;
+  line-height: 1.65;
   user-select: text;
   -webkit-user-select: text;
 }
@@ -1231,17 +1231,17 @@ html, body, #root {
 }
 
 .app-markdown-preview-surface {
-  padding-bottom: 48px;
+  padding-bottom: 28px;
 }
 
 .app-markdown-editable-preview {
-  padding-bottom: 48px;
+  padding-bottom: 28px;
 }
 
 .app-markdown-editable-block {
   position: relative;
-  margin: -6px -12px 6px;
-  padding: 6px 12px;
+  margin: -3px -12px 0;
+  padding: 3px 12px 0;
   border: 1px solid transparent;
   border-radius: 10px;
   transition:
@@ -1257,6 +1257,8 @@ html, body, #root {
 }
 
 .app-markdown-editable-block.is-editing {
+  margin-bottom: 6px;
+  padding-bottom: 8px;
   border-color: color-mix(in srgb, var(--cs-primary) 58%, var(--cs-border-card) 42%);
   background: var(--cs-bg-primary);
   box-shadow: 0 8px 28px color-mix(in srgb, var(--cs-primary) 10%, transparent);
@@ -1271,7 +1273,7 @@ html, body, #root {
   > .app-markdown-editable-block:not(:first-child)
   .app-markdown-preview-readme
   > :is(h1, h2, h3, h4, h5, h6):first-child {
-  margin-top: 1.65em;
+  margin-top: 1.35em;
 }
 
 .app-markdown-block-edit-trigger {
@@ -1367,22 +1369,22 @@ html, body, #root {
 .app-markdown-preview h4,
 .app-markdown-preview h5,
 .app-markdown-preview h6 {
-  margin-top: 1.65em;
-  margin-bottom: 0.7em;
+  margin-top: 1.35em;
+  margin-bottom: 0.55em;
   color: var(--cs-text-primary);
   line-height: 1.25;
   letter-spacing: -0.01em;
 }
 
 .app-markdown-preview h1 {
-  font-size: 2.65rem;
+  font-size: 2.4rem;
   font-weight: 600;
 }
 
 .app-markdown-preview h2 {
   padding-bottom: 0.42em;
   border-bottom: 1px solid color-mix(in srgb, var(--cs-border-card) 78%, transparent);
-  font-size: 1.95rem;
+  font-size: 1.75rem;
   font-weight: 600;
 }
 
@@ -1399,7 +1401,15 @@ html, body, #root {
 .app-markdown-preview table,
 .app-markdown-preview hr {
   margin-top: 0;
-  margin-bottom: 1.1rem;
+  margin-bottom: 0.75rem;
+}
+
+.app-markdown-preview li + li {
+  margin-top: 0.15em;
+}
+
+.app-markdown-preview li > p {
+  margin-bottom: 0;
 }
 
 .app-markdown-preview hr {
@@ -1464,7 +1474,7 @@ html, body, #root {
 
 .app-markdown-preview blockquote {
   margin-left: 0;
-  padding: 14px 18px;
+  padding: 9px 14px;
   border-left: 3px solid var(--cs-primary);
   background: color-mix(in srgb, var(--cs-bg-hover) 72%, transparent);
   color: var(--cs-text-secondary);

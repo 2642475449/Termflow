@@ -1,4 +1,5 @@
 import type { Session } from "@/types";
+import { toPersistedSession } from "@/lib/sessions";
 
 export interface ProjectInfo {
   path: string;
@@ -76,11 +77,12 @@ export function normalizeRehydratedProjectSessions(
 ) {
   const normalizedProjectSessions: Record<string, Session[]> = {};
   for (const [path, sessions] of Object.entries(projectSessions)) {
-    normalizedProjectSessions[path] = sessions.map((session) => ({
-      ...session,
-      agentId: (session.agentId as string) === "gemini" ? "antigravity" : session.agentId,
-      active: false,
-    }));
+    normalizedProjectSessions[path] = sessions.map((session) =>
+      toPersistedSession({
+        ...session,
+        agentId: (session.agentId as string) === "gemini" ? "antigravity" : session.agentId,
+      })
+    );
   }
   return normalizedProjectSessions;
 }

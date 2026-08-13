@@ -19,7 +19,23 @@ export function isEphemeralTerminalSession(session: Session): boolean {
  * mean the agent is currently starting or executing a turn.
  */
 export function isSessionTurnRunning(session: Session): boolean {
-  return session.status === "starting" || session.status === "running";
+  return session.active && (session.status === "starting" || session.status === "running");
+}
+
+/**
+ * PTY availability and in-flight turn states belong to the current desktop
+ * process. Persist only a resumable, inactive history snapshot.
+ */
+export function toPersistedSession(session: Session): Session {
+  const status = session.status === "starting" || session.status === "running"
+    ? "stopped"
+    : session.status;
+
+  return {
+    ...session,
+    active: false,
+    status,
+  };
 }
 
 /** Auxiliary tasks live in the Dock and must not be duplicated in session history. */
@@ -46,6 +62,18 @@ export function withoutSessionHistoryExcludedSessions(
     Object.entries(projectSessions).map(([path, sessions]) => [
       path,
       sessions.filter(isSessionVisibleInHistory),
+    ]),
+  );
+}
+
+/** Removes transient sessions and strips process-local runtime state. */
+export function toPersistedProjectSessions(
+  projectSessions: Record<string, Session[]>,
+): Record<string, Session[]> {
+  return Object.fromEntries(
+    Object.entries(projectSessions).map(([path, sessions]) => [
+      path,
+      sessions.filter(isSessionVisibleInHistory).map(toPersistedSession),
     ]),
   );
 }

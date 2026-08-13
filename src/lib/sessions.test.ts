@@ -4,6 +4,8 @@ import {
   isEphemeralTerminalSession,
   isSessionTurnRunning,
   isSessionVisibleInHistory,
+  toPersistedProjectSessions,
+  toPersistedSession,
   withoutEphemeralTerminalSessions,
   withoutSessionHistoryExcludedSessions,
 } from "./sessions";
@@ -76,5 +78,32 @@ describe("isSessionTurnRunning", () => {
     expect(isSessionTurnRunning(session({ active: true, status: "waiting" }))).toBe(false);
     expect(isSessionTurnRunning(session({ active: true, status: "completed" }))).toBe(false);
     expect(isSessionTurnRunning(session({ active: true, status: "stopped" }))).toBe(false);
+  });
+
+  it("does not trust a stale running status without a live PTY", () => {
+    expect(isSessionTurnRunning(session({ active: false, status: "starting" }))).toBe(false);
+    expect(isSessionTurnRunning(session({ active: false, status: "running" }))).toBe(false);
+  });
+});
+
+describe("persisted session history", () => {
+  it("strips process-local activity from resumable sessions", () => {
+    expect(toPersistedSession(session({ active: true, status: "running" }))).toMatchObject({
+      active: false,
+      status: "stopped",
+    });
+    expect(toPersistedSession(session({ active: true, status: "waiting" }))).toMatchObject({
+      active: false,
+      status: "waiting",
+    });
+  });
+
+  it("excludes transient surfaces while sanitizing retained sessions", () => {
+    const running = session({ id: "agent", agentId: "codex", status: "starting" });
+    const terminal = session({ id: "terminal", agentId: "powershell", ephemeral: true });
+
+    expect(toPersistedProjectSessions({ "D:/project": [terminal, running] })).toEqual({
+      "D:/project": [{ ...running, active: false, status: "stopped" }],
+    });
   });
 });

@@ -35,7 +35,7 @@ import {
 } from "@/lib/attentionPersistence";
 import {
   isEphemeralTerminalSession,
-  withoutSessionHistoryExcludedSessions,
+  toPersistedProjectSessions,
 } from "@/lib/sessions";
 import { normalizeArchivedSessionGroups } from "@/lib/archivedSessions";
 import {
@@ -2527,7 +2527,7 @@ function createPersistOptions(storage?: StateStorage) {
     migrate: (persistedState: unknown) =>
       rehydrateMigrationState(persistedState as Partial<AppState> | undefined),
     partialize: (state: AppState) => {
-      const projectSessions = withoutSessionHistoryExcludedSessions(state.projectSessions);
+      const projectSessions = toPersistedProjectSessions(state.projectSessions);
       const projectAttentionItems = sanitizePersistedAttentionItems(
         state.projectAttentionItems,
         projectSessions
@@ -2540,10 +2540,38 @@ function createPersistOptions(storage?: StateStorage) {
           state.projectAttentionItems
         ),
         projectSessions,
-        projectArchivedSessions: withoutSessionHistoryExcludedSessions(
+        projectArchivedSessions: toPersistedProjectSessions(
           state.projectArchivedSessions
         ),
-        projectWorkspaces: state.projectWorkspaces,
+        projectWorkspaces: Object.fromEntries(
+          Object.entries(state.projectWorkspaces).map(([path, workspace]) => [
+            path,
+            {
+              ...createDefaultWorkspace(),
+              tabsById: Object.fromEntries(
+                Object.entries(workspace.tabsById).filter(([, tab]) => tab.kind === "session")
+              ),
+              panesById: Object.fromEntries(
+                Object.entries(workspace.panesById).map(([paneId, pane]) => {
+                  const tabIds = pane.tabIds.filter((tabId) => workspace.tabsById[tabId]?.kind === "session");
+                  return [paneId, {
+                    ...pane,
+                    tabIds,
+                    activeTabId: tabIds.includes(pane.activeTabId ?? "")
+                      ? pane.activeTabId
+                      : tabIds[tabIds.length - 1] ?? null,
+                    history: pane.history.filter((tabId) => tabIds.includes(tabId)),
+                  }];
+                })
+              ),
+              layout: workspace.layout,
+              activePaneId: workspace.activePaneId,
+              focusedTabId: workspace.focusedTabId && workspace.tabsById[workspace.focusedTabId]?.kind === "session"
+                ? workspace.focusedTabId
+                : null,
+            },
+          ])
+        ),
         projectAttentionItems,
         sidebarCollapsed: state.sidebarCollapsed,
         sidebarWidth: state.sidebarWidth,
@@ -2564,7 +2592,7 @@ function createPersistOptions(storage?: StateStorage) {
         state.lastProject = state.lastProject ?? null;
         const { normalizedProjectSessions, recentProjects } =
           rehydrateRecentProjectState({
-            projectSessions: withoutSessionHistoryExcludedSessions(state.projectSessions ?? {}),
+            projectSessions: toPersistedProjectSessions(state.projectSessions ?? {}),
             recentProjects: state.recentProjects,
           });
         state.projectSessions = normalizedProjectSessions;
@@ -2573,8 +2601,7 @@ function createPersistOptions(storage?: StateStorage) {
         );
         state.recentProjects = recentProjects;
         state.sidebarWidth = clampSidebarWidth(state.sidebarWidth);
-        // Do not restore previously opened tabs after app restart.
-        state.projectWorkspaces = {};
+        // Restore session tabs as disconnected UI only. PTYs remain process-local.
         state.sessions = [];
         state.tabsById = {};
         state.panesById = createDefaultWorkspace().panesById;

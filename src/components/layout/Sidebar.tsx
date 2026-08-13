@@ -15,23 +15,19 @@ import {
 } from "@ant-design/icons";
 import { useAppStore, type SidebarSection } from "@/store";
 import {
-  spawnPty,
-  cleanupSessionProcess,
-  resolveRecentCodexSessionId,
   gitBranchInfo,
   gitRepoInfo,
   gitStatus,
   openInFileManager,
   openInAssociatedApplication,
 } from "@/lib/api";
-import { getAgentStartupCommand } from "@/lib/agents";
 import { archiveSessionRuntime } from "@/lib/tabClose";
 import { isSessionVisibleInHistory } from "@/lib/sessions";
 import { openCheckpointReview } from "@/lib/checkpointReview";
 import { openAuxiliarySession } from "@/lib/auxiliaryDock";
-import { getAgentCommandShell, isAiAgentId } from "@/lib/agents";
 import { useTranslation } from "react-i18next";
-import type { Session, SessionLaunchOptions } from "@/types";
+import type { Session } from "@/types";
+import { useResumeSession } from "@/hooks/useResumeSession";
 import SidebarProjectPanel from "./sidebar/SidebarProjectPanel";
 import SidebarSessionsPanel from "./sidebar/SidebarSessionsPanel";
 import SidebarGitPanel from "./sidebar/SidebarGitPanel";
@@ -46,13 +42,6 @@ const MIN_SIDEBAR_WIDTH = 220;
 const MAX_SIDEBAR_WIDTH = 360;
 const RESIZE_HANDLE_WIDTH = 6;
 
-class CodexSessionRestoreError extends Error {
-  constructor() {
-    super("Codex session ID was not found");
-    this.name = "CodexSessionRestoreError";
-  }
-}
-
 interface SidebarProps {
   collapsed: boolean;
   section: SidebarSection;
@@ -64,7 +53,7 @@ function Sidebar({ collapsed, section }: SidebarProps) {
   const sidebarWidth = useAppStore((s) => s.sidebarWidth);
   const sessions = useAppStore((s) => s.sessions);
   const activeSessionId = useAppStore((s) => s.activeSessionId);
-  const defaultTerminalShell = useAppStore((s) => s.defaultTerminalShell);
+  const resumeSession = useResumeSession();
   const openTab = useAppStore((s) => s.openTab);
   const openFileTab = useAppStore((s) => s.openFileTab);
   const updateSession = useAppStore((s) => s.updateSession);
@@ -188,31 +177,6 @@ function Sidebar({ collapsed, section }: SidebarProps) {
 
   // Keep `now` referenced to trigger re-renders for relative time updates
   void now;
-  const getStartupEnvErrorMessage = useCallback(
-    (error?: unknown) => {
-      if (typeof error === "string" && error.trim()) return error;
-      if (
-        error &&
-        typeof error === "object" &&
-        "message" in error &&
-        typeof error.message === "string" &&
-        error.message.trim()
-      ) {
-        return error.message;
-      }
-      return t("sidebar.startupEnvError");
-    },
-    [t]
-  );
-
-  const showStartupEnvError = useCallback(
-    (error?: unknown) => {
-      const nextMessage = getStartupEnvErrorMessage(error);
-      message.error(nextMessage);
-    },
-    [getStartupEnvErrorMessage]
-  );
-
   async function handleSessionClick(sessionId: string) {
     const session = sessions.find((s) => s.id === sessionId);
     if (session?.presentation === "auxiliary") {
@@ -229,76 +193,7 @@ function Sidebar({ collapsed, section }: SidebarProps) {
       return;
     }
     if (session && !session.active) {
-      try {
-        // Hook ingest revisions restart with the desktop process. Reset the
-        // persisted revision before resuming so fresh events are not rejected
-        // as stale after an application restart.
-        updateSession(sessionId, {
-          active: false,
-          status: "starting",
-          statusRevision: 0,
-          statusUpdatedAt: Date.now(),
-        });
-        await cleanupSessionProcess(sessionId);
-        let agentSessionId = session.agentSessionId;
-        if (session.agentId === "codex") {
-          agentSessionId ??= await resolveRecentCodexSessionId(session.path, session.createdAt);
-          if (!agentSessionId) {
-            throw new CodexSessionRestoreError();
-          }
-        }
-        const resumeLaunchOptions: SessionLaunchOptions | undefined =
-          session.agentId === "antigravity"
-          ? {
-              dangerouslySkipPermissions:
-                session.antigravityDangerouslySkipPermissions ?? false,
-              sandbox: session.antigravitySandbox ?? false,
-              mode: session.antigravityMode ?? "inherit",
-            }
-          : session.agentId === "qoder"
-            ? {
-                permissionMode: session.qoderPermissionMode ?? "inherit",
-              }
-            : undefined;
-        await spawnPty(
-          sessionId,
-          session.path,
-          Boolean(session.hasPromptHistory),
-          session.agentId === "claude" || !session.agentId
-            ? (session.claudeSkipPermissions ?? false)
-            : false,
-          getAgentStartupCommand(
-            session.agentId,
-            session.agentExecutablePath,
-            agentSessionId,
-            null,
-            resumeLaunchOptions,
-            true,
-          ),
-          undefined,
-          isAiAgentId(session.agentId)
-            ? getAgentCommandShell(session.agentId)
-            : defaultTerminalShell,
-          session.agentId === "claude" ? (session.runtimeEffort ?? undefined) : undefined,
-          session.agentId,
-        );
-        updateSession(sessionId, { active: true, status: "waiting" });
-        if (session.agentId === "codex" && agentSessionId && session.agentSessionId !== agentSessionId) {
-          updateSession(sessionId, { agentSessionId });
-        }
-      } catch (e) {
-        console.error("Failed to resume session:", e);
-        updateSession(sessionId, { active: false, status: "error" });
-        if (e instanceof CodexSessionRestoreError) {
-          message.error({
-            key: `codex-session-restore-${sessionId}`,
-            title: t("sidebar.codexSessionRestoreFailedTitle"),
-            content: t("sidebar.codexSessionRestoreFailedDescription"),
-          });
-        } else {
-          showStartupEnvError(e);
-        }
-      }
+      await resumeSession(sessionId);
     }
   }
 

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { Layout, message, Spin } from "antd";
+import { Button, Layout, message, Spin } from "antd";
 import dayjs from "dayjs";
 import TitleBar from "./TitleBar";
 import StatusBar from "./StatusBar";
@@ -14,6 +14,7 @@ import GlobalTextSearchDialog from "@/components/GlobalTextSearchDialog";
 import { VoiceTrigger } from "@/components/VoiceButton";
 import { useAppStore, type LayoutNode } from "@/store";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import { useResumeSession } from "@/hooks/useResumeSession";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { emit, listen } from "@tauri-apps/api/event";
 import {
@@ -166,6 +167,7 @@ function WorkspacePane({ paneId }: { paneId: string }) {
   const setActiveSession = useAppStore((state) => state.setActiveSession);
   const updateSession = useAppStore((state) => state.updateSession);
   const closeTab = useAppStore((state) => state.closeTab);
+  const resumeSession = useResumeSession();
 
   if (!pane) return null;
   const activeSession = pane.activeTabId
@@ -224,12 +226,28 @@ function WorkspacePane({ paneId }: { paneId: string }) {
                     />
                   ) : isDiff ? (
                     <GitDiffTabView tabId={tabId} />
-                  ) : (
+                  ) : session?.active ? (
                     <Terminal
                       sessionId={tabId}
                       onExit={() => updateSession(tabId, { active: false })}
                       onClose={() => closeTab(tabId)}
                     />
+                  ) : (
+                    <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+                      <div className="text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>
+                        {i18n.t("terminal.sessionDisconnected")}
+                      </div>
+                      <div className="max-w-md text-xs" style={{ color: "var(--cs-text-tertiary)" }}>
+                        {i18n.t("terminal.sessionDisconnectedDesc")}
+                      </div>
+                      <Button
+                        type="primary"
+                        loading={session?.status === "starting"}
+                        onClick={() => void resumeSession(tabId)}
+                      >
+                        {i18n.t("terminal.resumeSession")}
+                      </Button>
+                    </div>
                   )}
                 </Suspense>
               </div>

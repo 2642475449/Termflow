@@ -118,6 +118,22 @@ describe("recentProjects utils", () => {
     expect(result["D:/demo"][0].lastEventAt).toBe(300);
   });
 
+  it("normalizes stale in-flight states from an earlier desktop process", () => {
+    const running = createSession("d1", 100, 300);
+    running.status = "running";
+    const starting = createSession("d2", 101, 301);
+    starting.status = "starting";
+
+    const result = normalizeRehydratedProjectSessions({
+      "D:/demo": [running, starting],
+    });
+
+    expect(result["D:/demo"].map(({ active, status }) => ({ active, status }))).toEqual([
+      { active: false, status: "stopped" },
+      { active: false, status: "stopped" },
+    ]);
+  });
+
   it("rehydrateRecentProjectState recomputes recent projects from normalized sessions", () => {
     const result = rehydrateRecentProjectState({
       projectSessions: {
