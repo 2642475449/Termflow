@@ -1,8 +1,7 @@
-<p align="center">
-  <img src="public/logo.png" width="120" alt="Termflow Logo">
-</p>
-
-<h1 align="center">Termflow</h1>
+<h1 align="center">
+  <img src="public/logo.png" width="56" alt="Termflow Logo" align="absmiddle">
+  Termflow
+</h1>
 
 <p align="center">
   <strong>面向终端的 CLI 智能体工作台</strong><br>
