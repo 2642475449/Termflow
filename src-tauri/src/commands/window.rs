@@ -363,7 +363,11 @@ pub async fn open_project_window(
         "current_window" => true,
         "new_window" => false,
         "auto" => should_reuse_launcher_window(window.label(), launched_from_launcher),
-        _ => return Err(format!("Unsupported project open disposition: {disposition}")),
+        _ => {
+            return Err(format!(
+                "Unsupported project open disposition: {disposition}"
+            ))
+        }
     };
     let close_secondary_launcher = launched_from_launcher && !reuse_current_window;
 
@@ -418,6 +422,26 @@ pub async fn open_project_window(
         let _ = window.close();
     }
     Ok(context)
+}
+
+#[tauri::command]
+pub fn focus_existing_project_window(
+    path: String,
+    app: tauri::AppHandle,
+    registry: State<'_, Arc<WindowRegistry>>,
+) -> Result<bool, String> {
+    let project_path = ensure_existing_project_directory(&path)?;
+    let Some(window_label) = registry.get_label_by_project(&project_path) else {
+        return Ok(false);
+    };
+
+    if let Some(existing_window) = app.get_webview_window(&window_label) {
+        focus_window(&existing_window);
+        return Ok(true);
+    }
+
+    registry.release_window(&window_label);
+    Ok(false)
 }
 
 #[tauri::command]
@@ -594,9 +618,7 @@ fn voice_overlay_position_in_work_area(
     work_height: u32,
 ) -> (i32, i32) {
     let x = work_x + ((work_width as i32 - VOICE_OVERLAY_WIDTH as i32) / 2);
-    let y = work_y + work_height as i32
-        - VOICE_OVERLAY_HEIGHT as i32
-        - VOICE_OVERLAY_BOTTOM_MARGIN;
+    let y = work_y + work_height as i32 - VOICE_OVERLAY_HEIGHT as i32 - VOICE_OVERLAY_BOTTOM_MARGIN;
     (x, y.max(work_y))
 }
 

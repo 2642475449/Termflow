@@ -14,6 +14,7 @@ import { useProjectLauncher } from "@/hooks/useProjectLauncher";
 import CloneRepositoryModal from "@/components/layout/CloneRepositoryModal";
 import { useAppStore } from "@/store";
 import { isSessionTurnRunning } from "@/lib/sessions";
+import { focusExistingProjectWindow } from "@/lib/api";
 
 const PROJECT_SWATCHES = ["#34d399", "#a78bfa", "#60a5fa", "#f59e0b", "#f472b6", "#22d3ee"];
 const CURRENT_PROJECT_BACKGROUND =
@@ -87,6 +88,14 @@ function TitleBarProjectSwitcher() {
     setOpen(false);
     await waitForPopoverToClose();
     if (currentProject?.path === path) return;
+
+    try {
+      if (await focusExistingProjectWindow(path)) return;
+    } catch (error) {
+      console.error("Failed to focus existing project window:", error);
+      message.error(t("sidebar.projectWindowOpenFailed"));
+      return;
+    }
 
     const state = useAppStore.getState();
     const hasRunningSessions = state.sessions.some(isSessionTurnRunning);

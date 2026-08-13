@@ -889,6 +889,10 @@ export async function openProjectWindow(
   return await invoke("open_project_window", { path, disposition });
 }
 
+export async function focusExistingProjectWindow(path: string): Promise<boolean> {
+  return await invoke("focus_existing_project_window", { path });
+}
+
 export async function getExistingProjectPaths(paths: string[]): Promise<string[]> {
   return await invoke("get_existing_project_paths", { paths });
 }

@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Button, Dropdown, message, Modal, Tooltip } from "antd";
 import type { MenuProps } from "antd";
 import {
@@ -96,6 +96,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
   const setGitChangeCount = useAppStore((s) => s.setGitChangeCount);
   const setGitSyncCounts = useAppStore((s) => s.setGitSyncCounts);
   const defaultAgentId = useAppStore((s) => s.defaultAgentId);
+  const diffOpenRequestRef = useRef(0);
 
   // 使用 useGitStatus hook 管理 Git 状态
   const {
@@ -185,11 +186,14 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
       staged: boolean,
       oldFilePath?: string | null,
       hunkActionsAvailable?: boolean,
+      preview = true,
     ) => {
       if (!currentProject) return;
+      const requestId = ++diffOpenRequestRef.current;
       setOpeningDiffPath(filePath);
       try {
         const diffDocument = await gitDiffContent(currentProject.path, filePath, staged, oldFilePath);
+        if (requestId !== diffOpenRequestRef.current) return;
         if (diffDocument.isBinary) return;
         openGitDiffTab({
           path: diffDocument.filePath,
@@ -202,12 +206,15 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
           originalLabel: diffDocument.originalLabel,
           modifiedLabel: diffDocument.modifiedLabel,
           isBinary: diffDocument.isBinary,
-        });
+        }, { preview });
       } catch (error) {
+        if (requestId !== diffOpenRequestRef.current) return;
         const detail = typeof error === "string" ? error : "";
         message.error(detail ? `打开差异失败: ${detail}` : "打开差异失败");
       } finally {
-        setOpeningDiffPath(null);
+        if (requestId === diffOpenRequestRef.current) {
+          setOpeningDiffPath(null);
+        }
       }
     },
     [currentProject, openGitDiffTab]

@@ -61,6 +61,7 @@ interface GitFileListProps {
     staged: boolean,
     oldFilePath?: string | null,
     hunkActionsAvailable?: boolean,
+    preview?: boolean,
   ) => void;
   /** 暂存/取消暂存单个文件 */
   onToggleFile: (file: GitFileStatus) => void;
@@ -174,6 +175,15 @@ export function GitFileList({
                       staged,
                       file.oldPath,
                       hunkActionsAvailable,
+                    );
+                  }}
+                  onDoubleClick={() => {
+                    onViewDiff(
+                      file.path,
+                      staged,
+                      file.oldPath,
+                      hunkActionsAvailable,
+                      false,
                     );
                   }}
                 >

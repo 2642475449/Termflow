@@ -594,7 +594,10 @@ interface AppState {
   setActiveSession: (id: string | null, paneId?: string) => void;
   openTab: (tabId: string) => void;
   openFileTab: (path: string, options?: { preview?: boolean }) => string | null;
-  openGitDiffTab: (document: Omit<GitDiffDocumentState, "tabId">) => string | null;
+  openGitDiffTab: (
+    document: Omit<GitDiffDocumentState, "tabId">,
+    options?: { preview?: boolean },
+  ) => string | null;
   promoteTab: (tabId: string) => void;
   closeTab: (tabId: string, paneId?: string) => void;
   registerFileDocument: (document: FileDocumentState) => void;
@@ -1729,9 +1732,10 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
         return tabId;
       },
 
-      openGitDiffTab: (document) => {
+      openGitDiffTab: (document, options) => {
         const normalizedPath = document.path.trim();
         if (!normalizedPath) return null;
+        const preview = options?.preview ?? false;
         const tabId = getGitDiffTabId(
           normalizedPath,
           document.staged,
@@ -1744,6 +1748,23 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
           const nextWorkspace = cloneWorkspace(currentWorkspace);
           const pane = getActivePane(nextWorkspace);
           const now = Date.now();
+          const existingTab = nextWorkspace.tabsById[tabId];
+          const nextPreview = existingTab ? existingTab.preview && preview : preview;
+
+          if (preview) {
+            const existingPreviewId = pane.tabIds.find((id) => {
+              const tab = nextWorkspace.tabsById[id];
+              return tab?.preview && (tab.kind === "file" || tab.kind === "diff") && id !== tabId;
+            });
+            if (existingPreviewId) {
+              pane.tabIds = pane.tabIds.filter((id) => id !== existingPreviewId);
+              delete nextWorkspace.tabsById[existingPreviewId];
+              pane.history = pane.history.filter((id) => id !== existingPreviewId);
+              if (pane.activeTabId === existingPreviewId) {
+                pane.activeTabId = null;
+              }
+            }
+          }
 
           nextWorkspace.tabsById[tabId] =
             nextWorkspace.tabsById[tabId] ??
@@ -1763,7 +1784,7 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
               document.modifiedLabel,
             ),
             lastActivatedAt: now,
-            preview: false,
+            preview: nextPreview,
           };
           if (!pane.tabIds.includes(tabId)) {
             pane.tabIds.push(tabId);

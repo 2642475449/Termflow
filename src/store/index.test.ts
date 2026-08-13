@@ -1082,6 +1082,57 @@ describe("language persistence", () => {
   });
 });
 
+describe("git diff tab previews", () => {
+  const createDiff = (path: string) => ({
+    path,
+    name: path.split("/").pop() ?? path,
+    staged: false,
+    hunkActionsAvailable: true,
+    originalContent: "before",
+    modifiedContent: "after",
+    originalLabel: "HEAD",
+    modifiedLabel: "Working Tree",
+    isBinary: false,
+  });
+
+  it("reuses one preview tab when different changed files are single-clicked", () => {
+    const store = createAppStore();
+    const projectPath = "D:/workspace/demo";
+    store.setState({
+      currentProject: { path: projectPath, name: "demo" },
+      projectWorkspaces: { [projectPath]: createDefaultWorkspace() },
+    });
+
+    const firstId = store.getState().openGitDiffTab(createDiff("src/one.ts"), { preview: true });
+    const secondId = store.getState().openGitDiffTab(createDiff("src/two.ts"), { preview: true });
+    const state = store.getState();
+
+    expect(state.openTabs).toEqual([secondId]);
+    expect(state.tabsById[firstId!]).toBeUndefined();
+    expect(state.tabsById[secondId!]).toMatchObject({
+      title: "two.ts (工作树)",
+      preview: true,
+    });
+  });
+
+  it("keeps a double-clicked diff and uses a new preview for the next single click", () => {
+    const store = createAppStore();
+    const projectPath = "D:/workspace/demo";
+    store.setState({
+      currentProject: { path: projectPath, name: "demo" },
+      projectWorkspaces: { [projectPath]: createDefaultWorkspace() },
+    });
+
+    const pinnedId = store.getState().openGitDiffTab(createDiff("src/one.ts"), { preview: false });
+    const previewId = store.getState().openGitDiffTab(createDiff("src/two.ts"), { preview: true });
+    const state = store.getState();
+
+    expect(state.openTabs).toEqual([pinnedId, previewId]);
+    expect(state.tabsById[pinnedId!].preview).toBe(false);
+    expect(state.tabsById[previewId!].preview).toBe(true);
+  });
+});
+
 describe("editor typography persistence", () => {
   const originalEditorFontSize = useAppStore.getState().editorFontSize;
 
