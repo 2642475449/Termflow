@@ -14,6 +14,7 @@ src-tauri/target/release/bundle/nsis/*
 
 # Self-hosted updater release manifests (uploaded to the update server)
 output/updates/
+output/release-v*/
 
 # Local documentation
 docs/
