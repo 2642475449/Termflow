@@ -65,6 +65,9 @@ pub struct McpServerInfo {
 #[serde(rename_all = "camelCase")]
 pub struct McpServerCatalog {
     pub servers: Vec<McpServerInfo>,
+    #[serde(default)]
+    pub scope_config_paths: HashMap<String, String>,
+    // Kept for non-Claude clients and older frontend builds.
     pub workspace_config_path: Option<String>,
     pub user_config_path: String,
 }
@@ -88,7 +91,17 @@ fn validate_agent(agent: &str) -> Result<&str, String> {
     }
 }
 
-fn validate_scope(scope: &str, project_path: Option<&str>) -> Result<(), String> {
+fn validate_scope(agent: &str, scope: &str, project_path: Option<&str>) -> Result<(), String> {
+    if matches!(agent, CLAUDE | QODER) {
+        return match scope {
+            "user" => Ok(()),
+            "local" | "project" if project_path.is_some() => Ok(()),
+            "local" | "project" => {
+                Err("Open a project before managing local or project MCP servers".to_string())
+            }
+            _ => Err(format!("Unsupported {agent} MCP scope: {scope}")),
+        };
+    }
     match scope {
         "user" => Ok(()),
         "workspace" if project_path.is_some() => Ok(()),
@@ -101,7 +114,7 @@ fn home_dir() -> Result<PathBuf, String> {
     dirs_next::home_dir().ok_or_else(|| "Unable to resolve the user home directory".to_string())
 }
 
-/// Return the native MCP configuration path for an agent and Termflow's two scopes.
+/// Return the native MCP configuration path for an agent and its supported scopes.
 /// The page always keeps an agent selected, so configs never bleed between CLIs.
 fn get_mcp_config_path(
     agent: &str,
@@ -109,7 +122,7 @@ fn get_mcp_config_path(
     project_path: Option<&str>,
 ) -> Result<PathBuf, String> {
     validate_agent(agent)?;
-    validate_scope(scope, project_path)?;
+    validate_scope(agent, scope, project_path)?;
 
     let project = || -> Result<PathBuf, String> {
         project_path
@@ -118,8 +131,8 @@ fn get_mcp_config_path(
     };
 
     match (agent, scope) {
-        (CLAUDE, "user") => Ok(home_dir()?.join(".claude").join("settings.json")),
-        (CLAUDE, "workspace") => Ok(project()?.join(".claude").join("settings.json")),
+        (CLAUDE, "user" | "local") => Ok(home_dir()?.join(".claude.json")),
+        (CLAUDE, "project") => Ok(project()?.join(".mcp.json")),
         (CODEX, "user") => Ok(home_dir()?.join(".codex").join("config.toml")),
         (CODEX, "workspace") => Ok(project()?.join(".codex").join("config.toml")),
         (ANTIGRAVITY, "user") => Ok(home_dir()?
@@ -127,15 +140,41 @@ fn get_mcp_config_path(
             .join("config")
             .join("mcp_config.json")),
         (ANTIGRAVITY, "workspace") => Ok(project()?.join(".agents").join("mcp_config.json")),
-        (OPENCODE, "user") => Ok(home_dir()?
-            .join(".config")
-            .join("opencode")
-            .join("opencode.json")),
-        (OPENCODE, "workspace") => Ok(project()?.join(".opencode").join("opencode.json")),
+        (OPENCODE, "user") => Ok(prefer_existing_config_path(
+            home_dir()?.join(".config").join("opencode"),
+            &["opencode.jsonc", "opencode.json"],
+            "opencode.json",
+        )),
+        (OPENCODE, "workspace") => {
+            let project = project()?;
+            let nested = prefer_existing_config_path(
+                project.join(".opencode"),
+                &["opencode.jsonc", "opencode.json"],
+                "opencode.json",
+            );
+            if nested.exists() {
+                Ok(nested)
+            } else {
+                Ok(prefer_existing_config_path(
+                    project,
+                    &["opencode.jsonc", "opencode.json"],
+                    ".opencode/opencode.json",
+                ))
+            }
+        }
         (QODER, "user") => Ok(qoder_user_config_root()?.join("settings.json")),
-        (QODER, "workspace") => Ok(project()?.join(".mcp.json")),
+        (QODER, "local") => Ok(project()?.join(".qoder").join("settings.local.json")),
+        (QODER, "project") => Ok(project()?.join(".mcp.json")),
         _ => unreachable!("validated agent and scope"),
     }
+}
+
+fn prefer_existing_config_path(directory: PathBuf, names: &[&str], default: &str) -> PathBuf {
+    names
+        .iter()
+        .map(|name| directory.join(name))
+        .find(|path| path.exists())
+        .unwrap_or_else(|| directory.join(default))
 }
 
 fn read_json(path: &Path) -> Result<Value, String> {
@@ -144,7 +183,99 @@ fn read_json(path: &Path) -> Result<Value, String> {
     }
     let contents =
         fs::read_to_string(path).map_err(|error| format!("Failed to read MCP config: {error}"))?;
-    serde_json::from_str(&contents).map_err(|error| format!("Failed to parse MCP config: {error}"))
+    parse_json_or_jsonc(&contents).map_err(|error| format!("Failed to parse MCP config: {error}"))
+}
+
+fn strip_jsonc_comments(source: &str) -> String {
+    let mut output = String::with_capacity(source.len());
+    let mut characters = source.chars().peekable();
+    let mut in_string = false;
+    let mut escaped = false;
+    while let Some(character) = characters.next() {
+        if in_string {
+            output.push(character);
+            if escaped {
+                escaped = false;
+            } else if character == '\\' {
+                escaped = true;
+            } else if character == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+        if character == '"' {
+            in_string = true;
+            output.push(character);
+        } else if character == '/' && characters.peek() == Some(&'/') {
+            characters.next();
+            for comment_character in characters.by_ref() {
+                if comment_character == '\n' {
+                    output.push('\n');
+                    break;
+                }
+            }
+        } else if character == '/' && characters.peek() == Some(&'*') {
+            characters.next();
+            let mut previous = '\0';
+            for comment_character in characters.by_ref() {
+                if comment_character == '\n' {
+                    output.push('\n');
+                }
+                if previous == '*' && comment_character == '/' {
+                    break;
+                }
+                previous = comment_character;
+            }
+        } else {
+            output.push(character);
+        }
+    }
+    output
+}
+
+fn strip_jsonc_trailing_commas(source: &str) -> String {
+    let characters: Vec<char> = source.chars().collect();
+    let mut output = String::with_capacity(source.len());
+    let mut in_string = false;
+    let mut escaped = false;
+    for (index, character) in characters.iter().enumerate() {
+        if in_string {
+            output.push(*character);
+            if escaped {
+                escaped = false;
+            } else if *character == '\\' {
+                escaped = true;
+            } else if *character == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+        if *character == '"' {
+            in_string = true;
+            output.push(*character);
+            continue;
+        }
+        if *character == ',' {
+            if let Some(next) = characters[index + 1..]
+                .iter()
+                .find(|next| !next.is_whitespace())
+            {
+                if matches!(*next, '}' | ']') {
+                    output.push(' ');
+                    continue;
+                }
+            }
+        }
+        output.push(*character);
+    }
+    output
+}
+
+fn parse_json_or_jsonc(contents: &str) -> Result<Value, serde_json::Error> {
+    serde_json::from_str(contents).or_else(|_| {
+        let without_comments = strip_jsonc_comments(contents);
+        serde_json::from_str(&strip_jsonc_trailing_commas(&without_comments))
+    })
 }
 
 fn write_json(path: &Path, value: &Value) -> Result<(), String> {
@@ -155,6 +286,253 @@ fn write_json(path: &Path, value: &Value) -> Result<(), String> {
     let contents = serde_json::to_string_pretty(value)
         .map_err(|error| format!("Failed to serialize MCP config: {error}"))?;
     fs::write(path, contents).map_err(|error| format!("Failed to write MCP config: {error}"))
+}
+
+/// Claude Code keeps local and user MCP definitions inside its state file. That file
+/// also contains session state owned by Claude Code, so never deserialize and rewrite
+/// the entire document just to change one MCP entry. In particular, interrupted CLI
+/// writes can leave unrelated state malformed while the MCP object's own JSON remains
+/// usable. These helpers locate and replace only the relevant object value.
+fn matching_json_object_end(source: &str, start: usize) -> Option<usize> {
+    if source.as_bytes().get(start) != Some(&b'{') {
+        return None;
+    }
+    let mut depth = 0_i32;
+    let mut in_string = false;
+    let mut escaped = false;
+    for (offset, character) in source[start..].char_indices() {
+        let index = start + offset;
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if character == '\\' {
+                escaped = true;
+            } else if character == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+        match character {
+            '"' => in_string = true,
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(index + character.len_utf8());
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn json_object_value_range(
+    source: &str,
+    key: &str,
+    start: usize,
+    end: usize,
+) -> Option<(usize, usize)> {
+    let quoted_key = serde_json::to_string(key).ok()?;
+    let mut cursor = start;
+    while cursor < end {
+        let relative = source.get(cursor..end)?.find(&quoted_key)?;
+        let key_end = cursor + relative + quoted_key.len();
+        let mut value_start = key_end;
+        while source
+            .as_bytes()
+            .get(value_start)
+            .is_some_and(u8::is_ascii_whitespace)
+        {
+            value_start += 1;
+        }
+        if source.as_bytes().get(value_start) != Some(&b':') {
+            cursor = key_end;
+            continue;
+        }
+        value_start += 1;
+        while source
+            .as_bytes()
+            .get(value_start)
+            .is_some_and(u8::is_ascii_whitespace)
+        {
+            value_start += 1;
+        }
+        if value_start < end && source.as_bytes().get(value_start) == Some(&b'{') {
+            if let Some(value_end) = matching_json_object_end(source, value_start) {
+                if value_end <= end {
+                    return Some((value_start, value_end));
+                }
+            }
+        }
+        cursor = key_end;
+    }
+    None
+}
+
+fn claude_project_key_candidates(project_path: &str) -> Vec<String> {
+    let normalized = display_path(normalize_input_path(project_path));
+    let mut candidates = vec![
+        normalized.clone(),
+        normalized.replace('\\', "/"),
+        project_path.to_string(),
+        project_path.replace('\\', "/"),
+    ];
+    candidates.sort();
+    candidates.dedup();
+    candidates
+}
+
+fn claude_project_object_range(source: &str, project_path: &str) -> Option<(usize, usize)> {
+    // Do not require the complete state file to be valid. Claude Code's state file
+    // can contain unrelated, partially-written session metadata after this object.
+    let projects = json_object_value_range(source, "projects", 0, source.len())?;
+    for candidate in claude_project_key_candidates(project_path) {
+        if let Some(project) =
+            json_object_value_range(source, &candidate, projects.0 + 1, projects.1)
+        {
+            return Some(project);
+        }
+    }
+    None
+}
+
+fn claude_mcp_object_range(
+    source: &str,
+    scope: &str,
+    project_path: Option<&str>,
+) -> Option<(usize, usize)> {
+    match scope {
+        "user" => {
+            let projects_start = source.find("\"projects\"").unwrap_or(source.len());
+            json_object_value_range(source, "mcpServers", 0, projects_start)
+        }
+        "local" => {
+            let project = claude_project_object_range(source, project_path?)?;
+            json_object_value_range(source, "mcpServers", project.0 + 1, project.1)
+        }
+        _ => None,
+    }
+}
+
+fn claude_mcp_container_range(
+    source: &str,
+    scope: &str,
+    project_path: Option<&str>,
+) -> Option<(usize, usize)> {
+    match scope {
+        "user" => {
+            let start = source.find('{')?;
+            Some((start, matching_json_object_end(source, start)?))
+        }
+        "local" => claude_project_object_range(source, project_path?),
+        _ => None,
+    }
+}
+
+fn claude_servers_from_state(
+    source: &str,
+    scope: &str,
+    project_path: Option<&str>,
+) -> Result<Vec<(String, McpServerConfig)>, String> {
+    let Some((start, end)) = claude_mcp_object_range(source, scope, project_path) else {
+        return Ok(vec![]);
+    };
+    let servers: serde_json::Map<String, Value> = serde_json::from_str(&source[start..end])
+        .map_err(|error| format!("Failed to parse Claude Code MCP entry: {error}"))?;
+    Ok(servers
+        .iter()
+        .filter_map(|(name, value)| {
+            config_from_json(CLAUDE, value).map(|config| (name.clone(), config))
+        })
+        .collect())
+}
+
+fn insert_json_member(source: &str, container: (usize, usize), key: &str, value: &Value) -> String {
+    let insertion_at = container.1 - 1;
+    let inner = source[container.0 + 1..insertion_at].trim();
+    let member = format!(
+        "\n  {}: {}\n",
+        serde_json::to_string(key).unwrap_or_default(),
+        value
+    );
+    let separator = if inner.is_empty() { "" } else { "," };
+    format!(
+        "{}{}{}{}",
+        &source[..insertion_at],
+        separator,
+        member,
+        &source[insertion_at..]
+    )
+}
+
+fn update_claude_state_mcp(
+    source: &str,
+    scope: &str,
+    project_path: Option<&str>,
+    name: &str,
+    config: &McpServerConfig,
+    delete: bool,
+) -> Result<String, String> {
+    if let Some((start, end)) = claude_mcp_object_range(source, scope, project_path) {
+        let mut servers: serde_json::Map<String, Value> = serde_json::from_str(&source[start..end])
+            .map_err(|error| format!("Failed to parse Claude Code MCP entry: {error}"))?;
+        if delete {
+            servers.remove(name);
+        } else {
+            let updated = merge_json_mcp_config(CLAUDE, servers.get(name), config);
+            servers.insert(name.to_string(), updated);
+        }
+        let replacement = serde_json::to_string_pretty(&servers)
+            .map_err(|error| format!("Failed to serialize Claude Code MCP entry: {error}"))?;
+        return Ok(format!(
+            "{}{}{}",
+            &source[..start],
+            replacement,
+            &source[end..]
+        ));
+    }
+    if delete {
+        return Ok(source.to_string());
+    }
+    let container = claude_mcp_container_range(source, scope, project_path).ok_or_else(|| {
+        "Claude Code's state file has no writable MCP section; use `claude mcp add` to repair it without overwriting your state".to_string()
+    })?;
+    let mut servers = serde_json::Map::new();
+    servers.insert(name.to_string(), config_to_json(CLAUDE, config));
+    Ok(insert_json_member(
+        source,
+        container,
+        "mcpServers",
+        &Value::Object(servers),
+    ))
+}
+
+fn update_claude_state_file(
+    path: &Path,
+    scope: &str,
+    project_path: Option<&str>,
+    name: &str,
+    config: &McpServerConfig,
+    delete: bool,
+) -> Result<(), String> {
+    let source = if path.exists() {
+        fs::read_to_string(path)
+            .map_err(|error| format!("Failed to read Claude Code state: {error}"))?
+    } else if scope == "local" {
+        let project = project_path
+            .ok_or_else(|| "Open a project before managing local MCP servers".to_string())?;
+        let key = claude_project_key_candidates(project)
+            .into_iter()
+            .find(|candidate| candidate.contains('/'))
+            .unwrap_or_else(|| project.to_string());
+        json!({"projects": {key: {"mcpServers": {}}}}).to_string()
+    } else {
+        json!({"mcpServers": {}}).to_string()
+    };
+    let updated = update_claude_state_mcp(&source, scope, project_path, name, config, delete)?;
+    fs::write(path, updated)
+        .map_err(|error| format!("Failed to update Claude Code MCP entry: {error}"))
 }
 
 fn string_map(value: Option<&Value>) -> HashMap<String, String> {
@@ -320,6 +698,25 @@ fn config_to_json(agent: &str, config: &McpServerConfig) -> Value {
     Value::Object(result)
 }
 
+fn merge_json_mcp_config(agent: &str, current: Option<&Value>, config: &McpServerConfig) -> Value {
+    let mut merged = current
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let managed_keys: &[&str] = if agent == OPENCODE {
+        &["type", "command", "environment", "url", "headers", "cwd"]
+    } else {
+        &["type", "command", "args", "env", "url", "serverUrl", "headers", "cwd"]
+    };
+    for key in managed_keys {
+        merged.remove(*key);
+    }
+    if let Some(next) = config_to_json(agent, config).as_object() {
+        merged.extend(next.clone());
+    }
+    Value::Object(merged)
+}
+
 fn toml_string_map(value: Option<&toml::Value>) -> HashMap<String, String> {
     value
         .and_then(toml::Value::as_table)
@@ -422,6 +819,28 @@ fn config_to_codex(config: &McpServerConfig) -> toml::Value {
     toml::Value::Table(table)
 }
 
+/// The Settings UI only owns the common connection fields. Preserve every other
+/// native Codex setting (for example tool timeouts or an OAuth-specific option)
+/// when a user edits a server through the UI.
+fn merge_codex_mcp_config(
+    current: Option<&toml::Value>,
+    config: &McpServerConfig,
+) -> toml::Value {
+    let mut merged = current
+        .and_then(toml::Value::as_table)
+        .cloned()
+        .unwrap_or_default();
+    for key in ["command", "args", "env", "cwd", "url", "http_headers"] {
+        merged.remove(key);
+    }
+    if let Some(next) = config_to_codex(config).as_table() {
+        for (key, value) in next {
+            merged.insert(key.clone(), value.clone());
+        }
+    }
+    toml::Value::Table(merged)
+}
+
 fn read_mcp_configs(agent: &str, path: &Path) -> Result<Vec<(String, McpServerConfig)>, String> {
     if agent == CODEX {
         if !path.exists() {
@@ -464,6 +883,25 @@ fn read_mcp_configs(agent: &str, path: &Path) -> Result<Vec<(String, McpServerCo
         .unwrap_or_default())
 }
 
+fn read_claude_mcp_configs(
+    scope: &str,
+    project_path: Option<&str>,
+) -> Result<Vec<(String, McpServerConfig)>, String> {
+    match scope {
+        "project" => read_mcp_configs(CLAUDE, &get_mcp_config_path(CLAUDE, scope, project_path)?),
+        "local" | "user" => {
+            let path = get_mcp_config_path(CLAUDE, scope, project_path)?;
+            if !path.exists() {
+                return Ok(vec![]);
+            }
+            let source = fs::read_to_string(&path)
+                .map_err(|error| format!("Failed to read Claude Code state: {error}"))?;
+            claude_servers_from_state(&source, scope, project_path)
+        }
+        _ => unreachable!("Claude scope was validated"),
+    }
+}
+
 fn update_mcp_config(
     agent: &str,
     path: &Path,
@@ -491,7 +929,8 @@ fn update_mcp_config(
         if delete {
             servers.remove(name);
         } else {
-            servers.insert(name.to_string(), config_to_codex(config));
+            let updated = merge_codex_mcp_config(servers.get(name), config);
+            servers.insert(name.to_string(), updated);
         }
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)
@@ -527,9 +966,24 @@ fn update_mcp_config(
     if delete {
         servers.remove(name);
     } else {
-        servers.insert(name.to_string(), config_to_json(agent, config));
+        let updated = merge_json_mcp_config(agent, servers.get(name), config);
+        servers.insert(name.to_string(), updated);
     }
     write_json(path, &settings)
+}
+
+fn update_claude_mcp_config(
+    scope: &str,
+    project_path: Option<&str>,
+    name: &str,
+    config: &McpServerConfig,
+    delete: bool,
+) -> Result<(), String> {
+    let path = get_mcp_config_path(CLAUDE, scope, project_path)?;
+    if scope == "project" {
+        return update_mcp_config(CLAUDE, &path, name, config, delete);
+    }
+    update_claude_state_file(&path, scope, project_path, name, config, delete)
 }
 
 fn info(name: String, config: McpServerConfig, scope: &str, path: &Path) -> McpServerInfo {
@@ -553,7 +1007,12 @@ fn read_mcp_servers_for_scope(
     project_path: Option<&str>,
 ) -> Result<Vec<McpServerInfo>, String> {
     let path = get_mcp_config_path(agent, scope, project_path)?;
-    let mut servers: Vec<_> = read_mcp_configs(agent, &path)?
+    let configs = if agent == CLAUDE {
+        read_claude_mcp_configs(scope, project_path)?
+    } else {
+        read_mcp_configs(agent, &path)?
+    };
+    let mut servers: Vec<_> = configs
         .into_iter()
         .map(|(name, config)| info(name, config, scope, &path))
         .collect();
@@ -630,17 +1089,28 @@ pub fn list_mcp_servers(
     project_path: Option<String>,
 ) -> Result<McpServerCatalog, String> {
     let agent = validate_agent(&agent)?;
-    let user_path = get_mcp_config_path(agent, "user", None)?;
-    let workspace_path = project_path
-        .as_deref()
-        .map(|project| get_mcp_config_path(agent, "workspace", Some(project)))
-        .transpose()?;
-    let mut servers = read_mcp_servers_for_scope(agent, "user", None)?;
-    if let Some(project) = project_path.as_deref() {
+    let scopes: Vec<(&str, Option<&str>)> = if matches!(agent, CLAUDE | QODER) {
+        let mut scopes = vec![("user", None)];
+        if let Some(project) = project_path.as_deref() {
+            scopes.extend([("local", Some(project)), ("project", Some(project))]);
+        }
+        scopes
+    } else {
+        let mut scopes = vec![("user", None)];
+        if let Some(project) = project_path.as_deref() {
+            scopes.push(("workspace", Some(project)));
+        }
+        scopes
+    };
+    let mut scope_config_paths = HashMap::new();
+    let mut servers = Vec::new();
+    for (scope, scope_project_path) in scopes {
+        let path = get_mcp_config_path(agent, scope, scope_project_path)?;
+        scope_config_paths.insert(scope.to_string(), display_path(&path));
         servers.extend(read_mcp_servers_for_scope(
             agent,
-            "workspace",
-            Some(project),
+            scope,
+            scope_project_path,
         )?);
     }
     servers.sort_by(|left, right| {
@@ -648,8 +1118,21 @@ pub fn list_mcp_servers(
             .cmp(&right.scope)
             .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
     });
+    let user_path = get_mcp_config_path(agent, "user", None)?;
+    let workspace_path = if matches!(agent, CLAUDE | QODER) {
+        project_path
+            .as_deref()
+            .map(|project| get_mcp_config_path(agent, "project", Some(project)))
+            .transpose()?
+    } else {
+        project_path
+            .as_deref()
+            .map(|project| get_mcp_config_path(agent, "workspace", Some(project)))
+            .transpose()?
+    };
     Ok(McpServerCatalog {
         servers,
+        scope_config_paths,
         workspace_config_path: workspace_path.as_ref().map(|path| display_path(path)),
         user_config_path: display_path(&user_path),
     })
@@ -664,7 +1147,7 @@ pub fn add_mcp_server(
     project_path: Option<String>,
 ) -> Result<McpServerInfo, String> {
     let agent = validate_agent(&agent)?;
-    validate_scope(&scope, project_path.as_deref())?;
+    validate_scope(agent, &scope, project_path.as_deref())?;
     validate_server_name(&name)?;
     validate_mcp_config(agent, &config)?;
     let name = name.trim().to_string();
@@ -675,7 +1158,11 @@ pub fn add_mcp_server(
         return Err(format!("MCP server '{name}' already exists"));
     }
     let path = get_mcp_config_path(agent, &scope, project_path.as_deref())?;
-    update_mcp_config(agent, &path, &name, &config, false)?;
+    if agent == CLAUDE {
+        update_claude_mcp_config(&scope, project_path.as_deref(), &name, &config, false)?;
+    } else {
+        update_mcp_config(agent, &path, &name, &config, false)?;
+    }
     Ok(info(name, config, &scope, &path))
 }
 
@@ -688,7 +1175,7 @@ pub fn update_mcp_server(
     project_path: Option<String>,
 ) -> Result<McpServerInfo, String> {
     let agent = validate_agent(&agent)?;
-    validate_scope(&scope, project_path.as_deref())?;
+    validate_scope(agent, &scope, project_path.as_deref())?;
     validate_mcp_config(agent, &config)?;
     let name = name.trim().to_string();
     if !read_mcp_servers_for_scope(agent, &scope, project_path.as_deref())?
@@ -698,7 +1185,11 @@ pub fn update_mcp_server(
         return Err(format!("MCP server '{name}' does not exist"));
     }
     let path = get_mcp_config_path(agent, &scope, project_path.as_deref())?;
-    update_mcp_config(agent, &path, &name, &config, false)?;
+    if agent == CLAUDE {
+        update_claude_mcp_config(&scope, project_path.as_deref(), &name, &config, false)?;
+    } else {
+        update_mcp_config(agent, &path, &name, &config, false)?;
+    }
     Ok(info(name, config, &scope, &path))
 }
 
@@ -710,7 +1201,7 @@ pub fn delete_mcp_server(
     project_path: Option<String>,
 ) -> Result<(), String> {
     let agent = validate_agent(&agent)?;
-    validate_scope(&scope, project_path.as_deref())?;
+    validate_scope(agent, &scope, project_path.as_deref())?;
     let name = name.trim().to_string();
     if !read_mcp_servers_for_scope(agent, &scope, project_path.as_deref())?
         .iter()
@@ -719,7 +1210,17 @@ pub fn delete_mcp_server(
         return Err(format!("MCP server '{name}' does not exist"));
     }
     let path = get_mcp_config_path(agent, &scope, project_path.as_deref())?;
-    update_mcp_config(agent, &path, &name, &empty_config(), true)
+    if agent == CLAUDE {
+        update_claude_mcp_config(
+            &scope,
+            project_path.as_deref(),
+            &name,
+            &empty_config(),
+            true,
+        )
+    } else {
+        update_mcp_config(agent, &path, &name, &empty_config(), true)
+    }
 }
 
 #[tauri::command]
@@ -730,6 +1231,7 @@ pub fn test_mcp_server(
     project_path: Option<String>,
 ) -> Result<String, String> {
     let agent = validate_agent(&agent)?;
+    validate_scope(agent, &scope, project_path.as_deref())?;
     let name = name.trim().to_string();
     let server = read_mcp_servers_for_scope(agent, &scope, project_path.as_deref())?
         .into_iter()
@@ -777,8 +1279,9 @@ pub fn test_mcp_server(
 #[cfg(test)]
 mod tests {
     use super::{
-        config_from_json, config_to_codex, config_to_json, transport_supported_by_agent,
-        ANTIGRAVITY, CODEX, OPENCODE, QODER,
+        claude_servers_from_state, config_from_json, config_to_codex, config_to_json,
+        transport_supported_by_agent, update_claude_state_mcp, ANTIGRAVITY, CLAUDE, CODEX,
+        OPENCODE, QODER,
     };
     use serde_json::json;
 
@@ -819,5 +1322,53 @@ mod tests {
         assert!(transport_supported_by_agent(CODEX, "http"));
         assert!(!transport_supported_by_agent(CODEX, "sse"));
         assert!(transport_supported_by_agent(QODER, "ws"));
+    }
+
+    #[test]
+    fn reads_local_claude_servers_from_project_state_even_with_malformed_tail() {
+        let state = r#"{
+          "mcpServers": {},
+          "projects": {
+            "E:/work/Termflow": {
+              "mcpServers": {
+                "tavily-remote-mcp": { "type": "http", "url": "https://mcp.tavily.com/mcp/" }
+              }
+            }
+          },
+          "unrelated": "unterminated
+        "#;
+        let servers = claude_servers_from_state(state, "local", Some(r"E:\work\Termflow")).unwrap();
+        assert_eq!(servers.len(), 1);
+        assert_eq!(servers[0].0, "tavily-remote-mcp");
+        assert_eq!(
+            servers[0].1.url.as_deref(),
+            Some("https://mcp.tavily.com/mcp/")
+        );
+    }
+
+    #[test]
+    fn updates_only_the_local_mcp_object_in_claude_state() {
+        let state = r#"{"projects":{"E:/work/Termflow":{"mcpServers":{"old":{"command":"old"}}}},"opaque":"keep"}"#;
+        let config = super::McpServerConfig {
+            server_type: Some("http".to_string()),
+            url: Some("https://example.test/mcp".to_string()),
+            ..super::empty_config()
+        };
+        let updated = update_claude_state_mcp(
+            state,
+            "local",
+            Some(r"E:\work\Termflow"),
+            "fresh",
+            &config,
+            false,
+        )
+        .unwrap();
+        assert!(updated.contains("\"opaque\":\"keep\""));
+        let servers =
+            claude_servers_from_state(&updated, "local", Some(r"E:\work\Termflow")).unwrap();
+        assert_eq!(servers.len(), 2);
+        assert!(servers.iter().any(|(name, _)| name == "fresh"));
+        assert!(!updated.contains("settings.json"));
+        assert_eq!(CLAUDE, "claude");
     }
 }

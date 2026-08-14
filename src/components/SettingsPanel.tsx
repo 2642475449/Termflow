@@ -3596,11 +3596,12 @@ function McpServersPage() {
   const projectPath = currentProject?.path ?? null;
   const mcpAgents = getAgentIdsWithCapability("mcpManagement");
   const [activeAgent, setActiveAgent] = useState<AiAgentId>("claude");
+  const usesThreeMcpScopes = activeAgent === "claude" || activeAgent === "qoder";
   const [catalog, setCatalog] = useState<McpServerCatalog | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
-  const [activeScope, setActiveScope] = useState<"workspace" | "user">(
+  const [activeScope, setActiveScope] = useState<McpServerInfo["scope"]>(
     projectPath ? "workspace" : "user"
   );
   const [showForm, setShowForm] = useState(false);
@@ -3635,8 +3636,14 @@ function McpServersPage() {
   );
 
   useEffect(() => {
-    if (!projectPath) setActiveScope("user");
-  }, [projectPath]);
+    if (!projectPath) {
+      setActiveScope("user");
+    } else if (usesThreeMcpScopes) {
+      setActiveScope("local");
+    } else {
+      setActiveScope("workspace");
+    }
+  }, [projectPath, usesThreeMcpScopes]);
 
   useEffect(() => {
     closeForm();
@@ -3660,6 +3667,8 @@ function McpServersPage() {
     });
   }, [catalog?.servers, activeScope, search]);
 
+  const localCount = (catalog?.servers ?? []).filter((s) => s.scope === "local").length;
+  const projectCount = (catalog?.servers ?? []).filter((s) => s.scope === "project").length;
   const workspaceCount = (catalog?.servers ?? []).filter((s) => s.scope === "workspace").length;
   const userCount = (catalog?.servers ?? []).filter((s) => s.scope === "user").length;
 
@@ -3850,7 +3859,12 @@ function McpServersPage() {
   }
 
   const configPath =
-    activeScope === "workspace" ? catalog?.workspaceConfigPath : catalog?.userConfigPath;
+    catalog?.scopeConfigPaths?.[activeScope] ??
+    (activeScope === "workspace"
+      ? catalog?.workspaceConfigPath
+      : activeScope === "user"
+        ? catalog?.userConfigPath
+        : undefined);
   const serverTypeOptions: Array<{ value: McpServerType; label: string }> = [
     { value: "stdio", label: t("settings.mcpServers.serverTypeStdio") },
     { value: "http", label: t("settings.mcpServers.serverTypeHttp") },
@@ -3915,23 +3929,42 @@ function McpServersPage() {
             />
             <Segmented
               value={activeScope}
-              onChange={(val) => setActiveScope(val as "workspace" | "user")}
-              options={[
-                {
-                  value: "workspace",
-                  label: `${t("settings.mcpServers.workspaceServers")} (${workspaceCount})`,
-                  disabled: !projectPath,
-                },
-                {
-                  value: "user",
-                  label: `${t("settings.mcpServers.userServers")} (${userCount})`,
-                },
-              ]}
+              onChange={(val) => setActiveScope(val as McpServerInfo["scope"])}
+              options={
+                usesThreeMcpScopes
+                  ? [
+                      {
+                        value: "local",
+                        label: `${t("settings.mcpServers.localServers")} (${localCount})`,
+                        disabled: !projectPath,
+                      },
+                      {
+                        value: "project",
+                        label: `${t("settings.mcpServers.projectServers")} (${projectCount})`,
+                        disabled: !projectPath,
+                      },
+                      {
+                        value: "user",
+                        label: `${t("settings.mcpServers.userServers")} (${userCount})`,
+                      },
+                    ]
+                  : [
+                      {
+                        value: "workspace",
+                        label: `${t("settings.mcpServers.workspaceServers")} (${workspaceCount})`,
+                        disabled: !projectPath,
+                      },
+                      {
+                        value: "user",
+                        label: `${t("settings.mcpServers.userServers")} (${userCount})`,
+                      },
+                    ]
+              }
             />
           </div>
           <div className="flex w-full min-w-0 items-center gap-2 lg:w-auto lg:max-w-[50%]">
             <span className="min-w-0 flex-1 text-[11px] break-all" style={{ color: "var(--cs-text-tertiary)" }}>
-              {configPath || (activeScope === "workspace"
+              {configPath || ((activeScope === "workspace" || activeScope === "local" || activeScope === "project")
                 ? t("settings.mcpServers.workspaceConfigUnavailable")
                 : "")}
             </span>

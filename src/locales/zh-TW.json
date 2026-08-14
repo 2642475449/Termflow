@@ -1264,6 +1264,8 @@
       "title": "MCP 伺服器",
       "headerDesc": "管理 {{agent}} 的 MCP（Model Context Protocol）伺服器。變更會寫入該智能體原生的組態檔與格式。",
       "workspaceServers": "專案伺服器",
+      "localServers": "本機伺服器",
+      "projectServers": "專案伺服器",
       "userServers": "全域伺服器",
       "workspaceServersDesc": "目前專案的 MCP 伺服器組態",
       "userServersDesc": "目前使用者的全域 MCP 伺服器組態",

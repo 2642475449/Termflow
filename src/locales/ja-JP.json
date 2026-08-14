@@ -1264,6 +1264,8 @@
       "title": "MCP サーバー",
       "headerDesc": "{{agent}} の MCP（Model Context Protocol）サーバーを管理します。変更はそのエージェント固有の設定ファイルと形式で保存されます。",
       "workspaceServers": "プロジェクトサーバー",
+      "localServers": "ローカルサーバー",
+      "projectServers": "プロジェクトサーバー",
       "userServers": "グローバルサーバー",
       "workspaceServersDesc": "現在のプロジェクトに設定された MCP サーバー",
       "userServersDesc": "現在のユーザーのグローバル MCP サーバー",

@@ -858,12 +858,13 @@ export interface McpServerInfo {
   url?: string;
   headers: Record<string, string>;
   cwd?: string;
-  scope: "workspace" | "user";
+  scope: "local" | "project" | "workspace" | "user";
   configPath: string;
 }
 
 export interface McpServerCatalog {
   servers: McpServerInfo[];
+  scopeConfigPaths: Record<string, string>;
   workspaceConfigPath?: string | null;
   userConfigPath: string;
 }

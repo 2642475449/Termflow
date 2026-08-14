@@ -1267,6 +1267,8 @@
       "title": "MCP Servers",
       "headerDesc": "Manage MCP (Model Context Protocol) servers for {{agent}}. Changes are written to that agent's native configuration file and format.",
       "workspaceServers": "Project Servers",
+      "localServers": "Local Servers",
+      "projectServers": "Project Servers",
       "userServers": "Global Servers",
       "workspaceServersDesc": "MCP servers configured for the current project",
       "userServersDesc": "Global MCP servers configured for the current user",

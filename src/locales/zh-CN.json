@@ -1267,6 +1267,8 @@
       "title": "MCP 服务器",
       "headerDesc": "管理 {{agent}} 的 MCP（Model Context Protocol）服务器。更改会写入该智能体原生的配置文件和格式。",
       "workspaceServers": "项目服务器",
+      "localServers": "本地服务器",
+      "projectServers": "项目服务器",
       "userServers": "全局服务器",
       "workspaceServersDesc": "当前项目的 MCP 服务器配置",
       "userServersDesc": "当前用户的全局 MCP 服务器配置",
