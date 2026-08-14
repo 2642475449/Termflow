@@ -29,7 +29,7 @@ const FILE_EXTENSIONS = [
   "ts", "tsx", "js", "jsx", "mjs", "cjs", "rs", "py", "go", "java",
   "c", "cpp", "h", "hpp", "css", "scss", "less", "html", "vue", "svelte",
   "json", "jsonc", "yaml", "yml", "toml", "xml", "md", "mdx", "txt",
-  "sh", "bash", "zsh", "ps1", "sql", "graphql", "gql", "proto", "env", "lock",
+  "sh", "bash", "zsh", "ps1", "sql", "graphql", "gql", "proto", "env", "lock", "pdf",
 ];
 
 const EXTENSION_PATTERN = [...FILE_EXTENSIONS]

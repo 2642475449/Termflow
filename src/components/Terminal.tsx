@@ -653,7 +653,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
           }
 
         const file = await inspectProjectFile(projectPath, target.path);
-        if (/\.(md|markdown)$/i.test(file.path)) {
+        if (/\.(md|markdown|pdf)$/i.test(file.path)) {
           openAuxiliaryFile({
             projectPath,
             path: file.path,
