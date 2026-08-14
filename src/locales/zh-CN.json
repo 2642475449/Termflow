@@ -580,9 +580,9 @@
     "removeRecentProject": "从最近项目中移除",
     "openProjectTitle": "打开项目",
     "openProjectQuestion": "你希望在哪里打开项目“{{name}}”？",
-    "openInCurrentWindow": "当前窗口",
-    "openInNewWindow": "新窗口",
-    "rememberOpenChoice": "记住我的选择",
+    "openInCurrentWindow": "此窗口(T)",
+    "openInNewWindow": "新窗口(W)",
+    "rememberOpenChoice": "不再询问(D)",
     "openProjectRunningSessions": "当前项目有 {{count}} 个正在运行的会话。",
     "openProjectUnsavedFiles": "当前项目有 {{count}} 个未保存的文件。",
     "currentWindowCleanupWarning": "在当前窗口打开将结束运行中的会话，并放弃未保存的修改。"

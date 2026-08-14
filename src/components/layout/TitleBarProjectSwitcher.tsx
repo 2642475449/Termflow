@@ -8,7 +8,7 @@ import {
   RightOutlined,
 } from "@ant-design/icons";
 import { Button, Checkbox, Modal, Popover, message } from "antd";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useProjectLauncher } from "@/hooks/useProjectLauncher";
 import CloneRepositoryModal from "@/components/layout/CloneRepositoryModal";
@@ -131,6 +131,36 @@ function TitleBarProjectSwitcher() {
       message.error(t("sidebar.projectWindowOpenFailed"));
     }
   }
+
+  useEffect(() => {
+    if (!pendingProjectPath) return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+
+      const key = event.key.toLowerCase();
+      if (key === "t") {
+        event.preventDefault();
+        event.stopPropagation();
+        void confirmProjectOpen("current_window");
+      } else if (key === "w") {
+        event.preventDefault();
+        event.stopPropagation();
+        void confirmProjectOpen("new_window");
+      } else if (key === "d") {
+        event.preventDefault();
+        event.stopPropagation();
+        setRememberOpenChoice((checked) => !checked);
+      } else if (key === "enter") {
+        event.preventDefault();
+        event.stopPropagation();
+        void confirmProjectOpen("current_window");
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [pendingProjectPath, rememberOpenChoice]);
 
   function handleRemoveRecentProject(path: string) {
     removeRecentProject(path);
@@ -363,13 +393,13 @@ function TitleBarProjectSwitcher() {
         onCancel={() => setPendingProjectPath(null)}
         footer={
           <div className="flex justify-end gap-2">
-            <Button onClick={() => setPendingProjectPath(null)}>{t("common.cancel")}</Button>
-            <Button onClick={() => void confirmProjectOpen("current_window")}>
+            <Button autoFocus type="primary" onClick={() => void confirmProjectOpen("current_window")}>
               {t("projectLauncher.openInCurrentWindow")}
             </Button>
-            <Button type="primary" onClick={() => void confirmProjectOpen("new_window")}>
+            <Button onClick={() => void confirmProjectOpen("new_window")}>
               {t("projectLauncher.openInNewWindow")}
             </Button>
+            <Button onClick={() => setPendingProjectPath(null)}>{t("common.cancel")}</Button>
           </div>
         }
       >

@@ -441,6 +441,7 @@ export const VoiceTrigger: React.FC<{
   phase: AsrPhase;
 }> = ({ onClick, onHide, shortcutLabel, visible, phase }) => {
   const { t } = useTranslation();
+  const [contextMenuOpen, setContextMenuOpen] = useState(false);
   if (!visible) return null;
   const isRecording = phase === "recording";
   const isBusy = phase === "requesting_permission" || phase === "transcribing";
@@ -479,8 +480,9 @@ export const VoiceTrigger: React.FC<{
         },
       }}
       trigger={["contextMenu"]}
+      onOpenChange={setContextMenuOpen}
     >
-      <Tooltip title={tooltip} placement="left">
+      <Tooltip title={tooltip} placement="left" open={contextMenuOpen ? false : undefined}>
       <button
         type="button"
         aria-label={tooltip}

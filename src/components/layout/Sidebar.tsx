@@ -24,7 +24,7 @@ import {
 import { archiveSessionRuntime } from "@/lib/tabClose";
 import { isSessionVisibleInHistory } from "@/lib/sessions";
 import { openCheckpointReview } from "@/lib/checkpointReview";
-import { openAuxiliarySession } from "@/lib/auxiliaryDock";
+import { openAuxiliaryFile, openAuxiliarySession } from "@/lib/auxiliaryDock";
 import { useTranslation } from "react-i18next";
 import type { Session } from "@/types";
 import { useResumeSession } from "@/hooks/useResumeSession";
@@ -41,6 +41,10 @@ const DEFAULT_SIDEBAR_WIDTH = 248;
 const MIN_SIDEBAR_WIDTH = 220;
 const MAX_SIDEBAR_WIDTH = 360;
 const RESIZE_HANDLE_WIDTH = 6;
+
+function isAuxiliaryPreviewFile(path: string) {
+  return /\.(md|markdown|pdf)$/i.test(path);
+}
 
 interface SidebarProps {
   collapsed: boolean;
@@ -315,6 +319,14 @@ function Sidebar({ collapsed, section }: SidebarProps) {
   }
 
   function handleOpenFile(path: string, options?: { preview?: boolean }) {
+    if (currentProject && isAuxiliaryPreviewFile(path) && options?.preview !== false) {
+      openAuxiliaryFile({
+        projectPath: currentProject.path,
+        path,
+        preview: true,
+      });
+      return;
+    }
     openFileTab(path, { preview: options?.preview ?? true });
   }
 

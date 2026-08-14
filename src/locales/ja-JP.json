@@ -580,9 +580,9 @@
     "removeRecentProject": "最近のプロジェクトから削除",
     "openProjectTitle": "プロジェクトを開く",
     "openProjectQuestion": "プロジェクト「{{name}}」をどこで開きますか？",
-    "openInCurrentWindow": "現在のウィンドウ",
-    "openInNewWindow": "新しいウィンドウ",
-    "rememberOpenChoice": "選択を記憶する",
+    "openInCurrentWindow": "このウィンドウ(T)",
+    "openInNewWindow": "新しいウィンドウ(W)",
+    "rememberOpenChoice": "今後表示しない(D)",
     "openProjectRunningSessions": "現在のプロジェクトで {{count}} 件のセッションが実行中です。",
     "openProjectUnsavedFiles": "現在のプロジェクトに {{count}} 件の未保存ファイルがあります。",
     "currentWindowCleanupWarning": "現在のウィンドウで開くと、実行中のセッションが終了し、未保存の変更が破棄されます。"

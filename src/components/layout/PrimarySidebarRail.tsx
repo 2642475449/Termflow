@@ -2,6 +2,7 @@ import { CodeOutlined, FolderOutlined, SettingOutlined, BranchesOutlined } from 
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { message, Modal, Popover, Tooltip } from "antd";
 import { useCallback, useState } from "react";
+import { getQuickSettingsSubmenuOnPopoverChange, toggleQuickSettingsSubmenu, type QuickSettingsSubmenu } from "@/lib/quickSettingsMenu";
 import { useTranslation } from "react-i18next";
 import { ShortcutHint } from "@/components/ui/ShortcutHint";
 import { getKeysForAction } from "@/constants/shortcuts";
@@ -59,15 +60,19 @@ const quickThemeModeOptions: QuickThemeModeOption[] = [
 
 const SETTINGS_ID = "__settings__";
 
-type SubmenuKey = null | "language" | "theme";
-
 function SettingsMenu({
+  activeSubmenu,
   onClose,
   onCheckVersion,
+  onToggleSubmenu,
+  onClearSubmenu,
   checkingForUpdate,
 }: {
+  activeSubmenu: QuickSettingsSubmenu;
   onClose: () => void;
   onCheckVersion: () => void;
+  onToggleSubmenu: (submenu: Exclude<QuickSettingsSubmenu, null>) => void;
+  onClearSubmenu: () => void;
   checkingForUpdate: boolean;
 }) {
   const { t } = useTranslation();
@@ -78,7 +83,6 @@ function SettingsMenu({
   const openTab = useAppStore((s) => s.openTab);
   const currentProject = useAppStore((s) => s.currentProject);
   const projectPath = currentProject?.path ?? null;
-  const [activeSubmenu, setActiveSubmenu] = useState<SubmenuKey>(null);
   const systemPrefersDark = useAppStore((s) => s.systemPrefersDark);
 
   const currentThemeLabel = t(`settings.general.appearance.${themeCategory}`);
@@ -100,7 +104,7 @@ function SettingsMenu({
   const handleSelectLanguage = (lang: Language) => {
     setLanguage(lang);
     void i18n.changeLanguage(toI18nLanguage(lang));
-    setActiveSubmenu(null);
+    onClearSubmenu();
   };
 
   const handleSelectThemeCategory = (category: ThemeCategory) => {
@@ -112,7 +116,7 @@ function SettingsMenu({
       console.error("Failed to sync Claude theme:", error);
     });
 
-    setActiveSubmenu(null);
+    onClearSubmenu();
   };
 
   return (
@@ -133,14 +137,14 @@ function SettingsMenu({
             value={currentThemeLabel}
             showArrow
             active={activeSubmenu === "theme"}
-            onClick={() => setActiveSubmenu(activeSubmenu === "theme" ? null : "theme")}
+            onClick={() => onToggleSubmenu("theme")}
           />
           <MenuItem
             label={t("settings.quickMenu.language", "语言")}
             value={currentLangLabel}
             showArrow
             active={activeSubmenu === "language"}
-            onClick={() => setActiveSubmenu(activeSubmenu === "language" ? null : "language")}
+            onClick={() => onToggleSubmenu("language")}
           />
           <div style={{ borderTop: "1px solid var(--cs-border-sidebar)", margin: "4px 0" }} />
           <MenuItem
@@ -300,15 +304,36 @@ function PrimarySidebarRail() {
   const gitAheadCount = useAppStore((s) => s.gitAheadCount);
   const gitBehindCount = useAppStore((s) => s.gitBehindCount);
   const [quickSettingsOpen, setQuickSettingsOpen] = useState(false);
+  const [quickSettingsSubmenu, setQuickSettingsSubmenu] = useState<QuickSettingsSubmenu>(null);
   const [checkingForUpdate, setCheckingForUpdate] = useState(false);
   const [availableUpdate, setAvailableUpdate] = useState<Update | null>(null);
   const [installingUpdate, setInstallingUpdate] = useState(false);
+
+  const handleQuickSettingsOpenChange = useCallback((open: boolean) => {
+    setQuickSettingsOpen(open);
+    setQuickSettingsSubmenu((activeSubmenu) =>
+      getQuickSettingsSubmenuOnPopoverChange(open, activeSubmenu)
+    );
+  }, []);
+
+  const handleToggleQuickSettingsSubmenu = useCallback(
+    (submenu: Exclude<QuickSettingsSubmenu, null>) => {
+      setQuickSettingsSubmenu((activeSubmenu) =>
+        toggleQuickSettingsSubmenu(activeSubmenu, submenu)
+      );
+    },
+    []
+  );
+
+  const handleCloseQuickSettings = useCallback(() => {
+    handleQuickSettingsOpenChange(false);
+  }, [handleQuickSettingsOpenChange]);
 
   const handleCheckVersion = useCallback(async () => {
     if (checkingForUpdate) return;
 
     const messageKey = "termflow-update";
-    setQuickSettingsOpen(false);
+    handleCloseQuickSettings();
     setCheckingForUpdate(true);
     message.info({
       key: messageKey,
@@ -336,7 +361,7 @@ function PrimarySidebarRail() {
     } finally {
       setCheckingForUpdate(false);
     }
-  }, [checkingForUpdate, t]);
+  }, [checkingForUpdate, handleCloseQuickSettings, t]);
 
   const handleCancelUpdate = useCallback(() => {
     if (installingUpdate) return;
@@ -440,13 +465,16 @@ function PrimarySidebarRail() {
           placement="rightBottom"
           content={(
             <SettingsMenu
-              onClose={() => setQuickSettingsOpen(false)}
+              activeSubmenu={quickSettingsSubmenu}
+              onClose={handleCloseQuickSettings}
               onCheckVersion={() => void handleCheckVersion()}
+              onToggleSubmenu={handleToggleQuickSettingsSubmenu}
+              onClearSubmenu={() => setQuickSettingsSubmenu(null)}
               checkingForUpdate={checkingForUpdate}
             />
           )}
           open={quickSettingsOpen}
-          onOpenChange={setQuickSettingsOpen}
+          onOpenChange={handleQuickSettingsOpenChange}
           overlayInnerStyle={{ padding: 0, background: "transparent", boxShadow: "none" }}
         >
           <div>

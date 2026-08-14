@@ -580,9 +580,9 @@
     "removeRecentProject": "Remove from recent projects",
     "openProjectTitle": "Open Project",
     "openProjectQuestion": "Where would you like to open '{{name}}'?",
-    "openInCurrentWindow": "Current Window",
-    "openInNewWindow": "New Window",
-    "rememberOpenChoice": "Remember my choice",
+    "openInCurrentWindow": "This Window (T)",
+    "openInNewWindow": "New Window (W)",
+    "rememberOpenChoice": "Do not ask again (D)",
     "openProjectRunningSessions": "The current project has {{count}} running session(s).",
     "openProjectUnsavedFiles": "The current project has {{count}} unsaved file(s).",
     "currentWindowCleanupWarning": "Opening in the current window ends running sessions and discards unsaved changes."

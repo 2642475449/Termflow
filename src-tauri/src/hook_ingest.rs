@@ -4,7 +4,7 @@ use crate::pty::PtyManager;
 use log::{error, info};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -71,6 +71,26 @@ enum PermissionLifecycleEvent {
     Stop,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ClaudeTaskLifecycleEvent {
+    UserPromptSubmit,
+    SubagentStart,
+    SubagentStop,
+    Stop,
+}
+
+#[derive(Default)]
+struct TaskCompletionCoordinator {
+    generation: u64,
+    generation_started_at: i64,
+    active_subagents: HashSet<String>,
+    recently_stopped_subagents: HashMap<String, i64>,
+    subagent_seen: bool,
+    unverifiable_subagent_seen: bool,
+    activity_epoch: u64,
+    completion_emitted_generation: Option<u64>,
+}
+
 #[derive(Default)]
 struct SessionStatusGuard {
     revision: u64,
@@ -81,6 +101,7 @@ struct SessionStatusGuard {
     last_pre_tool: Option<ToolPermissionCorrelation>,
     pending_permission: Option<ToolPermissionCorrelation>,
     permission_pending: bool,
+    task_coordinator: TaskCompletionCoordinator,
 }
 
 type StatusGuards = Arc<Mutex<HashMap<String, SessionStatusGuard>>>;
@@ -198,15 +219,33 @@ fn handle_agent_status(
         return;
     }
 
-    let Some(state) = normalize_state(payload.state.as_deref(), payload.event_type.as_deref())
-    else {
-        return;
-    };
     let Some(agent) = normalize_agent(payload.agent.as_deref().or(payload.source.as_deref()))
     else {
         return;
     };
     let created_at = payload.created_at.unwrap_or_else(now_ms);
+    let task_lifecycle_event =
+        normalize_claude_task_lifecycle_event(&agent, payload.event_type.as_deref());
+    let actor_fingerprint = parse_actor_fingerprint(payload.payload.as_ref());
+
+    if matches!(
+        task_lifecycle_event,
+        Some(ClaudeTaskLifecycleEvent::SubagentStart | ClaudeTaskLifecycleEvent::SubagentStop)
+    ) {
+        update_subagent_lifecycle(
+            &guards,
+            &payload.session_id,
+            task_lifecycle_event.expect("subagent lifecycle was matched"),
+            actor_fingerprint.as_deref(),
+            created_at,
+        );
+        return;
+    }
+
+    let Some(state) = normalize_state(payload.state.as_deref(), payload.event_type.as_deref())
+    else {
+        return;
+    };
     let permission_lifecycle_event =
         normalize_permission_lifecycle_event(&agent, payload.event_type.as_deref());
     let tool_permission_correlation = permission_lifecycle_event
@@ -220,7 +259,7 @@ fn handle_agent_status(
         .unwrap_or_else(|| payload.session_id.clone());
     let event_type = normalize_event_type(state, payload.event_type.as_deref()).map(str::to_string);
     let agent_session_id = normalize_provider_session_id(payload.provider_session_id.as_deref());
-    let (revision, status_changed) = {
+    let (revision, status_changed, completion_candidate) = {
         let Ok(mut map) = guards.lock() else { return };
         if !map.contains_key(&payload.session_id) && map.len() >= MAX_STATUS_GUARDS {
             if let Some(stale_key) = map.keys().next().cloned() {
@@ -231,6 +270,20 @@ fn handle_agent_status(
         if !guard_event_is_fresh(guard, &event_id, created_at) {
             return;
         }
+
+        if task_lifecycle_event == Some(ClaudeTaskLifecycleEvent::UserPromptSubmit) {
+            begin_task_generation(&mut guard.task_coordinator, created_at);
+        }
+        if task_lifecycle_event == Some(ClaudeTaskLifecycleEvent::Stop)
+            && is_child_stop(
+                &guard.task_coordinator,
+                actor_fingerprint.as_deref(),
+                created_at,
+            )
+        {
+            return;
+        }
+
         if supports_correlated_permissions(&agent) {
             if let Some(hook_event) = permission_lifecycle_event {
                 if !prepare_permission_lifecycle_event(
@@ -253,8 +306,25 @@ fn handle_agent_status(
         else {
             return;
         };
-        result
+        if state != "completed" {
+            invalidate_task_completion(&mut guard.task_coordinator);
+        }
+        let completion_candidate = if state == "completed" {
+            completion_candidate_if_safe(&guard.task_coordinator, actor_fingerprint.as_deref())
+        } else {
+            None
+        };
+        (result.0, result.1, completion_candidate)
     };
+
+    if state == "completed" && completion_candidate.is_none() {
+        info!(
+            "suppressing unverified Claude task completion for Termflow session {}",
+            payload.session_id
+        );
+        return;
+    }
+
     let duration_ms = if state == "completed" {
         manager.take_prompt_duration_ms(&payload.session_id, created_at)
     } else {
@@ -269,6 +339,14 @@ fn handle_agent_status(
         object.insert("durationSec".into(), json!((duration as f64) / 1000.0));
     }
 
+    let event_id = completion_candidate
+        .map(|candidate| {
+            format!(
+                "task-complete:{}:{}",
+                payload.session_id, candidate.generation
+            )
+        })
+        .unwrap_or(event_id);
     let update = AgentStatusUpdate {
         event_id: event_id.clone(),
         revision,
@@ -287,14 +365,17 @@ fn handle_agent_status(
     if state == "completed" {
         let app = app.clone();
         let manager = manager.clone();
+        let Some(candidate) = completion_candidate else {
+            return;
+        };
         thread::spawn(move || {
             thread::sleep(Duration::from_millis(COMPLETION_QUIET_MS));
-            let still_current = guards
-                .lock()
-                .ok()
-                .and_then(|map| map.get(&update.session_id).map(|guard| guard.revision))
-                == Some(revision);
-            if still_current {
+            let can_finalize = guards.lock().ok().and_then(|mut map| {
+                let guard = map.get_mut(&update.session_id)?;
+                claim_task_completion(&mut guard.task_coordinator, candidate)
+                    .then_some(guard.revision == revision)
+            }) == Some(true);
+            if can_finalize {
                 if let Ok(Some(review)) =
                     manager.complete_active_turn(&update.session_id, "provider_event")
                 {
@@ -391,6 +472,162 @@ fn normalize_state(state: Option<&str>, event_type: Option<&str>) -> Option<&'st
         "process_error" | "hook_error" => Some("error"),
         _ => None,
     }
+}
+
+fn normalize_claude_task_lifecycle_event(
+    agent: &str,
+    event_type: Option<&str>,
+) -> Option<ClaudeTaskLifecycleEvent> {
+    if agent != "claude" {
+        return None;
+    }
+    let normalized = event_type?
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .collect::<String>()
+        .to_ascii_lowercase();
+    match normalized.as_str() {
+        "userpromptsubmit" => Some(ClaudeTaskLifecycleEvent::UserPromptSubmit),
+        "subagentstart" => Some(ClaudeTaskLifecycleEvent::SubagentStart),
+        "subagentstop" => Some(ClaudeTaskLifecycleEvent::SubagentStop),
+        "assistantcomplete" | "stop" => Some(ClaudeTaskLifecycleEvent::Stop),
+        _ => None,
+    }
+}
+
+fn parse_actor_fingerprint(payload: Option<&serde_json::Value>) -> Option<String> {
+    let payload = payload?.as_object()?;
+    if !payload
+        .get("hasExplicitActor")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false)
+    {
+        return None;
+    }
+    payload
+        .get("actorFingerprint")
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| is_safe_digest(value))
+        .map(str::to_string)
+}
+
+fn begin_task_generation(coordinator: &mut TaskCompletionCoordinator, created_at: i64) {
+    coordinator.generation = coordinator.generation.wrapping_add(1);
+    coordinator.generation_started_at = created_at;
+    coordinator.active_subagents.clear();
+    coordinator.recently_stopped_subagents.clear();
+    coordinator.subagent_seen = false;
+    coordinator.unverifiable_subagent_seen = false;
+    coordinator.activity_epoch = coordinator.activity_epoch.wrapping_add(1);
+}
+
+fn invalidate_task_completion(coordinator: &mut TaskCompletionCoordinator) {
+    coordinator.activity_epoch = coordinator.activity_epoch.wrapping_add(1);
+}
+
+fn update_subagent_lifecycle(
+    guards: &StatusGuards,
+    session_id: &str,
+    event: ClaudeTaskLifecycleEvent,
+    actor_fingerprint: Option<&str>,
+    created_at: i64,
+) {
+    let Ok(mut map) = guards.lock() else { return };
+    let guard = map.entry(session_id.to_string()).or_default();
+    let coordinator = &mut guard.task_coordinator;
+    if created_at < coordinator.generation_started_at {
+        return;
+    }
+    coordinator.subagent_seen = true;
+    let Some(actor_fingerprint) = actor_fingerprint else {
+        coordinator.unverifiable_subagent_seen = true;
+        invalidate_task_completion(coordinator);
+        info!("received Claude subagent lifecycle event without a verifiable actor identity");
+        return;
+    };
+    prune_recent_subagents(coordinator, created_at);
+    match event {
+        ClaudeTaskLifecycleEvent::SubagentStart => {
+            coordinator
+                .active_subagents
+                .insert(actor_fingerprint.to_string());
+            coordinator
+                .recently_stopped_subagents
+                .remove(actor_fingerprint);
+        }
+        ClaudeTaskLifecycleEvent::SubagentStop => {
+            coordinator.active_subagents.remove(actor_fingerprint);
+            coordinator
+                .recently_stopped_subagents
+                .insert(actor_fingerprint.to_string(), created_at);
+        }
+        _ => return,
+    }
+    invalidate_task_completion(coordinator);
+}
+
+fn prune_recent_subagents(coordinator: &mut TaskCompletionCoordinator, created_at: i64) {
+    const RECENT_SUBAGENT_MS: i64 = 15_000;
+    coordinator
+        .recently_stopped_subagents
+        .retain(|_, stopped_at| created_at.saturating_sub(*stopped_at) <= RECENT_SUBAGENT_MS);
+}
+
+fn is_child_stop(
+    coordinator: &TaskCompletionCoordinator,
+    actor_fingerprint: Option<&str>,
+    created_at: i64,
+) -> bool {
+    let Some(actor_fingerprint) = actor_fingerprint else {
+        return false;
+    };
+    coordinator.active_subagents.contains(actor_fingerprint)
+        || coordinator
+            .recently_stopped_subagents
+            .get(actor_fingerprint)
+            .is_some_and(|stopped_at| created_at.saturating_sub(*stopped_at) <= 15_000)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct CompletionCandidate {
+    generation: u64,
+    activity_epoch: u64,
+}
+
+fn completion_candidate_if_safe(
+    coordinator: &TaskCompletionCoordinator,
+    actor_fingerprint: Option<&str>,
+) -> Option<CompletionCandidate> {
+    if coordinator.generation == 0
+        || coordinator.completion_emitted_generation == Some(coordinator.generation)
+        || !coordinator.active_subagents.is_empty()
+        || coordinator.unverifiable_subagent_seen
+    {
+        return None;
+    }
+    if coordinator.subagent_seen && actor_fingerprint.is_none() {
+        return None;
+    }
+    Some(CompletionCandidate {
+        generation: coordinator.generation,
+        activity_epoch: coordinator.activity_epoch,
+    })
+}
+
+fn claim_task_completion(
+    coordinator: &mut TaskCompletionCoordinator,
+    candidate: CompletionCandidate,
+) -> bool {
+    if coordinator.generation != candidate.generation
+        || coordinator.activity_epoch != candidate.activity_epoch
+        || coordinator.completion_emitted_generation == Some(candidate.generation)
+        || !coordinator.active_subagents.is_empty()
+        || coordinator.unverifiable_subagent_seen
+    {
+        return false;
+    }
+    coordinator.completion_emitted_generation = Some(candidate.generation);
+    true
 }
 
 fn supports_correlated_permissions(agent: &str) -> bool {
@@ -763,14 +1000,113 @@ fn now_ms() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::{
-        accept_guard_event, agent_label, normalize_agent, normalize_event_type,
+        accept_guard_event, agent_label, begin_task_generation, claim_task_completion,
+        completion_candidate_if_safe, is_child_stop, normalize_agent,
+        normalize_claude_task_lifecycle_event, normalize_event_type,
         normalize_permission_lifecycle_event, normalize_provider_session_id, normalize_state,
-        parse_tool_permission_correlation, prepare_permission_lifecycle_event, sanitized_metadata,
-        should_emit_attention_event, should_suppress_uncorrelated_running,
-        PermissionLifecycleEvent, SessionStatusGuard, ToolPermissionCorrelation,
+        parse_actor_fingerprint, parse_tool_permission_correlation,
+        prepare_permission_lifecycle_event, sanitized_metadata, should_emit_attention_event,
+        should_suppress_uncorrelated_running, update_subagent_lifecycle, ClaudeTaskLifecycleEvent,
+        PermissionLifecycleEvent, SessionStatusGuard, StatusGuards, TaskCompletionCoordinator,
+        ToolPermissionCorrelation,
     };
     use serde_json::json;
 
+    #[test]
+    fn normalizes_claude_subagent_lifecycle_events() {
+        assert_eq!(
+            normalize_claude_task_lifecycle_event("claude", Some("SubagentStart")),
+            Some(ClaudeTaskLifecycleEvent::SubagentStart)
+        );
+        assert_eq!(
+            normalize_claude_task_lifecycle_event("claude", Some("SubagentStop")),
+            Some(ClaudeTaskLifecycleEvent::SubagentStop)
+        );
+        assert_eq!(
+            normalize_claude_task_lifecycle_event("codex", Some("SubagentStop")),
+            None
+        );
+    }
+
+    #[test]
+    fn accepts_only_explicit_safe_actor_fingerprints() {
+        let digest = "a".repeat(64);
+        assert_eq!(
+            parse_actor_fingerprint(Some(&json!({
+                "actorFingerprint": digest,
+                "hasExplicitActor": true
+            })))
+            .as_deref(),
+            Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        );
+        assert!(parse_actor_fingerprint(Some(&json!({
+            "actorFingerprint": "not-a-digest",
+            "hasExplicitActor": true
+        })))
+        .is_none());
+        assert!(parse_actor_fingerprint(Some(&json!({
+            "actorFingerprint": "a".repeat(64),
+            "hasExplicitActor": false
+        })))
+        .is_none());
+    }
+
+    #[test]
+    fn subagent_completion_requires_a_verified_root_stop() {
+        let mut coordinator = TaskCompletionCoordinator::default();
+        begin_task_generation(&mut coordinator, 100);
+        coordinator.subagent_seen = true;
+        coordinator.active_subagents.insert("child".to_string());
+
+        assert!(completion_candidate_if_safe(&coordinator, Some("root")).is_none());
+        coordinator.active_subagents.remove("child");
+        assert!(completion_candidate_if_safe(&coordinator, None).is_none());
+        let candidate = completion_candidate_if_safe(&coordinator, Some("root")).unwrap();
+        assert_eq!(candidate.generation, 1);
+        assert!(claim_task_completion(&mut coordinator, candidate));
+        assert!(!claim_task_completion(&mut coordinator, candidate));
+    }
+
+    #[test]
+    fn a_new_prompt_invalidates_a_previous_completion_candidate() {
+        let mut coordinator = TaskCompletionCoordinator::default();
+        begin_task_generation(&mut coordinator, 100);
+        let candidate = completion_candidate_if_safe(&coordinator, None).unwrap();
+        begin_task_generation(&mut coordinator, 200);
+
+        assert!(!claim_task_completion(&mut coordinator, candidate));
+        assert_eq!(coordinator.generation, 2);
+    }
+
+    #[test]
+    fn child_stops_do_not_complete_the_root_task() {
+        let mut coordinator = TaskCompletionCoordinator::default();
+        begin_task_generation(&mut coordinator, 100);
+        coordinator.active_subagents.insert("child".to_string());
+
+        assert!(is_child_stop(&coordinator, Some("child"), 101));
+        coordinator.active_subagents.remove("child");
+        coordinator
+            .recently_stopped_subagents
+            .insert("child".to_string(), 102);
+        assert!(is_child_stop(&coordinator, Some("child"), 103));
+        assert!(!is_child_stop(&coordinator, Some("root"), 103));
+    }
+
+    #[test]
+    fn anonymous_subagent_lifecycle_suppresses_completion() {
+        let guards: StatusGuards =
+            std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
+        update_subagent_lifecycle(
+            &guards,
+            "session",
+            ClaudeTaskLifecycleEvent::SubagentStart,
+            None,
+            100,
+        );
+        let guard = guards.lock().unwrap();
+        assert!(guard["session"].task_coordinator.unverifiable_subagent_seen);
+    }
     #[test]
     fn normalizes_native_and_legacy_states() {
         assert_eq!(normalize_state(Some("working"), None), Some("running"));

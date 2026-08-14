@@ -580,9 +580,9 @@
     "removeRecentProject": "從最近專案中移除",
     "openProjectTitle": "開啟專案",
     "openProjectQuestion": "你希望在哪裡開啟專案「{{name}}」？",
-    "openInCurrentWindow": "目前視窗",
-    "openInNewWindow": "新視窗",
-    "rememberOpenChoice": "記住我的選擇",
+    "openInCurrentWindow": "此視窗(T)",
+    "openInNewWindow": "新視窗(W)",
+    "rememberOpenChoice": "不再詢問(D)",
     "openProjectRunningSessions": "目前專案有 {{count}} 個執行中的工作階段。",
     "openProjectUnsavedFiles": "目前專案有 {{count}} 個尚未儲存的檔案。",
     "currentWindowCleanupWarning": "在目前視窗開啟將結束執行中的工作階段，並捨棄未儲存的修改。"

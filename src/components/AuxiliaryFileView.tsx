@@ -20,8 +20,12 @@ interface AuxiliaryFileViewProps {
   projectPath: string;
   path: string;
   preview: boolean;
+  active: boolean;
   onPin: () => void;
 }
+
+const GIT_REFRESH_EVENT = "termflow:git-refresh";
+const GIT_FILE_CHANGE_EVENT = "git:file-change";
 
 function isMarkdown(path: string) {
   return /\.(md|markdown)$/i.test(path);
@@ -31,6 +35,7 @@ export default function AuxiliaryFileView({
   projectPath,
   path,
   preview,
+  active,
   onPin,
 }: AuxiliaryFileViewProps) {
   const { t } = useTranslation();
@@ -41,6 +46,8 @@ export default function AuxiliaryFileView({
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [pdfData, setPdfData] = useState<Uint8Array | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [modifiedAtMs, setModifiedAtMs] = useState<number | null>(null);
+  const [refreshVersion, setRefreshVersion] = useState(0);
 
   const name = useMemo(
     () => path.split(/[\\/]/).filter(Boolean).pop() ?? path,
@@ -59,9 +66,13 @@ export default function AuxiliaryFileView({
       .then(async (status) => {
         if (cancelled) return;
         setKind(status.kind);
+        setModifiedAtMs(status.modifiedAtMs ?? null);
         if (status.kind === "text") {
           const file = await readProjectFile(projectPath, path);
-          if (!cancelled) setContent(file.content);
+          if (!cancelled) {
+            setContent(file.content);
+            setModifiedAtMs(file.modifiedAtMs ?? status.modifiedAtMs ?? null);
+          }
         } else if (status.kind === "image") {
           const image = await readProjectImage(projectPath, path);
           if (!cancelled) setImageSrc(image.dataUrl);
@@ -71,7 +82,10 @@ export default function AuxiliaryFileView({
         }
       })
       .catch((reason) => {
-        if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason));
+        if (!cancelled) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          setModifiedAtMs(null);
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -80,7 +94,50 @@ export default function AuxiliaryFileView({
     return () => {
       cancelled = true;
     };
-  }, [path, projectPath]);
+  }, [path, projectPath, refreshVersion]);
+
+  useEffect(() => {
+    if (!active) return;
+
+    let timer: number | undefined;
+    const requestRefresh = () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        setRefreshVersion((version) => version + 1);
+      }, 180);
+    };
+    const handleProjectFileChange = (event: Event) => {
+      const detail = (event as CustomEvent<{ projectPath?: string }>).detail;
+      if (detail?.projectPath === projectPath) requestRefresh();
+    };
+
+    window.addEventListener(GIT_REFRESH_EVENT, handleProjectFileChange);
+    window.addEventListener(GIT_FILE_CHANGE_EVENT, handleProjectFileChange);
+    return () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      window.removeEventListener(GIT_REFRESH_EVENT, handleProjectFileChange);
+      window.removeEventListener(GIT_FILE_CHANGE_EVENT, handleProjectFileChange);
+    };
+  }, [active, projectPath]);
+
+  useEffect(() => {
+    if (!active || loading || modifiedAtMs === null) return;
+
+    const timer = window.setInterval(() => {
+      void inspectProjectFile(projectPath, path)
+        .then((status) => {
+          const nextModifiedAtMs = status.modifiedAtMs ?? null;
+          if (nextModifiedAtMs !== modifiedAtMs) {
+            setRefreshVersion((version) => version + 1);
+          }
+        })
+        .catch(() => {
+          setRefreshVersion((version) => version + 1);
+        });
+    }, 3000);
+
+    return () => window.clearInterval(timer);
+  }, [active, loading, modifiedAtMs, path, projectPath]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">

@@ -395,6 +395,7 @@ export default function AuxiliaryDock({
                       projectPath={tab.projectPath}
                       path={tab.resourceId}
                       preview={tab.preview}
+                      active={active}
                       onPin={() => pinTab(tab.id)}
                     />
                   </Suspense>

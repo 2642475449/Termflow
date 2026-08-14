@@ -14,12 +14,14 @@ use std::sync::Arc;
 use std::time::UNIX_EPOCH;
 use tauri::State;
 
-const CLAUDE_REQUIRED_STATUS_EVENTS: [&str; 6] = [
+const CLAUDE_REQUIRED_STATUS_EVENTS: [&str; 8] = [
     "UserPromptSubmit",
     "PreToolUse",
     "PermissionRequest",
     "PostToolUse",
     "PostToolUseFailure",
+    "SubagentStart",
+    "SubagentStop",
     "Stop",
 ];
 
@@ -2676,6 +2678,20 @@ fn default_hook_entries_for_path(hook_script: &Path) -> Vec<StoredHookEntry> {
             timeout: Some(3000),
         },
         StoredHookEntry {
+            event: "SubagentStart".to_string(),
+            matcher: "".to_string(),
+            action_type: "command".to_string(),
+            command: format!("node \"{}\" subagentstart", hook_script_str),
+            timeout: Some(3000),
+        },
+        StoredHookEntry {
+            event: "SubagentStop".to_string(),
+            matcher: "".to_string(),
+            action_type: "command".to_string(),
+            command: format!("node \"{}\" subagentstop", hook_script_str),
+            timeout: Some(3000),
+        },
+        StoredHookEntry {
             event: "Stop".to_string(),
             matcher: "".to_string(),
             action_type: "command".to_string(),
@@ -2880,6 +2896,8 @@ try {
 const eventTypeByHook = {
   userpromptsubmit: 'user_prompt_submit',
   stop: 'assistant_complete',
+  subagentstart: 'subagent_start',
+  subagentstop: 'subagent_stop',
   permissionrequest: 'permission_request',
   pretooluse: 'pre_tool_use',
   posttooluse: 'post_tool_use',
@@ -2890,6 +2908,8 @@ const eventType = eventTypeByHook[hookName];
 const stateByHook = {
   userpromptsubmit: 'running',
   stop: 'completed',
+  subagentstart: 'running',
+  subagentstop: 'running',
   permissionrequest: 'waiting',
   pretooluse: 'running',
   posttooluse: 'running',
@@ -2920,21 +2940,26 @@ const toolUseId = typeof input.tool_use_id === 'string' && /^[a-zA-Z0-9._:-]{1,2
 const agentId = typeof input.agent_id === 'string' ? input.agent_id : '';
 const agentType = typeof input.agent_type === 'string' ? input.agent_type : '';
 const toolName = typeof input.tool_name === 'string' ? input.tool_name : '';
+const hasExplicitActor = agentId.length > 0 || agentType.length > 0;
+const actorFingerprint = hasExplicitActor ? digest({ agentId, agentType }) : undefined;
 const hasToolContext = toolName.length > 0 && ['pretooluse', 'permissionrequest', 'posttooluse', 'posttoolusefailure'].includes(hookName);
+const isSubagentLifecycle = ['subagentstart', 'subagentstop'].includes(hookName);
 const safePayload = hasToolContext
   ? {
       toolUseId,
       toolFingerprint: digest({ agentId, agentType, toolName, toolInput: input.tool_input ?? null }),
-      actorFingerprint: digest({ agentId, agentType }),
-      hasExplicitActor: agentId.length > 0 || agentType.length > 0,
+      actorFingerprint,
+      hasExplicitActor,
     }
-  : {};
+  : (isSubagentLifecycle || hookName === 'stop') && hasExplicitActor
+    ? { actorFingerprint, hasExplicitActor }
+    : {};
 
 const payload = {
   version: '1.0',
   agent: 'claude',
   state: stateByHook[hookName],
-  event_id: `claude:${process.env.TERMFLOW_SESSION_ID || ''}:${hookName}:${Date.now()}`,
+  event_id: `claude:${process.env.TERMFLOW_SESSION_ID || ''}:${hookName}:${crypto.randomUUID()}`,
   event_type: eventType,
   session_id: process.env.TERMFLOW_SESSION_ID || '',
   project_path: process.env.TERMFLOW_PROJECT_PATH || process.cwd(),
@@ -3497,6 +3522,8 @@ mod tests {
                 "PostToolUseFailure",
                 "PreToolUse",
                 "Stop",
+                "SubagentStart",
+                "SubagentStop",
                 "UserPromptSubmit",
             ])
         );
@@ -3509,6 +3536,10 @@ mod tests {
                 )
             })
             .all(|entry| entry.matcher == "*"));
+        assert!(entries
+            .iter()
+            .filter(|entry| matches!(entry.event.as_str(), "SubagentStart" | "SubagentStop"))
+            .all(|entry| entry.matcher.is_empty()));
     }
 
     #[test]
@@ -3529,6 +3560,9 @@ mod tests {
 
         assert!(script.contains("posttooluse: 'post_tool_use'"));
         assert!(script.contains("posttoolusefailure: 'post_tool_use_failure'"));
+        assert!(script.contains("subagentstart: 'subagent_start'"));
+        assert!(script.contains("subagentstop: 'subagent_stop'"));
+        assert!(script.contains("crypto.randomUUID()"));
         assert!(script.contains("crypto.createHmac('sha256', token)"));
         assert!(script.contains("toolFingerprint"));
         assert!(script.contains("payload: safePayload"));
