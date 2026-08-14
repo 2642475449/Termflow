@@ -100,7 +100,7 @@ export function GitFileList({
   }
 
   return (
-    <div>
+    <div className="git-file-list">
       {/* 分组标题 */}
       <div className="group flex items-center justify-between px-2" style={{ height: 22 }}>
         <button

@@ -231,9 +231,10 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
 
   const handleOpenFile = useCallback(
     (filePath: string) => {
-      openFileTab(filePath, { preview: false });
+      if (!currentProject) return;
+      openFileTab(resolveProjectFilePath(currentProject.path, filePath), { preview: false });
     },
-    [openFileTab]
+    [currentProject, openFileTab]
   );
 
   const handleOpenPathInManager = useCallback(

@@ -356,7 +356,11 @@ function FileTabView({ tabId, projectPath, path, isActive }: FileTabViewProps) {
       setTabDirty(tabId, false);
     } catch (nextError) {
       const nextMessage =
-        nextError instanceof Error ? nextError.message : t("fileTabs.openFailed");
+        typeof nextError === "string"
+          ? nextError
+          : nextError instanceof Error
+            ? nextError.message
+            : t("fileTabs.openFailed");
       setError(nextMessage);
       setReadOnly(true);
       setKind(nextKind);

@@ -354,12 +354,24 @@ html, body, #root {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  min-width: 74px;
-  gap: 6px;
+  min-width: 0;
+  gap: 4px;
   font-size: 11px;
   line-height: 22px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+/* Keep filenames readable in narrow sidebars; restore aligned diff statistics when there is room. */
+.git-file-list {
+  container-type: inline-size;
+}
+
+@container (min-width: 400px) {
+  .git-file-diff-stats {
+    min-width: 74px;
+    gap: 6px;
+  }
 }
 
 .git-file-diff-added {

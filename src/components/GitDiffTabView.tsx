@@ -50,8 +50,12 @@ function GitDiffTabView({ tabId }: GitDiffTabViewProps) {
   const currentProject = useAppStore((s) => s.currentProject);
   const diffEditorRef = useRef<monaco.editor.IStandaloneDiffEditor | null>(null);
   const diffUpdateSubscriptionRef = useRef<monaco.IDisposable | null>(null);
+  const documentRef = useRef(document);
+  const revealedDocumentRef = useRef<typeof document | null>(null);
   const [changeCount, setChangeCount] = useState(0);
   const [activeChangeIndex, setActiveChangeIndex] = useState(0);
+
+  documentRef.current = document;
 
   const isDark = useMemo(() => {
     if (themeCategory === "system") return systemPrefersDark;
@@ -98,29 +102,25 @@ function GitDiffTabView({ tabId }: GitDiffTabViewProps) {
       disableMonacoCommandPalette(editor.getModifiedEditor(), monaco);
 
       const syncChanges = () => {
-        const nextChangeCount = editor.getLineChanges()?.length ?? 0;
+        const changes = editor.getLineChanges() ?? [];
+        const nextChangeCount = changes.length;
         setChangeCount(nextChangeCount);
         setActiveChangeIndex(0);
-        if (nextChangeCount > 0) {
-          void editor.revealFirstDiff();
+        if (changes.length > 0 && revealedDocumentRef.current !== documentRef.current) {
+          const firstChange = changes[0];
+          editor.getModifiedEditor().revealLineInCenter(
+            getModifiedDiffTargetLine(firstChange),
+            monaco.editor.ScrollType.Immediate,
+          );
+          revealedDocumentRef.current = documentRef.current;
         }
       };
 
       diffUpdateSubscriptionRef.current = editor.onDidUpdateDiff(syncChanges);
       syncChanges();
-      void editor.revealFirstDiff();
     },
     [],
   );
-
-  useEffect(() => {
-    setActiveChangeIndex(0);
-    if (diffEditorRef.current) {
-      void diffEditorRef.current.revealFirstDiff();
-    }
-  }, [document]);
-
-
 
   useEffect(
     () => () => {

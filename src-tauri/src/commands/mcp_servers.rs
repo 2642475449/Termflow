@@ -72,6 +72,13 @@ pub struct McpServerCatalog {
     pub user_config_path: String,
 }
 
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct McpServerTestResult {
+    pub success: bool,
+    pub message: String,
+}
+
 fn empty_config() -> McpServerConfig {
     McpServerConfig {
         server_type: None,
@@ -706,7 +713,16 @@ fn merge_json_mcp_config(agent: &str, current: Option<&Value>, config: &McpServe
     let managed_keys: &[&str] = if agent == OPENCODE {
         &["type", "command", "environment", "url", "headers", "cwd"]
     } else {
-        &["type", "command", "args", "env", "url", "serverUrl", "headers", "cwd"]
+        &[
+            "type",
+            "command",
+            "args",
+            "env",
+            "url",
+            "serverUrl",
+            "headers",
+            "cwd",
+        ]
     };
     for key in managed_keys {
         merged.remove(*key);
@@ -822,10 +838,7 @@ fn config_to_codex(config: &McpServerConfig) -> toml::Value {
 /// The Settings UI only owns the common connection fields. Preserve every other
 /// native Codex setting (for example tool timeouts or an OAuth-specific option)
 /// when a user edits a server through the UI.
-fn merge_codex_mcp_config(
-    current: Option<&toml::Value>,
-    config: &McpServerConfig,
-) -> toml::Value {
+fn merge_codex_mcp_config(current: Option<&toml::Value>, config: &McpServerConfig) -> toml::Value {
     let mut merged = current
         .and_then(toml::Value::as_table)
         .cloned()
@@ -1229,7 +1242,7 @@ pub fn test_mcp_server(
     scope: String,
     name: String,
     project_path: Option<String>,
-) -> Result<String, String> {
+) -> Result<McpServerTestResult, String> {
     let agent = validate_agent(&agent)?;
     validate_scope(agent, &scope, project_path.as_deref())?;
     let name = name.trim().to_string();
@@ -1243,8 +1256,8 @@ pub fn test_mcp_server(
             .as_ref()
             .ok_or_else(|| "Stdio MCP server is missing a command".to_string())?;
         return match std::process::Command::new(command).args(&server.args).envs(&server.env).current_dir(server.cwd.as_deref().unwrap_or(".")).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped()).spawn() {
-            Ok(mut child) => { std::thread::sleep(std::time::Duration::from_millis(500)); let _ = child.kill(); let _ = child.wait(); Ok(json!({"success": true, "message": format!("MCP server '{name}' started successfully")}).to_string()) }
-            Err(error) => Ok(json!({"success": false, "message": format!("Failed to start MCP server: {error}")}).to_string()),
+            Ok(mut child) => { std::thread::sleep(std::time::Duration::from_millis(500)); let _ = child.kill(); let _ = child.wait(); Ok(McpServerTestResult { success: true, message: format!("MCP server '{name}' started successfully") }) }
+            Err(error) => Ok(McpServerTestResult { success: false, message: format!("Failed to start MCP server: {error}") }),
         };
     }
     let url = server
@@ -1266,13 +1279,14 @@ pub fn test_mcp_server(
             })
     })?;
     match std::net::TcpStream::connect_timeout(&address, std::time::Duration::from_secs(3)) {
-        Ok(_) => Ok(
-            json!({"success": true, "message": format!("MCP server '{name}' is reachable")})
-                .to_string(),
-        ),
-        Err(error) => Ok(
-            json!({"success": false, "message": format!("Failed to connect: {error}")}).to_string(),
-        ),
+        Ok(_) => Ok(McpServerTestResult {
+            success: true,
+            message: format!("MCP server '{name}' is reachable"),
+        }),
+        Err(error) => Ok(McpServerTestResult {
+            success: false,
+            message: format!("Failed to connect: {error}"),
+        }),
     }
 }
 
@@ -1280,8 +1294,9 @@ pub fn test_mcp_server(
 mod tests {
     use super::{
         claude_servers_from_state, config_from_json, config_to_codex, config_to_json,
-        transport_supported_by_agent, update_claude_state_mcp, ANTIGRAVITY, CLAUDE, CODEX,
-        OPENCODE, QODER,
+        merge_codex_mcp_config, merge_json_mcp_config, parse_json_or_jsonc,
+        transport_supported_by_agent, update_claude_state_mcp, validate_scope, ANTIGRAVITY, CLAUDE,
+        CODEX, OPENCODE, QODER,
     };
     use serde_json::json;
 
@@ -1322,6 +1337,70 @@ mod tests {
         assert!(transport_supported_by_agent(CODEX, "http"));
         assert!(!transport_supported_by_agent(CODEX, "sse"));
         assert!(transport_supported_by_agent(QODER, "ws"));
+    }
+
+    #[test]
+    fn accepts_qoder_user_local_and_project_scopes() {
+        assert!(validate_scope(QODER, "user", None).is_ok());
+        assert!(validate_scope(QODER, "local", Some(r"E:\\work\\Termflow")).is_ok());
+        assert!(validate_scope(QODER, "project", Some(r"E:\\work\\Termflow")).is_ok());
+        assert!(validate_scope(QODER, "workspace", Some(r"E:\\work\\Termflow")).is_err());
+    }
+
+    #[test]
+    fn reads_jsonc_with_comments_and_trailing_commas() {
+        let value = parse_json_or_jsonc(
+            r#"{
+                // OpenCode supports JSONC
+                "mcp": { "servers": { "demo": { "type": "remote", }, }, },
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(value["mcp"]["servers"]["demo"]["type"], "remote");
+    }
+
+    #[test]
+    fn preserves_native_json_server_fields_when_updating_connection() {
+        let config = super::McpServerConfig {
+            server_type: Some("http".to_string()),
+            url: Some("https://new.example.test/mcp".to_string()),
+            ..super::empty_config()
+        };
+        let current = json!({
+            "type": "remote",
+            "url": "https://old.example.test/mcp",
+            "disabled": true,
+            "oauth": { "clientId": "native-client" },
+            "timeout": 12000,
+        });
+        let updated = merge_json_mcp_config(OPENCODE, Some(&current), &config);
+        assert_eq!(updated["url"], "https://new.example.test/mcp");
+        assert_eq!(updated["disabled"], true);
+        assert_eq!(updated["oauth"]["clientId"], "native-client");
+        assert_eq!(updated["timeout"], 12000);
+    }
+
+    #[test]
+    fn preserves_native_codex_server_fields_when_updating_connection() {
+        let config = super::McpServerConfig {
+            server_type: Some("http".to_string()),
+            url: Some("https://new.example.test/mcp".to_string()),
+            ..super::empty_config()
+        };
+        let current: toml::Value = r#"
+            url = "https://old.example.test/mcp"
+            tool_timeout_sec = 90
+            enabled = false
+        "#
+        .parse()
+        .unwrap();
+        let updated = merge_codex_mcp_config(Some(&current), &config);
+        assert_eq!(
+            updated["url"].as_str(),
+            Some("https://new.example.test/mcp")
+        );
+        assert_eq!(updated["tool_timeout_sec"].as_integer(), Some(90));
+        assert_eq!(updated["enabled"].as_bool(), Some(false));
     }
 
     #[test]
