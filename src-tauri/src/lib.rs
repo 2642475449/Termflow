@@ -23,6 +23,21 @@ use std::sync::Arc;
 use tauri::{Manager, WindowEvent};
 
 pub fn run() {
+    let startup_args = std::env::args().skip(1).collect::<Vec<_>>();
+    let startup_cwd = std::env::current_dir()
+        .map(|path| path.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let startup_project_path = match commands::window::resolve_project_path_from_launch_arguments(
+        &startup_args,
+        &startup_cwd,
+    ) {
+        Ok(path) => path,
+        Err(error) => {
+            eprintln!("Ignoring invalid startup project argument: {error}");
+            None
+        }
+    };
+
     // 修复 H-07: create_ingest_config 现在返回 Result,失败时直接终止启动,
     // 避免在 TOCTOU 窗口期分配到端口但实际未 listen,造成静默失效。
     let (ingest_config_value, ingest_listener) =
@@ -34,15 +49,73 @@ pub fn run() {
     let voice_overlay_state = VoiceOverlayState::new();
     let voice_shortcut_state = VoiceShortcutState::new();
     tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            let registry = app.state::<Arc<WindowRegistry>>();
-            let database = app.state::<Arc<Database>>();
-            if let Err(error) = commands::window::show_or_create_launcher_window(
-                app,
-                registry.as_ref(),
-                database.as_ref(),
-            ) {
-                eprintln!("Failed to open launcher for second app activation: {error}");
+        .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+            // The Windows single-instance plugin can receive WM_COPYDATA while
+            // the first process is still completing setup. Queue window work on
+            // Tauri's main thread and use try_state so that edge case cannot
+            // panic before the database has been registered.
+            let app_handle = app.clone();
+            let launch_args = args.into_iter().skip(1).collect::<Vec<_>>();
+            if let Err(error) = app.run_on_main_thread(move || {
+                let Some(registry) = app_handle.try_state::<Arc<WindowRegistry>>() else {
+                    eprintln!("Received second app activation before window state was ready");
+                    return;
+                };
+
+                let launch_request = commands::window::resolve_project_path_from_launch_arguments(
+                    &launch_args,
+                    &cwd,
+                );
+                match launch_request {
+                    Ok(Some(project_path)) => {
+                        if let Err(error) = commands::window::open_project_from_external_request(
+                            &app_handle,
+                            registry.as_ref(),
+                            &project_path,
+                        ) {
+                            eprintln!("Failed to open project for second app activation: {error}");
+                        }
+                    }
+                    Ok(None) => {
+                        if let Some(database) = app_handle.try_state::<Arc<Database>>() {
+                            if let Err(error) = commands::window::show_or_create_launcher_window(
+                                &app_handle,
+                                registry.as_ref(),
+                                database.as_ref(),
+                            ) {
+                                eprintln!(
+                                    "Failed to open launcher for second app activation: {error}"
+                                );
+                            }
+                        } else if let Some(main_window) = app_handle.get_webview_window("main") {
+                            let _ = main_window.show();
+                            let _ = main_window.unminimize();
+                            let _ = main_window.set_focus();
+                        }
+                    }
+                    Err(error) => {
+                        eprintln!(
+                            "Ignoring invalid project argument from second app activation: {error}"
+                        );
+                        if let Some(database) = app_handle.try_state::<Arc<Database>>() {
+                            if let Err(error) = commands::window::show_or_create_launcher_window(
+                                &app_handle,
+                                registry.as_ref(),
+                                database.as_ref(),
+                            ) {
+                                eprintln!(
+                                    "Failed to open launcher for second app activation: {error}"
+                                );
+                            }
+                        } else if let Some(main_window) = app_handle.get_webview_window("main") {
+                            let _ = main_window.show();
+                            let _ = main_window.unminimize();
+                            let _ = main_window.set_focus();
+                        }
+                    }
+                }
+            }) {
+                eprintln!("Failed to schedule second app activation: {error}");
             }
         }))
         .plugin(tauri_plugin_dialog::init())
@@ -72,11 +145,6 @@ pub fn run() {
         .manage(voice_shortcut_state.clone())
         .manage(ContentSearchState::default())
         .manage(SearchIndexState::default())
-        .setup(move |app| {
-            let git_watcher = GitWatcher::new(app.handle().clone());
-            app.manage(Arc::new(git_watcher));
-            Ok(())
-        })
         .on_window_event(|window, event| {
             if matches!(event, WindowEvent::Destroyed) {
                 let registry = window.state::<Arc<WindowRegistry>>();
@@ -119,14 +187,29 @@ pub fn run() {
             }
         })
         .setup(move |app| {
+            // Tauri keeps one setup hook; keep all startup initialization in
+            // this hook so the Git watcher is not replaced by later setup work.
+            let git_watcher = GitWatcher::new(app.handle().clone());
+            app.manage(Arc::new(git_watcher));
             let database = Database::init(&app.handle())?;
             app.manage(database);
             let registry = app.state::<Arc<WindowRegistry>>();
             let database = app.state::<Arc<Database>>();
+            // The installer enables the menu by default. Only apply an
+            // existing opt-out here so development launches never write global
+            // Explorer registry state merely because the default is true.
+            if !database.load_explorer_context_menu_enabled()? {
+                if let Err(error) =
+                    commands::explorer_context_menu::set_explorer_context_menu_enabled(false)
+                {
+                    eprintln!("Failed to preserve Explorer context-menu opt-out: {error}");
+                }
+            }
             commands::window::restore_main_window_context_on_startup(
                 &app.handle(),
                 &registry,
                 &database,
+                startup_project_path.as_deref(),
             )?;
             start_ingest_server(
                 app.handle().clone(),
@@ -174,6 +257,9 @@ pub fn run() {
             commands::search_index::get_search_index_status,
             commands::search_index::set_project_index_enabled,
             commands::search_index::rebuild_project_index,
+            commands::search_index::pause_project_index,
+            commands::search_index::resume_project_index,
+            commands::search_index::delete_project_index,
             commands::search_index::get_search_index_storage_status,
             commands::search_index::set_search_index_storage,
             commands::search_index::clear_search_index_cache,
@@ -218,6 +304,7 @@ pub fn run() {
             commands::settings::initialize_persistent_settings,
             commands::settings::get_persistent_settings,
             commands::settings::save_persistent_settings,
+            commands::settings::set_explorer_context_menu_enabled,
             commands::window::open_project_window,
             commands::window::focus_existing_project_window,
             commands::window::get_existing_project_paths,

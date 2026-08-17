@@ -3,6 +3,7 @@ import type { GitCloneTask, ProjectSearchIndexStatus } from "@/types";
 const VISIBLE_INDEX_STATES = new Set<ProjectSearchIndexStatus["state"]>([
   "preflight",
   "building",
+  "updating",
   "stale",
   "failed",
   "unsupported",

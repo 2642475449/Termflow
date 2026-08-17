@@ -52,7 +52,7 @@ jobs:
           uploadUpdaterJson: true
           updaterJsonPreferNsis: true
 
-      - name: Generate self-hosted updater manifest
+      - name: Generate GitHub Release updater manifest
         shell: pwsh
         run: corepack pnpm update:manifest --notes "Termflow ${{ github.ref_name }}"
 

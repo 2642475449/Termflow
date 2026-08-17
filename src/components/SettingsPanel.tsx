@@ -68,6 +68,7 @@ import {
   updateMcpServer,
   deleteMcpServer,
   testMcpServer,
+  setExplorerContextMenuEnabled,
 } from "@/lib/api";
 import type {
   SkillCatalog,
@@ -400,12 +401,17 @@ function GeneralPage() {
   const language = useAppStore((s) => s.language);
   const startupRestoreLastProject = useAppStore((s) => s.startupRestoreLastProject);
   const projectOpenBehavior = useAppStore((s) => s.projectOpenBehavior);
+  const explorerContextMenuEnabled = useAppStore((s) => s.explorerContextMenuEnabled);
   const setLightTheme = useAppStore((s) => s.setLightTheme);
   const setDarkTheme = useAppStore((s) => s.setDarkTheme);
   const setThemeCategory = useAppStore((s) => s.setThemeCategory);
   const setLanguage = useAppStore((s) => s.setLanguage);
   const setStartupRestoreLastProject = useAppStore((s) => s.setStartupRestoreLastProject);
   const setProjectOpenBehavior = useAppStore((s) => s.setProjectOpenBehavior);
+  const setExplorerContextMenuEnabledInStore = useAppStore(
+    (s) => s.setExplorerContextMenuEnabled
+  );
+  const [updatingExplorerContextMenu, setUpdatingExplorerContextMenu] = useState(false);
 
   const langOptions = [
     { label: t("settings.languageName.zh_CN"), value: "zh_CN" },
@@ -435,6 +441,21 @@ function GeneralPage() {
       setDarkTheme(opt.key);
     } else {
       setLightTheme(opt.key);
+    }
+  }
+
+  async function handleExplorerContextMenuChange(enabled: boolean) {
+    if (updatingExplorerContextMenu) return;
+
+    setUpdatingExplorerContextMenu(true);
+    try {
+      await setExplorerContextMenuEnabled(enabled);
+      setExplorerContextMenuEnabledInStore(enabled);
+    } catch (error) {
+      console.error("Failed to update Explorer context menu integration:", error);
+      message.error(t("settings.general.explorerContextMenuUpdateFailed"));
+    } finally {
+      setUpdatingExplorerContextMenu(false);
     }
   }
 
@@ -542,6 +563,19 @@ function GeneralPage() {
               { value: "new_window", label: t("settings.general.projectOpenNew") },
             ]}
             onChange={setProjectOpenBehavior}
+          />
+        </SettingRow>
+      </SettingSection>
+
+      <SettingSection title={t("settings.general.windowsIntegrationSection")}>
+        <SettingRow
+          label={t("settings.general.explorerContextMenu")}
+          desc={t("settings.general.explorerContextMenuDesc")}
+        >
+          <Switch
+            checked={explorerContextMenuEnabled}
+            loading={updatingExplorerContextMenu}
+            onChange={handleExplorerContextMenuChange}
           />
         </SettingRow>
       </SettingSection>

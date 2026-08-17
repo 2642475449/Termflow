@@ -102,6 +102,33 @@ function homeCopy(language: string, zh: string, en: string, ja: string): string 
   return en;
 }
 
+function formatUsageScope(overview: AgentUsageOverview, language: string): string {
+  const readableProviders = overview.providers
+    .filter((provider) => provider.capability !== "unsupported")
+    .map((provider) => provider.label);
+  const unsupportedProviders = overview.providers
+    .filter((provider) => provider.capability === "unsupported")
+    .map((provider) => provider.label);
+  const readable = readableProviders.join("、") || homeCopy(language, "暂无", "none", "なし");
+
+  if (unsupportedProviders.length === 0) {
+    return homeCopy(
+      language,
+      `统计范围：本机 ${readable} 的可读取使用记录，不按当前项目筛选。`,
+      `Scope: readable local usage records from ${readable}; not limited to the current project.`,
+      `集計範囲：ローカルの ${readable} から読み取れる使用記録です。現在のプロジェクトには限定されません。`
+    );
+  }
+
+  const unsupported = unsupportedProviders.join("、");
+  return homeCopy(
+    language,
+    `统计范围：本机 ${readable} 的可读取使用记录，不按当前项目筛选；${unsupported} 暂无稳定的本地用量来源，未计入。`,
+    `Scope: readable local usage records from ${readable}; not limited to the current project. ${unsupported} are excluded because no stable local usage source is available.`,
+    `集計範囲：ローカルの ${readable} から読み取れる使用記録で、現在のプロジェクトには限定されません。${unsupported} は安定したローカル使用量ソースがないため含まれません。`
+  );
+}
+
 function parseDate(input: string): Date {
   const [year, month, day] = input.split("-").map(Number);
   return new Date(year, (month || 1) - 1, day || 1);
@@ -612,9 +639,9 @@ function HomePage() {
     windowMode === "project" && currentProject
       ? homeCopy(
           i18n.language,
-          `${currentProject.name} 已就绪，以下为项目运行以来的累计数据`,
-          `${currentProject.name} is ready. Here is its cumulative usage.`,
-          `${currentProject.name} の準備ができました。プロジェクト開始以来の累計使用状況です。`
+          `${currentProject.name} 已就绪，以下为本机智能体使用概览`,
+          `${currentProject.name} is ready. Here is a local agent usage overview.`,
+          `${currentProject.name} の準備ができました。以下はローカルのエージェント使用状況です。`
         )
       : t("home.overview.heroSubtitle");
   const greeting = t(
@@ -734,6 +761,10 @@ function HomePage() {
   const metrics = useMemo(
     () => (overview ? buildOverviewMetrics(overview, "all") : null),
     [overview]
+  );
+  const usageScope = useMemo(
+    () => (overview ? formatUsageScope(overview, i18n.language) : null),
+    [overview, i18n.language]
   );
 
   const heatmapColumns = useMemo(
@@ -1001,6 +1032,11 @@ function HomePage() {
               <div className="mt-2 text-[13px]" style={{ color: "var(--cs-text-secondary)" }}>
                 {subtitle}
               </div>
+              {usageScope && (
+                <div className="mt-1 text-[11px]" style={{ color: "var(--cs-text-tertiary)" }}>
+                  {usageScope}
+                </div>
+              )}
             </div>
 
             <div

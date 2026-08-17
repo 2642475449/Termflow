@@ -1,0 +1,4 @@
+interface:
+  display_name: "Termflow UI Interactions"
+  short_description: "Prevent fragile overlay and async UI flows"
+  default_prompt: "Use $termflow-ui-interactions to implement or debug this Termflow overlay interaction safely."

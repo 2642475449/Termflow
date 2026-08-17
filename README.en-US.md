@@ -30,13 +30,14 @@ Key capabilities:
 
 - **Multiple agents and sessions** — organize several conversations for each project.
 - **Embedded terminal** — keep a familiar CLI workflow inside the application.
-- **Voice input** — DashScope ASR support with a global shortcut.
+- **File management and editing** — browse project files, preview and edit Markdown in place, and drag files into the active CLI input.
+- **Voice input** — MiMo and DashScope ASR with a global shortcut.
 - **Git panel** — a complete Git workflow plus AI-generated commit messages.
 - **Checkpoint review** — inspect agent-turn checkpoints and compare changes.
 - **Quick commands** — define and run common actions with one click.
-- **Themes** — dark, light, and system-following appearance options.
 - **Persistent sessions** — reopen historical conversations after restarting the app.
-- **Interface languages** — Simplified Chinese, Traditional Chinese, English, and Japanese.
+
+The baseline experience also includes dark, light, and system-following themes, plus Simplified Chinese, Traditional Chinese, English, and Japanese interfaces.
 
 ## Why open source?
 
@@ -48,10 +49,11 @@ Termflow started as an application built around the workflow I wanted to use eve
 | :--- | :--- |
 | **Session management** | The sidebar groups sessions by project directory, lets you create sessions quickly, and shows their active state in real time. |
 | **Embedded terminal** | xterm.js and ConPTY provide a native-like terminal that resizes with the window and supports ANSI colours and cursor controls. |
-| **Session persistence** | Sessions use `--session-id` (UUID). Their data remains after the app closes and can be continued with `--resume`. |
+| **File management and editing** | Browse project files, preview and edit Markdown in place, and drag files from the project tree into the active CLI input. |
+| **Session persistence** | Session data remains after the app closes. Termflow uses the selected agent's native session-creation and resume options. |
 | **Checkpoint review** | Records agent-turn checkpoints, aligns diffs, shows file summaries and helper panels, and lets you return to any checkpoint. |
 | **Quick commands** | A customizable command library with categories, search, parameterized templates, and one-click execution. |
-| **Voice input** | Supports DashScope ASR, runtime provider switching, global shortcuts, and an overlay showing recording status and volume. |
+| **Voice input** | Supports MiMo and DashScope ASR, provider switching, global shortcuts, and an overlay showing recording status and volume. |
 | **Git workflow** | Commit, push, pull, sync, staging, diffs, branch management, and AI-generated commit messages. |
 | **Attention and notifications** | Tracks session state and sends smart notifications while preserving attention data for later review. |
 | **Full-text search** | Search project files using regular expressions, file-type filters, and highlighted results. |
@@ -73,7 +75,7 @@ Termflow started as an application built around the workflow I wanted to use eve
 | Editor | Monaco Editor | Code viewing and editing |
 | Charts | Mermaid | Git history diagrams |
 | Database | sql.js / rusqlite | Frontend and backend storage |
-| Speech recognition | DashScope ASR | Speech-to-text input |
+| Speech recognition | MiMo + DashScope ASR | Speech-to-text input |
 | Git | libgit2 (git2-rs) | Repository operations |
 | HTTP | reqwest | Backend network requests |
 
@@ -88,11 +90,11 @@ Termflow started as an application built around the workflow I wanted to use eve
 - **Rust toolchain:** `1.95.0-x86_64-pc-windows-msvc`
 - **Visual Studio Build Tools 2022:** install **Desktop development with C++** and a Windows 10/11 SDK
 - **WebView2 Runtime:** required for Tauri desktop apps on Windows
-- **Claude Code:** install with `npm install -g @anthropic-ai/claude-code`
+- **At least one supported agent CLI:** Claude Code, Codex, Antigravity CLI, OpenCode, or Qoder CLI; install the one you plan to use.
 
-### Reproduce the development environment
+### Development notes
 
-Install Node.js, then pin pnpm with Corepack:
+Prepare the development environment in the following order to match this repository's toolchain and dependency resolution. Install Node.js, then pin pnpm with Corepack:
 
 ```bash
 node -v   # v20.14.0
@@ -157,6 +159,19 @@ pnpm tauri build
 
 The NSIS installer is generated under `src-tauri/target/release/bundle/nsis/`.
 
+### Open a project from Explorer (Windows)
+
+After installing the NSIS package, Termflow registers an **Open with Termflow** entry for the current Windows user:
+
+- right-click a project folder, or
+- right-click an empty area inside a folder to open that directory.
+
+Termflow uses the selected directory as the project root. If that project is already open, it focuses the existing window instead of creating a duplicate window or session. The integration is registered only for the installing user, requires no administrator privileges, and does not affect other users on the same computer. Uninstalling Termflow removes entries that still point to that installation.
+
+You can turn the integration off in **Settings → General → Windows integration**. Termflow preserves that preference across later installer updates.
+
+On Windows 11, this first version is available from the classic **Show more options** menu.
+
 ## Configuration
 
 ### Speech recognition
@@ -165,13 +180,13 @@ Termflow supports multiple speech-recognition providers.
 
 | Provider | Model | Notes |
 | :--- | :--- | :--- |
-| DashScope | `mimo-v2.5-asr` | Alibaba Cloud DashScope ASR; the default provider |
-| Other | Extensible | Custom ASR providers can be added |
+| MiMo | `mimo-v2.5-asr` | Default provider; uses the MiMo API or Token Plan |
+| DashScope | `qwen3-asr-flash` | Alibaba Cloud Bailian DashScope ASR |
 
 Relevant settings:
 
 - `asrModel` — speech-recognition model; default: `mimo-v2.5-asr`
-- `asrRuntime` — ASR runtime; can be switched dynamically
+- Switch providers in Settings; this updates the corresponding model and authentication method.
 - `voiceShortcut` — voice-input shortcut; default: `Ctrl+Shift+V`
 - `voiceInputTarget` — target: `system` or `terminal`
 
@@ -194,16 +209,16 @@ The application uses i18next and supports dynamic switching between:
 
 ## How it works
 
-Creating a session follows this flow:
+The following is the shared PTY session flow, using Claude Code as an example. Every agent reuses this flow, while the agent adapter generates its own native start and resume commands.
 
 ```text
 New session → choose a project directory → create a UUID session record
 → invoke spawn_pty via Tauri IPC → Rust creates a ConPTY instance
-→ start claude --dangerously-skip-permissions --session-id <uuid>
+→ start the selected agent (for example, `claude [--dangerously-skip-permissions] [--effort <level>] --session-id <uuid>`)
 → PTY output is emitted to xterm.js → user input is written back to the PTY
 ```
 
-When a historical session is reopened, Termflow cleans up stale Claude processes and starts the session with `claude --dangerously-skip-permissions --resume <uuid>`.
+When a historical session is reopened, Termflow cleans up the current session's residual process, then the agent adapter generates its native resume command (for example, `claude [--dangerously-skip-permissions] [--effort <level>] --resume <uuid>`). Bracketed options are only included when selected.
 
 ## Acknowledgements
 

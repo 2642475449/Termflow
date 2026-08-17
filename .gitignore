@@ -40,3 +40,13 @@ Thumbs.db
 .workbuddy/
 .mcp.json
 .claude/settings.local.json
+
+# Shared Termflow release skills for Codex and Claude Code
+!.agents/
+!.agents/skills/
+!.agents/skills/termflow-github-release/
+!.agents/skills/termflow-github-release/**
+!.claude/
+!.claude/skills/
+!.claude/skills/termflow-github-release/
+!.claude/skills/termflow-github-release/**

@@ -148,6 +148,7 @@ export interface AppState {
   lastProject: ProjectInfo | null;
   startupRestoreLastProject: boolean;
   projectOpenBehavior: ProjectOpenBehavior;
+  explorerContextMenuEnabled: boolean;
   claudeCliInfo: ClaudeCliInfo | null;
   // Project
   currentProject: ProjectInfo | null;
@@ -233,6 +234,7 @@ export interface AppState {
   setSystemPrefersDark: (value: boolean) => void;
   setStartupRestoreLastProject: (enabled: boolean) => void;
   setProjectOpenBehavior: (behavior: ProjectOpenBehavior) => void;
+  setExplorerContextMenuEnabled: (enabled: boolean) => void;
   // Terminal actions
   setEditorFontSize: (size: number) => void;
   setTerminalFontSize: (size: number) => void;

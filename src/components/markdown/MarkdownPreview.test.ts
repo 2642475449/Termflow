@@ -73,4 +73,42 @@ describe("Markdown rendering", () => {
     expect(markup).toContain("多会话管理");
     expect(markup).not.toContain("| :-- | :-- |");
   });
+
+  it("keeps multiline HTML headers together so README links render as links", () => {
+    const markup = renderToStaticMarkup(
+      createElement(MarkdownPreview, {
+        content: [
+          '<h1 align="center">',
+          '  <img src="public/logo.png" width="56" alt="Termflow Logo">',
+          '  Termflow',
+          '</h1>',
+          '',
+          '<p align="center">',
+          '  简体中文 | <a href="README.en-US.md">English</a>',
+          '</p>',
+        ].join("\n"),
+        emptyText: "empty",
+        filePath: "C:/projects/termflow/README.md",
+        projectPath: "C:/projects/termflow",
+      }),
+    );
+
+    expect(markup).toMatch(/<h1[^>]*>[\s\S]*Termflow[\s\S]*<\/h1>/);
+    expect(markup).toContain("<a href=");
+    expect(markup).not.toContain("&lt;a href=");
+  });
+
+  it("filters executable content from raw HTML blocks", () => {
+    const markup = renderToStaticMarkup(
+      createElement(MarkdownPreview, {
+        content: '<p onclick="alert(1)">safe<script>alert(2)</script></p>',
+        emptyText: "empty",
+      }),
+    );
+
+    expect(markup).toContain("safe");
+    expect(markup).not.toContain("onclick");
+    expect(markup).not.toContain("script");
+    expect(markup).not.toContain("alert");
+  });
 });

@@ -31,6 +31,33 @@ type ResolvedMarkdownLink = {
   projectPath?: string;
 };
 
+const UNSAFE_RAW_HTML_TAGS = /<(script|style|iframe|object|embed|svg|math|form|input|button|textarea|select|option|link|meta|base)\b[^>]*>[\s\S]*?<\/\1\s*>|<\/?(?:script|style|iframe|object|embed|svg|math|form|input|button|textarea|select|option|link|meta|base)\b[^>]*>/gi;
+
+function sanitizeRawHtml(html: string) {
+  return html
+    .replace(UNSAFE_RAW_HTML_TAGS, "")
+    .replace(/\s+(?:on[a-z]+|style)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+    .replace(/\s+(?:href|src)\s*=\s*(['"])(?:javascript|vbscript|data:text\/html)[^'"]*\1/gi, "");
+}
+
+function getRawHtmlContainerTag(line: string) {
+  const match = line.match(/^\s*<([a-z][\w:-]*)\b[^>]*>/i);
+  if (!match) return null;
+
+  const tag = match[1].toLowerCase();
+  if (/\/>\s*$/.test(line) || /^(?:area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)$/.test(tag)) {
+    return null;
+  }
+  return tag;
+}
+
+function countRawHtmlTag(html: string, tag: string, closing = false) {
+  const pattern = closing
+    ? new RegExp(`</${tag}\\s*>`, "gi")
+    : new RegExp(`<${tag}\\b[^>]*>`, "gi");
+  return Array.from(html.matchAll(pattern)).length;
+}
+
 function cleanMarkdownUrl(url: string) {
   return url.trim().replace(/^`+|`+$/g, "");
 }
@@ -508,9 +535,10 @@ function RawHtmlBlock({
   filePath?: string;
   projectPath?: string;
 }) {
+  const sanitizedHtml = useMemo(() => sanitizeRawHtml(html), [html]);
   const transformedHtml = useMemo(
-    () => transformRawHtml(html, filePath, projectPath),
-    [filePath, html, projectPath],
+    () => transformRawHtml(sanitizedHtml, filePath, projectPath),
+    [filePath, projectPath, sanitizedHtml],
   );
   const [renderedHtml, setRenderedHtml] = useState(transformedHtml);
 
@@ -521,7 +549,7 @@ function RawHtmlBlock({
       disposed = true;
     };
 
-    const localImages = Array.from(html.matchAll(/src\s*=\s*(['"])(.*?)\1/gi))
+    const localImages = Array.from(sanitizedHtml.matchAll(/src\s*=\s*(['"])(.*?)\1/gi))
       .map((match) => resolveMarkdownLink(match[2], filePath, projectPath))
       .filter((resolved): resolved is Required<ResolvedMarkdownLink> => Boolean(resolved.projectPath));
 
@@ -551,7 +579,7 @@ function RawHtmlBlock({
     return () => {
       disposed = true;
     };
-  }, [filePath, html, projectPath, transformedHtml]);
+  }, [filePath, projectPath, sanitizedHtml, transformedHtml]);
 
   return <div className="overflow-auto" dangerouslySetInnerHTML={{ __html: renderedHtml }} />;
 }
@@ -1264,17 +1292,28 @@ function MarkdownPreviewRenderer({
       flushList();
       flushQuote();
       const htmlLines = [line];
-      while (index + 1 < lines.length) {
-        const nextLine = lines[index + 1];
-        if (!nextLine.trim()) {
-          break;
-        }
-        if (nextLine.trimStart().startsWith("<") || nextLine.includes("<img")) {
+      const containerTag = getRawHtmlContainerTag(line);
+
+      if (containerTag) {
+        let depth = countRawHtmlTag(line, containerTag) - countRawHtmlTag(line, containerTag, true);
+        while (depth > 0 && index + 1 < lines.length) {
+          const nextLine = lines[index + 1];
+          if (!nextLine.trim()) break;
           index += 1;
           htmlLines.push(nextLine);
-          continue;
+          depth += countRawHtmlTag(nextLine, containerTag) - countRawHtmlTag(nextLine, containerTag, true);
         }
-        break;
+      } else {
+        while (index + 1 < lines.length) {
+          const nextLine = lines[index + 1];
+          if (!nextLine.trim()) break;
+          if (nextLine.trimStart().startsWith("<") || nextLine.includes("<img")) {
+            index += 1;
+            htmlLines.push(nextLine);
+            continue;
+          }
+          break;
+        }
       }
       flushHtmlBlock(htmlLines);
       continue;

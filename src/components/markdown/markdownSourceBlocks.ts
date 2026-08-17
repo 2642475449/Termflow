@@ -64,6 +64,24 @@ function isTableSeparator(line: string) {
   return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
 }
 
+function getHtmlContainerTag(line: string) {
+  const match = line.match(/^\s*<([a-z][\w:-]*)\b[^>]*>/i);
+  if (!match) return null;
+
+  const tag = match[1].toLowerCase();
+  if (/\/>\s*$/.test(line) || /^(?:area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)$/.test(tag)) {
+    return null;
+  }
+  return tag;
+}
+
+function countHtmlTag(text: string, tag: string, closing = false) {
+  const pattern = closing
+    ? new RegExp(`</${tag}\\s*>`, "gi")
+    : new RegExp(`<${tag}\\b[^>]*>`, "gi");
+  return Array.from(text.matchAll(pattern)).length;
+}
+
 function startsStandaloneBlock(lines: SourceLine[], index: number) {
   const line = lines[index]?.text ?? "";
   const nextLine = lines[index + 1]?.text ?? "";
@@ -128,13 +146,24 @@ export function getMarkdownSourceBlocks(content: string): MarkdownSourceBlock[] 
     }
 
     if (line.trimStart().startsWith("<")) {
+      const containerTag = getHtmlContainerTag(line);
       index += 1;
-      while (
-        index < lines.length &&
-        lines[index].text.trim() &&
-        (lines[index].text.trimStart().startsWith("<") || lines[index].text.includes("<img"))
-      ) {
-        index += 1;
+      if (containerTag) {
+        let depth = countHtmlTag(line, containerTag) - countHtmlTag(line, containerTag, true);
+        while (depth > 0 && index < lines.length) {
+          const nextLine = lines[index].text;
+          if (!nextLine.trim()) break;
+          depth += countHtmlTag(nextLine, containerTag) - countHtmlTag(nextLine, containerTag, true);
+          index += 1;
+        }
+      } else {
+        while (
+          index < lines.length &&
+          lines[index].text.trim() &&
+          (lines[index].text.trimStart().startsWith("<") || lines[index].text.includes("<img"))
+        ) {
+          index += 1;
+        }
       }
       pushBlock(startLine, index - 1, "html");
       continue;

@@ -28,6 +28,7 @@ export interface PersistentSettings {
   language: string;
   startupRestoreLastProject: boolean;
   projectOpenBehavior: ProjectOpenBehavior;
+  explorerContextMenuEnabled: boolean;
   lastProjectPath: string | null;
   editorFontSize: number;
   terminalFontSize: number;
@@ -475,12 +476,14 @@ export interface ContentSearchSummary {
 export interface ProjectSearchIndexStatus {
   projectPath: string;
   enabled: boolean;
-  state: "disabled" | "preflight" | "building" | "ready" | "stale" | "failed" | "unsupported";
+  state: "disabled" | "preflight" | "building" | "paused" | "updating" | "ready" | "stale" | "failed" | "unsupported";
   backend: "scan" | "fts5";
   phase:
     | "disabled"
     | "discovering"
     | "writing"
+    | "paused"
+    | "applying_changes"
     | "finalizing"
     | "ready"
     | "reconciling"

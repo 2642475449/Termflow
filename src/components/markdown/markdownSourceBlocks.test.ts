@@ -37,6 +37,27 @@ describe("getMarkdownSourceBlocks", () => {
 
     expect(blocks.map((block) => block.kind)).toEqual(["heading", "heading", "table"]);
   });
+
+  it("keeps multiline HTML containers intact for editable previews", () => {
+    const content = [
+      '<h1 align="center">',
+      '  <img src="public/logo.png" width="56" alt="Termflow Logo">',
+      '  Termflow',
+      '</h1>',
+      '',
+      '<p align="center">',
+      '  简体中文 | <a href="README.en-US.md">English</a>',
+      '</p>',
+    ].join("\n");
+
+    const blocks = getMarkdownSourceBlocks(content);
+
+    expect(blocks.map((block) => block.kind)).toEqual(["html", "html"]);
+    expect(blocks.map((block) => block.source)).toEqual([
+      '<h1 align="center">\n  <img src="public/logo.png" width="56" alt="Termflow Logo">\n  Termflow\n</h1>',
+      '<p align="center">\n  简体中文 | <a href="README.en-US.md">English</a>\n</p>',
+    ]);
+  });
 });
 
 describe("replaceMarkdownSourceBlock", () => {

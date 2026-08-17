@@ -5,6 +5,7 @@ pub mod agents;
 pub mod claude_config;
 pub mod command_library;
 pub mod content_search;
+pub mod explorer_context_menu;
 pub mod feishu;
 pub mod file_tree;
 pub mod git;

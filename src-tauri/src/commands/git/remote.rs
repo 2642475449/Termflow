@@ -13,9 +13,9 @@ fn validate_remote_name(remote_name: &str) -> Result<&str, String> {
         return Err("远程名称不能为空".to_string());
     }
     if remote_name.starts_with('-')
-        || !remote_name
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | '-'))
+        || !remote_name.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | '-')
+        })
     {
         return Err("远程名称只能包含字母、数字、点、下划线和连字符".to_string());
     }
@@ -47,7 +47,10 @@ fn validate_branch_name(branch_name: &str) -> Result<&str, String> {
     Ok(branch_name)
 }
 
-fn find_existing_remote_url(project_path: &str, remote_name: &str) -> Result<Option<String>, String> {
+fn find_existing_remote_url(
+    project_path: &str,
+    remote_name: &str,
+) -> Result<Option<String>, String> {
     let repo = open_repo(project_path)?;
     let result = match repo.find_remote(remote_name) {
         Ok(remote) => remote
@@ -326,9 +329,15 @@ mod tests {
         assert_eq!(validate_remote_name("origin").unwrap(), "origin");
         assert!(validate_remote_name("--origin").is_err());
         assert!(validate_remote_name("origin name").is_err());
-        assert_eq!(validate_remote_url("https://example.com/repo.git").unwrap(), "https://example.com/repo.git");
+        assert_eq!(
+            validate_remote_url("https://example.com/repo.git").unwrap(),
+            "https://example.com/repo.git"
+        );
         assert!(validate_remote_url("--upload-pack=value").is_err());
-        assert_eq!(validate_branch_name("feature/remote").unwrap(), "feature/remote");
+        assert_eq!(
+            validate_branch_name("feature/remote").unwrap(),
+            "feature/remote"
+        );
         assert!(validate_branch_name("--all").is_err());
     }
 }

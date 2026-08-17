@@ -18,6 +18,7 @@ import {
   initializePersistentSettings,
   savePersistentSettings,
   setClaudeTheme,
+  setExplorerContextMenuEnabled,
 } from "./lib/api";
 import i18n, { toI18nLanguage } from "./i18n";
 import { useRecentProjectSync } from "./hooks/useRecentProjectSync";
@@ -32,6 +33,8 @@ const THEME_COLORS: Record<ThemeMode, string> = {
 
 const STARTUP_THEME_STORAGE_KEY = "termflow-startup-theme";
 const PERSISTENT_THEME_UPDATED_EVENT = "persistent-theme-updated";
+const PERSISTENT_EXPLORER_CONTEXT_MENU_UPDATED_EVENT =
+  "persistent-explorer-context-menu-updated";
 
 interface PersistentThemeUpdate {
   lightTheme: ThemeMode;
@@ -60,6 +63,20 @@ function isPersistentThemeUpdate(value: unknown): value is PersistentThemeUpdate
   );
 }
 
+interface PersistentExplorerContextMenuUpdate {
+  explorerContextMenuEnabled: boolean;
+}
+
+function isPersistentExplorerContextMenuUpdate(
+  value: unknown
+): value is PersistentExplorerContextMenuUpdate {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    typeof (value as Record<string, unknown>).explorerContextMenuEnabled === "boolean"
+  );
+}
+
 function App() {
   const lightTheme = useAppStore((s) => s.lightTheme);
   const darkTheme = useAppStore((s) => s.darkTheme);
@@ -69,6 +86,7 @@ function App() {
   const language = useAppStore((s) => s.language);
   const startupRestoreLastProject = useAppStore((s) => s.startupRestoreLastProject);
   const projectOpenBehavior = useAppStore((s) => s.projectOpenBehavior);
+  const explorerContextMenuEnabled = useAppStore((s) => s.explorerContextMenuEnabled);
   const systemPrefersDark = useAppStore((s) => s.systemPrefersDark);
   const setSystemPrefersDark = useAppStore((s) => s.setSystemPrefersDark);
   const editorFontSize = useAppStore((s) => s.editorFontSize);
@@ -121,6 +139,7 @@ function App() {
       language,
       startupRestoreLastProject,
       projectOpenBehavior,
+      explorerContextMenuEnabled,
       lastProjectPath: lastProject?.path ?? null,
       editorFontSize,
       terminalFontSize,
@@ -165,6 +184,7 @@ function App() {
       agentPermissionDefaults,
       startupRestoreLastProject,
       projectOpenBehavior,
+      explorerContextMenuEnabled,
       terminalCursorBlink,
       terminalFontSize,
       terminalLineHeight,
@@ -228,6 +248,11 @@ function App() {
         if (!disposed) {
           applyPersistentSettingsToStore(settings);
           lastPersistedSnapshotRef.current = JSON.stringify(settings);
+          if (settings.explorerContextMenuEnabled === false) {
+            void setExplorerContextMenuEnabled(false).catch((error) => {
+              console.warn("Failed to remove the disabled Explorer context menu:", error);
+            });
+          }
           setPersistentSettingsReady(true);
         }
       })
@@ -292,6 +317,43 @@ function App() {
       })
       .catch((error) => {
         console.error("Failed to listen for persistent theme updates:", error);
+      });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [persistentSettingsReady]);
+
+  useEffect(() => {
+    if (!persistentSettingsReady) {
+      return;
+    }
+
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+
+    listen<unknown>(PERSISTENT_EXPLORER_CONTEXT_MENU_UPDATED_EVENT, (event) => {
+      if (!isPersistentExplorerContextMenuUpdate(event.payload)) {
+        return;
+      }
+
+      useAppStore.setState({
+        explorerContextMenuEnabled: event.payload.explorerContextMenuEnabled,
+      });
+      // This update originated in another window and is already in SQLite. Mark
+      // it as persisted locally so it does not overwrite the preference later.
+      lastPersistedSnapshotRef.current = JSON.stringify(getPersistentSettingsSnapshot());
+    })
+      .then((nextUnlisten) => {
+        if (disposed) {
+          nextUnlisten();
+          return;
+        }
+        unlisten = nextUnlisten;
+      })
+      .catch((error) => {
+        console.error("Failed to listen for Explorer context menu updates:", error);
       });
 
     return () => {

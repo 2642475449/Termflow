@@ -51,6 +51,10 @@ describe("background task summary", () => {
     });
   });
 
+  it("shows an incremental index update as background work", () => {
+    expect(summarizeBackgroundTasks([], indexStatus("updating"), null).indexVisible).toBe(true);
+  });
+
   it("counts multiple clones independently from the index task", () => {
     const secondClone = { ...cloneTask, taskId: "clone-2" };
     expect(summarizeBackgroundTasks([cloneTask, secondClone], indexStatus("stale"), null).totalCount)

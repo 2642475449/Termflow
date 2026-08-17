@@ -7,9 +7,12 @@ import { useTranslation } from "react-i18next";
 import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
 import {
   clearSearchIndexCache,
+  deleteProjectIndex,
   getSearchIndexStorageStatus,
   getSearchIndexStatus,
+  pauseProjectIndex,
   rebuildProjectIndex,
+  resumeProjectIndex,
   setSearchIndexStorage,
   setProjectIndexEnabled,
 } from "@/lib/api";
@@ -83,12 +86,15 @@ export function SearchIndexPage() {
   const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
+  const [pausing, setPausing] = useState(false);
   const [storage, setStorage] = useState<SearchIndexStorageStatus | null>(null);
   const [storageLoading, setStorageLoading] = useState(true);
   const [storageSaving, setStorageSaving] = useState(false);
   const [quotaGiB, setQuotaGiB] = useState(5);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [deleteDialogProjectPath, setDeleteDialogProjectPath] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   async function refreshStorage() {
     setStorageLoading(true);
@@ -233,6 +239,23 @@ export function SearchIndexPage() {
     }
   }
 
+  async function togglePausedIndex() {
+    if (!projectPath || pausing || !status) return;
+    setPausing(true);
+    try {
+      const nextStatus = status.state === "paused"
+        ? await resumeProjectIndex(projectPath)
+        : await pauseProjectIndex(projectPath);
+      setStatus(nextStatus);
+      setStatusProjectPath(projectPath);
+      message.success(t(nextStatus.state === "paused" ? "settings.searchIndex.pausedSuccess" : "settings.searchIndex.resumedSuccess"));
+    } catch (error) {
+      message.error(t("settings.searchIndex.pauseFailed", { error: String(error) }));
+    } finally {
+      setPausing(false);
+    }
+  }
+
   async function chooseCacheRoot() {
     if (storageSaving) return;
     const selected = await openDialog({
@@ -296,6 +319,27 @@ export function SearchIndexPage() {
     }
   }
 
+  async function deleteCurrentProjectIndex() {
+    const deletePath = deleteDialogProjectPath;
+    if (!deletePath || deleting) return;
+    setDeleting(true);
+    try {
+      const nextStatus = await deleteProjectIndex(deletePath);
+      if (projectPath === deletePath) {
+        setStatus(nextStatus);
+        setStatusProjectPath(projectPath);
+        setLoadError(false);
+      }
+      setDeleteDialogProjectPath(null);
+      await refreshStorage();
+      message.success(t("settings.searchIndex.deleteSuccess"));
+    } catch (error) {
+      message.error(t("settings.searchIndex.deleteFailed", { error: String(error) }));
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   const projectIndexEnabled = statusBelongsToCurrentProject && status?.enabled === true;
   const statusTag = useMemo(() => {
     if (!projectPath) return <Tag className="m-0">{t("settings.searchIndex.openProjectFirst")}</Tag>;
@@ -313,6 +357,10 @@ export function SearchIndexPage() {
         return <Tag color="processing">{t("settings.searchIndex.preflight")}</Tag>;
       case "building":
         return <Tag color="processing">{t("settings.searchIndex.building")}</Tag>;
+      case "paused":
+        return <Tag color="warning">{t("settings.searchIndex.paused")}</Tag>;
+      case "updating":
+        return <Tag color="processing">{t("settings.searchIndex.updating")}</Tag>;
       case "ready":
         return <Tag color="success">{t("settings.searchIndex.ready")}</Tag>;
       case "stale":
@@ -332,6 +380,8 @@ export function SearchIndexPage() {
     }
     if (status.state === "preflight") return t("settings.searchIndex.preflightDescription");
     if (status.state === "building") return t("settings.searchIndex.buildingDescription");
+    if (status.state === "paused") return t("settings.searchIndex.pausedDescription");
+    if (status.state === "updating") return t("settings.searchIndex.updatingDescription");
     if (status.state === "ready") return t("settings.searchIndex.readyDescription");
     if (status.state === "stale") return t("settings.searchIndex.staleDescription");
     if (status.state === "unsupported") return t("settings.searchIndex.unsupportedDescription");
@@ -419,6 +469,18 @@ export function SearchIndexPage() {
                 onClick={() => void rebuild()}
               >
                 {t("settings.searchIndex.rebuild")}
+              </Button>
+              {(activeBuild || status.state === "paused") ? <Button size="small" loading={pausing} onClick={() => void togglePausedIndex()}>
+                {t(status.state === "paused" ? "settings.searchIndex.resume" : "settings.searchIndex.pause")}
+              </Button> : null}
+              <Button
+                danger
+                size="small"
+                icon={<DeleteOutlined />}
+                disabled={activeBuild || rebuilding || deleting}
+                onClick={() => projectPath && setDeleteDialogProjectPath(projectPath)}
+              >
+                {t("settings.searchIndex.deleteIndex")}
               </Button>
             </div>
           </div>
@@ -518,6 +580,18 @@ export function SearchIndexPage() {
         onOk={() => void clearCache()}
       >
         <p>{t("settings.searchIndex.clearCacheConfirmDescription")}</p>
+      </Modal>
+      <Modal
+        open={deleteDialogProjectPath !== null}
+        title={t("settings.searchIndex.deleteConfirmTitle")}
+        okText={t("settings.searchIndex.deleteIndex")}
+        okButtonProps={{ danger: true }}
+        cancelText={t("common.cancel")}
+        confirmLoading={deleting}
+        onCancel={() => !deleting && setDeleteDialogProjectPath(null)}
+        onOk={() => void deleteCurrentProjectIndex()}
+      >
+        <p>{t("settings.searchIndex.deleteConfirmDescription")}</p>
       </Modal>
     </div>
   );

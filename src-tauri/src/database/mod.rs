@@ -83,6 +83,10 @@ fn default_project_open_behavior() -> String {
     "ask".into()
 }
 
+fn default_explorer_context_menu_enabled() -> bool {
+    true
+}
+
 fn default_feishu_notification_threshold_ms() -> i64 {
     300_000
 }
@@ -118,6 +122,8 @@ pub struct PersistentSettingsRecord {
     pub theme_category: String,
     pub language: String,
     pub startup_restore_last_project: bool,
+    #[serde(default = "default_explorer_context_menu_enabled")]
+    pub explorer_context_menu_enabled: bool,
     #[serde(default = "default_project_open_behavior")]
     pub project_open_behavior: String,
     pub last_project_path: Option<String>,
@@ -162,6 +168,7 @@ impl Default for PersistentSettingsRecord {
             theme_category: "dark".into(),
             language: "zh_CN".into(),
             startup_restore_last_project: true,
+            explorer_context_menu_enabled: default_explorer_context_menu_enabled(),
             project_open_behavior: default_project_open_behavior(),
             last_project_path: None,
             editor_font_size: default_editor_font_size(),
@@ -283,6 +290,9 @@ impl Database {
         settings.startup_restore_last_project =
             read_setting(&conn, "general.startupRestoreLastProject")?
                 .unwrap_or(settings.startup_restore_last_project);
+        settings.explorer_context_menu_enabled =
+            read_setting(&conn, "general.explorerContextMenuEnabled")?
+                .unwrap_or(settings.explorer_context_menu_enabled);
         settings.project_open_behavior = read_setting(&conn, "general.projectOpenBehavior")?
             .unwrap_or(settings.project_open_behavior);
         settings.last_project_path =
@@ -337,14 +347,18 @@ impl Database {
         &self,
         settings: &PersistentSettingsRecord,
     ) -> Result<(), String> {
-        self.save_persistent_settings_internal(settings, true)
+        self.save_persistent_settings_internal(settings, true, true)
     }
 
-    pub fn save_persistent_settings_without_last_project(
+    /// Saves preferences owned by the settings UI without overwriting values
+    /// that are changed by dedicated runtime workflows. In particular, an
+    /// in-flight save from another project window cannot undo the last closed
+    /// project or the Explorer context-menu opt-out.
+    pub fn save_general_persistent_settings(
         &self,
         settings: &PersistentSettingsRecord,
     ) -> Result<(), String> {
-        self.save_persistent_settings_internal(settings, false)
+        self.save_persistent_settings_internal(settings, false, false)
     }
 
     pub fn save_last_project_path(&self, project_path: &str) -> Result<(), String> {
@@ -354,6 +368,17 @@ impl Database {
             "general.lastProjectPath",
             &Some(project_path.to_string()),
         )
+    }
+
+    pub fn load_explorer_context_menu_enabled(&self) -> Result<bool, String> {
+        let conn = self.conn.lock();
+        Ok(read_setting(&conn, "general.explorerContextMenuEnabled")?
+            .unwrap_or_else(default_explorer_context_menu_enabled))
+    }
+
+    pub fn save_explorer_context_menu_enabled(&self, enabled: bool) -> Result<(), String> {
+        let conn = self.conn.lock();
+        write_setting(&conn, "general.explorerContextMenuEnabled", &enabled)
     }
 
     pub fn load_project_search_index_enabled(&self, project_key: &str) -> Result<bool, String> {
@@ -394,6 +419,7 @@ impl Database {
         &self,
         settings: &PersistentSettingsRecord,
         include_last_project: bool,
+        include_explorer_context_menu: bool,
     ) -> Result<(), String> {
         let conn = self.conn.lock();
 
@@ -406,6 +432,13 @@ impl Database {
             "general.startupRestoreLastProject",
             &settings.startup_restore_last_project,
         )?;
+        if include_explorer_context_menu {
+            write_setting(
+                &conn,
+                "general.explorerContextMenuEnabled",
+                &settings.explorer_context_menu_enabled,
+            )?;
+        }
         write_setting(
             &conn,
             "general.projectOpenBehavior",
@@ -809,6 +842,59 @@ mod tests {
     }
 
     #[test]
+    fn persistent_settings_default_to_enabled_explorer_context_menu() {
+        assert!(PersistentSettingsRecord::default().explorer_context_menu_enabled);
+    }
+
+    #[test]
+    fn persistent_settings_without_explorer_context_menu_remain_backward_compatible() {
+        let mut value = serde_json::to_value(PersistentSettingsRecord::default()).unwrap();
+        value
+            .as_object_mut()
+            .unwrap()
+            .remove("explorerContextMenuEnabled");
+
+        let restored: PersistentSettingsRecord = serde_json::from_value(value).unwrap();
+
+        assert!(restored.explorer_context_menu_enabled);
+    }
+
+    #[test]
+    fn explorer_context_menu_preference_can_be_saved_without_other_settings() {
+        let database = Database::open_in_memory();
+        let mut initial = PersistentSettingsRecord::default();
+        initial.language = "en-US".to_string();
+        initial.project_open_behavior = "reuse".to_string();
+        database.save_persistent_settings(&initial).unwrap();
+
+        database.save_explorer_context_menu_enabled(false).unwrap();
+
+        assert!(!database.load_explorer_context_menu_enabled().unwrap());
+        let restored = database.load_persistent_settings().unwrap();
+        assert_eq!(restored.language, "en-US");
+        assert_eq!(restored.project_open_behavior, "reuse");
+    }
+
+    #[test]
+    fn general_runtime_saves_cannot_overwrite_explorer_context_menu_preference() {
+        let database = Database::open_in_memory();
+        let mut initial = PersistentSettingsRecord::default();
+        initial.explorer_context_menu_enabled = false;
+        database.save_persistent_settings(&initial).unwrap();
+
+        let mut stale_window_settings = PersistentSettingsRecord::default();
+        stale_window_settings.explorer_context_menu_enabled = true;
+        stale_window_settings.language = "en-US".to_string();
+        database
+            .save_general_persistent_settings(&stale_window_settings)
+            .unwrap();
+
+        let restored = database.load_persistent_settings().unwrap();
+        assert!(!restored.explorer_context_menu_enabled);
+        assert_eq!(restored.language, "en-US");
+    }
+
+    #[test]
     fn persistent_settings_without_asr_region_remain_backward_compatible() {
         let mut value = serde_json::to_value(PersistentSettingsRecord::default()).unwrap();
         value.as_object_mut().unwrap().remove("asrRegion");
@@ -833,7 +919,7 @@ mod tests {
         competing_window.last_project_path = Some("D:/3.project/Termflow".to_string());
         competing_window.language = "en-US".to_string();
         database
-            .save_persistent_settings_without_last_project(&competing_window)
+            .save_general_persistent_settings(&competing_window)
             .unwrap();
 
         let restored = database.load_persistent_settings().unwrap();

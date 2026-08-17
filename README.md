@@ -34,13 +34,14 @@
 核心特性：
 - 🤖 **多智能体与多会话**：按项目组织不同智能体的多个会话
 - 🖥️ **嵌入式终端**：在图形界面中保留熟悉的 CLI 工作方式
-- 🎤 **语音输入**：支持 DashScope ASR，全局快捷键触发
+- 📁 **文件管理与编辑**：浏览项目文件，支持 Markdown 预览与即时编辑，并可将文件拖放到当前 CLI 输入框
+- 🎤 **语音输入**：支持 MiMo 与 DashScope ASR，全局快捷键触发
 - 📊 **Git 面板**：完整的 Git 工作流 + AI 生成提交信息
 - 🔍 **检查点审阅**：Agent 回合检查点审阅与差异对比
 - ⚡ **快速命令**：自定义快捷命令，一键执行常用操作
-- 🎨 **多套主题**：深色、浅色与跟随系统切换
 - 💾 **会话持久化**：关闭应用后无缝恢复历史对话
-- 🌐 **多语言支持**：简体中文、繁體中文、英文、日语界面
+
+基础体验包括深色、浅色与跟随系统的主题切换，以及简体中文、繁體中文、英文和日语界面。
 
 ## 为什么开源
 
@@ -52,10 +53,11 @@ Termflow 最初是为了做一款符合自己使用习惯的应用。在功能�
 | :--- | :--- |
 | **多会话管理**：侧边栏树状导航会按项目目录自动分组；一键新建会话，并实时显示每个会话的活跃状态。 | ![Termflow 多会话管理界面](public/images/termflow-overview.png) |
 | **嵌入式终端**：基于 xterm.js + ConPTY 提供原生终端体验，自动适配窗口大小并同步 PTY 尺寸，完整支持 ANSI 色彩和光标控制。 | ![Termflow 工作台界面](public/images/termflow-overview.png) |
-| **会话持久化**：通过 `--session-id`（UUID）创建会话；关闭后保留数据，重新打开即可恢复，并支持 `--resume` 无缝续接历史对话。 | ![Termflow 会话工作台](public/images/termflow-overview.png) |
+| **文件管理与编辑**：浏览项目文件；Markdown 支持预览与即时编辑；可将项目树中的文件拖放到当前 CLI 输入框。 | ![Termflow 文件管理界面](public/images/termflow-overview.png) |
+| **会话持久化**：关闭应用后保留会话数据，重新打开即可恢复。Termflow 会按所选 Agent 使用其原生的会话创建与恢复参数。 | ![Termflow 会话工作台](public/images/termflow-overview.png) |
 | **检查点审阅系统**：自动记录 Agent 回合检查点，提供差异对齐、文件摘要和辅助面板，并可一键回滚到任意检查点。 | ![Termflow 检查点审阅工作台](public/images/termflow-overview.png) |
 | **快速命令系统**：自定义快捷命令库，一键执行常用操作；支持命令分类、搜索与参数化模板。 | ![Termflow 快捷操作界面](public/images/termflow-overview.png) |
-| **语音输入系统**：支持 DashScope ASR、运行时切换识别提供商和全局快捷键；悬浮窗实时显示录音状态与音量。 | ![Termflow 语音输入工作台](public/images/termflow-overview.png) |
+| **语音输入系统**：支持 MiMo 与 DashScope ASR、切换识别提供商和全局快捷键；悬浮窗实时显示录音状态与音量。 | ![Termflow 语音输入工作台](public/images/termflow-overview.png) |
 | **Git 面板**：覆盖提交、推送、拉取和同步等完整 Git 工作流，集成暂存区、差异查看、分支管理和 AI 提交信息生成。 | ![Termflow Git 工作台](public/images/termflow-overview.png) |
 | **注意力中心与通知**：实时监控会话状态并推送智能通知；持久化记录注意力数据，帮助掌握工作节奏。 | ![Termflow 数据概览界面](public/images/termflow-overview.png) |
 | **全局文本搜索**：在项目内进行全文搜索，支持正则表达式、文件类型过滤和结果高亮。 | ![Termflow 全局搜索界面](public/images/termflow-overview.png) |
@@ -77,7 +79,7 @@ Termflow 最初是为了做一款符合自己使用习惯的应用。在功能�
 | 代码编辑器 | Monaco Editor | 代码查看与编辑（Geist Mono 字体） |
 | 图表渲染 | Mermaid | Git 提交历史图表 |
 | 数据库 | sql.js / rusqlite | 前后端数据存储 |
-| 语音识别 | DashScope ASR | 语音输入转文字 |
+| 语音识别 | MiMo + DashScope ASR | 语音输入转文字 |
 | Git 操作 | libgit2 (git2-rs) | Git 仓库操作 |
 | HTTP 客户端 | reqwest | 后端网络请求 |
 
@@ -92,11 +94,11 @@ Termflow 最初是为了做一款符合自己使用习惯的应用。在功能�
 - **Rust toolchain**：`1.95.0-x86_64-pc-windows-msvc`
 - **Visual Studio Build Tools 2022**：安装 `Desktop development with C++`，并勾选 Windows 10/11 SDK
 - **WebView2 Runtime**：Tauri Windows 桌面应用运行所需
-- **Claude Code**：已安装（`npm install -g @anthropic-ai/claude-code`）
+- **至少一个受支持的 Agent CLI**：Claude Code、Codex、Antigravity CLI、OpenCode 或 Qoder CLI；按需安装。
 
-### 在新电脑复刻同一套开发环境
+### 开发须知
 
-推荐按下面顺序安装，这样另一台电脑能尽量贴近当前仓库的实际开发环境。
+推荐按下面顺序准备开发环境，以保持与当前仓库的工具链和依赖解析结果一致。
 
 #### 1. 安装 Node.js 与 pnpm
 
@@ -216,6 +218,19 @@ pnpm tauri build
 
 构建产物位于 `src-tauri/target/release/bundle/nsis/`。
 
+### 从资源管理器打开项目（Windows）
+
+通过 NSIS 安装包装好后，Termflow 会为**当前 Windows 用户**注册“Open with Termflow”菜单项：
+
+- 右键单击项目文件夹；
+- 或在文件夹空白处右键单击当前目录。
+
+它会将所选目录作为项目根目录打开；若该项目已在 Termflow 中打开，则会直接聚焦现有窗口，避免重复窗口和会话。注册仅写入当前用户的注册表，不需要管理员权限，也不会影响同一台电脑上的其他用户。卸载 Termflow 时会移除仍指向该安装位置的菜单项。
+
+如需移除该集成，可在“设置 → 通用 → Windows 集成”中关闭“资源管理器右键菜单”；Termflow 会在之后的安装更新中保留这项偏好。
+
+在 Windows 11 中，该首版集成会位于“显示更多选项”的传统右键菜单中。
+
 ## 配置说明
 
 ### 语音识别
@@ -224,12 +239,12 @@ Termflow 支持多种语音识别提供商：
 
 | 提供商 | 模型 | 说明 |
 |--------|------|------|
-| DashScope | `mimo-v2.5-asr` | 阿里云 DashScope ASR（默认） |
-| 其他 | 可扩展 | 支持自定义 ASR 提供商 |
+| MiMo | `mimo-v2.5-asr` | 默认提供商，使用 MiMo API 或 Token Plan |
+| DashScope | `qwen3-asr-flash` | 阿里云百炼 DashScope ASR |
 
 **配置项**：
 - `asrModel`：语音识别模型（默认：`mimo-v2.5-asr`）
-- `asrRuntime`：ASR 运行时（支持动态切换）
+- 通过设置页在 MiMo 与 DashScope 提供商之间切换；切换时会更新对应模型与鉴权方式
 - `voiceShortcut`：语音输入快捷键（默认：`Ctrl+Shift+V`）
 - `voiceInputTarget`：语音输入目标（`system` 或 `terminal`）
 
@@ -267,6 +282,8 @@ Termflow 支持多种语音识别提供商：
 
 ## 工作原理
 
+以下以 Claude Code 为例说明通用 PTY 会话流程。所有 Agent 复用该流程，但由 Agent 适配层生成各自的原生启动与恢复命令。
+
 ```
 用户点击"新建会话"
     ↓
@@ -278,27 +295,27 @@ Termflow 支持多种语音识别提供商：
     ↓
 Rust PTY 管理器创建 ConPTY
     ↓
-启动 claude --dangerously-skip-permissions --session-id <uuid>
+启动所选 Agent（例如：claude [--dangerously-skip-permissions] [--effort <level>] --session-id <uuid>）
     ↓
 后台线程读取 PTY 输出 → emit("pty-output") → 前端 xterm.js 渲染
     ↓
 用户输入 → invoke("pty_input") → PTY 写入
 ```
 
-会话恢复流程：
+历史会话恢复流程（Claude Code 示例）：
 
 ```
 用户点击历史会话
     ↓
 检测 active === false
     ↓
-cleanupStaleSessions() — 清理残留 claude 进程
+cleanupSessionProcess(sessionId) — 清理当前会话的残留进程
     ↓
 spawnPty(sessionId, path, resume=true)
     ↓
-claude --dangerously-skip-permissions --resume <uuid>
+Agent 适配层生成恢复命令（例如：claude [--dangerously-skip-permissions] [--effort <level>] --resume <uuid>）
     ↓
-Claude Code 恢复对话上下文
+所选 Agent 恢复对话上下文
 ```
 
 ## 致谢

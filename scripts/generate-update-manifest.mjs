@@ -2,7 +2,7 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import packageJson from "../package.json" with { type: "json" };
 
-const UPDATE_BASE_URL = "https://termflow.jianglan.online/updates";
+const GITHUB_RELEASE_URL = "https://github.com/2642475449/Termflow/releases";
 const PROJECT_ROOT = resolve(import.meta.dirname, "..");
 
 function readOption(name) {
@@ -28,7 +28,7 @@ function resolveProjectPath(path) {
 function printUsage() {
   console.log(`Usage: pnpm update:manifest [options]
 
-Creates the signed Tauri updater manifest for the self-hosted update server.
+Creates the signed Tauri updater manifest for a GitHub Release.
 
 Options:
   --version <semver>       Release version (default: package.json version)
@@ -52,7 +52,8 @@ const artifactPath = resolveProjectPath(
   readOption("--artifact") ?? `src-tauri/target/release/bundle/nsis/${artifactName}`,
 );
 const signaturePath = resolveProjectPath(readOption("--signature") ?? `${artifactPath}.sig`);
-const installerUrl = readOption("--url") ?? `${UPDATE_BASE_URL}/${artifactName}`;
+const installerUrl = readOption("--url")
+  ?? `${GITHUB_RELEASE_URL}/download/v${version}/${artifactName}`;
 const outputPath = resolveProjectPath(readOption("--output") ?? "output/updates/latest.json");
 const notes = readOption("--notes") ?? `Termflow v${version}`;
 
@@ -92,7 +93,7 @@ await mkdir(dirname(outputPath), { recursive: true });
 await writeFile(outputPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 
 console.log(`Created update manifest: ${outputPath}`);
-console.log(`Upload these files to ${UPDATE_BASE_URL}/:`);
-console.log(`  ${artifactPath}`);
+console.log(`Upload these files to the GitHub Release for v${version}:`);
+console.log(`  ${artifactPath} -> ${artifactName}`);
 console.log(`  ${outputPath} -> latest.json`);
 console.log(`Keep the signature file for release records: ${signaturePath}`);

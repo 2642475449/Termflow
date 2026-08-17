@@ -30,12 +30,14 @@
 
 - **多智慧代理與多工作階段**：依專案管理多個對話。
 - **內嵌式終端機**：在圖形介面中保留熟悉的 CLI 工作方式。
-- **語音輸入**：支援 DashScope ASR 與全域快速鍵。
+- **檔案管理與編輯**：瀏覽專案檔案，支援 Markdown 預覽與即時編輯，也可將檔案拖放至目前 CLI 輸入欄。
+- **語音輸入**：支援 MiMo 與 DashScope ASR，以及全域快速鍵。
 - **Git 面板**：完整 Git 工作流程，以及 AI 產生的提交訊息。
 - **檢查點審閱**：檢視智慧代理回合檢查點及變更差異。
 - **快速命令**：自訂並一鍵執行常用操作。
-- **主題與持久化**：提供明暗主題，並能在重啟後恢復歷史對話。
-- **介面語言**：簡體中文、繁體中文、英文與日文。
+- **工作階段持久化**：可在重啟後恢復歷史對話。
+
+基礎體驗包含明暗與跟隨系統的主題切換，以及簡體中文、繁體中文、英文與日文介面。
 
 ## 為什麼開源？
 
@@ -47,10 +49,11 @@ Termflow 最初是為了打造符合自己日常習慣的應用程式。隨著�
 | :--- | :--- |
 | **工作階段管理** | 側邊欄會依專案目錄分組工作階段；可快速建立工作階段並即時顯示活動狀態。 |
 | **內嵌式終端機** | xterm.js 與 ConPTY 提供近似原生的終端機體驗，隨視窗大小調整，並支援 ANSI 色彩與游標控制。 |
-| **工作階段持久化** | 透過 `--session-id`（UUID）建立工作階段；關閉後仍保留資料，並能以 `--resume` 接續對話。 |
+| **檔案管理與編輯** | 瀏覽專案檔案；Markdown 支援預覽與即時編輯；可將專案樹中的檔案拖放至目前 CLI 輸入欄。 |
+| **工作階段持久化** | 關閉應用程式後仍保留工作階段資料。Termflow 會依所選 Agent 使用其原生的建立與恢復參數。 |
 | **檢查點審閱** | 記錄智慧代理回合檢查點，提供差異對齊、檔案摘要與輔助面板，且可回到任何檢查點。 |
 | **快速命令** | 可自訂命令庫，支援分類、搜尋、參數化範本與一鍵執行。 |
-| **語音輸入** | 支援 DashScope ASR、執行期間切換提供者、全域快速鍵，以及顯示錄音狀態和音量的懸浮視窗。 |
+| **語音輸入** | 支援 MiMo 與 DashScope ASR、提供者切換、全域快速鍵，以及顯示錄音狀態和音量的懸浮視窗。 |
 | **Git 工作流程** | 支援提交、推送、拉取、同步、暫存、差異檢視、分支管理與 AI 提交訊息。 |
 | **注意力與通知** | 監控工作階段狀態並推送智慧通知，持久化記錄注意力資料以供回顧。 |
 | **全文搜尋** | 在專案中全文搜尋，支援正規表示式、檔案類型篩選與結果醒目提示。 |
@@ -72,7 +75,7 @@ Termflow 最初是為了打造符合自己日常習慣的應用程式。隨著�
 | 編輯器 | Monaco Editor | 程式碼檢視與編輯 |
 | 圖表 | Mermaid | Git 歷史圖表 |
 | 資料庫 | sql.js / rusqlite | 前後端資料儲存 |
-| 語音辨識 | DashScope ASR | 語音轉文字輸入 |
+| 語音辨識 | MiMo + DashScope ASR | 語音轉文字輸入 |
 | Git | libgit2 (git2-rs) | 儲存庫操作 |
 | HTTP | reqwest | 後端網路請求 |
 
@@ -87,11 +90,11 @@ Termflow 最初是為了打造符合自己日常習慣的應用程式。隨著�
 - **Rust toolchain**：`1.95.0-x86_64-pc-windows-msvc`
 - **Visual Studio Build Tools 2022**：安裝 **Desktop development with C++** 與 Windows 10/11 SDK
 - **WebView2 Runtime**：Windows 上執行 Tauri 桌面應用程式所需
-- **Claude Code**：以 `npm install -g @anthropic-ai/claude-code` 安裝
+- **至少一個受支援的 Agent CLI**：Claude Code、Codex、Antigravity CLI、OpenCode 或 Qoder CLI；依需求安裝。
 
-### 建立相同的開發環境
+### 開發須知
 
-安裝 Node.js 後，使用 Corepack 固定 pnpm 版本：
+請依下列順序準備開發環境，以保持與目前儲存庫的工具鏈和相依套件解析結果一致。安裝 Node.js 後，使用 Corepack 固定 pnpm 版本：
 
 ```bash
 node -v   # v20.14.0
@@ -156,17 +159,30 @@ pnpm tauri build
 
 NSIS 安裝程式會產生在 `src-tauri/target/release/bundle/nsis/`。
 
+### 從檔案總管開啟專案（Windows）
+
+安裝 NSIS 套件後，Termflow 會為**目前 Windows 使用者**註冊「Open with Termflow」選單項目：
+
+- 在專案資料夾上按右鍵；
+- 或在資料夾空白處按右鍵，以開啟目前目錄。
+
+Termflow 會將所選目錄作為專案根目錄開啟；若該專案已在 Termflow 中開啟，則直接聚焦既有視窗，避免重複建立視窗或工作階段。整合只寫入安裝者的使用者登錄，不需要系統管理員權限，也不會影響同一台電腦的其他使用者。解除安裝 Termflow 時，仍指向該安裝位置的選單項目會一併移除。
+
+如需移除此整合，可在「設定 → 一般 → Windows 整合」中關閉「檔案總管右鍵選單」；Termflow 會在之後的安裝更新中保留這項偏好。
+
+在 Windows 11 中，首版整合位於「顯示更多選項」的傳統右鍵選單內。
+
 ## 設定說明
 
 ### 語音辨識
 
 | 提供者 | 模型 | 說明 |
 | :--- | :--- | :--- |
-| DashScope | `mimo-v2.5-asr` | 阿里雲 DashScope ASR；預設提供者 |
-| 其他 | 可擴充 | 可加入自訂 ASR 提供者 |
+| MiMo | `mimo-v2.5-asr` | 預設提供者；使用 MiMo API 或 Token Plan |
+| DashScope | `qwen3-asr-flash` | 阿里雲百煉 DashScope ASR |
 
 - `asrModel`：語音辨識模型；預設為 `mimo-v2.5-asr`
-- `asrRuntime`：ASR 執行環境；支援動態切換
+- 在設定頁切換 MiMo 與 DashScope 提供者；切換時會更新對應模型與驗證方式。
 - `voiceShortcut`：語音輸入快速鍵；預設為 `Ctrl+Shift+V`
 - `voiceInputTarget`：輸入目標：`system` 或 `terminal`
 
@@ -185,16 +201,16 @@ NSIS 安裝程式會產生在 `src-tauri/target/release/bundle/nsis/`。
 
 ## 工作原理
 
-建立工作階段的流程：
+以下以 Claude Code 為例說明共用的 PTY 工作階段流程。所有 Agent 都會重用此流程，但由 Agent 介接層產生各自的原生啟動與恢復命令。
 
 ```text
 新增工作階段 → 選擇專案目錄 → 建立 UUID 工作階段記錄
 → 透過 Tauri IPC 呼叫 spawn_pty → Rust 建立 ConPTY
-→ 啟動 claude --dangerously-skip-permissions --session-id <uuid>
+→ 啟動所選 Agent（例如：claude [--dangerously-skip-permissions] [--effort <level>] --session-id <uuid>）
 → PTY 輸出傳送至 xterm.js → 使用者輸入再寫回 PTY
 ```
 
-重新開啟歷史工作階段時，Termflow 會清理殘留的 Claude 程序，並以 `claude --dangerously-skip-permissions --resume <uuid>` 恢復對話。
+重新開啟歷史工作階段時，Termflow 會清理目前工作階段的殘留程序，再由 Agent 介接層產生其原生恢復命令（例如：`claude [--dangerously-skip-permissions] [--effort <level>] --resume <uuid>`）。中括號中的選項僅會在使用者選取時加入。
 
 ## 致謝
 

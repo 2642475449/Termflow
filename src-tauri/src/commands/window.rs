@@ -6,6 +6,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::fs;
 use std::hash::{Hash, Hasher};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tauri::{
     Emitter, Manager, PhysicalPosition, PhysicalSize, Position, Size, State, WebviewUrl,
@@ -223,6 +224,92 @@ pub fn show_or_create_launcher_window(
     Ok(())
 }
 
+/// Resolves the single directory argument accepted by the desktop executable.
+///
+/// Explorer passes an absolute path for the context-menu verbs, while a direct
+/// command-line invocation may use a path relative to its current directory.
+/// Keeping this parsing and validation in Rust ensures all external activation
+/// paths use the same canonical project identity as the in-app project picker.
+pub fn resolve_project_path_from_launch_arguments(
+    args: &[String],
+    cwd: &str,
+) -> Result<Option<String>, String> {
+    if args.len() > 1 {
+        return Err("Termflow 只支持一个项目目录参数".to_string());
+    }
+
+    let Some(path_argument) = args.first() else {
+        return Ok(None);
+    };
+
+    let supplied_path = PathBuf::from(path_argument);
+    let project_path = if supplied_path.is_absolute() {
+        supplied_path
+    } else {
+        Path::new(cwd).join(supplied_path)
+    };
+
+    ensure_existing_project_directory(&project_path.to_string_lossy()).map(Some)
+}
+
+/// Opens a project requested outside the application, such as an Explorer
+/// context-menu invocation. Existing project windows are focused; an available
+/// launcher window is reused; otherwise the request opens in a new project
+/// window so an active project is never replaced without an in-app decision.
+pub fn open_project_from_external_request(
+    app: &tauri::AppHandle,
+    registry: &WindowRegistry,
+    path: &str,
+) -> Result<WindowProjectContext, String> {
+    let project_path = ensure_existing_project_directory(path)?;
+    let project_name = project_name_from_path(&project_path);
+
+    if let Some(existing_label) = registry.get_label_by_project(&project_path) {
+        if let Some(existing_window) = app.get_webview_window(&existing_label) {
+            focus_window(&existing_window);
+            return Ok(registry.get_context(&existing_label));
+        }
+        registry.release_window(&existing_label);
+    }
+
+    if let Some(launcher_label) = registry.get_launcher_label() {
+        if let Some(launcher_window) = app.get_webview_window(&launcher_label) {
+            let context = registry.bind_project(&launcher_label, project_path, project_name);
+            let _ = launcher_window.set_title(&window_title(&context));
+            let _ = app.emit_to(launcher_window.label(), "window-context-updated", &context);
+            focus_window(&launcher_window);
+            return Ok(context);
+        }
+        registry.release_window(&launcher_label);
+    }
+
+    let label = if registry.has_project_windows() || app.get_webview_window("main").is_some() {
+        project_window_label(&project_path)
+    } else {
+        "main".to_string()
+    };
+    let context = registry.bind_project(&label, project_path, project_name);
+    let project_window =
+        match WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
+            .title(window_title(&context))
+            .inner_size(1024.0, 700.0)
+            .min_inner_size(800.0, 600.0)
+            .center()
+            .resizable(true)
+            .decorations(false)
+            .build()
+        {
+            Ok(window) => window,
+            Err(error) => {
+                registry.release_window(&label);
+                return Err(format!("创建项目窗口失败: {error}"));
+            }
+        };
+    let _ = app.emit_to(project_window.label(), "window-context-updated", &context);
+    focus_window(&project_window);
+    Ok(context)
+}
+
 fn focus_window(window: &WebviewWindow) {
     let _ = window.show();
     let _ = window.unminimize();
@@ -305,16 +392,43 @@ pub fn restore_main_window_context_on_startup(
     app: &tauri::AppHandle,
     registry: &WindowRegistry,
     database: &Database,
+    launch_project_path: Option<&str>,
 ) -> Result<(), String> {
-    // Resolve the project before the webview loads so startup never remains on
-    // an empty launcher when restoration is enabled.
-    let context = restored_window_context(registry, "main", database);
+    // An explicit launch target must take precedence over the user's restored
+    // project. This is what makes `Termflow.exe <directory>` and Explorer's
+    // context-menu verbs reliably open the requested project.
+    let context = startup_main_window_context(registry, database, launch_project_path);
 
     if let Some(main_window) = app.get_webview_window("main") {
         let _ = main_window.set_title(&window_title(&context));
     }
 
     Ok(())
+}
+
+fn startup_main_window_context(
+    registry: &WindowRegistry,
+    database: &Database,
+    launch_project_path: Option<&str>,
+) -> WindowProjectContext {
+    if let Some(path) = launch_project_path {
+        match ensure_existing_project_directory(path) {
+            Ok(project_path) => {
+                let project_name = project_name_from_path(&project_path);
+                return registry.bind_project("main", project_path, project_name);
+            }
+            Err(error) => {
+                // The directory can disappear between process startup and this
+                // setup hook. Fall back to the standard startup behavior rather
+                // than preventing the application from opening at all.
+                eprintln!("Ignoring unavailable launch project: {error}");
+            }
+        }
+    }
+
+    // Resolve the restored project before the webview loads so startup never
+    // remains on an empty launcher when restoration is enabled.
+    restored_window_context(registry, "main", database)
 }
 
 fn restored_window_context(
@@ -837,6 +951,90 @@ mod tests {
         assert!(context.project_path.is_none());
 
         std::fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn launch_arguments_resolve_absolute_and_relative_project_directories() {
+        let workspace = temporary_project("launch-arguments");
+        let project = workspace.join("project");
+        std::fs::create_dir_all(&project).unwrap();
+
+        let absolute_args = vec![project.to_string_lossy().into_owned()];
+        let absolute = resolve_project_path_from_launch_arguments(&absolute_args, "").unwrap();
+        assert_eq!(
+            absolute.as_deref(),
+            Some(normalize_path(project.to_str().unwrap()).unwrap().as_str())
+        );
+
+        let relative_args = vec!["project".to_string()];
+        let relative =
+            resolve_project_path_from_launch_arguments(&relative_args, workspace.to_str().unwrap())
+                .unwrap();
+        assert_eq!(relative, absolute);
+
+        // The single-instance plugin includes the executable as args[0], so
+        // callers must pass the remaining positional arguments to the parser.
+        let secondary_instance_args = vec![
+            "Termflow.exe".to_string(),
+            project.to_string_lossy().into_owned(),
+        ];
+        assert_eq!(
+            resolve_project_path_from_launch_arguments(&secondary_instance_args[1..], "").unwrap(),
+            absolute
+        );
+
+        std::fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn launch_arguments_reject_files_and_allow_an_empty_argument_list() {
+        let workspace = temporary_project("launch-file");
+        let file = workspace.join("not-a-project.txt");
+        std::fs::write(&file, "not a directory").unwrap();
+
+        assert_eq!(
+            resolve_project_path_from_launch_arguments(&[], workspace.to_str().unwrap()).unwrap(),
+            None
+        );
+        let file_args = vec![file.to_string_lossy().into_owned()];
+        assert!(resolve_project_path_from_launch_arguments(&file_args, "").is_err());
+        assert!(resolve_project_path_from_launch_arguments(
+            &["first".to_string(), "second".to_string()],
+            workspace.to_str().unwrap(),
+        )
+        .is_err());
+
+        std::fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn explicit_startup_project_takes_precedence_over_restored_project() {
+        let restored_project = temporary_project("startup-restored");
+        let requested_project = temporary_project("startup-requested");
+        let database = Database::open_in_memory();
+        let mut settings = PersistentSettingsRecord::default();
+        settings.last_project_path = Some(restored_project.to_string_lossy().into_owned());
+        database.save_persistent_settings(&settings).unwrap();
+
+        let registry = WindowRegistry::new();
+        let context = startup_main_window_context(
+            &registry,
+            &database,
+            Some(requested_project.to_str().unwrap()),
+        );
+
+        assert!(context.mode == WindowMode::Project);
+        assert_eq!(
+            context.project_path.as_deref(),
+            Some(
+                normalize_path(requested_project.to_str().unwrap())
+                    .unwrap()
+                    .as_str()
+            )
+        );
+
+        std::fs::remove_dir_all(restored_project).unwrap();
+        std::fs::remove_dir_all(requested_project).unwrap();
     }
 
     #[test]

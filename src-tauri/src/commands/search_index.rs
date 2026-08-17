@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -7,7 +7,8 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use ignore::WalkBuilder;
+use ignore::gitignore::GitignoreBuilder;
+use ignore::{Match, WalkBuilder};
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use rusqlite::{params, Connection, OpenFlags};
 use serde::Serialize;
@@ -17,9 +18,15 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use crate::database::{Database, SearchIndexStorageSettings};
 use crate::path_utils::{display_path, normalize_input_path};
 
-const INDEX_SCHEMA_VERSION: u32 = 1;
+// Schema v2 retains a row for non-text candidates.  That makes a watcher-driven
+// update able to account for a file moving between indexed and skipped without
+// rescanning the project.
+const INDEX_SCHEMA_VERSION: u32 = 2;
 const MAX_FILE_BYTES: u64 = 5 * 1024 * 1024;
 const STATUS_EMIT_INTERVAL: Duration = Duration::from_millis(150);
+const WATCHER_DEBOUNCE: Duration = Duration::from_millis(500);
+const MAX_INCREMENTAL_CHANGE_PATHS: usize = 1_024;
+const LARGE_RECONCILIATION_QUIET_PERIOD: Duration = Duration::from_secs(2);
 const IGNORED_DIRECTORIES: &[&str] = &[
     ".git",
     ".svn",
@@ -68,6 +75,7 @@ pub struct SearchIndexStorageStatus {
 struct ActiveEntry {
     job_id: u64,
     cancel: Arc<AtomicBool>,
+    pause: Arc<AtomicBool>,
     revision: Arc<AtomicU64>,
     status: ProjectSearchIndexStatus,
 }
@@ -97,6 +105,29 @@ struct IndexCandidate {
     relative_path: String,
     size: u64,
     modified_ns: i64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum IndexedFileStatus {
+    Indexed,
+    Skipped,
+}
+
+impl IndexedFileStatus {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Indexed => "indexed",
+            Self::Skipped => "skipped",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct IndexUpdateSummary {
+    total_files: u64,
+    indexed_files: u64,
+    skipped_files: u64,
+    total_bytes: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -216,7 +247,11 @@ fn index_root_from_settings(
     app: &AppHandle,
     settings: &SearchIndexStorageSettings,
 ) -> Result<PathBuf, String> {
-    match settings.cache_root.as_deref().filter(|value| !value.trim().is_empty()) {
+    match settings
+        .cache_root
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
         Some(path) => Ok(PathBuf::from(path)),
         None => default_index_root(app),
     }
@@ -332,8 +367,12 @@ fn enforce_storage_quota(app: &AppHandle, keep: &Path) -> Result<(), String> {
         if path == keep {
             continue;
         }
-        fs::remove_dir_all(&path)
-            .map_err(|error| format!("Failed to evict old search index {}: {error}", path.display()))?;
+        fs::remove_dir_all(&path).map_err(|error| {
+            format!(
+                "Failed to evict old search index {}: {error}",
+                path.display()
+            )
+        })?;
         used_bytes = used_bytes.saturating_sub(size);
     }
     Ok(())
@@ -341,27 +380,50 @@ fn enforce_storage_quota(app: &AppHandle, keep: &Path) -> Result<(), String> {
 
 fn has_active_build(state: &SearchIndexState) -> bool {
     state.entries.lock().ok().is_some_and(|entries| {
-        entries.values().any(|entry| matches!(entry.status.state.as_str(), "preflight" | "building"))
+        entries
+            .values()
+            .any(|entry| matches!(entry.status.state.as_str(), "preflight" | "building"))
+    })
+}
+
+fn project_has_active_index_write(state: &SearchIndexState, key: &str) -> bool {
+    get_active_status(state, key).is_some_and(|status| {
+        matches!(status.state.as_str(), "preflight" | "building" | "updating")
     })
 }
 
 fn copy_directory(source: &Path, destination: &Path) -> Result<(), String> {
-    fs::create_dir_all(destination)
-        .map_err(|error| format!("Failed to create cache directory {}: {error}", destination.display()))?;
+    fs::create_dir_all(destination).map_err(|error| {
+        format!(
+            "Failed to create cache directory {}: {error}",
+            destination.display()
+        )
+    })?;
     for entry in fs::read_dir(source)
-        .map_err(|error| format!("Failed to read cache directory {}: {error}", source.display()))?
+        .map_err(|error| {
+            format!(
+                "Failed to read cache directory {}: {error}",
+                source.display()
+            )
+        })?
         .flatten()
     {
         let source_path = entry.path();
         let destination_path = destination.join(entry.file_name());
-        let file_type = entry
-            .file_type()
-            .map_err(|error| format!("Failed to inspect cache entry {}: {error}", source_path.display()))?;
+        let file_type = entry.file_type().map_err(|error| {
+            format!(
+                "Failed to inspect cache entry {}: {error}",
+                source_path.display()
+            )
+        })?;
         if file_type.is_dir() {
             copy_directory(&source_path, &destination_path)?;
         } else if file_type.is_file() {
             fs::copy(&source_path, &destination_path).map_err(|error| {
-                format!("Failed to copy cache entry {}: {error}", source_path.display())
+                format!(
+                    "Failed to copy cache entry {}: {error}",
+                    source_path.display()
+                )
             })?;
         }
     }
@@ -381,10 +443,8 @@ fn relocate_index_root(source: &Path, destination: &Path) -> Result<(), String> 
             return Err("The selected index cache folder is not empty".to_string());
         }
     }
-    let temporary = destination.with_file_name(format!(
-        ".termflow-search-index-moving-{}",
-        now_ms()
-    ));
+    let temporary =
+        destination.with_file_name(format!(".termflow-search-index-moving-{}", now_ms()));
     copy_directory(source, &temporary)?;
     if destination.exists() {
         fs::remove_dir(destination)
@@ -392,8 +452,9 @@ fn relocate_index_root(source: &Path, destination: &Path) -> Result<(), String> 
     }
     fs::rename(&temporary, destination)
         .map_err(|error| format!("Failed to activate relocated index cache: {error}"))?;
-    fs::remove_dir_all(source)
-        .map_err(|error| format!("Index cache was copied but the old cache could not be removed: {error}"))?;
+    fs::remove_dir_all(source).map_err(|error| {
+        format!("Index cache was copied but the old cache could not be removed: {error}")
+    })?;
     Ok(())
 }
 
@@ -419,6 +480,9 @@ fn set_status(
         if entry.job_id != job_id {
             return false;
         }
+        if entry.status.state == "paused" {
+            return false;
+        }
         entry.status = status.clone();
         true
     });
@@ -436,6 +500,13 @@ fn cancel_active_job(state: &SearchIndexState, key: &str) {
     }
 }
 
+fn wait_while_paused(pause: &AtomicBool, cancel: &AtomicBool) -> bool {
+    while pause.load(Ordering::Relaxed) && !cancel.load(Ordering::Relaxed) {
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    !cancel.load(Ordering::Relaxed)
+}
+
 fn active_revision(state: &SearchIndexState, key: &str) -> Option<Arc<AtomicU64>> {
     state
         .entries
@@ -444,17 +515,146 @@ fn active_revision(state: &SearchIndexState, key: &str) -> Option<Arc<AtomicU64>
         .and_then(|entries| entries.get(key).map(|entry| entry.revision.clone()))
 }
 
-fn mark_index_stale(app: &AppHandle, state: &SearchIndexState, key: &str) {
+fn event_requires_rebuild(project_path: &Path, event: &Event) -> bool {
+    if matches!(event.kind, EventKind::Access(_)) {
+        return false;
+    }
+    if event.need_rescan() || event.paths.is_empty() {
+        return true;
+    }
+    event.paths.iter().any(|path| {
+        let Ok(relative) = path.strip_prefix(project_path) else {
+            return false;
+        };
+        let relative = relative.to_string_lossy().replace('\\', "/");
+        if matches!(
+            relative.as_str(),
+            ".gitignore" | ".ignore" | ".rgignore" | ".git/info/exclude"
+        ) {
+            return true;
+        }
+        if path.is_dir() {
+            return true;
+        }
+        false
+    })
+}
+
+fn is_under_ignored_directory(project_path: &Path, path: &Path) -> bool {
+    path.strip_prefix(project_path)
+        .ok()
+        .is_some_and(|relative| {
+            relative.components().any(|component| {
+                let name = component.as_os_str().to_string_lossy();
+                IGNORED_DIRECTORIES
+                    .iter()
+                    .any(|ignored| name.eq_ignore_ascii_case(ignored))
+            })
+        })
+}
+
+fn removed_path_had_indexed_children(
+    app: &AppHandle,
+    project: &ResolvedProject,
+    path: &Path,
+) -> bool {
+    let Some(relative_path) = path
+        .strip_prefix(&project.path)
+        .ok()
+        .and_then(Path::to_str)
+        .map(|path| path.replace('\\', "/"))
+    else {
+        return false;
+    };
+    let Ok(database_path) = index_directory(app, project).map(|path| path.join("index.sqlite3"))
+    else {
+        return false;
+    };
+    let Ok(connection) =
+        Connection::open_with_flags(&database_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+    else {
+        return false;
+    };
+    connection
+        .query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM indexed_files
+                WHERE substr(relative_path, 1, length(?1) + 1) = ?1 || '/'
+             )",
+            [&relative_path],
+            |row| row.get::<_, i64>(0),
+        )
+        .map(|exists| exists != 0)
+        .unwrap_or(false)
+}
+
+fn watcher_event_paths(
+    app: &AppHandle,
+    project: &ResolvedProject,
+    event: &Event,
+) -> Option<Vec<PathBuf>> {
+    if matches!(event.kind, EventKind::Access(_)) {
+        return Some(Vec::new());
+    }
+    if event_requires_rebuild(&project.path, event) {
+        return None;
+    }
+    let mut paths = Vec::new();
+    for path in &event.paths {
+        if is_under_ignored_directory(&project.path, path) {
+            continue;
+        }
+        if !path.exists() && removed_path_had_indexed_children(app, project, path) {
+            return None;
+        }
+        paths.push(path.clone());
+    }
+    Some(paths)
+}
+
+fn begin_incremental_update(
+    app: &AppHandle,
+    state: &SearchIndexState,
+    key: &str,
+) -> Option<(u64, ProjectSearchIndexStatus)> {
     let status = state.entries.lock().ok().and_then(|mut entries| {
         let entry = entries.get_mut(key)?;
         entry.revision.fetch_add(1, Ordering::Relaxed);
-        if entry.status.state != "ready" {
+        if matches!(entry.status.state.as_str(), "preflight" | "building") {
             return None;
         }
+        if entry.status.state != "ready" {
+            return Some((entry.job_id, None));
+        }
+        entry.status.state = "updating".to_string();
+        entry.status.phase = "applying_changes".to_string();
+        entry.status.backend = "scan".to_string();
+        entry.status.updated_at = Some(now_ms());
+        Some((entry.job_id, Some(entry.status.clone())))
+    });
+    match status {
+        Some((job_id, Some(status))) => {
+            let _ = app.emit("search-index-status", status.clone());
+            Some((job_id, status))
+        }
+        _ => None,
+    }
+}
+
+fn mark_index_for_rebuild(
+    app: &AppHandle,
+    state: &SearchIndexState,
+    key: &str,
+    error: Option<String>,
+) {
+    let status = state.entries.lock().ok().and_then(|mut entries| {
+        let entry = entries.get_mut(key)?;
+        entry.revision.fetch_add(1, Ordering::Relaxed);
         entry.status.state = "stale".to_string();
         entry.status.backend = "scan".to_string();
-        entry.status.phase = "waiting_changes".to_string();
+        entry.status.phase = "reconciling".to_string();
         entry.status.updated_at = Some(now_ms());
+        entry.status.error = error;
         Some(entry.status.clone())
     });
     if let Some(status) = status {
@@ -462,27 +662,81 @@ fn mark_index_stale(app: &AppHandle, state: &SearchIndexState, key: &str) {
     }
 }
 
-fn event_requires_rebuild(project_path: &Path, event: &Event) -> bool {
-    if matches!(event.kind, EventKind::Access(_)) {
-        return false;
-    }
-    if event.need_rescan() {
-        return true;
-    }
-    event.paths.iter().any(|path| {
-        let Ok(relative) = path.strip_prefix(project_path) else {
-            return false;
-        };
-        if relative.to_string_lossy().replace('\\', "/") == ".git/info/exclude" {
-            return true;
+fn apply_watcher_updates(
+    app: &AppHandle,
+    state: &SearchIndexState,
+    project: &ResolvedProject,
+    paths: &[PathBuf],
+) -> Result<bool, String> {
+    let Some((job_id, _)) = begin_incremental_update(app, state, &project.preference_key) else {
+        // A build already in progress observes the revision change and replays
+        // with a full build. A stale/failed index needs the same recovery.
+        return Ok(false);
+    };
+    let database_path = index_directory(app, project)?.join("index.sqlite3");
+    let summary = apply_incremental_updates(&database_path, project, paths)?;
+    let final_path = database_path;
+    let status = state.entries.lock().ok().and_then(|mut entries| {
+        let entry = entries.get_mut(&project.preference_key)?;
+        if entry.job_id != job_id || entry.status.state != "updating" {
+            return None;
         }
-        !relative.components().any(|component| {
-            let name = component.as_os_str().to_string_lossy();
-            IGNORED_DIRECTORIES
-                .iter()
-                .any(|ignored| name.eq_ignore_ascii_case(ignored))
-        })
-    })
+        entry.status.state = "ready".to_string();
+        entry.status.phase = "ready".to_string();
+        entry.status.backend = "fts5".to_string();
+        entry.status.total_files = Some(summary.total_files);
+        entry.status.indexed_files = summary.indexed_files;
+        entry.status.skipped_files = summary.skipped_files;
+        entry.status.processed_files = summary.total_files;
+        entry.status.total_bytes = Some(summary.total_bytes);
+        entry.status.processed_bytes = summary.total_bytes;
+        entry.status.index_size_bytes = fs::metadata(&final_path)
+            .map(|meta| meta.len())
+            .unwrap_or(0);
+        entry.status.updated_at = Some(now_ms());
+        entry.status.error = None;
+        Some(entry.status.clone())
+    });
+    if let Some(status) = status {
+        touch_index_usage(final_path.parent().unwrap_or_else(|| Path::new("")));
+        let _ = app.emit("search-index-status", status);
+        return Ok(true);
+    }
+    Ok(false)
+}
+
+fn collect_watcher_result(
+    app: &AppHandle,
+    state: &SearchIndexState,
+    project: &ResolvedProject,
+    result: Result<Event, notify::Error>,
+    changed_paths: &mut Vec<PathBuf>,
+) -> bool {
+    match result {
+        Ok(event) => match watcher_event_paths(app, project, &event) {
+            Some(paths) => {
+                changed_paths.extend(paths);
+                false
+            }
+            None => {
+                mark_index_for_rebuild(app, state, &project.preference_key, None);
+                true
+            }
+        },
+        Err(error) => {
+            mark_index_for_rebuild(
+                app,
+                state,
+                &project.preference_key,
+                Some(format!("Search index watcher failed: {error}")),
+            );
+            true
+        }
+    }
+}
+
+fn needs_full_reconciliation(rebuild_requested: bool, changed_path_count: usize) -> bool {
+    rebuild_requested || changed_path_count > MAX_INCREMENTAL_CHANGE_PATHS
 }
 
 fn ensure_project_watcher(
@@ -545,14 +799,55 @@ fn ensure_project_watcher(
         .name(format!("termflow-index-watch-{}", project_hash(project)))
         .spawn(move || {
             while let Ok(result) = receiver.recv() {
-                let mut rebuild_requested =
-                    process_watcher_result(&worker_app, &worker_state, &worker_project, result);
-                while let Ok(result) = receiver.recv_timeout(Duration::from_millis(500)) {
-                    rebuild_requested |=
-                        process_watcher_result(&worker_app, &worker_state, &worker_project, result);
+                let mut changed_paths = Vec::new();
+                let mut rebuild_requested = collect_watcher_result(
+                    &worker_app,
+                    &worker_state,
+                    &worker_project,
+                    result,
+                    &mut changed_paths,
+                );
+                while let Ok(result) = receiver.recv_timeout(WATCHER_DEBOUNCE) {
+                    rebuild_requested |= collect_watcher_result(
+                        &worker_app,
+                        &worker_state,
+                        &worker_project,
+                        result,
+                        &mut changed_paths,
+                    );
                 }
-                if !rebuild_requested {
-                    continue;
+                if needs_full_reconciliation(rebuild_requested, changed_paths.len()) {
+                    if !rebuild_requested {
+                        mark_index_for_rebuild(
+                            &worker_app,
+                            &worker_state,
+                            &worker_project.preference_key,
+                            None,
+                        );
+                        rebuild_requested = true;
+                    }
+                    // Git checkout/clone can emit thousands of events while
+                    // the working tree is still changing. Wait for a longer
+                    // quiet period before doing one complete reconciliation.
+                    while receiver
+                        .recv_timeout(LARGE_RECONCILIATION_QUIET_PERIOD)
+                        .is_ok()
+                    {}
+                }
+                if !rebuild_requested && !changed_paths.is_empty() {
+                    if let Err(error) = apply_watcher_updates(
+                        &worker_app,
+                        &worker_state,
+                        &worker_project,
+                        &changed_paths,
+                    ) {
+                        mark_index_for_rebuild(
+                            &worker_app,
+                            &worker_state,
+                            &worker_project.preference_key,
+                            Some(error),
+                        );
+                    }
                 }
                 let should_rebuild =
                     get_active_status(&worker_state, &worker_project.preference_key)
@@ -579,45 +874,6 @@ fn ensure_project_watcher(
     Ok(())
 }
 
-fn process_watcher_result(
-    app: &AppHandle,
-    state: &SearchIndexState,
-    project: &ResolvedProject,
-    result: Result<Event, notify::Error>,
-) -> bool {
-    match result {
-        Ok(event) if event_requires_rebuild(&project.path, &event) => {
-            mark_index_stale(app, state, &project.preference_key);
-            true
-        }
-        Ok(_) => false,
-        Err(error) => {
-            if let Some(revision) = active_revision(state, &project.preference_key) {
-                revision.fetch_add(1, Ordering::Relaxed);
-            }
-            let mut status = get_active_status(state, &project.preference_key);
-            if let Some(ref mut status) = status {
-                status.state = "stale".to_string();
-                status.backend = "scan".to_string();
-                status.phase = "watch_failed".to_string();
-                status.error = Some(format!("Search index watcher failed: {error}"));
-                status.updated_at = Some(now_ms());
-            }
-            if let Some(status) = status {
-                let job_id = state.entries.lock().ok().and_then(|entries| {
-                    entries
-                        .get(&project.preference_key)
-                        .map(|entry| entry.job_id)
-                });
-                if let Some(job_id) = job_id {
-                    set_status(app, state, &project.preference_key, job_id, status);
-                }
-            }
-            false
-        }
-    }
-}
-
 fn stop_project_watcher(state: &SearchIndexState, key: &str) {
     if let Ok(mut watchers) = state.watchers.lock() {
         watchers.remove(key);
@@ -641,6 +897,7 @@ fn start_index_build(
     cancel_active_job(&state, &project.preference_key);
     let job_id = state.next_job_id.fetch_add(1, Ordering::Relaxed) + 1;
     let cancel = Arc::new(AtomicBool::new(false));
+    let pause = Arc::new(AtomicBool::new(false));
     let revision = Arc::new(AtomicU64::new(0));
     let status = initial_build_status(project.display_path.clone());
     state
@@ -652,6 +909,7 @@ fn start_index_build(
             ActiveEntry {
                 job_id,
                 cancel: cancel.clone(),
+                pause: pause.clone(),
                 revision: revision.clone(),
                 status: status.clone(),
             },
@@ -672,7 +930,15 @@ fn start_index_build(
     let _ = app.emit("search-index-status", status.clone());
 
     tauri::async_runtime::spawn_blocking(move || {
-        let result = build_project_index(&app, &state, &project, job_id, start_revision, &cancel);
+        let result = build_project_index(
+            &app,
+            &state,
+            &project,
+            job_id,
+            start_revision,
+            &cancel,
+            &pause,
+        );
         if let Err(error) = result {
             if cancel.load(Ordering::Relaxed) {
                 return;
@@ -705,6 +971,7 @@ fn build_project_index(
     job_id: u64,
     start_revision: u64,
     cancel: &AtomicBool,
+    pause: &AtomicBool,
 ) -> Result<(), String> {
     let index_dir = index_directory(app, project)?;
     fs::create_dir_all(&index_dir)
@@ -719,7 +986,7 @@ fn build_project_index(
     let mut status = get_active_status(state, &project.preference_key)
         .unwrap_or_else(|| initial_build_status(project.display_path.clone()));
     let mut last_emit = Instant::now();
-    let candidates = discover_candidates(project, cancel, |discovered, bytes, skipped| {
+    let candidates = discover_candidates(project, cancel, pause, |discovered, bytes, skipped| {
         status.processed_files = discovered;
         status.processed_bytes = bytes;
         status.skipped_files = skipped;
@@ -730,6 +997,9 @@ fn build_project_index(
         }
     })?;
     if cancel.load(Ordering::Relaxed) {
+        return Ok(());
+    }
+    if !wait_while_paused(pause, cancel) {
         return Ok(());
     }
 
@@ -750,6 +1020,7 @@ fn build_project_index(
         project,
         &candidates,
         cancel,
+        pause,
         |processed, indexed, skipped, bytes| {
             status.processed_files = processed;
             status.indexed_files = indexed;
@@ -807,6 +1078,7 @@ fn build_project_index(
 fn discover_candidates<F>(
     project: &ResolvedProject,
     cancel: &AtomicBool,
+    pause: &AtomicBool,
     mut progress: F,
 ) -> Result<Vec<IndexCandidate>, String>
 where
@@ -838,6 +1110,9 @@ where
     let mut discovered_bytes = 0_u64;
     let mut skipped = 0_u64;
     for entry in builder.build() {
+        if !wait_while_paused(pause, cancel) {
+            break;
+        }
         if cancel.load(Ordering::Relaxed) {
             break;
         }
@@ -897,11 +1172,248 @@ fn modified_ns(metadata: &fs::Metadata) -> i64 {
         .unwrap_or_default()
 }
 
+fn candidate_for_existing_path(
+    project: &ResolvedProject,
+    path: &Path,
+) -> Result<Option<IndexCandidate>, String> {
+    let relative_path = match path
+        .strip_prefix(&project.path)
+        .ok()
+        .and_then(Path::to_str)
+        .map(|path| path.replace('\\', "/"))
+    {
+        Some(relative_path) if !relative_path.is_empty() => relative_path,
+        _ => return Ok(None),
+    };
+    let metadata = match fs::metadata(path) {
+        Ok(metadata) if metadata.is_file() && metadata.len() <= MAX_FILE_BYTES => metadata,
+        Ok(_) | Err(_) => return Ok(None),
+    };
+
+    if is_under_ignored_directory(&project.path, path)
+        || path_is_ignored_by_project_rules(project, path)
+    {
+        return Ok(None);
+    }
+
+    Ok(Some(IndexCandidate {
+        path: path.to_path_buf(),
+        relative_path,
+        size: metadata.len(),
+        modified_ns: modified_ns(&metadata),
+    }))
+}
+
+fn first_ignore_file_match(
+    project: &ResolvedProject,
+    path: &Path,
+    file_name: &str,
+) -> Option<bool> {
+    let mut directory = path.parent()?.to_path_buf();
+    loop {
+        let ignore_path = directory.join(file_name);
+        if ignore_path.is_file() {
+            let mut builder = GitignoreBuilder::new(&directory);
+            if builder.add(&ignore_path).is_none() {
+                if let Ok(matcher) = builder.build() {
+                    match matcher.matched(path, false) {
+                        Match::Ignore(_) => return Some(true),
+                        Match::Whitelist(_) => return Some(false),
+                        Match::None => {}
+                    }
+                }
+            }
+        }
+        if directory == project.path {
+            break;
+        }
+        directory = directory.parent()?.to_path_buf();
+    }
+    None
+}
+
+fn project_has_git_directory(project: &ResolvedProject) -> bool {
+    let mut directory = Some(project.path.as_path());
+    while let Some(path) = directory {
+        if path.join(".git").exists() {
+            return true;
+        }
+        directory = path.parent();
+    }
+    false
+}
+
+fn path_is_ignored_by_project_rules(project: &ResolvedProject, path: &Path) -> bool {
+    // This mirrors the ignore precedence used by the full walker: .rgignore,
+    // .ignore, repository .gitignore/.git-info-exclude, then global Git
+    // ignore. The closest matching file wins within each rule class.
+    for file_name in [".rgignore", ".ignore"] {
+        if let Some(ignored) = first_ignore_file_match(project, path, file_name) {
+            return ignored;
+        }
+    }
+    if project_has_git_directory(project) {
+        for file_name in [".gitignore", ".git/info/exclude"] {
+            if let Some(ignored) = first_ignore_file_match(project, path, file_name) {
+                return ignored;
+            }
+        }
+        let (global, _) = GitignoreBuilder::new(&project.path).build_global();
+        if global.matched(path, false).is_ignore() {
+            return true;
+        }
+    }
+    false
+}
+
+fn update_index_metadata(
+    transaction: &rusqlite::Transaction<'_>,
+) -> Result<IndexUpdateSummary, String> {
+    let summary = transaction
+        .query_row(
+            "SELECT
+                count(*),
+                sum(CASE WHEN status = 'indexed' THEN 1 ELSE 0 END),
+                sum(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END),
+                coalesce(sum(size), 0)
+             FROM indexed_files",
+            [],
+            |row| {
+                Ok(IndexUpdateSummary {
+                    total_files: row.get::<_, i64>(0)? as u64,
+                    indexed_files: row.get::<_, i64>(1)? as u64,
+                    skipped_files: row.get::<_, i64>(2)? as u64,
+                    total_bytes: row.get::<_, i64>(3)? as u64,
+                })
+            },
+        )
+        .map_err(|error| format!("Failed to recalculate index metadata: {error}"))?;
+    let updated_at = now_ms().to_string();
+    for (key, value) in [
+        ("state", "ready".to_string()),
+        ("built_at", updated_at),
+        ("total_files", summary.total_files.to_string()),
+        ("indexed_files", summary.indexed_files.to_string()),
+        ("skipped_files", summary.skipped_files.to_string()),
+        ("total_bytes", summary.total_bytes.to_string()),
+    ] {
+        transaction
+            .execute(
+                "UPDATE index_meta SET value = ?2 WHERE key = ?1",
+                params![key, value],
+            )
+            .map_err(|error| format!("Failed to update index metadata: {error}"))?;
+    }
+    Ok(summary)
+}
+
+fn apply_incremental_updates(
+    database_path: &Path,
+    project: &ResolvedProject,
+    paths: &[PathBuf],
+) -> Result<IndexUpdateSummary, String> {
+    let mut connection = Connection::open(database_path)
+        .map_err(|error| format!("Failed to open search index for update: {error}"))?;
+    connection
+        .busy_timeout(Duration::from_secs(2))
+        .map_err(|error| format!("Failed to configure search index update: {error}"))?;
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("Failed to start incremental index transaction: {error}"))?;
+    let mut seen = HashSet::new();
+    for path in paths {
+        let Some(relative_path) = path
+            .strip_prefix(&project.path)
+            .ok()
+            .and_then(Path::to_str)
+            .map(|path| path.replace('\\', "/"))
+        else {
+            continue;
+        };
+        if !seen.insert(relative_path.clone()) {
+            continue;
+        }
+        let old = transaction
+            .query_row(
+                "SELECT id, status FROM indexed_files WHERE relative_path = ?1",
+                [&relative_path],
+                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
+            )
+            .ok();
+        if let Some((row_id, status)) = old {
+            if status == IndexedFileStatus::Indexed.as_str() {
+                transaction
+                    .execute("DELETE FROM content_fts WHERE rowid = ?1", [row_id])
+                    .map_err(|error| format!("Failed to remove outdated FTS row: {error}"))?;
+            }
+            transaction
+                .execute("DELETE FROM indexed_files WHERE id = ?1", [row_id])
+                .map_err(|error| format!("Failed to remove outdated index entry: {error}"))?;
+        }
+        let Some(candidate) = candidate_for_existing_path(project, path)? else {
+            continue;
+        };
+        let indexed_at = now_ms() as i64;
+        match read_text_file(&candidate.path) {
+            Ok((content, encoding)) => {
+                transaction
+                    .execute(
+                        "INSERT INTO indexed_files
+                         (relative_path, size, modified_ns, encoding, status, indexed_at)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                        params![
+                            candidate.relative_path,
+                            candidate.size as i64,
+                            candidate.modified_ns,
+                            encoding.as_str(),
+                            IndexedFileStatus::Indexed.as_str(),
+                            indexed_at,
+                        ],
+                    )
+                    .map_err(|error| {
+                        format!("Failed to insert incremental index entry: {error}")
+                    })?;
+                let row_id = transaction.last_insert_rowid();
+                transaction
+                    .execute(
+                        "INSERT INTO content_fts(rowid, content) VALUES (?1, ?2)",
+                        params![row_id, content],
+                    )
+                    .map_err(|error| format!("Failed to insert incremental FTS entry: {error}"))?;
+            }
+            Err(_) => {
+                transaction
+                    .execute(
+                        "INSERT INTO indexed_files
+                         (relative_path, size, modified_ns, encoding, status, indexed_at)
+                         VALUES (?1, ?2, ?3, NULL, ?4, ?5)",
+                        params![
+                            candidate.relative_path,
+                            candidate.size as i64,
+                            candidate.modified_ns,
+                            IndexedFileStatus::Skipped.as_str(),
+                            indexed_at,
+                        ],
+                    )
+                    .map_err(|error| {
+                        format!("Failed to record incrementally skipped file: {error}")
+                    })?;
+            }
+        }
+    }
+    let summary = update_index_metadata(&transaction)?;
+    transaction
+        .commit()
+        .map_err(|error| format!("Failed to commit incremental index update: {error}"))?;
+    Ok(summary)
+}
+
 fn write_index_database<F>(
     path: &Path,
     project: &ResolvedProject,
     candidates: &[IndexCandidate],
     cancel: &AtomicBool,
+    pause: &AtomicBool,
     mut progress: F,
 ) -> Result<(), String>
 where
@@ -923,7 +1435,8 @@ where
                relative_path TEXT UNIQUE NOT NULL,
                size INTEGER NOT NULL,
                modified_ns INTEGER NOT NULL,
-               encoding TEXT NOT NULL,
+               encoding TEXT,
+               status TEXT NOT NULL CHECK(status IN ('indexed', 'skipped')),
                indexed_at INTEGER NOT NULL
              );
              CREATE VIRTUAL TABLE content_fts USING fts5(
@@ -946,8 +1459,8 @@ where
         let mut file_statement = transaction
             .prepare(
                 "INSERT INTO indexed_files
-                 (relative_path, size, modified_ns, encoding, indexed_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                 (relative_path, size, modified_ns, encoding, status, indexed_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             )
             .map_err(|error| format!("Failed to prepare indexed file write: {error}"))?;
         let mut fts_statement = transaction
@@ -955,6 +1468,9 @@ where
             .map_err(|error| format!("Failed to prepare FTS5 write: {error}"))?;
 
         for (index, candidate) in candidates.iter().enumerate() {
+            if !wait_while_paused(pause, cancel) {
+                return Ok(());
+            }
             if cancel.load(Ordering::Relaxed) {
                 return Ok(());
             }
@@ -967,6 +1483,7 @@ where
                             candidate.size as i64,
                             candidate.modified_ns,
                             encoding.as_str(),
+                            IndexedFileStatus::Indexed.as_str(),
                             built_at as i64,
                         ])
                         .map_err(|error| {
@@ -983,7 +1500,24 @@ where
                         })?;
                     indexed += 1;
                 }
-                Err(_) => skipped += 1,
+                Err(_) => {
+                    file_statement
+                        .execute(params![
+                            candidate.relative_path,
+                            candidate.size as i64,
+                            candidate.modified_ns,
+                            Option::<String>::None,
+                            IndexedFileStatus::Skipped.as_str(),
+                            built_at as i64,
+                        ])
+                        .map_err(|error| {
+                            format!(
+                                "Failed to record skipped {}: {error}",
+                                candidate.relative_path
+                            )
+                        })?;
+                    skipped += 1;
+                }
             }
             progress(index as u64 + 1, indexed, skipped, processed_bytes);
         }
@@ -1120,6 +1654,61 @@ fn cleanup_temporary_indexes(index_dir: &Path) {
     }
 }
 
+enum IndexHealth {
+    Healthy,
+    Corrupt(String),
+    Unavailable(String),
+}
+
+fn inspect_index_health(path: &Path) -> IndexHealth {
+    let connection = match Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY) {
+        Ok(connection) => connection,
+        Err(error) => {
+            let message = error.to_string();
+            let lower = message.to_lowercase();
+            return if lower.contains("malformed")
+                || lower.contains("not a database")
+                || lower.contains("database corrupt")
+            {
+                IndexHealth::Corrupt(message)
+            } else {
+                IndexHealth::Unavailable(message)
+            };
+        }
+    };
+    match connection.query_row("PRAGMA quick_check(1)", [], |row| row.get::<_, String>(0)) {
+        Ok(result) if result == "ok" => IndexHealth::Healthy,
+        Ok(result) => IndexHealth::Corrupt(format!("quick_check returned {result}")),
+        Err(error) => IndexHealth::Corrupt(format!("quick_check failed: {error}")),
+    }
+}
+
+fn quarantine_corrupt_index(path: &Path) -> Result<Option<PathBuf>, String> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    let quarantine = path.with_file_name(format!("index.corrupt-{}.sqlite3", now_ms()));
+    fs::rename(path, &quarantine)
+        .map_err(|error| format!("Failed to isolate corrupt search index: {error}"))?;
+    Ok(Some(quarantine))
+}
+
+fn recover_unusable_index(
+    app: &AppHandle,
+    state: &SearchIndexState,
+    project: &ResolvedProject,
+    reason: String,
+) {
+    if let Ok(index_dir) = index_directory(app, project) {
+        let final_path = index_dir.join("index.sqlite3");
+        if matches!(inspect_index_health(&final_path), IndexHealth::Corrupt(_)) {
+            let _ = quarantine_corrupt_index(&final_path);
+        }
+    }
+    mark_index_for_rebuild(app, state, &project.preference_key, Some(reason));
+    let _ = start_index_build(app.clone(), state.clone(), project.clone(), true);
+}
+
 fn load_ready_status(
     app: &AppHandle,
     project: &ResolvedProject,
@@ -1129,6 +1718,10 @@ fn load_ready_status(
     let backup_path = index_dir.join("index.sqlite3.backup");
     if !final_path.exists() && backup_path.exists() {
         fs::rename(&backup_path, &final_path).ok()?;
+    }
+    if let IndexHealth::Corrupt(_) = inspect_index_health(&final_path) {
+        let _ = quarantine_corrupt_index(&final_path);
+        return None;
     }
     let connection =
         Connection::open_with_flags(&final_path, OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?;
@@ -1250,6 +1843,7 @@ pub(crate) fn lookup_index_candidates(
                     ActiveEntry {
                         job_id: 0,
                         cancel: Arc::new(AtomicBool::new(false)),
+                        pause: Arc::new(AtomicBool::new(false)),
                         revision: Arc::new(AtomicU64::new(0)),
                         status,
                     },
@@ -1285,24 +1879,63 @@ pub(crate) fn lookup_index_candidates(
             }
         }
     };
+    match inspect_index_health(&final_path) {
+        IndexHealth::Healthy => {}
+        IndexHealth::Corrupt(reason) => {
+            recover_unusable_index(
+                app,
+                state.inner(),
+                &project,
+                format!("Search index is corrupt: {reason}"),
+            );
+            return IndexCandidateLookup::Fallback {
+                reason: "index_corrupt_rebuilding".to_string(),
+                index_state: "corrupt".to_string(),
+            };
+        }
+        IndexHealth::Unavailable(reason) => {
+            recover_unusable_index(
+                app,
+                state.inner(),
+                &project,
+                format!("Search index is unavailable: {reason}"),
+            );
+            return IndexCandidateLookup::Fallback {
+                reason: "index_unavailable_rebuilding".to_string(),
+                index_state: "unavailable".to_string(),
+            };
+        }
+    }
     let connection =
         match Connection::open_with_flags(&final_path, OpenFlags::SQLITE_OPEN_READ_ONLY) {
             Ok(connection) => connection,
             Err(error) => {
+                recover_unusable_index(
+                    app,
+                    state.inner(),
+                    &project,
+                    format!("Search index could not be opened: {error}"),
+                );
                 return IndexCandidateLookup::Fallback {
-                    reason: format!("index_open_failed: {error}"),
-                    index_state: "ready".to_string(),
-                }
+                    reason: "index_open_failed_rebuilding".to_string(),
+                    index_state: "unavailable".to_string(),
+                };
             }
         };
     const CANDIDATE_LIMIT: usize = 50_000;
     let relative_paths = match query_candidate_relative_paths(&connection, query, CANDIDATE_LIMIT) {
         Ok(paths) => paths,
         Err(reason) => {
+            recover_unusable_index(
+                app,
+                state.inner(),
+                &project,
+                format!("Search index query failed: {reason}"),
+            );
             return IndexCandidateLookup::Fallback {
-                reason,
-                index_state: "ready".to_string(),
-            }
+                reason: "index_query_failed_rebuilding".to_string(),
+                index_state: "unavailable".to_string(),
+            };
         }
     };
     if relative_paths.len() > CANDIDATE_LIMIT {
@@ -1372,6 +2005,7 @@ pub fn get_search_index_status(
                 ActiveEntry {
                     job_id: 0,
                     cancel: Arc::new(AtomicBool::new(false)),
+                    pause: Arc::new(AtomicBool::new(false)),
                     revision: Arc::new(AtomicU64::new(0)),
                     status,
                 },
@@ -1405,6 +2039,7 @@ pub fn set_project_index_enabled(
                 ActiveEntry {
                     job_id,
                     cancel: Arc::new(AtomicBool::new(true)),
+                    pause: Arc::new(AtomicBool::new(false)),
                     revision: Arc::new(AtomicU64::new(0)),
                     status: status.clone(),
                 },
@@ -1425,6 +2060,7 @@ pub fn set_project_index_enabled(
                 ActiveEntry {
                     job_id: 0,
                     cancel: Arc::new(AtomicBool::new(false)),
+                    pause: Arc::new(AtomicBool::new(false)),
                     revision: Arc::new(AtomicU64::new(0)),
                     status,
                 },
@@ -1447,6 +2083,103 @@ pub fn rebuild_project_index(
 }
 
 #[tauri::command]
+pub fn pause_project_index(
+    app: AppHandle,
+    state: State<'_, SearchIndexState>,
+    project_path: String,
+) -> Result<ProjectSearchIndexStatus, String> {
+    let project = resolve_project(&project_path)?;
+    let status = state
+        .entries
+        .lock()
+        .map_err(|_| "Failed to pause search index".to_string())?
+        .get_mut(&project.preference_key)
+        .and_then(|entry| {
+            if !matches!(entry.status.state.as_str(), "preflight" | "building") {
+                return None;
+            }
+            entry.pause.store(true, Ordering::Relaxed);
+            entry.status.state = "paused".to_string();
+            entry.status.phase = "paused".to_string();
+            entry.status.backend = "scan".to_string();
+            entry.status.updated_at = Some(now_ms());
+            Some(entry.status.clone())
+        })
+        .ok_or_else(|| "Only an active index build can be paused".to_string())?;
+    let _ = app.emit("search-index-status", status.clone());
+    Ok(status)
+}
+
+#[tauri::command]
+pub fn resume_project_index(
+    app: AppHandle,
+    state: State<'_, SearchIndexState>,
+    project_path: String,
+) -> Result<ProjectSearchIndexStatus, String> {
+    let project = resolve_project(&project_path)?;
+    let status = state
+        .entries
+        .lock()
+        .map_err(|_| "Failed to resume search index".to_string())?
+        .get_mut(&project.preference_key)
+        .and_then(|entry| {
+            if entry.status.state != "paused" {
+                return None;
+            }
+            entry.pause.store(false, Ordering::Relaxed);
+            entry.status.state =
+                if entry.status.processed_files == 0 && entry.status.total_files.is_none() {
+                    "preflight".to_string()
+                } else {
+                    "building".to_string()
+                };
+            entry.status.phase = if entry.status.state == "preflight" {
+                "discovering".to_string()
+            } else {
+                "writing".to_string()
+            };
+            entry.status.updated_at = Some(now_ms());
+            Some(entry.status.clone())
+        })
+        .ok_or_else(|| "No paused index build is available to resume".to_string())?;
+    let _ = app.emit("search-index-status", status.clone());
+    Ok(status)
+}
+
+#[tauri::command]
+pub fn delete_project_index(
+    app: AppHandle,
+    database: State<'_, Arc<Database>>,
+    state: State<'_, SearchIndexState>,
+    project_path: String,
+) -> Result<ProjectSearchIndexStatus, String> {
+    let project = resolve_project(&project_path)?;
+    if project_has_active_index_write(&state, &project.preference_key) {
+        return Err(
+            "Wait for the active search index update to finish before deleting it".to_string(),
+        );
+    }
+    cancel_active_job(&state, &project.preference_key);
+    stop_project_watcher(&state, &project.preference_key);
+    let index_dir = index_directory(&app, &project)?;
+    if index_dir.exists() {
+        fs::remove_dir_all(&index_dir).map_err(|error| {
+            format!(
+                "Failed to delete search index for {}: {error}",
+                project.display_path
+            )
+        })?;
+    }
+    database.save_project_search_index_enabled(&project.preference_key, false)?;
+    if let Ok(mut entries) = state.entries.lock() {
+        entries.remove(&project.preference_key);
+    }
+    let status = disabled_status(project.display_path);
+    let _ = app.emit("search-index-status", status.clone());
+    Ok(status)
+}
+
+#[tauri::command]
 pub fn get_search_index_storage_status(app: AppHandle) -> Result<SearchIndexStorageStatus, String> {
     storage_status(&app)
 }
@@ -1464,7 +2197,9 @@ pub fn set_search_index_storage(
         return Err("Search index cache limit must be at least 256 MiB".to_string());
     }
     if has_active_build(&state) {
-        return Err("Wait for active search index builds to finish before moving the cache".to_string());
+        return Err(
+            "Wait for active search index builds to finish before moving the cache".to_string(),
+        );
     }
 
     let mut settings = database.load_search_index_storage()?;
@@ -1512,7 +2247,9 @@ pub fn clear_search_index_cache(
     state: State<'_, SearchIndexState>,
 ) -> Result<SearchIndexStorageStatus, String> {
     if has_active_build(&state) {
-        return Err("Wait for active search index builds to finish before clearing the cache".to_string());
+        return Err(
+            "Wait for active search index builds to finish before clearing the cache".to_string(),
+        );
     }
     let root = index_root(&app)?;
     if root.exists() {
@@ -1559,7 +2296,8 @@ mod tests {
         .unwrap();
         let project = test_project(root.path());
         let cancel = AtomicBool::new(false);
-        let candidates = discover_candidates(&project, &cancel, |_, _, _| {}).unwrap();
+        let pause = AtomicBool::new(false);
+        let candidates = discover_candidates(&project, &cancel, &pause, |_, _, _| {}).unwrap();
         assert_eq!(candidates.len(), 3);
 
         let database_path = root.path().join("index.sqlite3");
@@ -1568,6 +2306,7 @@ mod tests {
             &project,
             &candidates,
             &cancel,
+            &pause,
             |_, _, _, _| {},
         )
         .unwrap();
@@ -1576,8 +2315,16 @@ mod tests {
         assert_eq!(matches, vec!["source.txt"]);
         let quoted = query_candidate_relative_paths(&connection, "alpha OR \"beta\"", 10).unwrap();
         assert_eq!(quoted, vec!["quoted.txt"]);
-        let indexed: u64 = connection
+        let tracked: u64 = connection
             .query_row("SELECT count(*) FROM indexed_files", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(tracked, 3);
+        let indexed: u64 = connection
+            .query_row(
+                "SELECT count(*) FROM indexed_files WHERE status = 'indexed'",
+                [],
+                |row| row.get(0),
+            )
             .unwrap();
         assert_eq!(indexed, 2);
     }
@@ -1613,7 +2360,7 @@ mod tests {
         let root = tempdir().unwrap();
         let source_event = Event::new(EventKind::Modify(notify::event::ModifyKind::Any))
             .add_path(root.path().join("src").join("main.rs"));
-        assert!(event_requires_rebuild(root.path(), &source_event));
+        assert!(!event_requires_rebuild(root.path(), &source_event));
 
         let target_event = Event::new(EventKind::Modify(notify::event::ModifyKind::Any)).add_path(
             root.path()
@@ -1626,6 +2373,110 @@ mod tests {
         let git_exclude_event = Event::new(EventKind::Modify(notify::event::ModifyKind::Any))
             .add_path(root.path().join(".git").join("info").join("exclude"));
         assert!(event_requires_rebuild(root.path(), &git_exclude_event));
+    }
+
+    #[test]
+    fn large_watcher_batches_reconcile_instead_of_incrementally_writing_every_path() {
+        assert!(!needs_full_reconciliation(
+            false,
+            MAX_INCREMENTAL_CHANGE_PATHS
+        ));
+        assert!(needs_full_reconciliation(
+            false,
+            MAX_INCREMENTAL_CHANGE_PATHS.saturating_add(1)
+        ));
+        assert!(needs_full_reconciliation(true, 0));
+    }
+
+    #[test]
+    fn corrupt_index_is_quarantined_before_rebuild() {
+        let root = tempdir().unwrap();
+        let database_path = root.path().join("index.sqlite3");
+        fs::write(&database_path, b"not a sqlite database").unwrap();
+        assert!(matches!(
+            inspect_index_health(&database_path),
+            IndexHealth::Corrupt(_)
+        ));
+
+        let quarantine = quarantine_corrupt_index(&database_path).unwrap().unwrap();
+        assert!(!database_path.exists());
+        assert!(quarantine.is_file());
+        assert!(quarantine
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.starts_with("index.corrupt-")));
+    }
+
+    #[test]
+    fn incremental_updates_cover_modify_create_delete_and_rename() {
+        let root = tempdir().unwrap();
+        let source = root.path().join("source.txt");
+        fs::write(&source, "alpha first-version").unwrap();
+        let project = test_project(root.path());
+        let cancel = AtomicBool::new(false);
+        let pause = AtomicBool::new(false);
+        let database_path = root.path().join("index.sqlite3");
+        let candidates = discover_candidates(&project, &cancel, &pause, |_, _, _| {}).unwrap();
+        write_index_database(
+            &database_path,
+            &project,
+            &candidates,
+            &cancel,
+            &pause,
+            |_, _, _, _| {},
+        )
+        .unwrap();
+
+        fs::write(&source, "beta second-version").unwrap();
+        let summary =
+            apply_incremental_updates(&database_path, &project, &[source.clone()]).unwrap();
+        assert_eq!(summary.indexed_files, 1);
+        let connection = Connection::open(&database_path).unwrap();
+        assert!(query_candidate_relative_paths(&connection, "alpha", 10)
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            query_candidate_relative_paths(&connection, "beta", 10).unwrap(),
+            vec!["source.txt"]
+        );
+
+        let created = root.path().join("created.txt");
+        fs::write(&created, "gamma created-file").unwrap();
+        let summary =
+            apply_incremental_updates(&database_path, &project, &[created.clone()]).unwrap();
+        assert_eq!(summary.total_files, 2);
+        assert_eq!(
+            query_candidate_relative_paths(&connection, "gamma", 10).unwrap(),
+            vec!["created.txt"]
+        );
+
+        fs::write(root.path().join(".ignore"), "ignored.txt\n").unwrap();
+        let ignored = root.path().join("ignored.txt");
+        fs::write(&ignored, "delta ignored-file").unwrap();
+        let summary = apply_incremental_updates(&database_path, &project, &[ignored]).unwrap();
+        assert_eq!(summary.total_files, 2);
+        assert!(query_candidate_relative_paths(&connection, "delta", 10)
+            .unwrap()
+            .is_empty());
+
+        fs::remove_file(&created).unwrap();
+        let summary =
+            apply_incremental_updates(&database_path, &project, &[created.clone()]).unwrap();
+        assert_eq!(summary.total_files, 1);
+        assert!(query_candidate_relative_paths(&connection, "gamma", 10)
+            .unwrap()
+            .is_empty());
+
+        let renamed = root.path().join("renamed.txt");
+        fs::rename(&source, &renamed).unwrap();
+        let summary =
+            apply_incremental_updates(&database_path, &project, &[source, renamed.clone()])
+                .unwrap();
+        assert_eq!(summary.total_files, 1);
+        assert_eq!(
+            query_candidate_relative_paths(&connection, "beta", 10).unwrap(),
+            vec!["renamed.txt"]
+        );
     }
 
     #[test]
@@ -1649,8 +2500,13 @@ mod tests {
 
         assert!(!source.exists());
         assert_eq!(
-            fs::read_to_string(destination.join("v1").join("project-a").join("index.sqlite3"))
-                .unwrap(),
+            fs::read_to_string(
+                destination
+                    .join("v1")
+                    .join("project-a")
+                    .join("index.sqlite3")
+            )
+            .unwrap(),
             "index-content"
         );
     }
@@ -1670,11 +2526,11 @@ mod tests {
         let indexes = cached_index_directories(root.path());
 
         assert_eq!(indexes.len(), 2);
-        assert!(indexes.iter().any(|(path, size, used)| {
-            path == &first && *size >= 3 && *used == 10
-        }));
-        assert!(indexes.iter().any(|(path, size, used)| {
-            path == &second && *size >= 5 && *used == 20
-        }));
+        assert!(indexes
+            .iter()
+            .any(|(path, size, used)| { path == &first && *size >= 3 && *used == 10 }));
+        assert!(indexes
+            .iter()
+            .any(|(path, size, used)| { path == &second && *size >= 5 && *used == 20 }));
     }
 }

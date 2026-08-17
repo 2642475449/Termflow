@@ -10,6 +10,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 import {
   clearSearchIndexCache,
+  deleteProjectIndex,
   getSearchIndexStorageStatus,
   getSearchIndexStatus,
   rebuildProjectIndex,
@@ -64,6 +65,21 @@ describe("search index API", () => {
     await rebuildProjectIndex("E:/projects/Termflow");
 
     expect(apiMocks.invoke).toHaveBeenCalledWith("rebuild_project_index", {
+      projectPath: "E:/projects/Termflow",
+    });
+  });
+
+  it("deletes the selected project's index", async () => {
+    apiMocks.invoke.mockResolvedValue({
+      projectPath: "E:/projects/Termflow",
+      enabled: false,
+      state: "disabled",
+      backend: "scan",
+    });
+
+    await deleteProjectIndex("E:/projects/Termflow");
+
+    expect(apiMocks.invoke).toHaveBeenCalledWith("delete_project_index", {
       projectPath: "E:/projects/Termflow",
     });
   });

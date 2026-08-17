@@ -389,6 +389,10 @@ export async function savePersistentSettings(settings: PersistentSettings): Prom
   await invoke("save_persistent_settings", { settings });
 }
 
+export async function setExplorerContextMenuEnabled(enabled: boolean): Promise<void> {
+  await invoke("set_explorer_context_menu_enabled", { enabled });
+}
+
 export async function getSearchIndexStatus(
   projectPath: string
 ): Promise<ProjectSearchIndexStatus> {
@@ -406,6 +410,20 @@ export async function rebuildProjectIndex(
   projectPath: string
 ): Promise<ProjectSearchIndexStatus> {
   return await invoke("rebuild_project_index", { projectPath });
+}
+
+export async function pauseProjectIndex(projectPath: string): Promise<ProjectSearchIndexStatus> {
+  return await invoke("pause_project_index", { projectPath });
+}
+
+export async function resumeProjectIndex(projectPath: string): Promise<ProjectSearchIndexStatus> {
+  return await invoke("resume_project_index", { projectPath });
+}
+
+export async function deleteProjectIndex(
+  projectPath: string
+): Promise<ProjectSearchIndexStatus> {
+  return await invoke("delete_project_index", { projectPath });
 }
 
 export async function getSearchIndexStorageStatus(): Promise<SearchIndexStorageStatus> {

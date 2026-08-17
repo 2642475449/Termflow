@@ -2,7 +2,7 @@
 
 ## 概述
 
-Termflow 是一个基于 Tauri 的现代化终端应用程序，采用前后端分离架构。
+Termflow 是一个基于 Tauri 2 的本地桌面工作台，用于在同一项目上下文中使用多个 CLI 智能体、终端和 Git 工作流。
 
 ## 技术栈
 
@@ -38,9 +38,9 @@ Termflow/
 │   ├── src/
 │   │   ├── commands/      # Tauri 命令
 │   │   ├── database/      # 数据库操作
-│   │   └── events/        # 事件处理
+│   │   ├── events.rs      # 应用事件
+│   │   └── pty.rs         # PTY 与进程管理
 │   └── capabilities/      # 权限配置
-├── docs/                  # 设计文档
 └── scripts/               # 构建脚本
 ```
 
@@ -58,10 +58,20 @@ Termflow/
 - 多标签页支持
 - 会话持久化
 
-### 语音系统
-- 语音识别 (ASR)
-- 语音合成 (TTS)
-- 语音命令处理
+### 文件管理与编辑
+- 项目文件树浏览、全文搜索和文件标签页
+- Markdown 预览与即时编辑
+- 将项目文件拖放到当前 CLI 输入
+
+### 智能体与终端
+- Claude Code、Codex、Antigravity CLI、OpenCode 与 Qoder CLI 的检测和启动
+- 基于 portable-pty 的嵌入式终端与会话恢复
+- Agent Hook、检查点审阅和会话状态事件
+
+### 语音输入
+- MiMo 与 DashScope 语音识别 (ASR)
+- 全局快捷键和录音状态悬浮窗
+- 将识别文本写入系统输入目标或当前终端
 
 ### 主题系统
 - 4 套内置主题
@@ -76,7 +86,7 @@ pnpm dev
 
 # 构建
 pnpm build
-pnpm build:tauri
+pnpm tauri build
 
 # 测试
 pnpm test

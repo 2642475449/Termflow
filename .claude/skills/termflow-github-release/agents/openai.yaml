@@ -1,0 +1,4 @@
+interface:
+  display_name: "Termflow GitHub Release"
+  short_description: "Publish and verify GitHub-hosted auto-updates"
+  default_prompt: "Use $termflow-github-release to prepare and verify a Termflow release."

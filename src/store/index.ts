@@ -229,6 +229,7 @@ export function getPersistentSettingsSnapshot(): PersistentSettings {
     language: state.language,
     startupRestoreLastProject: state.startupRestoreLastProject,
     projectOpenBehavior: state.projectOpenBehavior,
+    explorerContextMenuEnabled: state.explorerContextMenuEnabled,
     lastProjectPath: state.lastProject?.path ?? null,
     editorFontSize: state.editorFontSize,
     terminalFontSize: state.terminalFontSize,
@@ -270,6 +271,7 @@ export function applyPersistentSettingsToStore(settings: PersistentSettings) {
       settings.projectOpenBehavior === "new_window"
         ? settings.projectOpenBehavior
         : "ask",
+    explorerContextMenuEnabled: settings.explorerContextMenuEnabled ?? true,
     lastProject: lastProjectPath ? projectInfoFromPath(lastProjectPath) : null,
     editorFontSize: Math.max(10, Math.round(settings.editorFontSize || 14)),
     terminalFontSize: Math.max(10, Math.round(settings.terminalFontSize || 14)),
@@ -513,6 +515,7 @@ interface AppState {
   lastProject: ProjectInfo | null;
   startupRestoreLastProject: boolean;
   projectOpenBehavior: ProjectOpenBehavior;
+  explorerContextMenuEnabled: boolean;
   claudeCliInfo: ClaudeCliInfo | null;
   recentProjects: RecentProjectEntry[];
   // Project
@@ -647,6 +650,7 @@ interface AppState {
   setLanguage: (lang: Language) => void;
   setStartupRestoreLastProject: (enabled: boolean) => void;
   setProjectOpenBehavior: (behavior: ProjectOpenBehavior) => void;
+  setExplorerContextMenuEnabled: (enabled: boolean) => void;
   // Terminal actions
   setEditorFontSize: (size: number) => void;
   setTerminalFontSize: (size: number) => void;
@@ -1402,6 +1406,7 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
       lastProject: null,
       startupRestoreLastProject: true,
       projectOpenBehavior: "ask",
+      explorerContextMenuEnabled: true,
       claudeCliInfo: null,
       recentProjects: [],
       projectSessions: {},
@@ -2265,6 +2270,8 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
       setStartupRestoreLastProject: (startupRestoreLastProject) =>
         set({ startupRestoreLastProject }),
       setProjectOpenBehavior: (projectOpenBehavior) => set({ projectOpenBehavior }),
+      setExplorerContextMenuEnabled: (explorerContextMenuEnabled) =>
+        set({ explorerContextMenuEnabled }),
       setEditorFontSize: (size) => set({ editorFontSize: size }),
       setTerminalFontSize: (size) => set({ terminalFontSize: size }),
       setTerminalCursorBlink: (blink) => set({ terminalCursorBlink: blink }),
@@ -2672,6 +2679,8 @@ function rehydrateMigrationState(persistedState: Partial<AppState> | undefined) 
     migratedState.startupRestoreLastProject = normalizeStartupRestoreLastProjectValue(
       migratedState.startupRestoreLastProject
     );
+    migratedState.explorerContextMenuEnabled =
+      migratedState.explorerContextMenuEnabled ?? true;
   }
   return migratedState;
 }
