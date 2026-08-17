@@ -4,7 +4,7 @@ import {
   LoadingOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
-import { Empty, Input, Modal, Select, Spin, Tooltip, type InputRef } from "antd";
+import { Button, Empty, Input, Modal, Select, Spin, Tooltip, type InputRef } from "antd";
 import {
   startTransition,
   useCallback,
@@ -42,14 +42,6 @@ interface SearchResultGroup {
   relativePath: string;
   matches: ContentSearchMatch[];
 }
-
-const DEFAULT_EXCLUDE_PATTERNS = [
-  "node_modules/**",
-  "target/**",
-  "dist/**",
-  "build/**",
-  ".git/**",
-];
 
 const RESULT_FLUSH_INTERVAL_MS = 100;
 
@@ -107,7 +99,6 @@ function GlobalTextSearchDialog({
   const [useRegex, setUseRegex] = useState(false);
   const [scopeMode, setScopeMode] = useState<"project" | "directory">("project");
   const [includePatterns, setIncludePatterns] = useState("");
-  const [excludePatterns, setExcludePatterns] = useState(DEFAULT_EXCLUDE_PATTERNS.join(", "));
   const [matches, setMatches] = useState<ContentSearchMatch[]>([]);
   const [selectedMatch, setSelectedMatch] = useState<ContentSearchMatch | null>(null);
   const [summary, setSummary] = useState<ContentSearchSummary | null>(null);
@@ -233,7 +224,7 @@ function GlobalTextSearchDialog({
         wholeWord,
         useRegex,
         includePatterns: parsePatterns(includePatterns),
-        excludePatterns: parsePatterns(excludePatterns),
+        excludePatterns: [],
       })
         .then((nextSummary) => {
           settled = true;
@@ -266,7 +257,6 @@ function GlobalTextSearchDialog({
   }, [
     caseSensitive,
     currentProject,
-    excludePatterns,
     includePatterns,
     open,
     query,
@@ -431,11 +421,6 @@ function GlobalTextSearchDialog({
               onChange={(event) => setIncludePatterns(event.target.value)}
               placeholder={t("globalSearch.includePlaceholder")}
             />
-            <Input
-              value={excludePatterns}
-              onChange={(event) => setExcludePatterns(event.target.value)}
-              placeholder={t("globalSearch.excludePlaceholder")}
-            />
             <div className="app-global-search-toggles">
               <Tooltip title={t("globalSearch.caseSensitive")}>
                 <button
@@ -548,7 +533,16 @@ function GlobalTextSearchDialog({
               <>
                 <div className="app-global-search-preview-title">
                   <span title={selectedMatch.relativePath}>{selectedMatch.relativePath}</span>
-                  <span>{t("globalSearch.line", { line: selectedMatch.lineNumber })}</span>
+                  <div className="app-global-search-preview-actions">
+                    <span>{t("globalSearch.line", { line: selectedMatch.lineNumber })}</span>
+                    <Button
+                      type="primary"
+                      size="small"
+                      onClick={() => handleOpenMatch(selectedMatch, false)}
+                    >
+                      {t("globalSearch.open")}
+                    </Button>
+                  </div>
                 </div>
                 <div className="app-global-search-preview-code">
                   {previewLines.map((line) => (

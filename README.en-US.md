@@ -77,26 +77,6 @@ Termflow started as an application built around the workflow I wanted to use eve
 | Git | libgit2 (git2-rs) | Repository operations |
 | HTTP | reqwest | Backend network requests |
 
-## Project layout
-
-```text
-Termflow/
-├── src/                 # React frontend
-│   ├── components/      # Terminal, Git, settings, and review UI
-│   ├── hooks/           # Voice and Git hooks
-│   ├── locales/         # zh-CN, zh-TW, en-US, and ja-JP translations
-│   ├── pages/           # Application pages
-│   ├── store/           # Zustand state
-│   └── i18n.ts          # i18next configuration
-├── src-tauri/           # Rust/Tauri backend
-│   ├── src/commands/    # Session, Git, voice, and agent commands
-│   ├── src/database/    # SQLite layer
-│   └── tauri.conf.json  # Tauri configuration
-├── public/              # Static assets
-├── docs/                # Design and module documentation
-└── scripts/             # Build and release scripts
-```
-
 ## Quick start
 
 ### Requirements

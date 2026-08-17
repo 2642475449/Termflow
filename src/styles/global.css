@@ -1902,7 +1902,7 @@ html, body, #root {
 
 .app-global-search-options {
   display: grid;
-  grid-template-columns: minmax(170px, 0.8fr) minmax(180px, 1fr) minmax(220px, 1.2fr) auto;
+  grid-template-columns: minmax(170px, 0.8fr) minmax(180px, 1fr) auto;
   gap: 8px;
 }
 
@@ -2106,6 +2106,13 @@ html, body, #root {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.app-global-search-preview-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
 }
 
 .app-global-search-preview-code {

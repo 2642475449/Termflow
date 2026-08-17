@@ -76,26 +76,6 @@ Termflow 最初是為了打造符合自己日常習慣的應用程式。隨著�
 | Git | libgit2 (git2-rs) | 儲存庫操作 |
 | HTTP | reqwest | 後端網路請求 |
 
-## 專案結構
-
-```text
-Termflow/
-├── src/                 # React 前端原始碼
-│   ├── components/      # 終端機、Git、設定與審閱介面
-│   ├── hooks/           # 語音與 Git Hooks
-│   ├── locales/         # zh-CN、zh-TW、en-US、ja-JP 翻譯資源
-│   ├── pages/           # 應用程式頁面
-│   ├── store/           # Zustand 狀態
-│   └── i18n.ts          # i18next 設定
-├── src-tauri/           # Rust/Tauri 後端
-│   ├── src/commands/    # 工作階段、Git、語音與智慧代理命令
-│   ├── src/database/    # SQLite 資料層
-│   └── tauri.conf.json  # Tauri 設定
-├── public/              # 靜態資源
-├── docs/                # 設計與模組文件
-└── scripts/             # 建置與發行指令碼
-```
-
 ## 快速開始
 
 ### 環境需求

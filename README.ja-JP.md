@@ -76,26 +76,6 @@ Termflow は、日常的に使いたいワークフローに合わせて作り�
 | Git | libgit2 (git2-rs) | リポジトリ操作 |
 | HTTP | reqwest | バックエンドのネットワーク要求 |
 
-## プロジェクト構成
-
-```text
-Termflow/
-├── src/                 # React フロントエンド
-│   ├── components/      # ターミナル、Git、設定、レビュー UI
-│   ├── hooks/           # 音声・Git の Hooks
-│   ├── locales/         # zh-CN、zh-TW、en-US、ja-JP の翻訳リソース
-│   ├── pages/           # アプリケーションページ
-│   ├── store/           # Zustand の状態
-│   └── i18n.ts          # i18next 設定
-├── src-tauri/           # Rust/Tauri バックエンド
-│   ├── src/commands/    # セッション、Git、音声、エージェントのコマンド
-│   ├── src/database/    # SQLite レイヤー
-│   └── tauri.conf.json  # Tauri 設定
-├── public/              # 静的アセット
-├── docs/                # 設計・モジュール文書
-└── scripts/             # ビルド・リリーススクリプト
-```
-
 ## クイックスタート
 
 ### 必要な環境
