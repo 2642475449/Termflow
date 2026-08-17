@@ -3,10 +3,35 @@ pub mod schema;
 use parking_lot::Mutex;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::{fs, sync::Arc};
+use std::{collections::BTreeMap, fs, sync::Arc};
 use tauri::{AppHandle, Manager};
 
 const DATABASE_FILE_NAME: &str = "termflow.db";
+const SEARCH_INDEX_PROJECT_PREFERENCES_KEY: &str = "searchIndex.projectPreferences";
+const SEARCH_INDEX_STORAGE_KEY: &str = "searchIndex.storage";
+pub const DEFAULT_SEARCH_INDEX_QUOTA_BYTES: u64 = 5 * 1024 * 1024 * 1024;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchIndexStorageSettings {
+    #[serde(default)]
+    pub cache_root: Option<String>,
+    #[serde(default = "default_search_index_quota_bytes")]
+    pub quota_bytes: u64,
+}
+
+fn default_search_index_quota_bytes() -> u64 {
+    DEFAULT_SEARCH_INDEX_QUOTA_BYTES
+}
+
+impl Default for SearchIndexStorageSettings {
+    fn default() -> Self {
+        Self {
+            cache_root: None,
+            quota_bytes: default_search_index_quota_bytes(),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -329,6 +354,40 @@ impl Database {
             "general.lastProjectPath",
             &Some(project_path.to_string()),
         )
+    }
+
+    pub fn load_project_search_index_enabled(&self, project_key: &str) -> Result<bool, String> {
+        let conn = self.conn.lock();
+        let preferences =
+            read_setting::<BTreeMap<String, bool>>(&conn, SEARCH_INDEX_PROJECT_PREFERENCES_KEY)?
+                .unwrap_or_default();
+        Ok(preferences.get(project_key).copied().unwrap_or(false))
+    }
+
+    pub fn save_project_search_index_enabled(
+        &self,
+        project_key: &str,
+        enabled: bool,
+    ) -> Result<(), String> {
+        let conn = self.conn.lock();
+        let mut preferences =
+            read_setting::<BTreeMap<String, bool>>(&conn, SEARCH_INDEX_PROJECT_PREFERENCES_KEY)?
+                .unwrap_or_default();
+        preferences.insert(project_key.to_string(), enabled);
+        write_setting(&conn, SEARCH_INDEX_PROJECT_PREFERENCES_KEY, &preferences)
+    }
+
+    pub fn load_search_index_storage(&self) -> Result<SearchIndexStorageSettings, String> {
+        let conn = self.conn.lock();
+        Ok(read_setting(&conn, SEARCH_INDEX_STORAGE_KEY)?.unwrap_or_default())
+    }
+
+    pub fn save_search_index_storage(
+        &self,
+        settings: &SearchIndexStorageSettings,
+    ) -> Result<(), String> {
+        let conn = self.conn.lock();
+        write_setting(&conn, SEARCH_INDEX_STORAGE_KEY, settings)
     }
 
     fn save_persistent_settings_internal(
@@ -731,7 +790,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{Database, PersistentSettingsRecord};
+    use super::{
+        Database, PersistentSettingsRecord, SearchIndexStorageSettings,
+        DEFAULT_SEARCH_INDEX_QUOTA_BYTES,
+    };
 
     #[test]
     fn persistent_settings_default_to_beijing_asr_region() {
@@ -780,5 +842,46 @@ mod tests {
             Some("E:/7.project/git/renmin")
         );
         assert_eq!(restored.language, "en-US");
+    }
+
+    #[test]
+    fn project_search_index_preferences_default_off_and_preserve_explicit_overrides() {
+        let database = Database::open_in_memory();
+
+        assert!(!database
+            .load_project_search_index_enabled("e:/projects/termflow")
+            .unwrap());
+
+        database
+            .save_project_search_index_enabled("e:/projects/termflow", true)
+            .unwrap();
+        database
+            .save_project_search_index_enabled("e:/projects/other", false)
+            .unwrap();
+
+        assert!(database
+            .load_project_search_index_enabled("e:/projects/termflow")
+            .unwrap());
+        assert!(!database
+            .load_project_search_index_enabled("e:/projects/other")
+            .unwrap());
+    }
+
+    #[test]
+    fn search_index_storage_defaults_and_persists() {
+        let database = Database::open_in_memory();
+        let defaults = database.load_search_index_storage().unwrap();
+        assert_eq!(defaults.cache_root, None);
+        assert_eq!(defaults.quota_bytes, DEFAULT_SEARCH_INDEX_QUOTA_BYTES);
+
+        let configured = SearchIndexStorageSettings {
+            cache_root: Some("D:/Termflow Search Index".to_string()),
+            quota_bytes: 2 * 1024 * 1024 * 1024,
+        };
+        database.save_search_index_storage(&configured).unwrap();
+
+        let restored = database.load_search_index_storage().unwrap();
+        assert_eq!(restored.cache_root, configured.cache_root);
+        assert_eq!(restored.quota_bytes, configured.quota_bytes);
     }
 }

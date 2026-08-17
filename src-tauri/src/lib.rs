@@ -13,6 +13,7 @@ mod qoder_config;
 use claude_rate_limits::ClaudeRateLimitStore;
 use commands::content_search::ContentSearchState;
 use commands::git::GitWatcher;
+use commands::search_index::SearchIndexState;
 use commands::voice_shortcut::VoiceShortcutState;
 use commands::window::{VoiceOverlayState, WindowMode, WindowRegistry};
 use database::Database;
@@ -70,6 +71,7 @@ pub fn run() {
         .manage(voice_overlay_state.clone())
         .manage(voice_shortcut_state.clone())
         .manage(ContentSearchState::default())
+        .manage(SearchIndexState::default())
         .setup(move |app| {
             let git_watcher = GitWatcher::new(app.handle().clone());
             app.manage(Arc::new(git_watcher));
@@ -169,6 +171,12 @@ pub fn run() {
             commands::file_tree::inspect_project_file,
             commands::content_search::search_project_text,
             commands::content_search::cancel_content_search,
+            commands::search_index::get_search_index_status,
+            commands::search_index::set_project_index_enabled,
+            commands::search_index::rebuild_project_index,
+            commands::search_index::get_search_index_storage_status,
+            commands::search_index::set_search_index_storage,
+            commands::search_index::clear_search_index_cache,
             commands::file_tree::copy_external_entry,
             commands::file_tree::copy_project_entries,
             commands::skills::list_skills,
@@ -259,6 +267,7 @@ pub fn run() {
             commands::git::git_generate_commit_message,
             commands::git::git_fetch,
             commands::git::git_push,
+            commands::git::git_add_remote_and_push,
             commands::git::git_pull,
             commands::git::git_pull_rebase,
             commands::git::git_list_branches,

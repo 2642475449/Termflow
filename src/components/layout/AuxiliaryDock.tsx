@@ -19,6 +19,7 @@ import {
 } from "@/lib/auxiliaryDock";
 import { OPEN_CHECKPOINT_REVIEW_EVENT } from "@/lib/checkpointReview";
 import { useAppStore } from "@/store";
+import { getFileIconByName } from "@/lib/fileIcon";
 import {
   clampAuxiliaryDockWidth,
   MIN_AUXILIARY_DOCK_WIDTH,
@@ -273,6 +274,7 @@ export default function AuxiliaryDock({
                 : tab.kind === "review"
                   ? `${t("auxiliaryDock.reviewPrefix")} · ${sessions.find((item) => item.id === tab.resourceId)?.name ?? tab.title}`
                   : tab.title;
+              const fileVisual = tab.kind === "file" ? getFileIconByName(tab.title) : null;
               return (
                 <div
                   key={tab.id}
@@ -299,6 +301,8 @@ export default function AuxiliaryDock({
                       status={session.status}
                       size={15}
                     />
+                  ) : fileVisual ? (
+                    <span className="inline-flex" style={{ color: fileVisual.color }}>{fileVisual.icon}</span>
                   ) : tabIcon(tab.kind)}
                   <span className="min-w-0 flex-1 truncate">{displayTitle}</span>
                   <button
@@ -397,6 +401,7 @@ export default function AuxiliaryDock({
                       preview={tab.preview}
                       active={active}
                       onPin={() => pinTab(tab.id)}
+                      onPromoteToWorkspace={() => closeTab(tab.id)}
                     />
                   </Suspense>
                 ) : (

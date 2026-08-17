@@ -18,6 +18,12 @@ import { useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
 import { cancelContentSearch, searchProjectText } from "@/lib/api";
 import { requestFileNavigation } from "@/lib/fileNavigation";
+import {
+  DEFAULT_GLOBAL_SEARCH_SPLIT_RATIO,
+  MAX_GLOBAL_SEARCH_SPLIT_RATIO,
+  MIN_GLOBAL_SEARCH_SPLIT_RATIO,
+  globalSearchSplitRatioFromPointer,
+} from "@/lib/globalSearchLayout";
 import { useAppStore } from "@/store";
 import type {
   ContentSearchBatch,
@@ -107,7 +113,11 @@ function GlobalTextSearchDialog({
   const [summary, setSummary] = useState<ContentSearchSummary | null>(null);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [splitRatio, setSplitRatio] = useState(DEFAULT_GLOBAL_SEARCH_SPLIT_RATIO);
+  const [splitDragging, setSplitDragging] = useState(false);
   const inputRef = useRef<InputRef | null>(null);
+  const searchContentRef = useRef<HTMLDivElement | null>(null);
+  const splitDraggingRef = useRef(false);
   const activeSearchIdRef = useRef<string | null>(null);
   const searchInFlightRef = useRef(false);
   const pendingMatchesRef = useRef<ContentSearchMatch[]>([]);
@@ -168,7 +178,11 @@ function GlobalTextSearchDialog({
   }, []);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      splitDraggingRef.current = false;
+      setSplitDragging(false);
+      return;
+    }
     setScopeMode(initialScopePath ? "directory" : "project");
     const timer = window.setTimeout(() => inputRef.current?.focus({ cursor: "all" }), 30);
     return () => window.clearTimeout(timer);
@@ -292,6 +306,21 @@ function GlobalTextSearchDialog({
     [matches, selectedIndex]
   );
 
+  const updateSplitFromPointer = useCallback((clientY: number) => {
+    const content = searchContentRef.current;
+    if (!content) return;
+    const bounds = content.getBoundingClientRect();
+    setSplitRatio(globalSearchSplitRatioFromPointer(clientY, bounds.top, bounds.height));
+  }, []);
+
+  const finishSplitDrag = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    splitDraggingRef.current = false;
+    setSplitDragging(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }, []);
+
   const handleSearchKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLInputElement>) => {
       if (event.key === "ArrowDown") {
@@ -340,6 +369,11 @@ function GlobalTextSearchDialog({
             files: summary.matchedFiles,
             scanned: summary.scannedFiles,
             seconds: (summary.durationMs / 1000).toFixed(2),
+            backend: t(
+              summary.backend === "index"
+                ? "globalSearch.indexBackend"
+                : "globalSearch.scanBackend"
+            ),
           })
         : t("globalSearch.ready");
 
@@ -434,7 +468,14 @@ function GlobalTextSearchDialog({
           </div>
         </div>
 
-        <div className="app-global-search-content">
+        <div
+          ref={searchContentRef}
+          className="app-global-search-content"
+          data-resizing={splitDragging ? "true" : "false"}
+          style={{
+            gridTemplateRows: `minmax(0, ${splitRatio}fr) 8px minmax(0, ${100 - splitRatio}fr)`,
+          }}
+        >
           <div className="app-global-search-results">
             {!query.trim() ? (
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("globalSearch.enterQuery")} />
@@ -469,6 +510,38 @@ function GlobalTextSearchDialog({
               ))
             )}
           </div>
+
+          <div
+            className="app-global-search-splitter"
+            data-dragging={splitDragging ? "true" : "false"}
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label={t("globalSearch.splitterLabel")}
+            aria-valuemin={MIN_GLOBAL_SEARCH_SPLIT_RATIO}
+            aria-valuemax={MAX_GLOBAL_SEARCH_SPLIT_RATIO}
+            aria-valuenow={Math.round(splitRatio)}
+            title={t("globalSearch.splitterHint")}
+            onPointerDown={(event) => {
+              if (event.button !== 0) return;
+              event.preventDefault();
+              splitDraggingRef.current = true;
+              setSplitDragging(true);
+              event.currentTarget.setPointerCapture(event.pointerId);
+              updateSplitFromPointer(event.clientY);
+            }}
+            onPointerMove={(event) => {
+              if (!splitDraggingRef.current) return;
+              event.preventDefault();
+              updateSplitFromPointer(event.clientY);
+            }}
+            onPointerUp={finishSplitDrag}
+            onPointerCancel={finishSplitDrag}
+            onLostPointerCapture={() => {
+              splitDraggingRef.current = false;
+              setSplitDragging(false);
+            }}
+            onDoubleClick={() => setSplitRatio(DEFAULT_GLOBAL_SEARCH_SPLIT_RATIO)}
+          />
 
           <div className="app-global-search-preview">
             {selectedMatch ? (

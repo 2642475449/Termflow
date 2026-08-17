@@ -1941,9 +1941,15 @@ html, body, #root {
 
 .app-global-search-content {
   display: grid;
-  grid-template-columns: minmax(300px, 42%) minmax(0, 58%);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 55fr) 8px minmax(0, 45fr);
   flex: 1;
   min-height: 0;
+}
+
+.app-global-search-content[data-resizing="true"] {
+  cursor: row-resize;
+  user-select: none;
 }
 
 .app-global-search-results,
@@ -1953,8 +1959,48 @@ html, body, #root {
 }
 
 .app-global-search-results {
-  border-right: 1px solid var(--cs-border-sidebar);
   padding: 8px;
+}
+
+.app-global-search-splitter {
+  position: relative;
+  z-index: 1;
+  min-height: 8px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  cursor: row-resize;
+  touch-action: none;
+}
+
+.app-global-search-splitter::before {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--cs-border-sidebar);
+  content: "";
+  transform: translateY(-50%);
+}
+
+.app-global-search-splitter::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 42px;
+  height: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cs-text-tertiary) 42%, var(--cs-border-sidebar));
+  content: "";
+  transform: translate(-50%, -50%);
+  transition: width 120ms ease, background-color 120ms ease;
+}
+
+.app-global-search-splitter:hover::after,
+.app-global-search-splitter[data-dragging="true"]::after {
+  width: 58px;
+  background: var(--cs-primary);
 }
 
 .app-global-search-results > .ant-empty,
@@ -2132,16 +2178,8 @@ html, body, #root {
     display: none;
   }
 
-  .app-global-search-content {
-    grid-template-columns: 1fr;
-  }
-
-  .app-global-search-preview {
-    display: none;
-  }
-
   .app-global-search-results {
-    border-right: 0;
+    padding: 6px;
   }
 }
 /* About page WebGL flow: calm copy area on the left, dense pigment on the right. */

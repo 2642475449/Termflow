@@ -2737,6 +2737,9 @@ fn get_claude_hook_script_path() -> Result<PathBuf, String> {
         .join("termflow-hook.cjs"))
 }
 
+// Retained for a future opt-in usage-status integration. Claude sessions must
+// not receive this settings file implicitly.
+#[allow(dead_code)]
 pub(crate) fn ensure_claude_statusline_bridge() -> Result<PathBuf, String> {
     let home_dir = dirs_next::home_dir().ok_or("无法获取用户主目录")?;
     let bridge_dir = home_dir.join(".claude").join("hooks");

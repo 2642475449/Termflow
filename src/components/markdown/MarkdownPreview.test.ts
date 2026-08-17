@@ -60,4 +60,17 @@ describe("Markdown rendering", () => {
     expect(markup).toContain("const ready = true;");
     expect(markup).toContain('aria-label="复制代码"');
   });
+
+  it("renders compact two-dash table separators", () => {
+    const markup = renderToStaticMarkup(
+      createElement(MarkdownPreview, {
+        content: "| 功能说明 | 界面预览 |\n| :-- | :-- |\n| 多会话管理 | 预览图 |",
+        emptyText: "empty",
+      }),
+    );
+
+    expect(markup).toContain("<table");
+    expect(markup).toContain("多会话管理");
+    expect(markup).not.toContain("| :-- | :-- |");
+  });
 });

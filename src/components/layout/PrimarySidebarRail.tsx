@@ -14,13 +14,14 @@ import packageJson from "../../../package.json";
 interface RailButtonProps {
   active?: boolean;
   title: React.ReactNode;
+  tooltipOpen?: boolean;
   onClick: () => void;
   children: React.ReactNode;
 }
 
-function RailButton({ active = false, title, onClick, children }: RailButtonProps) {
+function RailButton({ active = false, title, tooltipOpen, onClick, children }: RailButtonProps) {
   return (
-    <Tooltip title={title} placement="right" mouseEnterDelay={0.4}>
+    <Tooltip title={title} placement="right" mouseEnterDelay={0.4} open={tooltipOpen}>
       <button
         type="button"
         aria-pressed={active}
@@ -478,7 +479,12 @@ function PrimarySidebarRail() {
           overlayInnerStyle={{ padding: 0, background: "transparent", boxShadow: "none" }}
         >
           <div>
-            <RailButton active={quickSettingsOpen} title={t("common.settings")} onClick={() => {}}>
+            <RailButton
+              active={quickSettingsOpen}
+              title={t("common.settings")}
+              tooltipOpen={quickSettingsOpen ? false : undefined}
+              onClick={() => {}}
+            >
               <SettingOutlined className="text-[18px]" />
             </RailButton>
           </div>

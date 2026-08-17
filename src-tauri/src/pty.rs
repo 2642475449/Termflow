@@ -1,6 +1,5 @@
 use crate::claude_usage::spawn_usage_monitor;
 use crate::commands::agents::agent_definition;
-use crate::commands::claude_config::ensure_claude_statusline_bridge;
 use crate::commands::git::checkpoint::{self, AgentTurnReview};
 use crate::events::{emit_session_event, SessionEvent, SessionEventSeverity, SessionEventType};
 use crate::hook_ingest::HookIngestConfig;
@@ -128,16 +127,6 @@ impl PtyManager {
             .map_err(|e| format!("创建 PTY 失败: {}", e))?;
 
         let shell = session_shell(shell_type)?;
-        let claude_statusline_settings = if agent_id.as_deref() == Some("claude") {
-            ensure_claude_statusline_bridge()
-                .map(|path| path.to_string_lossy().into_owned())
-                .map_err(|error| {
-                    log::warn!("failed to configure Claude usage status bridge: {error}");
-                })
-                .ok()
-        } else {
-            None
-        };
         let mut startup_command = match startup_command_override {
             Some(cmd) => cmd,
             None => build_claude_start_command(
@@ -146,7 +135,6 @@ impl PtyManager {
                 skip_permissions,
                 claude_effort.as_deref(),
                 initial_prompt.as_deref(),
-                claude_statusline_settings.as_deref(),
             ),
         };
         let opencode_control = if agent_id.as_deref() == Some("opencode") {
@@ -780,7 +768,6 @@ fn build_claude_start_command(
     skip_permissions: bool,
     effort: Option<&str>,
     initial_prompt: Option<&str>,
-    settings_path: Option<&str>,
 ) -> String {
     let mut parts = vec!["claude".to_string()];
     if skip_permissions {
@@ -789,10 +776,6 @@ fn build_claude_start_command(
     if let Some(level) = effort.filter(|value| !value.trim().is_empty()) {
         parts.push("--effort".to_string());
         parts.push(level.to_string());
-    }
-    if let Some(path) = settings_path.filter(|value| !value.trim().is_empty()) {
-        parts.push("--settings".to_string());
-        parts.push(quote_shell_arg(path));
     }
     if resume {
         parts.push("--resume".to_string());
@@ -1059,7 +1042,7 @@ mod tests {
     #[test]
     fn test_build_claude_start_command_for_new_session() {
         assert_eq!(
-            build_claude_start_command("abc-123", false, true, None, None, None),
+            build_claude_start_command("abc-123", false, true, None, None),
             r#"claude --dangerously-skip-permissions --session-id "abc-123""#
         );
     }
@@ -1067,7 +1050,7 @@ mod tests {
     #[test]
     fn test_build_claude_start_command_for_resume() {
         assert_eq!(
-            build_claude_start_command("abc-123", true, false, None, None, None),
+            build_claude_start_command("abc-123", true, false, None, None),
             r#"claude --resume "abc-123""#
         );
     }
@@ -1075,7 +1058,7 @@ mod tests {
     #[test]
     fn test_build_claude_start_command_with_effort() {
         assert_eq!(
-            build_claude_start_command("abc-123", false, true, Some("max"), None, None),
+            build_claude_start_command("abc-123", false, true, Some("max"), None),
             r#"claude --dangerously-skip-permissions --effort max --session-id "abc-123""#
         );
     }
@@ -1090,7 +1073,6 @@ mod tests {
                 false,
                 None,
                 Some("review this; echo 'unsafe'"),
-                None,
             ),
             r#"$__termflow_prompt=$env:TERMFLOW_INITIAL_PROMPT; Remove-Item Env:TERMFLOW_INITIAL_PROMPT; claude --session-id "abc-123" $__termflow_prompt"#
         );
@@ -1105,26 +1087,10 @@ mod tests {
             false,
             None,
             Some("first line\nsecond line; echo unsafe"),
-            None,
         );
         assert!(!command.contains("first line"));
         assert!(!command.contains('\n'));
         assert!(command.contains("$env:TERMFLOW_INITIAL_PROMPT"));
-    }
-
-    #[test]
-    fn test_build_claude_start_command_adds_session_settings() {
-        assert_eq!(
-            build_claude_start_command(
-                "abc-123",
-                false,
-                false,
-                None,
-                None,
-                Some(r"C:\Users\test user\.claude\hooks\termflow-statusline-settings.json"),
-            ),
-            r#"claude --settings "C:\Users\test user\.claude\hooks\termflow-statusline-settings.json" --session-id "abc-123""#
-        );
     }
 
     #[test]

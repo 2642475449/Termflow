@@ -31,7 +31,6 @@
                          "@xterm/addon-webgl":  "^0.19.0",
                          "@xterm/xterm":  "^6.0.0",
                          "antd":  "^5.24.7",
-                         "better-sqlite3":  "^12.9.0",
                          "dayjs":  "^1.11.13",
                          "i18next":  "^26.2.0",
                          "mermaid":  "^11.15.0",

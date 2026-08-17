@@ -1,6 +1,6 @@
-import { Alert, Button, Empty, Spin, message } from "antd";
+import { Alert, Button, Empty, Segmented, Spin, Tag, message } from "antd";
 import { ExportOutlined, FolderOpenOutlined, PushpinOutlined } from "@ant-design/icons";
-import { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import MarkdownPreview from "@/components/markdown/MarkdownPreview";
 import MonacoTextEditor from "@/components/editors/MonacoTextEditor";
@@ -10,8 +10,10 @@ import {
   readProjectFile,
   readProjectImage,
   readProjectPdf,
+  writeProjectFile,
 } from "@/lib/api";
 import { openAuxiliaryFile } from "@/lib/auxiliaryDock";
+import { replaceMarkdownSourceBlock } from "@/components/markdown/markdownSourceBlocks";
 import { useAppStore } from "@/store";
 
 const PdfPreview = lazy(() => import("@/components/pdf/PdfPreview"));
@@ -22,6 +24,7 @@ interface AuxiliaryFileViewProps {
   preview: boolean;
   active: boolean;
   onPin: () => void;
+  onPromoteToWorkspace: () => void;
 }
 
 const GIT_REFRESH_EVENT = "termflow:git-refresh";
@@ -37,17 +40,22 @@ export default function AuxiliaryFileView({
   preview,
   active,
   onPin,
+  onPromoteToWorkspace,
 }: AuxiliaryFileViewProps) {
   const { t } = useTranslation();
   const openFileTab = useAppStore((state) => state.openFileTab);
   const [loading, setLoading] = useState(true);
   const [kind, setKind] = useState<"text" | "image" | "pdf" | "binary">("text");
   const [content, setContent] = useState("");
+  const [savedContent, setSavedContent] = useState("");
+  const [readOnly, setReadOnly] = useState(true);
+  const [markdownViewMode, setMarkdownViewMode] = useState<"edit" | "preview">("preview");
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [pdfData, setPdfData] = useState<Uint8Array | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [modifiedAtMs, setModifiedAtMs] = useState<number | null>(null);
   const [refreshVersion, setRefreshVersion] = useState(0);
+  const saveInFlightRef = useRef(false);
 
   const name = useMemo(
     () => path.split(/[\\/]/).filter(Boolean).pop() ?? path,
@@ -59,6 +67,8 @@ export default function AuxiliaryFileView({
     setLoading(true);
     setError(null);
     setContent("");
+    setSavedContent("");
+    setReadOnly(true);
     setImageSrc(null);
     setPdfData(null);
 
@@ -66,11 +76,14 @@ export default function AuxiliaryFileView({
       .then(async (status) => {
         if (cancelled) return;
         setKind(status.kind);
+        setReadOnly(status.readOnly);
         setModifiedAtMs(status.modifiedAtMs ?? null);
         if (status.kind === "text") {
           const file = await readProjectFile(projectPath, path);
           if (!cancelled) {
             setContent(file.content);
+            setSavedContent(file.content);
+            setReadOnly(file.readOnly);
             setModifiedAtMs(file.modifiedAtMs ?? status.modifiedAtMs ?? null);
           }
         } else if (status.kind === "image") {
@@ -95,6 +108,42 @@ export default function AuxiliaryFileView({
       cancelled = true;
     };
   }, [path, projectPath, refreshVersion]);
+
+  useEffect(() => {
+    setMarkdownViewMode("preview");
+  }, [path]);
+
+  const isDirty = kind === "text" && content !== savedContent;
+  const handleSave = useCallback(async (options?: { silent?: boolean }) => {
+    if (readOnly || kind !== "text" || !isDirty || saveInFlightRef.current) return true;
+
+    saveInFlightRef.current = true;
+    try {
+      await writeProjectFile(projectPath, path, content);
+      setSavedContent(content);
+      setError(null);
+      window.dispatchEvent(new CustomEvent(GIT_REFRESH_EVENT, { detail: { projectPath } }));
+      if (!options?.silent) message.success(t("fileTabs.saveSuccess"));
+      return true;
+    } catch (reason) {
+      message.error(reason instanceof Error ? reason.message : t("fileTabs.saveFailed"));
+      return false;
+    } finally {
+      saveInFlightRef.current = false;
+    }
+  }, [content, isDirty, kind, path, projectPath, readOnly, t]);
+
+  useEffect(() => {
+    if (!active || !isDirty || readOnly) return;
+    const timer = window.setTimeout(() => void handleSave({ silent: true }), 1500);
+    return () => window.clearTimeout(timer);
+  }, [active, handleSave, isDirty, readOnly]);
+
+  const handleOpenInWorkspace = useCallback(async () => {
+    if (!await handleSave({ silent: true })) return;
+    openFileTab(path, { preview: false });
+    onPromoteToWorkspace();
+  }, [handleSave, onPromoteToWorkspace, openFileTab, path]);
 
   useEffect(() => {
     if (!active) return;
@@ -157,7 +206,7 @@ export default function AuxiliaryFileView({
           size="small"
           type="text"
           icon={<ExportOutlined />}
-          onClick={() => openFileTab(path, { preview: false })}
+          onClick={() => { void handleOpenInWorkspace(); }}
         >
           {t("auxiliaryDock.openInWorkspace")}
         </Button>
@@ -202,27 +251,60 @@ export default function AuxiliaryFileView({
             {imageSrc ? <img src={imageSrc} alt={name} className="max-h-full max-w-full object-contain" /> : null}
           </div>
         ) : isMarkdown(path) ? (
-          <div className="app-markdown-preview-shell h-full overflow-auto p-5">
-            <MarkdownPreview
-              content={content}
-              emptyText={t("fileTabs.markdownPreviewEmpty")}
-              filePath={path}
-              projectPath={projectPath}
-              className="app-markdown-preview-surface"
-              onOpenProjectPath={(targetPath) => {
-                openAuxiliaryFile({ projectPath, path: targetPath, preview: true });
-              }}
-              onOpenExternalLink={(href) => {
-                void openInAssociatedApplication(href);
-              }}
-            />
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="flex shrink-0 items-center justify-end gap-2 border-b border-[var(--cs-border-sidebar)] px-3 py-1.5">
+              {readOnly ? <Tag>{t("fileTabs.readOnly")}</Tag> : null}
+              <Segmented<"edit" | "preview">
+                size="small"
+                value={markdownViewMode}
+                onChange={(value) => setMarkdownViewMode(value)}
+                options={[
+                  { value: "edit", label: t("fileTabs.markdownModeEdit") },
+                  { value: "preview", label: t("fileTabs.markdownModePreview") },
+                ]}
+              />
+            </div>
+            {markdownViewMode === "preview" ? (
+              <div className="app-markdown-preview-shell min-h-0 flex-1 overflow-auto p-5">
+                <MarkdownPreview
+                  content={content}
+                  emptyText={t("fileTabs.markdownPreviewEmpty")}
+                  filePath={path}
+                  projectPath={projectPath}
+                  className="app-markdown-preview-surface"
+                  onEditBlock={readOnly ? undefined : (block, source) => {
+                    setContent(replaceMarkdownSourceBlock(content, block, source));
+                  }}
+                  editBlockLabel={t("fileTabs.markdownEditBlock")}
+                  finishEditingLabel={t("fileTabs.markdownFinishBlockEditing")}
+                  cancelEditingLabel={t("fileTabs.markdownCancelBlockEditing")}
+                  onOpenProjectPath={(targetPath) => {
+                    openAuxiliaryFile({ projectPath, path: targetPath, preview: true });
+                  }}
+                  onOpenExternalLink={(href) => {
+                    void openInAssociatedApplication(href);
+                  }}
+                />
+              </div>
+            ) : (
+              <MonacoTextEditor
+                filePath={path}
+                value={content}
+                readOnly={readOnly}
+                onChange={setContent}
+                onSave={() => { void handleSave(); }}
+                saveEnabled={isDirty && !readOnly}
+              />
+            )}
           </div>
         ) : (
           <MonacoTextEditor
             filePath={path}
             value={content}
-            readOnly
-            onChange={() => undefined}
+            readOnly={readOnly}
+            onChange={setContent}
+            onSave={() => { void handleSave(); }}
+            saveEnabled={isDirty && !readOnly}
           />
         )}
       </div>

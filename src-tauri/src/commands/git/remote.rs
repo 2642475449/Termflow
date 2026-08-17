@@ -1,11 +1,64 @@
 use super::types::GitRemoteResult;
-use super::utils::{git_command, run_git_blocking};
+use super::utils::{git_command, open_repo, run_git_blocking};
 use std::io::Read;
 use std::process::{Child, Output, Stdio};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 const REMOTE_COMMAND_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+
+fn validate_remote_name(remote_name: &str) -> Result<&str, String> {
+    let remote_name = remote_name.trim();
+    if remote_name.is_empty() {
+        return Err("远程名称不能为空".to_string());
+    }
+    if remote_name.starts_with('-')
+        || !remote_name
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | '-'))
+    {
+        return Err("远程名称只能包含字母、数字、点、下划线和连字符".to_string());
+    }
+
+    Ok(remote_name)
+}
+
+fn validate_remote_url(remote_url: &str) -> Result<&str, String> {
+    let remote_url = remote_url.trim();
+    if remote_url.is_empty() {
+        return Err("远程仓库地址不能为空".to_string());
+    }
+    if remote_url.starts_with('-') {
+        return Err("远程仓库地址无效".to_string());
+    }
+
+    Ok(remote_url)
+}
+
+fn validate_branch_name(branch_name: &str) -> Result<&str, String> {
+    let branch_name = branch_name.trim();
+    if branch_name.is_empty() {
+        return Err("推送分支不能为空".to_string());
+    }
+    if branch_name.starts_with('-') {
+        return Err("推送分支无效".to_string());
+    }
+
+    Ok(branch_name)
+}
+
+fn find_existing_remote_url(project_path: &str, remote_name: &str) -> Result<Option<String>, String> {
+    let repo = open_repo(project_path)?;
+    let result = match repo.find_remote(remote_name) {
+        Ok(remote) => remote
+            .url()
+            .map(|url| Some(url.to_string()))
+            .ok_or_else(|| format!("远程仓库 {} 没有配置地址", remote_name)),
+        Err(error) if error.code() == git2::ErrorCode::NotFound => Ok(None),
+        Err(error) => Err(format!("读取远程仓库 {} 失败: {}", remote_name, error)),
+    };
+    result
+}
 
 fn read_stream<R>(mut stream: R, stream_name: &'static str) -> JoinHandle<Result<Vec<u8>, String>>
 where
@@ -126,6 +179,59 @@ pub async fn git_push(project_path: String) -> Result<GitRemoteResult, String> {
     .await
 }
 
+/// Add a remote and set the specified local branch to track it on the first push.
+#[tauri::command]
+pub async fn git_add_remote_and_push(
+    project_path: String,
+    remote_name: String,
+    remote_url: String,
+    branch_name: String,
+) -> Result<GitRemoteResult, String> {
+    let remote_name = validate_remote_name(&remote_name)?.to_string();
+    let remote_url = validate_remote_url(&remote_url)?.to_string();
+    let branch_name = validate_branch_name(&branch_name)?.to_string();
+
+    run_git_blocking("连接 Git 远程仓库", move || {
+        match find_existing_remote_url(&project_path, &remote_name)? {
+            Some(existing_url) if existing_url != remote_url => {
+                return Err(format!(
+                    "远程仓库 {} 已存在，地址为 {}",
+                    remote_name, existing_url
+                ));
+            }
+            Some(_) => {}
+            None => {
+                let add_result = run_remote_command(
+                    &project_path,
+                    &["remote", "add", &remote_name, &remote_url],
+                    "远程仓库已添加",
+                    "添加远程仓库失败",
+                )?;
+                if !add_result.success {
+                    return Ok(add_result);
+                }
+            }
+        }
+
+        let push_result = run_remote_command(
+            &project_path,
+            &["push", "--set-upstream", &remote_name, &branch_name],
+            "远程仓库已连接并推送成功",
+            "远程仓库已配置，但首次推送失败",
+        )?;
+
+        if push_result.success {
+            return Ok(push_result);
+        }
+
+        Ok(GitRemoteResult {
+            success: false,
+            message: format!("远程仓库已配置，但首次推送失败：{}", push_result.message),
+        })
+    })
+    .await
+}
+
 #[tauri::command]
 pub async fn git_pull(project_path: String) -> Result<GitRemoteResult, String> {
     run_git_blocking("拉取 Git 更新", move || {
@@ -213,5 +319,16 @@ mod tests {
 
         assert!(error.contains("超时"));
         assert!(started_at.elapsed() < Duration::from_secs(2));
+    }
+
+    #[test]
+    fn validates_remote_configuration_arguments() {
+        assert_eq!(validate_remote_name("origin").unwrap(), "origin");
+        assert!(validate_remote_name("--origin").is_err());
+        assert!(validate_remote_name("origin name").is_err());
+        assert_eq!(validate_remote_url("https://example.com/repo.git").unwrap(), "https://example.com/repo.git");
+        assert!(validate_remote_url("--upload-pack=value").is_err());
+        assert_eq!(validate_branch_name("feature/remote").unwrap(), "feature/remote");
+        assert!(validate_branch_name("--all").is_err());
     }
 }

@@ -11,6 +11,7 @@ pub mod git;
 pub mod image;
 pub mod mcp_servers;
 pub mod notification;
+pub mod search_index;
 pub mod session;
 pub mod settings;
 pub mod skills;

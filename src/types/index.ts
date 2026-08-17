@@ -465,6 +465,46 @@ export interface ContentSearchSummary {
   durationMs: number;
   truncated: boolean;
   cancelled: boolean;
+  backend: "scan" | "index";
+  fallbackReason: string | null;
+  candidateFiles: number | null;
+  indexGeneration: number | null;
+  indexState: string;
+}
+
+export interface ProjectSearchIndexStatus {
+  projectPath: string;
+  enabled: boolean;
+  state: "disabled" | "preflight" | "building" | "ready" | "stale" | "failed" | "unsupported";
+  backend: "scan" | "fts5";
+  phase:
+    | "disabled"
+    | "discovering"
+    | "writing"
+    | "finalizing"
+    | "ready"
+    | "reconciling"
+    | "waiting_changes"
+    | "replaying_changes"
+    | "watch_failed"
+    | "failed";
+  processedFiles: number;
+  totalFiles: number | null;
+  indexedFiles: number;
+  skippedFiles: number;
+  processedBytes: number;
+  totalBytes: number | null;
+  indexSizeBytes: number;
+  startedAt: number | null;
+  updatedAt: number | null;
+  error: string | null;
+}
+
+export interface SearchIndexStorageStatus {
+  cacheRoot: string;
+  quotaBytes: number;
+  usedBytes: number;
+  projectCount: number;
 }
 
 export interface SavedImagePayload {

@@ -14,6 +14,7 @@ describe("terminal file path links", () => {
       String.raw`D:\workspace\demo\src\main.rs:42`,
       "/workspace/demo/app.py:8",
       "package.json",
+      "docs/guide.pdf:12",
       String.raw`D:\3.project\Termflow\src\locales`,
       "src/components/",
     ];
@@ -22,6 +23,7 @@ describe("terminal file path links", () => {
       String.raw`D:\workspace\demo\src\main.rs`,
       "/workspace/demo/app.py",
       "package.json",
+      "docs/guide.pdf",
       String.raw`D:\3.project\Termflow\src\locales`,
       "src/components/",
     ]);

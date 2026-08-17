@@ -24,6 +24,8 @@ import type {
   ProjectFileStatus,
   ContentSearchRequest,
   ContentSearchSummary,
+  ProjectSearchIndexStatus,
+  SearchIndexStorageStatus,
   SavedImagePayload,
   WindowProjectContext,
   SkillCatalog,
@@ -385,6 +387,40 @@ export async function getPersistentSettings(): Promise<PersistentSettings> {
 
 export async function savePersistentSettings(settings: PersistentSettings): Promise<void> {
   await invoke("save_persistent_settings", { settings });
+}
+
+export async function getSearchIndexStatus(
+  projectPath: string
+): Promise<ProjectSearchIndexStatus> {
+  return await invoke("get_search_index_status", { projectPath });
+}
+
+export async function setProjectIndexEnabled(
+  projectPath: string,
+  enabled: boolean
+): Promise<ProjectSearchIndexStatus> {
+  return await invoke("set_project_index_enabled", { projectPath, enabled });
+}
+
+export async function rebuildProjectIndex(
+  projectPath: string
+): Promise<ProjectSearchIndexStatus> {
+  return await invoke("rebuild_project_index", { projectPath });
+}
+
+export async function getSearchIndexStorageStatus(): Promise<SearchIndexStorageStatus> {
+  return await invoke("get_search_index_storage_status");
+}
+
+export async function setSearchIndexStorage(
+  cacheRoot: string | null,
+  quotaBytes: number
+): Promise<SearchIndexStorageStatus> {
+  return await invoke("set_search_index_storage", { cacheRoot, quotaBytes });
+}
+
+export async function clearSearchIndexCache(): Promise<SearchIndexStorageStatus> {
+  return await invoke("clear_search_index_cache");
 }
 
 export async function getClaudeMdDetail(
@@ -1093,6 +1129,15 @@ export async function gitCommitAmend(
 
 export async function gitPush(projectPath: string): Promise<GitRemoteResult> {
   return await invoke("git_push", { projectPath });
+}
+
+export async function gitAddRemoteAndPush(options: {
+  projectPath: string;
+  remoteName: string;
+  remoteUrl: string;
+  branchName: string;
+}): Promise<GitRemoteResult> {
+  return await invoke("git_add_remote_and_push", options);
 }
 
 export async function gitFetch(projectPath: string): Promise<GitRemoteResult> {

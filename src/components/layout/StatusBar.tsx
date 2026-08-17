@@ -1,11 +1,12 @@
-import { CloseOutlined, LoadingOutlined, ReloadOutlined, WarningOutlined } from "@ant-design/icons";
+import { CloseOutlined, DatabaseOutlined, LoadingOutlined, ReloadOutlined, WarningOutlined } from "@ant-design/icons";
 import { listen } from "@tauri-apps/api/event";
 import { message, Popover } from "antd";
 import type { TFunction } from "i18next";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AgentIcon } from "@/components/AgentIcon";
-import { getClaudeRateLimits, getCodexRateLimits, gitCancelCloneTask, inspectAgentClis } from "@/lib/api";
+import { getClaudeRateLimits, getCodexRateLimits, getSearchIndexStatus, gitCancelCloneTask, inspectAgentClis } from "@/lib/api";
+import { summarizeBackgroundTasks } from "@/lib/backgroundTasks";
 import {
   shouldLoadClaudeRateLimits,
   shouldLoadCodexRateLimits,
@@ -14,8 +15,13 @@ import {
 import { formatAgentVersion, getAgentDisplayName, isAiAgentId } from "@/lib/agents";
 import { useProjectLauncher } from "@/hooks/useProjectLauncher";
 import { useAppStore } from "@/store";
-import type { AiAgentId, ClaudeRateLimits, ClaudeRateLimitsUpdatePayload, CodexRateLimits, CodexRateLimitWindow, GitCloneEventPayload, GitCloneTask } from "@/types";
+import type { AiAgentId, ClaudeRateLimits, ClaudeRateLimitsUpdatePayload, CodexRateLimits, CodexRateLimitWindow, GitCloneEventPayload, GitCloneTask, ProjectSearchIndexStatus } from "@/types";
 const GIT_CLONE_EVENT = "git-clone-task-event";
+const SEARCH_INDEX_EVENT = "search-index-status";
+
+function normalizeProjectPath(value: string): string {
+  return value.replaceAll("\\", "/").toLocaleLowerCase();
+}
 
 function StatusBar() {
   const { t } = useTranslation();
@@ -24,6 +30,7 @@ function StatusBar() {
   const activeSessionId = useAppStore((state) => state.activeSessionId);
   const defaultAgentId = useAppStore((state) => state.defaultAgentId);
   const claudeCliInfo = useAppStore((state) => state.claudeCliInfo);
+  const currentProject = useAppStore((state) => state.currentProject);
   const gitCloneTasks = useAppStore((state) => state.gitCloneTasks);
   const upsertGitCloneTask = useAppStore((state) => state.upsertGitCloneTask);
   const removeGitCloneTask = useAppStore((state) => state.removeGitCloneTask);
@@ -35,6 +42,20 @@ function StatusBar() {
   const [claudeUsageLoading, setClaudeUsageLoading] = useState(false);
   const [claudeUsageError, setClaudeUsageError] = useState<string | null>(null);
   const [cancellingTaskIds, setCancellingTaskIds] = useState<string[]>([]);
+  const [searchIndexStatus, setSearchIndexStatus] = useState<ProjectSearchIndexStatus | null>(null);
+  const [searchIndexStatusProjectPath, setSearchIndexStatusProjectPath] = useState<string | null>(null);
+  const [searchIndexStatusError, setSearchIndexStatusError] = useState<string | null>(null);
+  const [searchIndexListenerError, setSearchIndexListenerError] = useState<string | null>(null);
+  const visibleSearchIndexStatus = currentProject?.path
+    && searchIndexStatusProjectPath
+    && normalizeProjectPath(currentProject.path) === normalizeProjectPath(searchIndexStatusProjectPath)
+    ? searchIndexStatus
+    : null;
+  const visibleSearchIndexStatusError = currentProject?.path
+    && searchIndexStatusProjectPath
+    && normalizeProjectPath(currentProject.path) === normalizeProjectPath(searchIndexStatusProjectPath)
+    ? searchIndexListenerError ?? searchIndexStatusError
+    : null;
 
   const activeSession = sessions.find((session) => session.id === activeSessionId) ?? null;
   const showCodexUsage = shouldLoadCodexRateLimits(activeSession);
@@ -199,6 +220,87 @@ function StatusBar() {
       .finally(() => setClaudeUsageLoading(false));
   };
 
+  useEffect(() => {
+    const projectPath = currentProject?.path ?? null;
+    setSearchIndexStatus(null);
+    setSearchIndexStatusProjectPath(null);
+    setSearchIndexStatusError(null);
+    setSearchIndexListenerError(null);
+    if (!projectPath) return;
+
+    let disposed = false;
+    let cleanup: (() => void) | undefined;
+
+    void listen<ProjectSearchIndexStatus>(SEARCH_INDEX_EVENT, (event) => {
+      if (disposed) return;
+      if (normalizeProjectPath(event.payload.projectPath) !== normalizeProjectPath(projectPath)) return;
+      setSearchIndexStatus(event.payload);
+      setSearchIndexStatusProjectPath(projectPath);
+      setSearchIndexStatusError(null);
+    })
+      .then((unlisten) => {
+        if (disposed) unlisten();
+        else {
+          cleanup = unlisten;
+          setSearchIndexListenerError(null);
+        }
+      })
+      .catch((error) => {
+        if (disposed) return;
+        const detail = error instanceof Error ? error.message : String(error);
+        console.error("Failed to listen for search index progress:", error);
+        setSearchIndexStatusProjectPath(projectPath);
+        setSearchIndexListenerError(detail);
+      });
+
+    void getSearchIndexStatus(projectPath)
+      .then((status) => {
+        if (disposed) return;
+        setSearchIndexStatus(status);
+        setSearchIndexStatusProjectPath(projectPath);
+        setSearchIndexStatusError(null);
+      })
+      .catch((error) => {
+        if (disposed) return;
+        const detail = error instanceof Error ? error.message : String(error);
+        console.error("Failed to load search index progress:", error);
+        setSearchIndexStatusProjectPath(projectPath);
+        setSearchIndexStatusError(detail);
+      });
+
+    return () => {
+      disposed = true;
+      cleanup?.();
+    };
+  }, [currentProject?.path]);
+
+  const indexNeedsPolling = visibleSearchIndexStatus?.enabled === true
+    && ["preflight", "building", "stale"].includes(visibleSearchIndexStatus.state);
+
+  useEffect(() => {
+    const projectPath = currentProject?.path ?? null;
+    if (!projectPath || !indexNeedsPolling) return;
+    let disposed = false;
+    const timer = window.setInterval(() => {
+      void getSearchIndexStatus(projectPath)
+        .then((status) => {
+          if (disposed) return;
+          setSearchIndexStatus(status);
+          setSearchIndexStatusProjectPath(projectPath);
+          setSearchIndexStatusError(null);
+        })
+        .catch((error) => {
+          if (disposed) return;
+          setSearchIndexStatusProjectPath(projectPath);
+          setSearchIndexStatusError(error instanceof Error ? error.message : String(error));
+        });
+    }, 1000);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [currentProject?.path, indexNeedsPolling]);
+
   const agentDisplayName = effectiveAgentId ? getAgentDisplayName(effectiveAgentId) : "";
   const versionLabel = effectiveAgentId && agentVersion
     ? `${agentDisplayName} ${formatAgentVersion(agentVersion, agentDisplayName)}`
@@ -207,7 +309,12 @@ function StatusBar() {
       : "";
   const cloneTasks = [...gitCloneTasks].reverse();
   const activeCloneTask = cloneTasks[0] ?? null;
-  const additionalCloneTaskCount = Math.max(cloneTasks.length - 1, 0);
+  const backgroundTaskSummary = summarizeBackgroundTasks(
+    cloneTasks,
+    visibleSearchIndexStatus,
+    visibleSearchIndexStatusError,
+  );
+  const additionalBackgroundTaskCount = Math.max(backgroundTaskSummary.totalCount - 1, 0);
 
   useEffect(() => {
     let disposed = false;
@@ -294,7 +401,53 @@ function StatusBar() {
     activeCloneTask?.speed,
     simplifyRemoteUrl(activeCloneTask?.remoteUrl ?? null),
   ].filter(Boolean).join(" · ");
-  const clonePopoverContent = activeCloneTask ? (
+  const indexStateLabel = visibleSearchIndexStatusError
+    ? t("statusBar.backgroundTasks.unavailable")
+    : t(`statusBar.backgroundTasks.${visibleSearchIndexStatus?.state ?? "unavailable"}`, {
+        defaultValue: visibleSearchIndexStatus?.state ?? "unavailable",
+      });
+  const indexMetaLabel = visibleSearchIndexStatusError
+    ? visibleSearchIndexStatusError
+    : visibleSearchIndexStatus?.totalFiles != null
+      ? t("statusBar.backgroundTasks.files", {
+          processed: visibleSearchIndexStatus.processedFiles,
+          total: visibleSearchIndexStatus.totalFiles,
+        })
+      : visibleSearchIndexStatus
+        ? t("statusBar.backgroundTasks.discoveredFiles", {
+            count: visibleSearchIndexStatus.processedFiles,
+          })
+        : t("statusBar.backgroundTasks.unavailable");
+  const cloneCompactProgress = activeCloneTask?.progressPercent != null
+    ? `${activeCloneTask.progressPercent}%`
+    : t("statusBar.backgroundTasks.pending");
+  const indexCompactProgress = backgroundTaskSummary.indexProgressPercent != null
+    ? `${backgroundTaskSummary.indexProgressPercent}%`
+    : indexStateLabel;
+  const compactTaskMeta = backgroundTaskSummary.concurrent
+    ? [
+        `${t("statusBar.backgroundTasks.cloneCompact")} ${cloneCompactProgress}`,
+        `${t("statusBar.backgroundTasks.indexCompact")} ${indexCompactProgress}`,
+      ].join(" · ")
+    : activeCloneTask
+      ? cloneMetaLabel
+      : indexCompactProgress;
+  const indexHasError = Boolean(visibleSearchIndexStatusError)
+    || visibleSearchIndexStatus?.state === "failed"
+    || visibleSearchIndexStatus?.state === "unsupported";
+  const compactTaskTitle = backgroundTaskSummary.concurrent
+    ? t("statusBar.backgroundTasks.multiple", { count: backgroundTaskSummary.totalCount })
+    : activeCloneTask
+      ? t("projectLauncher.backgroundCloning", { name: activeCloneTask.directoryName })
+      : t("statusBar.backgroundTasks.indexing", {
+          name: currentProject?.name ?? t("statusBar.backgroundTasks.searchIndex"),
+        });
+  const compactTaskStage = backgroundTaskSummary.concurrent
+    ? null
+    : activeCloneTask
+      ? cloneStageLabel
+      : indexStateLabel;
+  const backgroundTaskPopoverContent = backgroundTaskSummary.totalCount > 0 ? (
     <div
       className="w-[520px] overflow-hidden rounded-[12px] border"
       style={{
@@ -308,13 +461,66 @@ function StatusBar() {
         style={{ borderBottom: "1px solid color-mix(in srgb, var(--cs-border-sidebar) 82%, transparent)" }}
       >
         <span className="text-[12px] font-medium" style={{ color: "var(--cs-text-primary)" }}>
-          {t("projectLauncher.cloneDetailsTitle")}
+          {t("statusBar.backgroundTasks.title")}
         </span>
         <span className="text-[11px]" style={{ color: "var(--cs-text-tertiary)" }}>
-          {t("projectLauncher.cloneTaskCount", { count: cloneTasks.length })}
+          {t("statusBar.backgroundTasks.count", { count: backgroundTaskSummary.totalCount })}
         </span>
       </div>
       <div className="max-h-[420px] overflow-y-auto px-3 py-2">
+        {backgroundTaskSummary.indexVisible ? (
+          <div className="px-1 py-3">
+            <div className="flex items-center gap-2">
+              {indexHasError ? (
+                <WarningOutlined style={{ color: "var(--cs-warning, #d89614)", fontSize: 11 }} />
+              ) : (
+                <DatabaseOutlined style={{ color: "var(--cs-primary)", fontSize: 11 }} />
+              )}
+              <span
+                className="min-w-0 flex-1 truncate text-[13px] font-medium"
+                style={{ color: "var(--cs-text-primary)" }}
+                title={currentProject?.path}
+              >
+                {t("statusBar.backgroundTasks.indexing", {
+                  name: currentProject?.name ?? t("statusBar.backgroundTasks.searchIndex"),
+                })}
+              </span>
+              <span className="shrink-0 text-[10px]" style={{ color: "var(--cs-text-tertiary)" }}>
+                {indexStateLabel}
+              </span>
+            </div>
+            {!indexHasError ? (
+              <div
+                className="mt-2 h-[3px] overflow-hidden rounded-full"
+                style={{ background: "color-mix(in srgb, var(--cs-border) 72%, transparent)" }}
+              >
+                <div
+                  className="h-full rounded-full transition-[width] duration-150"
+                  style={{
+                    width: `${Math.max(backgroundTaskSummary.indexProgressPercent ?? 8, 8)}%`,
+                    background: "var(--cs-primary)",
+                  }}
+                />
+              </div>
+            ) : null}
+            <div
+              className="mt-2 truncate text-[11px]"
+              style={{ color: indexHasError ? "var(--cs-warning, #d89614)" : "var(--cs-text-tertiary)" }}
+              title={indexMetaLabel}
+            >
+              {indexMetaLabel}
+            </div>
+            {currentProject?.path ? (
+              <div
+                className="mt-1 truncate text-[11px]"
+                style={{ color: "var(--cs-text-quaternary, var(--cs-text-tertiary))" }}
+                title={currentProject.path}
+              >
+                {currentProject.path}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         {cloneTasks.map((task, index) => {
           const taskStageLabel = task.stage
             ? t(`projectLauncher.cloneStages.${task.stage}`, { defaultValue: task.stage })
@@ -332,7 +538,7 @@ function StatusBar() {
               key={task.taskId}
               className="px-1 py-3"
               style={{
-                borderTop: index === 0
+                borderTop: index === 0 && !backgroundTaskSummary.indexVisible
                   ? "none"
                   : "1px solid color-mix(in srgb, var(--cs-border-sidebar) 72%, transparent)",
               }}
@@ -402,6 +608,17 @@ function StatusBar() {
           );
         })}
       </div>
+      {backgroundTaskSummary.concurrent ? (
+        <div
+          className="px-3 py-2 text-[11px]"
+          style={{
+            color: "var(--cs-text-tertiary)",
+            borderTop: "1px solid color-mix(in srgb, var(--cs-border-sidebar) 72%, transparent)",
+          }}
+        >
+          {t("statusBar.backgroundTasks.concurrentHint")}
+        </div>
+      ) : null}
     </div>
   ) : null;
 
@@ -434,11 +651,11 @@ function StatusBar() {
         ) : null}
       </div>
       <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
-        {activeCloneTask ? (
+        {backgroundTaskSummary.totalCount > 0 ? (
           <Popover
             trigger={["click"]}
             placement="topRight"
-            content={clonePopoverContent}
+            content={backgroundTaskPopoverContent}
             arrow={false}
             overlayInnerStyle={{ padding: 0, background: "transparent", boxShadow: "none" }}
             styles={{ body: { padding: 0 } }}
@@ -446,37 +663,66 @@ function StatusBar() {
           >
             <button
               type="button"
-              className="flex h-6 w-[320px] min-w-0 items-center gap-2 px-0 text-left transition-colors"
+              className="flex h-6 min-w-0 items-center gap-2 px-0 text-left transition-colors"
               style={{
+                width: "min(360px, 45vw)",
                 background: "transparent",
                 border: "0",
                 boxShadow: "none",
               }}
-              title={activeCloneTask.remoteUrl || activeCloneTask.projectPath}
+              title={backgroundTaskSummary.concurrent
+                ? t("statusBar.backgroundTasks.concurrentHint")
+                : activeCloneTask?.remoteUrl || activeCloneTask?.projectPath || currentProject?.path}
             >
-              <LoadingOutlined style={{ color: "var(--cs-primary)", fontSize: 11 }} />
+              {indexHasError && !activeCloneTask ? (
+                <WarningOutlined style={{ color: "var(--cs-warning, #d89614)", fontSize: 11 }} />
+              ) : backgroundTaskSummary.indexVisible && !activeCloneTask ? (
+                <DatabaseOutlined style={{ color: "var(--cs-primary)", fontSize: 11 }} />
+              ) : (
+                <LoadingOutlined style={{ color: "var(--cs-primary)", fontSize: 11 }} />
+              )}
               <div className="flex min-w-0 flex-1 flex-col justify-center">
                 <div className="flex min-w-0 items-center gap-2 leading-none">
                   <span className="truncate" style={{ color: "var(--cs-text-secondary)" }}>
-                    {t("projectLauncher.backgroundCloning", { name: activeCloneTask.directoryName })}
+                    {compactTaskTitle}
                   </span>
-                  <span className="shrink-0" style={{ color: "var(--cs-text-tertiary)" }}>
-                    {cloneStageLabel}
-                  </span>
+                  {compactTaskStage ? (
+                    <span className="shrink-0" style={{ color: "var(--cs-text-tertiary)" }}>
+                      {compactTaskStage}
+                    </span>
+                  ) : null}
                 </div>
                 <div
-                  className="mt-1 h-[2px] overflow-hidden rounded-full"
-                  style={{
-                    background: "color-mix(in srgb, var(--cs-border) 48%, transparent)",
-                  }}
+                  className="mt-1 flex h-[2px] gap-[2px] overflow-hidden rounded-full"
                 >
-                  <div
-                    className="h-full rounded-full transition-[width] duration-150"
-                    style={{
-                      width: `${Math.max(activeCloneTask.progressPercent ?? 8, 8)}%`,
-                      background: "var(--cs-primary)",
-                    }}
-                  />
+                  {activeCloneTask ? (
+                    <div
+                      className="h-full flex-1 overflow-hidden rounded-full"
+                      style={{ background: "color-mix(in srgb, var(--cs-border) 48%, transparent)" }}
+                    >
+                      <div
+                        className="h-full rounded-full transition-[width] duration-150"
+                        style={{
+                          width: `${Math.max(activeCloneTask.progressPercent ?? 8, 8)}%`,
+                          background: "var(--cs-primary)",
+                        }}
+                      />
+                    </div>
+                  ) : null}
+                  {backgroundTaskSummary.indexVisible ? (
+                    <div
+                      className="h-full flex-1 overflow-hidden rounded-full"
+                      style={{ background: "color-mix(in srgb, var(--cs-border) 48%, transparent)" }}
+                    >
+                      <div
+                        className="h-full rounded-full transition-[width] duration-150"
+                        style={{
+                          width: `${indexHasError ? 100 : Math.max(backgroundTaskSummary.indexProgressPercent ?? 8, 8)}%`,
+                          background: indexHasError ? "var(--cs-warning, #d89614)" : "var(--cs-primary)",
+                        }}
+                      />
+                    </div>
+                  ) : null}
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -484,16 +730,16 @@ function StatusBar() {
                   className="max-w-[96px] truncate text-[10px] leading-none"
                   style={{ color: "var(--cs-text-tertiary)" }}
                 >
-                  {cloneMetaLabel}
+                  {compactTaskMeta}
                 </span>
-                {additionalCloneTaskCount > 0 ? (
+                {additionalBackgroundTaskCount > 0 ? (
                   <span
                     className="shrink-0 text-[10px] font-medium"
                     style={{
                       color: "var(--cs-text-secondary)",
                     }}
                   >
-                    +{additionalCloneTaskCount}
+                    +{additionalBackgroundTaskCount}
                   </span>
                 ) : null}
               </div>

@@ -1255,9 +1255,27 @@ pub fn test_mcp_server(
             .command
             .as_ref()
             .ok_or_else(|| "Stdio MCP server is missing a command".to_string())?;
-        return match std::process::Command::new(command).args(&server.args).envs(&server.env).current_dir(server.cwd.as_deref().unwrap_or(".")).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped()).spawn() {
-            Ok(mut child) => { std::thread::sleep(std::time::Duration::from_millis(500)); let _ = child.kill(); let _ = child.wait(); Ok(McpServerTestResult { success: true, message: format!("MCP server '{name}' started successfully") }) }
-            Err(error) => Ok(McpServerTestResult { success: false, message: format!("Failed to start MCP server: {error}") }),
+        return match std::process::Command::new(command)
+            .args(&server.args)
+            .envs(&server.env)
+            .current_dir(server.cwd.as_deref().unwrap_or("."))
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+        {
+            Ok(mut child) => {
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                let _ = child.kill();
+                let _ = child.wait();
+                Ok(McpServerTestResult {
+                    success: true,
+                    message: format!("MCP server '{name}' started successfully"),
+                })
+            }
+            Err(error) => Ok(McpServerTestResult {
+                success: false,
+                message: format!("Failed to start MCP server: {error}"),
+            }),
         };
     }
     let url = server

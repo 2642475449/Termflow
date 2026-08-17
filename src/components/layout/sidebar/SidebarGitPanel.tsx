@@ -1,16 +1,18 @@
 import { useCallback, useRef, useState } from "react";
-import { Button, Dropdown, message, Modal, Tooltip } from "antd";
+import { Button, Dropdown, Input, message, Modal, Tooltip } from "antd";
 import type { MenuProps } from "antd";
 import {
   BranchesOutlined,
   CheckOutlined,
   DownOutlined,
   EllipsisOutlined,
+  LinkOutlined,
   LoadingOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
 import {
   gitDiffContent,
+  gitAddRemoteAndPush,
   gitGenerateCommitMessage,
   gitDiscardChanges,
   gitStageFiles,
@@ -154,6 +156,11 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
   const [discardConfirmFiles, setDiscardConfirmFiles] = useState<GitFileStatus[]>([]);
   const [discardConfirmTitle, setDiscardConfirmTitle] = useState("");
   const [discardSubmitting, setDiscardSubmitting] = useState(false);
+  const [remoteModalOpen, setRemoteModalOpen] = useState(false);
+  const [remoteName, setRemoteName] = useState("origin");
+  const [remoteUrl, setRemoteUrl] = useState("");
+  const [remoteBranch, setRemoteBranch] = useState("");
+  const [remoteSubmitting, setRemoteSubmitting] = useState(false);
 
   const canGenerateCommitMessage =
     !generatingCommitMessage &&
@@ -502,6 +509,57 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
     }
   }, [currentProject, discardConfirmFiles, loadGitData, t]);
 
+  const handleOpenRemoteModal = useCallback(() => {
+    if (!currentProject || !rawBranchName || branchInfo?.isDetached) {
+      message.warning(t("sidebar.gitConnectRemoteDetached"));
+      return;
+    }
+
+    setRemoteName("origin");
+    setRemoteUrl("");
+    setRemoteBranch(rawBranchName);
+    setRemoteModalOpen(true);
+  }, [branchInfo?.isDetached, currentProject, rawBranchName, t]);
+
+  const handleConnectRemote = useCallback(async () => {
+    if (!currentProject || remoteSubmitting) return;
+
+    const trimmedRemoteName = remoteName.trim();
+    const trimmedRemoteUrl = remoteUrl.trim();
+    const trimmedBranch = remoteBranch.trim();
+    if (!trimmedRemoteName || !trimmedRemoteUrl || !trimmedBranch) {
+      message.warning(t("sidebar.gitConnectRemoteRequired"));
+      return;
+    }
+
+    const controller = getGitRefreshController();
+    controller?.markOperationStart();
+    setRemoteSubmitting(true);
+    try {
+      const result = await gitAddRemoteAndPush({
+        projectPath: currentProject.path,
+        remoteName: trimmedRemoteName,
+        remoteUrl: trimmedRemoteUrl,
+        branchName: trimmedBranch,
+      });
+      await loadGitData();
+
+      if (!result.success) {
+        message.error(`${t("sidebar.gitConnectRemoteFailed")}: ${result.message}`);
+        return;
+      }
+
+      message.success(t("sidebar.gitConnectRemoteSuccess"));
+      setRemoteModalOpen(false);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      message.error(`${t("sidebar.gitConnectRemoteFailed")}: ${detail}`);
+    } finally {
+      setRemoteSubmitting(false);
+      controller?.markOperationEnd();
+    }
+  }, [currentProject, loadGitData, remoteBranch, remoteName, remoteSubmitting, remoteUrl, t]);
+
   // No project
   if (!currentProject) {
     return (
@@ -547,6 +605,18 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
           </button>
         </Tooltip>
         <div className="flex items-center gap-1">
+          <Tooltip title={t("sidebar.gitConnectRemote")} mouseEnterDelay={0.4}>
+            <Button
+              type="text"
+              size="small"
+              icon={<LinkOutlined />}
+              onClick={handleOpenRemoteModal}
+              disabled={loading || !rawBranchName || branchInfo?.isDetached}
+              style={{ color: "var(--cs-text-secondary)" }}
+            >
+              {t("sidebar.gitConnectRemote")}
+            </Button>
+          </Tooltip>
           <Dropdown
             trigger={["click"]}
             menu={{ items: collapsePanelMenuItems, onClick: handleCollapsePanelMenuClick }}
@@ -749,6 +819,59 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
               : t("sidebar.gitDiscardConfirm", { name: discardConfirmFiles[0]?.path || "" })}
         </p>
       </Modal>
+
+      <Modal
+        title={t("sidebar.gitConnectRemoteTitle")}
+        open={remoteModalOpen}
+        okText={t("sidebar.gitConnectRemoteAction")}
+        cancelText={t("common.cancel")}
+        confirmLoading={remoteSubmitting}
+        onOk={() => void handleConnectRemote()}
+        onCancel={() => {
+          if (!remoteSubmitting) setRemoteModalOpen(false);
+        }}
+        destroyOnHidden
+      >
+        <div className="space-y-4">
+          <p className="m-0 text-sm" style={{ color: "var(--cs-text-secondary)" }}>
+            {t("sidebar.gitConnectRemoteDescription")}
+          </p>
+          <label className="block space-y-1.5">
+            <span className="text-sm" style={{ color: "var(--cs-text-primary)" }}>
+              {t("sidebar.gitRemoteName")}
+            </span>
+            <Input
+              value={remoteName}
+              onChange={(event) => setRemoteName(event.target.value)}
+              placeholder="origin"
+              disabled={remoteSubmitting}
+            />
+          </label>
+          <label className="block space-y-1.5">
+            <span className="text-sm" style={{ color: "var(--cs-text-primary)" }}>
+              {t("sidebar.gitRemoteUrl")}
+            </span>
+            <Input
+              autoFocus
+              value={remoteUrl}
+              onChange={(event) => setRemoteUrl(event.target.value)}
+              placeholder="https://github.com/owner/repository.git"
+              disabled={remoteSubmitting}
+            />
+          </label>
+          <label className="block space-y-1.5">
+            <span className="text-sm" style={{ color: "var(--cs-text-primary)" }}>
+              {t("sidebar.gitRemoteBranch")}
+            </span>
+            <Input
+              value={remoteBranch}
+              onChange={(event) => setRemoteBranch(event.target.value)}
+              disabled={remoteSubmitting}
+            />
+          </label>
+        </div>
+      </Modal>
+
     </div>
   );
 }

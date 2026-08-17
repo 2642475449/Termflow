@@ -69,6 +69,20 @@ describe("auxiliary dock store", () => {
     expect(useAuxiliaryDockStore.getState().activeTabId).toBe(first);
   });
 
+  it("closes the dock after its last file is promoted away", () => {
+    const store = useAuxiliaryDockStore.getState();
+    store.openFile({ projectPath: "D:/repo", path: "D:/repo/one.md", preview: false });
+    const fileTabId = useAuxiliaryDockStore.getState().activeTabId!;
+
+    store.closeTab(fileTabId);
+
+    expect(useAuxiliaryDockStore.getState()).toMatchObject({
+      open: false,
+      activeTabId: null,
+      tabs: [],
+    });
+  });
+
   it("returns to a preferred session tab after closing its review", () => {
     const store = useAuxiliaryDockStore.getState();
     store.openSession({

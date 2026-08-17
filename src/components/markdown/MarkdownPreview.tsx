@@ -789,7 +789,9 @@ function parseTableRow(line: string) {
 }
 
 function isTableSeparator(line: string) {
-  return /^\s*\|?(?:\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?\s*$/.test(line);
+  // 与常见 Markdown 编辑器保持兼容：除了标准的 `---`，也接受
+  // `--` 形式的紧凑分隔行，避免将整张表格降级为普通段落。
+  return /^\s*\|?(?:\s*:?-{2,}:?\s*\|)+\s*:?-{2,}:?\s*\|?\s*$/.test(line);
 }
 
 function parseTableAlignment(line: string): TableAlignment[] {
