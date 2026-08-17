@@ -1572,7 +1572,7 @@ function AppLayout() {
       <Layout className="relative flex-1 min-h-0">
         <PrimarySidebarRail />
         <Sidebar
-          collapsed={sidebarCollapsed || settingsVisible}
+          collapsed={sidebarCollapsed}
           section={activeSidebarSection}
         />
         <Content className="app-main-content flex flex-col">

@@ -386,12 +386,14 @@ export function SearchIndexPage() {
               style={{ color: "var(--cs-text-tertiary)" }}
             >
               <span>
-                {t("settings.searchIndex.indexedFiles", {
-                  indexed: status.indexedFiles,
-                  total: status.totalFiles ?? status.processedFiles,
+                {t("settings.searchIndex.searchableFiles", { count: status.indexedFiles })}
+              </span>
+              <span>
+                {t("settings.searchIndex.candidateFiles", {
+                  count: status.totalFiles ?? status.processedFiles,
                 })}
               </span>
-              <span>{t("settings.searchIndex.skippedFiles", { count: status.skippedFiles })}</span>
+              <span>{t("settings.searchIndex.skippedNonTextFiles", { count: status.skippedFiles })}</span>
               {status.indexSizeBytes > 0 ? (
                 <span>
                   {t("settings.searchIndex.indexSize", { size: formatBytes(status.indexSizeBytes) })}
@@ -404,6 +406,9 @@ export function SearchIndexPage() {
                   })}
                 </span>
               ) : null}
+            </div>
+            <div className="mt-2 text-xs leading-5" style={{ color: "var(--cs-text-tertiary)" }}>
+              {t("settings.searchIndex.excludedDirectories")}
             </div>
             <div className="mt-3">
               <Button

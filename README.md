@@ -4,6 +4,10 @@
 </h1>
 
 <p align="center">
+  简体中文 | <a href="README.zh-TW.md">繁體中文</a> | <a href="README.en-US.md">English</a> | <a href="README.ja-JP.md">日本語</a>
+</p>
+
+<p align="center">
   <strong>面向终端的 CLI 智能体工作台</strong><br>
   本地优先 · 项目与会话管理 · 嵌入式终端 · Git 工作流 · 检查点审阅
 </p>
@@ -36,7 +40,7 @@
 - ⚡ **快速命令**：自定义快捷命令，一键执行常用操作
 - 🎨 **多套主题**：深色、浅色与跟随系统切换
 - 💾 **会话持久化**：关闭应用后无缝恢复历史对话
-- 🌐 **多语言支持**：中文、英文、日语界面
+- 🌐 **多语言支持**：简体中文、繁體中文、英文、日语界面
 
 ## 为什么开源
 
@@ -69,7 +73,7 @@ Termflow 最初是为了做一款符合自己使用习惯的应用。在功能�
 | UI 组件 | Ant Design 5 | 按钮、弹窗、标签等 |
 | 样式 | TailwindCSS 3 + CSS 变量 | 原子化样式 + 主题系统 |
 | 构建 | Vite 6 | 前端构建工具 |
-| 国际化 | i18next | 多语言支持（中/英/日） |
+| 国际化 | i18next | 多语言支持（简体中文/繁體中文/英文/日语） |
 | 代码编辑器 | Monaco Editor | 代码查看与编辑（Geist Mono 字体） |
 | 图表渲染 | Mermaid | Git 提交历史图表 |
 | 数据库 | sql.js / rusqlite | 前后端数据存储 |
@@ -127,7 +131,8 @@ Termflow/
 │   ├── lib/
 │   │   └── api/index.ts                # Tauri invoke 封装
 │   ├── locales/                        # 国际化资源
-│   │   ├── zh-CN.json                  # 中文
+│   │   ├── zh-CN.json                  # 简体中文
+│   │   ├── zh-TW.json                  # 繁體中文
 │   │   ├── en-US.json                  # 英文
 │   │   └── ja-JP.json                  # 日语
 │   ├── styles/
@@ -334,7 +339,8 @@ Termflow 支持多种语音识别提供商：
 ### 国际化
 
 支持多语言切换：
-- 中文（zh-CN）- 默认
+- 简体中文（zh-CN）- 默认
+- 繁體中文（zh-TW）
 - 英文（en-US）
 - 日语（ja-JP）
 
