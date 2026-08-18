@@ -6,46 +6,36 @@ export type GitSyncAction =
 
 export interface GitSyncPlan {
   action: GitSyncAction;
-  blockedByLocalChanges: boolean;
 }
 
 interface GitSyncState {
   ahead: number;
   behind: number;
-  hasLocalChanges: boolean;
 }
 
 /**
- * Keep sync behavior predictable and avoid touching a dirty worktree when a
- * pull (including a rebase pull) is required. Pushing existing commits does
- * not read or modify unstaged/staged working tree changes, so it remains safe.
+ * Let Git decide whether the working tree can safely be updated. Git permits
+ * non-conflicting local changes and refuses operations that would overwrite
+ * them, which is less restrictive than blocking every dirty worktree in the UI.
  */
 export function getGitSyncPlan({
   ahead,
   behind,
-  hasLocalChanges,
 }: GitSyncState): GitSyncPlan {
   const hasAhead = ahead > 0;
   const hasBehind = behind > 0;
 
   if (!hasAhead && !hasBehind) {
-    return { action: "none", blockedByLocalChanges: false };
-  }
-
-  if (hasBehind && hasLocalChanges) {
-    return { action: "none", blockedByLocalChanges: true };
+    return { action: "none" };
   }
 
   if (hasAhead && hasBehind) {
-    return {
-      action: "pull-rebase-and-push",
-      blockedByLocalChanges: false,
-    };
+    return { action: "pull-rebase-and-push" };
   }
 
   if (hasBehind) {
-    return { action: "pull", blockedByLocalChanges: false };
+    return { action: "pull" };
   }
 
-  return { action: "push", blockedByLocalChanges: false };
+  return { action: "push" };
 }

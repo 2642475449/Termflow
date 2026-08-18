@@ -59,7 +59,13 @@ pub async fn spawn_pty(
     if path.is_empty() {
         return Err("项目路径不能为空".into());
     }
-    if let Some(agent_id) = agent_id.as_deref() {
+    // Shell sessions do not support Agent status hooks.  Do not attempt their
+    // configuration here, otherwise a successful PowerShell/CMD launch emits a
+    // misleading "Hook unavailable" warning to the user.
+    if let Some(agent_id) = agent_id
+        .as_deref()
+        .filter(|agent_id| *agent_id != "powershell" && *agent_id != "cmd")
+    {
         let hook_error =
             match super::agent_hooks::ensure_agent_status_hook(agent_id.to_string()) {
                 Ok(status) if !status.configured => Some(status.detail.unwrap_or_else(|| {

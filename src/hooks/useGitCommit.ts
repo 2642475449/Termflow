@@ -85,8 +85,6 @@ export function useGitCommit({
   const { t } = useTranslation();
   const [committing, setCommitting] = useState(false);
 
-  const hasLocalChanges = stagedFiles.length > 0 || unstagedFiles.length > 0;
-
   const runGitOperation = useCallback(
     async (operation: () => Promise<void>) => {
       const controller = getGitRefreshController();
@@ -152,10 +150,6 @@ export function useGitCommit({
 
   const pull = useCallback(async () => {
     if (!projectPath) return;
-    if (hasLocalChanges) {
-      message.warning("请先提交或丢弃本地更改，再拉取远程更新。");
-      return;
-    }
 
     await runGitOperation(async () => {
       const pullResult = await gitPull(projectPath);
@@ -166,16 +160,12 @@ export function useGitCommit({
         message.error(`${t("sidebar.gitPullFailed")}: ${formatGitRemoteError(pullResult.message, t)}`);
       }
     });
-  }, [hasLocalChanges, projectPath, refresh, runGitOperation, t]);
+  }, [projectPath, refresh, runGitOperation, t]);
 
   const sync = useCallback(async () => {
     if (!projectPath) return;
 
-    const plan = getGitSyncPlan({ ahead, behind, hasLocalChanges });
-    if (plan.blockedByLocalChanges) {
-      message.warning("请先提交或暂存本地更改，再同步远程更新。");
-      return;
-    }
+    const plan = getGitSyncPlan({ ahead, behind });
     if (plan.action === "none") return;
 
     await runGitOperation(async () => {
@@ -216,7 +206,7 @@ export function useGitCommit({
       message.success(t("sidebar.gitPushSuccess"));
       await refreshGitStateAndGraph(projectPath, refresh);
     });
-  }, [ahead, behind, hasLocalChanges, projectPath, refresh, runGitOperation, t]);
+  }, [ahead, behind, projectPath, refresh, runGitOperation, t]);
 
   const commitAndPush = useCallback(async (commitMessage: string) => {
     if (!projectPath) return;

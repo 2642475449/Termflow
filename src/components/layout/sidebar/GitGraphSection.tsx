@@ -497,19 +497,22 @@ export function GitGraphSection({
           file.oldPath,
         );
         const pathSegments = diffDocument.filePath.replace(/\\/g, "/").split("/");
-        openGitDiffTab({
-          path: diffDocument.filePath,
-          oldPath: file.oldPath,
-          name: pathSegments[pathSegments.length - 1] ?? diffDocument.filePath,
-          staged: false,
-          revision: commit.oid,
-          hunkActionsAvailable: false,
-          originalContent: diffDocument.originalContent,
-          modifiedContent: diffDocument.modifiedContent,
-          originalLabel: diffDocument.originalLabel,
-          modifiedLabel: diffDocument.modifiedLabel,
-          isBinary: diffDocument.isBinary,
-        });
+        openGitDiffTab(
+          {
+            path: diffDocument.filePath,
+            oldPath: file.oldPath,
+            name: pathSegments[pathSegments.length - 1] ?? diffDocument.filePath,
+            staged: false,
+            revision: commit.oid,
+            hunkActionsAvailable: false,
+            originalContent: diffDocument.originalContent,
+            modifiedContent: diffDocument.modifiedContent,
+            originalLabel: diffDocument.originalLabel,
+            modifiedLabel: diffDocument.modifiedLabel,
+            isBinary: diffDocument.isBinary,
+          },
+          { preview: true },
+        );
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
         message.error(`${t("sidebar.gitGraphFileDiffFailed")}: ${detail}`);

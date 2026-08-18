@@ -1182,6 +1182,37 @@ describe("git diff tab previews", () => {
     expect(state.tabsById[pinnedId!].preview).toBe(false);
     expect(state.tabsById[previewId!].preview).toBe(true);
   });
+
+  it("reuses one preview tab across files selected from the commit graph", () => {
+    const store = createAppStore();
+    const projectPath = "D:/workspace/demo";
+    store.setState({
+      currentProject: { path: projectPath, name: "demo" },
+      projectWorkspaces: { [projectPath]: createDefaultWorkspace() },
+    });
+
+    const firstId = store.getState().openGitDiffTab({
+      ...createDiff("src/one.ts"),
+      revision: "1111111111111111111111111111111111111111",
+    }, { preview: true });
+    const secondId = store.getState().openGitDiffTab({
+      ...createDiff("src/two.ts"),
+      revision: "2222222222222222222222222222222222222222",
+    }, { preview: true });
+    const reopenedId = store.getState().openGitDiffTab({
+      ...createDiff("src/two.ts"),
+      revision: "2222222222222222222222222222222222222222",
+    }, { preview: true });
+    const state = store.getState();
+
+    expect(reopenedId).toBe(secondId);
+    expect(state.openTabs).toEqual([secondId]);
+    expect(state.tabsById[firstId!]).toBeUndefined();
+    expect(state.tabsById[secondId!]).toMatchObject({
+      title: "two.ts (工作树)",
+      preview: true,
+    });
+  });
 });
 
 describe("editor typography persistence", () => {

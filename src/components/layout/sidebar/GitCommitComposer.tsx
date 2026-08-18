@@ -8,7 +8,6 @@ import {
   ReloadOutlined,
 } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
-import { getGitSyncPlan } from "@/lib/gitSyncPolicy";
 import type { GitCommitMessageProfile } from "@/types";
 
 interface GitCommitComposerProps {
@@ -45,8 +44,6 @@ export function GitCommitComposer({
   hasLocalChanges,
   stagedChangeCount,
   unstagedChangeCount,
-  aheadCount,
-  behindCount,
   hasSyncChanges,
   syncChangeCount,
   committing,
@@ -73,14 +70,9 @@ export function GitCommitComposer({
   const hasUnstagedChanges = unstagedChangeCount > 0;
   const willStageAllBeforeCommit = !hasStagedChanges && hasUnstagedChanges;
   const hasMixedChanges = hasStagedChanges && hasUnstagedChanges;
-  const syncPlan = getGitSyncPlan({
-    ahead: aheadCount,
-    behind: behindCount,
-    hasLocalChanges,
-  });
   const canCommit = !committing && hasLocalChanges && trimmedMessage.length > 0;
   const canSync =
-    !committing && hasSyncChanges && !syncPlan.blockedByLocalChanges;
+    !committing && hasSyncChanges;
   const showSyncPrimaryAction = !hasLocalChanges && hasSyncChanges;
   const canOpenCommitMenu = !committing && (hasLocalChanges || hasSyncChanges);
   const canPrimaryAction = showSyncPrimaryAction ? canSync : canCommit;
@@ -103,11 +95,9 @@ export function GitCommitComposer({
 
   const syncDisabledReason = committing
     ? "Git 操作进行中，请稍候"
-    : syncPlan.blockedByLocalChanges
-      ? "请先提交或暂存本地更改，再同步远程更新"
-      : !hasSyncChanges
-        ? "当前没有可同步的远程变更"
-        : null;
+    : !hasSyncChanges
+      ? "当前没有可同步的远程变更"
+      : null;
 
   const commitMenuDisabledReason = committing
     ? "Git 操作进行中，请稍候"
