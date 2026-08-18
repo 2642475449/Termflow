@@ -320,17 +320,17 @@ export function AgentsPage() {
           </Button>
         </div>
 
-        <div className="mt-4 space-y-2">
+        <div className="mt-3 space-y-1.5">
           {gitCommitMessageProfiles.map((profile) => {
             const isDefault = profile.id === defaultGitCommitMessageProfileId;
             return (
               <div
                 key={profile.id}
-                className="flex min-w-0 items-start gap-3 rounded-lg px-3 py-3"
+                className="flex min-w-0 items-center gap-3 rounded-lg px-3 py-2"
                 style={{ background: "var(--cs-bg-hover)", border: "1px solid var(--cs-border-sidebar)" }}
               >
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
                     <span className="text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>
                       {profile.name}
                     </span>
@@ -340,12 +340,14 @@ export function AgentsPage() {
                       </Tag>
                     )}
                   </div>
-                  <div
-                    className="mt-1 line-clamp-2 whitespace-pre-wrap text-xs leading-5"
-                    style={{ color: "var(--cs-text-tertiary)" }}
-                  >
-                    {profile.instructions}
-                  </div>
+                  <Tooltip title={profile.instructions} placement="topLeft">
+                    <div
+                      className="mt-0.5 truncate text-xs leading-4"
+                      style={{ color: "var(--cs-text-tertiary)" }}
+                    >
+                      {profile.instructions.replace(/\s+/g, " ")}
+                    </div>
+                  </Tooltip>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   {!isDefault && (

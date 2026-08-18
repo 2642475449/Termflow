@@ -62,6 +62,20 @@ function cleanMarkdownUrl(url: string) {
   return url.trim().replace(/^`+|`+$/g, "");
 }
 
+/**
+ * Keep heading identifiers compatible with ordinary Markdown links such as
+ * `[Jump to install](#installation)`.  The previous `heading-` prefix made
+ * the visible links render correctly but left their targets unreachable.
+ */
+function createHeadingAnchorId(heading: string) {
+  return heading
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s-]/gu, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .trim();
+}
+
 export function isLikelyMarkdownPath(value: string) {
   const candidate = cleanMarkdownUrl(value);
   if (!candidate || /\s/.test(candidate)) return false;
@@ -1327,17 +1341,12 @@ function MarkdownPreviewRenderer({
       const level = Math.min(headingMatch[1].length, 6);
       const HeadingTag = `h${level}` as keyof React.JSX.IntrinsicElements;
       const headingText = headingMatch[2];
-      // 生成锚点 ID（将标题文本转换为 URL 友好的格式）
-      const headingId = headingText
-        .toLowerCase()
-        .replace(/[^\w\s-]/g, "")
-        .replace(/\s+/g, "-")
-        .replace(/-+/g, "-")
-        .trim();
+      // Generate standard Markdown-compatible anchors, e.g. `#安装`.
+      const headingId = createHeadingAnchorId(headingText);
       blocks.push(
         <HeadingTag
           key={`heading-${blocks.length}`}
-          id={`heading-${headingId}`}
+          id={headingId}
           className={level <= 2 ? "m-0 text-lg font-semibold" : "m-0 text-base font-semibold"}
           style={{ color: "var(--cs-text-primary)" }}
         >

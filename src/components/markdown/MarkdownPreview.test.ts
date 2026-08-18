@@ -61,6 +61,18 @@ describe("Markdown rendering", () => {
     expect(markup).toContain('aria-label="复制代码"');
   });
 
+  it("uses standard heading anchors so in-document links can navigate", () => {
+    const markup = renderToStaticMarkup(
+      createElement(MarkdownPreview, {
+        content: "[查看安装](#安装)\n\n## 安装",
+        emptyText: "empty",
+      }),
+    );
+
+    expect(markup).toContain('href="#安装"');
+    expect(markup).toContain('<h2 id="安装"');
+  });
+
   it("renders compact two-dash table separators", () => {
     const markup = renderToStaticMarkup(
       createElement(MarkdownPreview, {

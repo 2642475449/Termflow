@@ -1029,29 +1029,32 @@ function HomePage() {
               >
                 {greeting}
               </h1>
-              <div className="mt-2 text-[13px]" style={{ color: "var(--cs-text-secondary)" }}>
-                {subtitle}
-              </div>
-              {usageScope && (
-                <Popover
-                  trigger="click"
-                  placement="bottomLeft"
-                  content={
-                    <div className="max-w-[420px] text-xs leading-5" style={{ color: "var(--cs-text-secondary)" }}>
-                      {usageScope}
-                    </div>
-                  }
-                >
-                  <button
-                    type="button"
-                    className="mt-2 inline-flex h-4 w-4 items-center justify-center rounded-full border-0 bg-transparent p-0 text-[13px]"
-                    aria-label={homeCopy(i18n.language, "查看统计范围说明", "View usage scope details", "集計範囲の詳細を表示")}
-                    style={{ color: "var(--cs-text-tertiary)" }}
+              <div
+                className="mt-2 flex items-center gap-2 text-[13px]"
+                style={{ color: "var(--cs-text-secondary)" }}
+              >
+                <span>{subtitle}</span>
+                {usageScope && (
+                  <Popover
+                    trigger="click"
+                    placement="bottomLeft"
+                    content={
+                      <div className="max-w-[420px] text-xs leading-5" style={{ color: "var(--cs-text-secondary)" }}>
+                        {usageScope}
+                      </div>
+                    }
                   >
-                    <ExclamationCircleOutlined />
-                  </button>
-                </Popover>
-              )}
+                    <button
+                      type="button"
+                      className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-0 bg-transparent p-0 text-[13px]"
+                      aria-label={homeCopy(i18n.language, "查看统计范围说明", "View usage scope details", "集計範囲の詳細を表示")}
+                      style={{ color: "var(--cs-text-tertiary)" }}
+                    >
+                      <ExclamationCircleOutlined />
+                    </button>
+                  </Popover>
+                )}
+              </div>
             </div>
 
             <div

@@ -52,6 +52,7 @@ import {
 import { AgentIcon } from "@/components/AgentIcon";
 import { SideQuestionComposer } from "@/components/SideQuestionComposer";
 import { getAgentDisplayName, getAgentTerminalBehavior, isAiAgentId } from "@/lib/agents";
+import { isSessionTurnRunning } from "@/lib/sessions";
 import { getTerminalTheme } from "@/lib/terminalTheme";
 import type { AgentCliInfo } from "@/types";
 import { useTranslation } from "react-i18next";
@@ -62,7 +63,20 @@ const AGENT_FILE_DRAG_MIME = "application/x-termflow-agent-files";
 const TERMINAL_FOCUS_RETRY_DELAYS_MS = [0, 50, 150, 300];
 const TERMINAL_SCROLLBAR_INTERACTION_WIDTH = 8;
 const TERMINAL_SCROLLBAR_HIDE_DELAY_MS = 700;
+const HIDE_CURSOR_SEQUENCE = "\x1b[?25l";
+const SHOW_CURSOR_SEQUENCE = "\x1b[?25h";
 let cachedWebglSupport: boolean | null = null;
+
+export function keepRunningCursorHidden(data: string, shouldHideCursor: boolean): string {
+  return shouldHideCursor ? `${data}${HIDE_CURSOR_SEQUENCE}` : data;
+}
+
+export function shouldHideRunningAgentCursor(
+  agentId: unknown,
+  isTurnRunning: boolean,
+): boolean {
+  return isAiAgentId(agentId) && isTurnRunning;
+}
 
 function canUseWebglRenderer(): boolean {
   if (cachedWebglSupport !== null) {
@@ -164,6 +178,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
   const pendingSubmissionEscapeSequenceRef = useRef("");
   const titleRequestStartedRef = useRef(false);
   const sideQuestionSubmittingRef = useRef(false);
+  const hideCursorWhileRunningRef = useRef(false);
   const suppressedFocusSequenceUntilRef = useRef(0);
   const processedResourceDropStartedAtRef = useRef<number | null>(null);
   const [isImageDragOver, setIsImageDragOver] = useState(false);
@@ -195,6 +210,12 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
   );
   const terminalBehavior = getAgentTerminalBehavior(currentSession?.agentId);
   const forceStableCursor = terminalBehavior.forceStableCursor === true;
+  const manageAgentCursorVisibility = isAiAgentId(currentSession?.agentId);
+  const hideCursorWhileRunning = shouldHideRunningAgentCursor(
+    currentSession?.agentId,
+    Boolean(currentSession && isSessionTurnRunning(currentSession)),
+  );
+  hideCursorWhileRunningRef.current = hideCursorWhileRunning;
   const termTheme = getTerminalTheme(activeTheme);
   const currentSessionPath = currentSession?.path ?? "";
 
@@ -962,7 +983,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
     const onCompositionEnd = () => {
       isComposing = false;
       if (pendingOutput) {
-        term.write(pendingOutput);
+        term.write(keepRunningCursorHidden(pendingOutput, hideCursorWhileRunningRef.current));
         pendingOutput = "";
       }
     };
@@ -979,7 +1000,9 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
           if (isComposing) {
             pendingOutput += event.payload.data;
           } else {
-            term.write(event.payload.data);
+            term.write(
+              keepRunningCursorHidden(event.payload.data, hideCursorWhileRunningRef.current),
+            );
           }
         }
       }
@@ -1089,6 +1112,12 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
     terminalRef.current.options.disableStdin =
       !currentSession?.active || currentSession?.status === "starting";
   }, [currentSession?.active, currentSession?.status]);
+
+  useEffect(() => {
+    const term = terminalRef.current;
+    if (!term || !manageAgentCursorVisibility) return;
+    term.write(hideCursorWhileRunning ? HIDE_CURSOR_SEQUENCE : SHOW_CURSOR_SEQUENCE);
+  }, [hideCursorWhileRunning, manageAgentCursorVisibility]);
 
   useEffect(() => {
     const container = containerRef.current;
