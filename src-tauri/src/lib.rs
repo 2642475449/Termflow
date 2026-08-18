@@ -287,6 +287,7 @@ pub fn run() {
             commands::claude_config::list_agent_hooks,
             commands::claude_config::get_agent_hook_detail,
             commands::claude_config::repair_agent_hooks,
+            commands::claude_config::migrate_workspace_claude_hooks,
             commands::claude_config::get_hook_ingest_config,
             commands::claude_config::get_claude_effort_info,
             commands::claude_config::get_claude_usage_overview,

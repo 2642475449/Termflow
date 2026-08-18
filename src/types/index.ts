@@ -635,6 +635,11 @@ export interface HookCatalog {
   userConfigPath: string;
 }
 
+export interface WorkspaceHookMigrationResult {
+  removedCount: number;
+  catalog: HookCatalog;
+}
+
 export interface HookDetail {
   hook: HookInfo;
   rawConfig: string;

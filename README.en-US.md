@@ -47,17 +47,15 @@ Termflow started as an application built around the workflow I wanted to use eve
 
 | Feature | What it provides |
 | :--- | :--- |
-| **Session management** | The sidebar groups sessions by project directory, lets you create sessions quickly, and shows their active state in real time.<br><br>![Termflow multi-session management demo](public/images/demos/multi-session-management.gif) |
-| **Embedded terminal** | xterm.js and ConPTY provide a native-like terminal that resizes with the window and supports ANSI colours and cursor controls. |
-| **File management and editing** | Browse project files, preview and edit Markdown in place, and drag files from the project tree into the active CLI input. |
-| **Session persistence** | Session data remains after the app closes. Termflow uses the selected agent's native session-creation and resume options. |
-| **Checkpoint review** | Records agent-turn checkpoints, aligns diffs, shows file summaries and helper panels, and lets you return to any checkpoint. |
-| **Quick commands** | A customizable command library with categories, search, parameterized templates, and one-click execution. |
-| **Voice input** | Supports MiMo and DashScope ASR, provider switching, global shortcuts, and an overlay showing recording status and volume. |
-| **Git workflow** | Commit, push, pull, sync, staging, diffs, branch management, and AI-generated commit messages. |
-| **Attention and notifications** | Tracks session state and sends smart notifications while preserving attention data for later review. |
-| **Full-text search** | Search project files using regular expressions, file-type filters, and highlighted results. |
-| **Custom title bar** | Borderless window controls, drag region, fast search, project switching, and theme and language settings. |
+| **Project and session workspace** | Automatically organize sessions from different agents by project directory, create and switch tasks quickly, and see the live state of every session.<br><br>![Termflow project and session workspace demo](public/images/demos/multi-session-management.gif) |
+| **Multi-agent terminal** | Use Claude Code, Codex, Antigravity CLI, OpenCode, and Qoder CLI in one workspace, with full terminal interaction powered by xterm.js and ConPTY. |
+| **File and context collaboration** | Browse, search, and edit project files, preview Markdown, and drag files from the project tree into the active CLI input to give an agent context quickly. |
+| **Git change workflow** | Review and stage changes, manage branches, commit, push, pull, and sync from one place, with optional AI-generated commit messages. |
+| **Checkpoint and diff review** | Record checkpoints for agent turns automatically, review file summaries and diffs, and return to any checkpoint. |
+| **Quick commands and voice input** | Run common actions through searchable, parameterized quick commands; use MiMo or DashScope ASR with a global shortcut and recording-status overlay. |
+| **Work status overview** | Summarize session activity, token usage, and work patterns, while the attention center and smart notifications highlight tasks that need action.<br><br>![Termflow work status overview demo](public/images/demos/work-status-overview.gif) |
+
+Additional capabilities include persistent sessions, a custom title bar and borderless window controls, dark/light/system themes, and Simplified Chinese, Traditional Chinese, English, and Japanese interfaces.
 
 ## Technology stack
 

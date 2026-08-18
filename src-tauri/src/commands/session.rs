@@ -25,6 +25,14 @@ pub struct ClaudeCliInfo {
     pub error: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentHookConfigurationFailedPayload {
+    session_id: String,
+    agent_id: String,
+    error: String,
+}
+
 const INTERACTIVE_BASELINE_TIMEOUT: Duration = Duration::from_millis(1_500);
 const PREVIOUS_TURN_COMPLETION_TIMEOUT: Duration = Duration::from_millis(750);
 
@@ -52,9 +60,25 @@ pub async fn spawn_pty(
         return Err("项目路径不能为空".into());
     }
     if let Some(agent_id) = agent_id.as_deref() {
-        if let Err(error) = super::agent_hooks::ensure_agent_status_hook(agent_id.to_string()) {
+        let hook_error =
+            match super::agent_hooks::ensure_agent_status_hook(agent_id.to_string()) {
+                Ok(status) if !status.configured => Some(status.detail.unwrap_or_else(|| {
+                    format!("Hook 配置未通过完整性检查：{}", status.config_path)
+                })),
+                Ok(_) => None,
+                Err(error) => Some(error),
+            };
+        if let Some(error) = hook_error {
             // Status integration is best-effort and must never prevent the terminal from opening.
             warn!("failed to configure {agent_id} status hook: {error}");
+            let _ = app.emit(
+                "agent-hook-configuration-failed",
+                AgentHookConfigurationFailedPayload {
+                    session_id: session_id.clone(),
+                    agent_id: agent_id.to_string(),
+                    error,
+                },
+            );
         }
     }
     let checkpoint_agent_id = agent_id.as_deref().unwrap_or("generic-cli");

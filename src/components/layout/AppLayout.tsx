@@ -148,6 +148,12 @@ interface AgentStatusUpdatePayload {
   createdAt: number;
 }
 
+interface AgentHookConfigurationFailedPayload {
+  sessionId: string;
+  agentId: string;
+  error: string;
+}
+
 const INITIAL_WORKER_VOICE_STATE: WorkerVoiceStatePayload = {
   phase: "idle",
   level: 0,
@@ -531,14 +537,35 @@ function AppLayout() {
             detail: status.detail ?? undefined,
             checkedAt: Date.now(),
           });
+          if (!status.configured) {
+            const errorText = status.detail
+              ?? i18n.t("settings.hooks.integrityCheckFailed", { path: status.configPath });
+            void message.warning({
+              content: i18n.t("settings.hooks.autoInstallFailed", {
+                agent: getAgentDisplayName(agentId),
+                error: errorText,
+              }),
+              key: `agent-hook-install-${agentId}`,
+              duration: 8,
+            });
+          }
         } catch (error) {
           if (!cancelled) {
             console.warn(`Failed to preinstall ${agentId} status hook:`, error);
+            const errorText = error instanceof Error ? error.message : String(error);
             useAppStore.getState().setAgentHookDiagnostic({
               agentId,
               configured: false,
               checkedAt: Date.now(),
-              error: error instanceof Error ? error.message : String(error),
+              error: errorText,
+            });
+            void message.warning({
+              content: i18n.t("settings.hooks.autoInstallFailed", {
+                agent: getAgentDisplayName(agentId),
+                error: errorText,
+              }),
+              key: `agent-hook-install-${agentId}`,
+              duration: 8,
             });
           }
         }
@@ -546,6 +573,35 @@ function AppLayout() {
     })();
     return () => {
       cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const unlistenPromise = listen<AgentHookConfigurationFailedPayload>(
+      "agent-hook-configuration-failed",
+      (event) => {
+        const { agentId, error } = event.payload;
+        if (isAiAgentId(agentId)) {
+          useAppStore.getState().setAgentHookDiagnostic({
+            agentId,
+            configured: false,
+            checkedAt: Date.now(),
+            error,
+          });
+        }
+        void message.warning({
+          content: i18n.t("settings.hooks.sessionInstallFailed", {
+            agent: isAiAgentId(agentId) ? getAgentDisplayName(agentId) : agentId,
+            error,
+          }),
+          key: `agent-hook-install-${agentId}`,
+          duration: 10,
+        });
+      }
+    );
+
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten()).catch(() => {});
     };
   }, []);
 

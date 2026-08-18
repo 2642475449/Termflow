@@ -60,6 +60,7 @@ import {
   listSkills,
   listAgentHooks,
   repairAgentHooks,
+  migrateWorkspaceClaudeHooks,
   runCommandTest,
   setSkillEnabled,
   openInFileManager,
@@ -2985,6 +2986,13 @@ function buildHookEmptyState(params: {
     };
   }
 
+  if (scope === "workspace") {
+    return {
+      description: t("settings.hooks.emptyWorkspace"),
+      detail: t("settings.hooks.emptyWorkspaceDetail", { agent: hookAgentLabel(agent, t) }),
+    };
+  }
+
   return {
     description: t("settings.hooks.emptyInitial"),
     detail: t("settings.hooks.emptyInitialDetail"),
@@ -3198,8 +3206,13 @@ function HooksPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [repairing, setRepairing] = useState(false);
+  const [migrating, setMigrating] = useState(false);
+  const [migrationTarget, setMigrationTarget] = useState<{
+    projectPath: string;
+    count: number;
+  } | null>(null);
   const [search, setSearch] = useState("");
-  const [activeScope, setActiveScope] = useState<HookScope>(projectPath ? "workspace" : "user");
+  const [activeScope, setActiveScope] = useState<HookScope>("user");
   const [eventFilter, setEventFilter] = useState<string>("all");
   const [selectedHook, setSelectedHook] = useState<HookInfo | null>(null);
   const [detail, setDetail] = useState<HookDetail | null>(null);
@@ -3280,6 +3293,9 @@ function HooksPage() {
 
   const workspaceCount = baseFilteredHooks.filter((hook) => hook.scope === "workspace").length;
   const userCount = baseFilteredHooks.filter((hook) => hook.scope === "user").length;
+  const workspaceManagedHookCount = (catalog?.hooks ?? []).filter(
+    (hook) => hook.agent === "claude" && hook.scope === "workspace" && isDefaultHook(hook)
+  ).length;
   const filteredHooks = baseFilteredHooks.filter((hook) => hook.scope === activeScope);
   const pagedHooks = filteredHooks.slice(
     (page - 1) * SETTINGS_LIST_PAGE_SIZE,
@@ -3340,28 +3356,49 @@ function HooksPage() {
     }
   }
 
-  async function handleRepair(scope: HookScope) {
+  async function handleRepair() {
     setRepairing(true);
     try {
-      const next = await repairAgentHooks(activeAgent, scope, projectPath);
+      const next = await repairAgentHooks(activeAgent, "user", projectPath);
       setCatalog(next);
-      message.success(
-        scope === "workspace"
-          ? t("settings.hooks.repairWorkspaceSuccess", { agent: hookAgentLabel(activeAgent, t) })
-          : t("settings.hooks.repairUserSuccess", { agent: hookAgentLabel(activeAgent, t) })
-      );
+      setActiveScope("user");
+      message.success(t("settings.hooks.repairUserSuccess", { agent: hookAgentLabel(activeAgent, t) }));
     } catch (error) {
       console.error("Failed to repair hooks:", error);
-      message.error(t("settings.hooks.repairFailed"));
+      message.error(t("settings.hooks.repairFailedWithError", {
+        error: error instanceof Error ? error.message : String(error),
+      }));
     } finally {
       setRepairing(false);
+    }
+  }
+
+  async function handleConfirmMigration() {
+    if (!migrationTarget) return;
+    const target = migrationTarget;
+    setMigrating(true);
+    try {
+      const result = await migrateWorkspaceClaudeHooks(target.projectPath);
+      if (useAppStore.getState().currentProject?.path === target.projectPath) {
+        setCatalog(result.catalog);
+      }
+      setMigrationTarget(null);
+      message.success(t("settings.hooks.migrationSuccess", {
+        count: String(result.removedCount),
+      }));
+    } catch (error) {
+      console.error("Failed to migrate workspace hooks:", error);
+      message.error(t("settings.hooks.migrationFailed", {
+        error: error instanceof Error ? error.message : String(error),
+      }));
+    } finally {
+      setMigrating(false);
     }
   }
 
   function renderHookSection() {
     const currentScope = activeScope;
     const configPath = currentScope === "workspace" ? catalog?.workspaceConfigPath : catalog?.userConfigPath;
-    const workspaceRepairDisabled = currentScope === "workspace" && (!projectPath || activeAgent !== "claude");
     const totalItems = filteredHooks.length;
     const items = pagedHooks;
     const emptyState = buildHookEmptyState({
@@ -3393,15 +3430,16 @@ function HooksPage() {
             >
               {t("settings.hooks.openConfigFile")}
             </Button>
-            <Button
-              size="small"
-              type="primary"
-              onClick={() => handleRepair(currentScope)}
-              loading={repairing}
-              disabled={workspaceRepairDisabled}
-            >
-              {t("settings.hooks.repairDefaultHook")}
-            </Button>
+            {currentScope === "user" && (
+              <Button
+                size="small"
+                type="primary"
+                onClick={handleRepair}
+                loading={repairing}
+              >
+                {t("settings.hooks.repairGlobalHook")}
+              </Button>
+            )}
           </div>
         </div>
         {items.length === 0 ? (
@@ -3415,14 +3453,11 @@ function HooksPage() {
             >
               {emptyState.detail}
             </div>
-            <Button
-              type="primary"
-              onClick={() => handleRepair(currentScope)}
-              loading={repairing}
-              disabled={workspaceRepairDisabled}
-            >
-              {t("settings.hooks.repairDefaultHook")}
-            </Button>
+            {currentScope === "user" && (
+              <Button type="primary" onClick={handleRepair} loading={repairing}>
+                {t("settings.hooks.repairGlobalHook")}
+              </Button>
+            )}
           </Empty>
         ) : (
           <>
@@ -3465,11 +3500,10 @@ function HooksPage() {
           <>
             <Button
               type="primary"
-              onClick={() => handleRepair(activeScope)}
+              onClick={handleRepair}
               loading={repairing}
-              disabled={activeScope === "workspace" && (!projectPath || activeAgent !== "claude")}
             >
-              {t("settings.hooks.repairDefaultHook")}
+              {t("settings.hooks.repairGlobalHook")}
             </Button>
             <Button
               icon={<ReloadOutlined spin={refreshing} />}
@@ -3490,6 +3524,37 @@ function HooksPage() {
         >
           {t(hookAgentCapabilityKey(activeAgent))}
         </div>
+        <div
+          className="mb-3 rounded-xl px-3 py-2 text-xs"
+          style={{
+            background: "color-mix(in srgb, #55b685 9%, transparent)",
+            border: "1px solid color-mix(in srgb, #55b685 22%, transparent)",
+            color: "var(--cs-text-secondary)",
+          }}
+        >
+          {t("settings.hooks.globalManagedNotice")}
+        </div>
+        {workspaceManagedHookCount > 0 && (
+          <div
+            className="mb-3 rounded-xl px-3 py-2 text-xs flex items-center justify-between gap-3"
+            style={{
+              background: "color-mix(in srgb, #d99b2b 10%, transparent)",
+              border: "1px solid color-mix(in srgb, #d99b2b 24%, transparent)",
+              color: "var(--cs-text-secondary)",
+            }}
+          >
+            <span>{t("settings.hooks.workspaceDuplicateNotice", { count: workspaceManagedHookCount })}</span>
+            <Button
+              size="small"
+              onClick={() => projectPath && setMigrationTarget({
+                projectPath,
+                count: workspaceManagedHookCount,
+              })}
+            >
+              {t("settings.hooks.migrateToGlobal")}
+            </Button>
+          </div>
+        )}
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_auto]">
           <Input
             allowClear
@@ -3574,6 +3639,24 @@ function HooksPage() {
               ? t("settings.hooks.confirmDeleteDefaultDesc")
               : t("settings.hooks.confirmDeleteDesc")
             : ""}
+        </div>
+      </Modal>
+
+      <Modal
+        open={!!migrationTarget}
+        title={t("settings.hooks.migrationTitle")}
+        onCancel={() => !migrating && setMigrationTarget(null)}
+        onOk={handleConfirmMigration}
+        confirmLoading={migrating}
+        cancelButtonProps={{ disabled: migrating }}
+        closable={!migrating}
+        maskClosable={!migrating}
+        okText={t("settings.hooks.migrateToGlobal")}
+        cancelText={t("common.cancel")}
+        centered
+      >
+        <div className="text-sm leading-6" style={{ color: "var(--cs-text-secondary)" }}>
+          {t("settings.hooks.migrationDesc", { count: migrationTarget?.count ?? 0 })}
         </div>
       </Modal>
     </>

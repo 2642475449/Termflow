@@ -52,17 +52,15 @@ Termflow 最初是为了做一款符合自己使用习惯的应用。在功能�
 
 | 功能说明 | 界面预览 |
 | :--- | :--- |
-| **多会话管理**：侧边栏树状导航会按项目目录自动分组；一键新建会话，并实时显示每个会话的活跃状态。 | ![Termflow 多会话管理演示](public/images/demos/multi-session-management.gif) |
-| **嵌入式终端**：基于 xterm.js + ConPTY 提供原生终端体验，自动适配窗口大小并同步 PTY 尺寸，完整支持 ANSI 色彩和光标控制。 | ![Termflow 工作台界面](public/images/termflow-overview.png) |
-| **文件管理与编辑**：浏览项目文件；Markdown 支持预览与即时编辑；可将项目树中的文件拖放到当前 CLI 输入框。 | ![Termflow 文件管理界面](public/images/termflow-overview.png) |
-| **会话持久化**：关闭应用后保留会话数据，重新打开即可恢复。Termflow 会按所选 Agent 使用其原生的会话创建与恢复参数。 | ![Termflow 会话工作台](public/images/termflow-overview.png) |
-| **检查点审阅系统**：自动记录 Agent 回合检查点，提供差异对齐、文件摘要和辅助面板，并可一键回滚到任意检查点。 | ![Termflow 检查点审阅工作台](public/images/termflow-overview.png) |
-| **快速命令系统**：自定义快捷命令库，一键执行常用操作；支持命令分类、搜索与参数化模板。 | ![Termflow 快捷操作界面](public/images/termflow-overview.png) |
-| **语音输入系统**：支持 MiMo 与 DashScope ASR、切换识别提供商和全局快捷键；悬浮窗实时显示录音状态与音量。 | ![Termflow 语音输入工作台](public/images/termflow-overview.png) |
-| **Git 面板**：覆盖提交、推送、拉取和同步等完整 Git 工作流，集成暂存区、差异查看、分支管理和 AI 提交信息生成。 | ![Termflow Git 工作台](public/images/termflow-overview.png) |
-| **注意力中心与通知**：实时监控会话状态并推送智能通知；持久化记录注意力数据，帮助掌握工作节奏。 | ![Termflow 数据概览界面](public/images/termflow-overview.png) |
-| **全局文本搜索**：在项目内进行全文搜索，支持正则表达式、文件类型过滤和结果高亮。 | ![Termflow 全局搜索界面](public/images/termflow-overview.png) |
-| **自定义标题栏**：提供无边框窗口、自定义拖拽、快速搜索、项目切换、主题和语言设置，以及完整窗口控制。 | ![Termflow 自定义标题栏界面](public/images/termflow-overview.png) |
+| **项目与会话工作区**：按项目目录自动组织不同智能体的会话，快速创建和切换任务，并实时掌握每个会话的运行状态。 | ![Termflow 项目与会话工作区演示](public/images/demos/multi-session-management.gif) |
+| **多智能体终端**：在统一工作台中使用 Claude Code、Codex、Antigravity CLI、OpenCode 与 Qoder CLI；基于 xterm.js + ConPTY 提供完整的终端交互体验。 | ![Termflow 多智能体终端](public/images/termflow-overview.png) |
+| **文件与上下文协作**：浏览、搜索和编辑项目文件，预览 Markdown，并将文件从项目树拖放到当前 CLI 输入框，为智能体快速补充上下文。 | ![Termflow 文件与上下文协作](public/images/termflow-overview.png) |
+| **Git 变更工作流**：集中完成变更查看、暂存、分支管理、提交、推送、拉取和同步，并可使用 AI 生成提交信息。 | ![Termflow Git 变更工作流](public/images/termflow-overview.png) |
+| **检查点与差异审阅**：自动记录 Agent 回合检查点，集中查看文件摘要和变更差异，并可回到任意检查点。 | ![Termflow 检查点与差异审阅](public/images/termflow-overview.png) |
+| **快捷命令与语音输入**：通过可搜索、可参数化的快捷命令执行常用操作；支持 MiMo 与 DashScope ASR、全局快捷键和录音状态悬浮窗。 | ![Termflow 快捷命令与语音输入](public/images/termflow-overview.png) |
+| **工作状态概览**：汇总会话活动、Token 使用和工作节奏，通过注意力中心与智能通知提示需要处理的任务。 | ![Termflow 工作状态概览演示](public/images/demos/work-status-overview.gif) |
+
+其他基础能力包括会话持久化、自定义标题栏与无边框窗口控制、深色/浅色/跟随系统主题，以及简体中文、繁體中文、英文和日语界面。
 
 ## 技术栈
 

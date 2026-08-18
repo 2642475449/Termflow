@@ -14,7 +14,8 @@ use std::sync::Arc;
 use std::time::UNIX_EPOCH;
 use tauri::State;
 
-const CLAUDE_REQUIRED_STATUS_EVENTS: [&str; 8] = [
+const CLAUDE_REQUIRED_STATUS_EVENTS: [&str; 9] = [
+    "SessionStart",
     "UserPromptSubmit",
     "PreToolUse",
     "PermissionRequest",
@@ -229,6 +230,13 @@ pub struct HookCatalog {
     pub hooks: Vec<HookInfo>,
     pub workspace_config_path: Option<String>,
     pub user_config_path: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceHookMigrationResult {
+    pub removed_count: usize,
+    pub catalog: HookCatalog,
 }
 
 #[derive(Debug, Serialize)]
@@ -2604,6 +2612,41 @@ fn remove_active_hook(settings: &mut Value, scope: &str, id: &str) -> Result<(),
     Ok(())
 }
 
+fn is_termflow_managed_claude_hook(action: &Value) -> bool {
+    action
+        .get("command")
+        .and_then(Value::as_str)
+        .is_some_and(|command| command.contains("termflow-hook.cjs"))
+}
+
+fn remove_termflow_managed_claude_hooks(settings: &mut Value) -> usize {
+    let Some(hooks) = settings.get_mut("hooks").and_then(Value::as_object_mut) else {
+        return 0;
+    };
+
+    let event_names = hooks.keys().cloned().collect::<Vec<_>>();
+    let mut removed_count = 0;
+    for event_name in event_names {
+        let Some(entries) = hooks.get_mut(&event_name).and_then(Value::as_array_mut) else {
+            continue;
+        };
+        entries.retain_mut(|entry| {
+            let Some(actions) = entry.get_mut("hooks").and_then(Value::as_array_mut) else {
+                return true;
+            };
+            let previous_len = actions.len();
+            actions.retain(|action| !is_termflow_managed_claude_hook(action));
+            removed_count += previous_len - actions.len();
+            !actions.is_empty()
+        });
+        if entries.is_empty() {
+            hooks.remove(&event_name);
+        }
+    }
+
+    removed_count
+}
+
 fn insert_hook(settings: &mut Value, entry: &StoredHookEntry) -> Result<(), String> {
     // 修复 H-01: 原实现用 .expect() 处理用户控制的 settings.json,
     // 一旦 hooks / event_entries 是数组/字符串/null 就会 panic。
@@ -2670,6 +2713,13 @@ fn default_hook_entries_for_path(hook_script: &Path) -> Vec<StoredHookEntry> {
     let hook_script_str = hook_script.to_string_lossy().replace('\\', "\\\\");
 
     vec![
+        StoredHookEntry {
+            event: "SessionStart".to_string(),
+            matcher: "".to_string(),
+            action_type: "command".to_string(),
+            command: format!("node \"{}\" sessionstart", hook_script_str),
+            timeout: Some(3000),
+        },
         StoredHookEntry {
             event: "UserPromptSubmit".to_string(),
             matcher: "".to_string(),
@@ -2897,6 +2947,7 @@ try {
 } catch {}
 
 const eventTypeByHook = {
+  sessionstart: 'session_start',
   userpromptsubmit: 'user_prompt_submit',
   stop: 'assistant_complete',
   subagentstart: 'subagent_start',
@@ -2909,6 +2960,7 @@ const eventTypeByHook = {
 
 const eventType = eventTypeByHook[hookName];
 const stateByHook = {
+  sessionstart: 'waiting',
   userpromptsubmit: 'running',
   stop: 'completed',
   subagentstart: 'running',
@@ -3209,11 +3261,11 @@ pub fn repair_agent_hooks(
     project_path: Option<String>,
 ) -> Result<HookCatalog, String> {
     let agent = normalize_hook_agent(&agent)?;
+    if scope != "user" {
+        return Err("Termflow 默认 Hook 只允许安装到全局用户配置".to_string());
+    }
     if agent == "claude" {
         return repair_claude_hooks(scope, project_path);
-    }
-    if scope != "user" {
-        return Err("该智能体当前只支持修复全局 Hook/Plugin 配置".to_string());
     }
     super::agent_hooks::ensure_agent_status_hook(agent.to_string())?;
     list_agent_hooks(agent.to_string(), project_path)
@@ -3283,6 +3335,9 @@ pub fn repair_claude_hooks(
     scope: String,
     project_path: Option<String>,
 ) -> Result<HookCatalog, String> {
+    if scope != "user" {
+        return Err("Termflow 默认 Hook 只允许安装到全局用户配置".to_string());
+    }
     let config_path = get_scope_config_path(&scope, project_path.as_deref())?;
     let mut settings = read_settings(&config_path)?;
     if !settings.is_object() {
@@ -3302,6 +3357,30 @@ pub fn repair_claude_hooks(
     write_settings(&config_path, &settings)?;
     remove_legacy_disabled_hooks_file(&config_path)?;
     list_claude_hooks(project_path)
+}
+
+#[tauri::command]
+pub fn migrate_workspace_claude_hooks(
+    project_path: String,
+) -> Result<WorkspaceHookMigrationResult, String> {
+    if project_path.trim().is_empty() {
+        return Err("当前未打开项目，无法迁移项目级 Hook".to_string());
+    }
+
+    repair_claude_hooks("user".to_string(), Some(project_path.clone()))?;
+
+    let config_path = get_scope_config_path("workspace", Some(&project_path))?;
+    let mut settings = read_settings(&config_path)?;
+    let removed_count = remove_termflow_managed_claude_hooks(&mut settings);
+    if removed_count > 0 {
+        write_settings(&config_path, &settings)?;
+        remove_legacy_disabled_hooks_file(&config_path)?;
+    }
+
+    Ok(WorkspaceHookMigrationResult {
+        removed_count,
+        catalog: list_claude_hooks(Some(project_path))?,
+    })
 }
 
 #[tauri::command]
@@ -3524,6 +3603,7 @@ mod tests {
                 "PostToolUse",
                 "PostToolUseFailure",
                 "PreToolUse",
+                "SessionStart",
                 "Stop",
                 "SubagentStart",
                 "SubagentStop",
@@ -3543,6 +3623,10 @@ mod tests {
             .iter()
             .filter(|entry| matches!(entry.event.as_str(), "SubagentStart" | "SubagentStop"))
             .all(|entry| entry.matcher.is_empty()));
+        assert!(entries
+            .iter()
+            .find(|entry| entry.event == "SessionStart")
+            .is_some_and(|entry| entry.matcher.is_empty()));
     }
 
     #[test]
@@ -3562,6 +3646,8 @@ mod tests {
         let script = build_hook_script_content();
 
         assert!(script.contains("posttooluse: 'post_tool_use'"));
+        assert!(script.contains("sessionstart: 'session_start'"));
+        assert!(script.contains("sessionstart: 'waiting'"));
         assert!(script.contains("posttoolusefailure: 'post_tool_use_failure'"));
         assert!(script.contains("subagentstart: 'subagent_start'"));
         assert!(script.contains("subagentstop: 'subagent_stop'"));
@@ -3597,6 +3683,40 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("termflow-hook.cjs"));
+    }
+
+    #[test]
+    fn removing_workspace_managed_hooks_preserves_user_actions() {
+        let mut settings = json!({
+            "hooks": {
+                "PostToolUse": [{
+                    "matcher": "*",
+                    "hooks": [
+                        {"type": "command", "command": "node C:/Users/test/.claude/hooks/termflow-hook.cjs posttooluse"},
+                        {"type": "command", "command": "node user-hook.js"}
+                    ]
+                }],
+                "Stop": [{
+                    "hooks": [{"type": "command", "command": "node C:/Users/test/.claude/hooks/termflow-hook.cjs stop"}]
+                }]
+            }
+        });
+
+        let removed = remove_termflow_managed_claude_hooks(&mut settings);
+
+        assert_eq!(removed, 2);
+        assert_eq!(
+            settings["hooks"]["PostToolUse"][0]["hooks"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            settings["hooks"]["PostToolUse"][0]["hooks"][0]["command"],
+            "node user-hook.js"
+        );
+        assert!(settings["hooks"].get("Stop").is_none());
     }
 
     #[test]

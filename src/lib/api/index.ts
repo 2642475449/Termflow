@@ -43,6 +43,7 @@ import type {
   HookDetail,
   HookAgent,
   HookScope,
+  WorkspaceHookMigrationResult,
   McpServerCatalog,
   McpServerConfig,
   McpServerInfo,
@@ -925,6 +926,12 @@ export async function repairAgentHooks(
     scope,
     projectPath: projectPath ?? null,
   });
+}
+
+export async function migrateWorkspaceClaudeHooks(
+  projectPath: string
+): Promise<WorkspaceHookMigrationResult> {
+  return await invoke("migrate_workspace_claude_hooks", { projectPath });
 }
 
 export interface HookIngestConfig {
