@@ -700,9 +700,15 @@ fn voice_overlay_position(
     window: &WebviewWindow,
 ) -> Result<(i32, i32), String> {
     let monitor = if window.label() == VOICE_WORKER_LABEL {
-        app.primary_monitor()
-            .map_err(|e| format!("获取主显示器信息失败: {e}"))?
-            .or_else(|| window.current_monitor().ok().flatten())
+        let foreground_monitor = foreground_window_center()
+            .and_then(|(x, y)| app.monitor_from_point(x, y).ok().flatten());
+        if foreground_monitor.is_some() {
+            foreground_monitor
+        } else {
+            app.primary_monitor()
+                .map_err(|e| format!("获取主显示器信息失败: {e}"))?
+                .or_else(|| window.current_monitor().ok().flatten())
+        }
     } else {
         window
             .current_monitor()
@@ -722,6 +728,40 @@ fn voice_overlay_position(
         work_area.position.y,
         work_area.size.width,
         work_area.size.height,
+    ))
+}
+
+#[cfg(target_os = "windows")]
+fn foreground_window_center() -> Option<(f64, f64)> {
+    use windows::Win32::Foundation::RECT;
+    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowRect};
+
+    let foreground = unsafe { GetForegroundWindow() };
+    if foreground.0.is_null() {
+        return None;
+    }
+
+    let mut rect = RECT::default();
+    if unsafe { GetWindowRect(foreground, &mut rect) }.is_err() {
+        return None;
+    }
+
+    window_rect_center(rect.left, rect.top, rect.right, rect.bottom)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn foreground_window_center() -> Option<(f64, f64)> {
+    None
+}
+
+fn window_rect_center(left: i32, top: i32, right: i32, bottom: i32) -> Option<(f64, f64)> {
+    if right <= left || bottom <= top {
+        return None;
+    }
+
+    Some((
+        left as f64 + (right - left) as f64 / 2.0,
+        top as f64 + (bottom - top) as f64 / 2.0,
     ))
 }
 
@@ -899,6 +939,20 @@ mod tests {
         assert_eq!(
             voice_overlay_position_in_work_area(-1920, 40, 1920, 1040),
             (-1220, 888)
+        );
+    }
+
+    #[test]
+    fn window_rect_center_rejects_invalid_rectangles() {
+        assert_eq!(window_rect_center(100, 200, 100, 400), None);
+        assert_eq!(window_rect_center(100, 200, 300, 200), None);
+    }
+
+    #[test]
+    fn window_rect_center_supports_offset_monitors() {
+        assert_eq!(
+            window_rect_center(-1920, 40, 0, 1080),
+            Some((-960.0, 560.0))
         );
     }
 

@@ -39,9 +39,10 @@
 - 📊 **Git 面板**：完整的 Git 工作流 + AI 生成提交信息
 - 🔍 **检查点审阅**：Agent 回合检查点审阅与差异对比
 - ⚡ **快速命令**：自定义快捷命令，一键执行常用操作
-- 💾 **会话持久化**：关闭应用后无缝恢复历史对话
+- 💾 **会话持久化**：关闭应用后无缝恢复历史对话。。。。
 
 基础体验包括深色、浅色与跟随系统的主题切换，以及简体中文、繁體中文、英文和日语界面。
+
 
 ## 为什么开源
 
@@ -51,7 +52,7 @@ Termflow 最初是为了做一款符合自己使用习惯的应用。在功能�
 
 | 功能说明 | 界面预览 |
 | :--- | :--- |
-| **多会话管理**：侧边栏树状导航会按项目目录自动分组；一键新建会话，并实时显示每个会话的活跃状态。 | ![Termflow 多会话管理界面](public/images/termflow-overview.png) |
+| **多会话管理**：侧边栏树状导航会按项目目录自动分组；一键新建会话，并实时显示每个会话的活跃状态。 | ![Termflow 多会话管理演示](public/images/demos/multi-session-management.gif) |
 | **嵌入式终端**：基于 xterm.js + ConPTY 提供原生终端体验，自动适配窗口大小并同步 PTY 尺寸，完整支持 ANSI 色彩和光标控制。 | ![Termflow 工作台界面](public/images/termflow-overview.png) |
 | **文件管理与编辑**：浏览项目文件；Markdown 支持预览与即时编辑；可将项目树中的文件拖放到当前 CLI 输入框。 | ![Termflow 文件管理界面](public/images/termflow-overview.png) |
 | **会话持久化**：关闭应用后保留会话数据，重新打开即可恢复。Termflow 会按所选 Agent 使用其原生的会话创建与恢复参数。 | ![Termflow 会话工作台](public/images/termflow-overview.png) |

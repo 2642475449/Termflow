@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import { VoiceStatusCapsule } from "@/components/VoiceButton";
 import type { AsrPhase } from "@/hooks/useVoiceRecognition";
 
@@ -80,15 +80,30 @@ function VoiceOverlayWindow() {
 
   useEffect(() => {
     let disposed = false;
-    const unlistenPromise = listen<VoiceOverlayStatePayload>("voice-overlay-state", (event) => {
-      if (!disposed) {
-        setVoiceState(event.payload);
+    let unlisten: (() => void) | undefined;
+    void listen<VoiceOverlayStatePayload>(
+      "voice-overlay-state",
+      (event) => {
+        if (!disposed) {
+          setVoiceState(event.payload);
+        }
+      },
+    ).then((nextUnlisten) => {
+      if (disposed) {
+        nextUnlisten();
+        return;
       }
+
+      unlisten = nextUnlisten;
+      // Tauri events are not replayed. Let the worker resend its latest state
+      // after this window has installed the listener so a newly loaded or
+      // recovered WebView never remains on the initial idle state.
+      void emit("voice-overlay-ready");
     });
 
     return () => {
       disposed = true;
-      void unlistenPromise.then((unlisten) => unlisten());
+      unlisten?.();
     };
   }, []);
 

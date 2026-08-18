@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { emit, listen } from "@tauri-apps/api/event";
 import { useVoiceRecognition, type AsrPhase } from "@/hooks/useVoiceRecognition";
 import type { MimoAuthMode } from "@/lib/mimoAsr";
@@ -97,6 +97,8 @@ function VoiceWorkerWindow() {
       void emit("voice-worker-error", err);
     },
   });
+  const voiceRef = useRef(voice);
+  voiceRef.current = voice;
 
   const workerState = useMemo<VoiceWorkerStatePayload>(
     () => ({
@@ -147,28 +149,37 @@ function VoiceWorkerWindow() {
   useEffect(() => {
     let disposed = false;
     const handleAction = (action?: VoiceWorkerAction) => {
+      const currentVoice = voiceRef.current;
       if (action === "press") {
-        if (voice.phase === "idle" || voice.phase === "error" || voice.phase === "done") {
-          void voice.start();
+        if (
+          currentVoice.phase === "idle" ||
+          currentVoice.phase === "error" ||
+          currentVoice.phase === "done"
+        ) {
+          void currentVoice.start();
         }
         return;
       }
       if (action === "release") {
-        if (voice.phase === "recording") {
-          void voice.stop();
+        if (currentVoice.phase === "recording") {
+          void currentVoice.stop();
         }
         return;
       }
       if (action === "toggle") {
-        if (voice.phase === "recording") {
-          void voice.stop();
-        } else if (voice.phase === "idle" || voice.phase === "error" || voice.phase === "done") {
-          void voice.start();
+        if (currentVoice.phase === "recording") {
+          void currentVoice.stop();
+        } else if (
+          currentVoice.phase === "idle" ||
+          currentVoice.phase === "error" ||
+          currentVoice.phase === "done"
+        ) {
+          void currentVoice.start();
         }
         return;
       }
       if (action === "cancel") {
-        voice.cancel();
+        currentVoice.cancel();
       }
     };
 
@@ -194,7 +205,7 @@ function VoiceWorkerWindow() {
       void unlistenControlPromise.then((unlisten) => unlisten());
       void unlistenShortcutPromise.then((unlisten) => unlisten());
     };
-  }, [voice]);
+  }, []);
 
   useEffect(() => {
     let disposed = false;
@@ -213,16 +224,43 @@ function VoiceWorkerWindow() {
     };
   }, []);
 
-  useEffect(() => {
-    void emit("voice-worker-state", workerState);
-    void emit("voice-overlay-state", {
+  const overlayState = useMemo(
+    () => ({
       phase: workerState.phase,
       level: workerState.level,
       elapsedMs: workerState.elapsedMs,
       errorMessage: workerState.errorMessage,
       shortcutLabel: workerState.shortcutLabel,
+    }),
+    [
+      workerState.elapsedMs,
+      workerState.errorMessage,
+      workerState.level,
+      workerState.phase,
+      workerState.shortcutLabel,
+    ],
+  );
+  const overlayStateRef = useRef(overlayState);
+  overlayStateRef.current = overlayState;
+
+  useEffect(() => {
+    void emit("voice-worker-state", workerState);
+    void emit("voice-overlay-state", overlayState);
+  }, [overlayState, workerState]);
+
+  useEffect(() => {
+    let disposed = false;
+    const unlistenPromise = listen("voice-overlay-ready", () => {
+      if (!disposed) {
+        void emit("voice-overlay-state", overlayStateRef.current);
+      }
     });
-  }, [workerState]);
+
+    return () => {
+      disposed = true;
+      void unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, []);
 
   useEffect(() => {
     const isOverlayActive =
@@ -230,16 +268,18 @@ function VoiceWorkerWindow() {
       workerState.phase !== "done";
 
     if (isOverlayActive) {
-      ensureVoiceOverlayWindow().catch((error) => {
-        console.error("voice worker failed to ensure overlay window:", error);
-        void emit("voice-worker-error", {
-          code: "overlay_show_failed",
-          message:
-            error instanceof Error && error.message
-              ? error.message
-              : String(error || "Failed to show the voice overlay."),
+      ensureVoiceOverlayWindow()
+        .then(() => emit("voice-overlay-state", overlayStateRef.current))
+        .catch((error) => {
+          console.error("voice worker failed to ensure overlay window:", error);
+          void emit("voice-worker-error", {
+            code: "overlay_show_failed",
+            message:
+              error instanceof Error && error.message
+                ? error.message
+                : String(error || "Failed to show the voice overlay."),
+          });
         });
-      });
       return;
     }
 

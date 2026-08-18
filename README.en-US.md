@@ -47,7 +47,7 @@ Termflow started as an application built around the workflow I wanted to use eve
 
 | Feature | What it provides |
 | :--- | :--- |
-| **Session management** | The sidebar groups sessions by project directory, lets you create sessions quickly, and shows their active state in real time. |
+| **Session management** | The sidebar groups sessions by project directory, lets you create sessions quickly, and shows their active state in real time.<br><br>![Termflow multi-session management demo](public/images/demos/multi-session-management.gif) |
 | **Embedded terminal** | xterm.js and ConPTY provide a native-like terminal that resizes with the window and supports ANSI colours and cursor controls. |
 | **File management and editing** | Browse project files, preview and edit Markdown in place, and drag files from the project tree into the active CLI input. |
 | **Session persistence** | Session data remains after the app closes. Termflow uses the selected agent's native session-creation and resume options. |
