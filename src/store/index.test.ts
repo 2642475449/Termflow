@@ -1082,6 +1082,32 @@ describe("language persistence", () => {
   });
 });
 
+describe("terminal scrollback settings", () => {
+  const originalSettings = getPersistentSettingsSnapshot();
+
+  afterEach(() => {
+    applyPersistentSettingsToStore(originalSettings);
+  });
+
+  it("round-trips a selected scrollback size", () => {
+    applyPersistentSettingsToStore({
+      ...originalSettings,
+      terminalScrollback: 20_000,
+    });
+
+    expect(getPersistentSettingsSnapshot().terminalScrollback).toBe(20_000);
+  });
+
+  it("falls back to 5,000 rows for unsupported values", () => {
+    applyPersistentSettingsToStore({
+      ...originalSettings,
+      terminalScrollback: 12_345,
+    });
+
+    expect(getPersistentSettingsSnapshot().terminalScrollback).toBe(5_000);
+  });
+});
+
 describe("git diff tab previews", () => {
   const createDiff = (path: string) => ({
     path,

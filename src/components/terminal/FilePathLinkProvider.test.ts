@@ -154,7 +154,7 @@ describe("terminal file path links", () => {
     });
   });
 
-  it("only activates file path links on Ctrl+left click", () => {
+  it("only activates file path links on left click", () => {
     const terminal = {
       cols: 80,
       buffer: {
@@ -181,13 +181,10 @@ describe("terminal file path links", () => {
 
     link?.activate({ button: 0, ctrlKey: false } as MouseEvent, link.text);
     link?.activate({ button: 1, ctrlKey: true } as MouseEvent, link.text);
-    expect(activated).toEqual([]);
-
-    link?.activate({ button: 0, ctrlKey: true } as MouseEvent, link.text);
     expect(activated).toEqual(["src/Terminal.tsx"]);
   });
 
-  it("deduplicates concurrent Ctrl+clicks for the same link", async () => {
+  it("deduplicates concurrent left clicks for the same link", async () => {
     const terminal = {
       cols: 80,
       buffer: {
@@ -216,14 +213,14 @@ describe("terminal file path links", () => {
     const link = providedLinks?.[0];
     expect(link).toBeDefined();
 
-    link?.activate({ button: 0, ctrlKey: true } as MouseEvent, link.text);
-    link?.activate({ button: 0, ctrlKey: true } as MouseEvent, link.text);
+    link?.activate({ button: 0, ctrlKey: false } as MouseEvent, link.text);
+    link?.activate({ button: 0, ctrlKey: false } as MouseEvent, link.text);
     expect(activationCount).toBe(1);
 
     finishActivation?.();
     await pendingActivation;
     await Promise.resolve();
-    link?.activate({ button: 0, ctrlKey: true } as MouseEvent, link.text);
+    link?.activate({ button: 0, ctrlKey: false } as MouseEvent, link.text);
     expect(activationCount).toBe(2);
   });
 
@@ -296,7 +293,7 @@ describe("terminal file path links", () => {
     });
 
     secondRowLinks?.[0]?.activate(
-      { button: 0, ctrlKey: true } as MouseEvent,
+      { button: 0, ctrlKey: false } as MouseEvent,
       secondRowLinks[0].text,
     );
     expect(activated).toEqual([expectedPath]);

@@ -45,6 +45,7 @@ import {
 import { createSilentWavDataUrl, type MimoAuthMode } from "@/lib/mimoAsr";
 import { captureShortcutFromEvent, formatShortcutDisplay, parseShortcut } from "@/lib/shortcut";
 import { stripAnsiEscapeSequences } from "@/lib/textContent";
+import { TERMINAL_SCROLLBACK_OPTIONS } from "@/lib/terminalSettings";
 import {
   createSkill,
   createCommand,
@@ -402,12 +403,14 @@ function GeneralPage() {
   const startupRestoreLastProject = useAppStore((s) => s.startupRestoreLastProject);
   const projectOpenBehavior = useAppStore((s) => s.projectOpenBehavior);
   const explorerContextMenuEnabled = useAppStore((s) => s.explorerContextMenuEnabled);
+  const terminalScrollback = useAppStore((s) => s.terminalScrollback);
   const setLightTheme = useAppStore((s) => s.setLightTheme);
   const setDarkTheme = useAppStore((s) => s.setDarkTheme);
   const setThemeCategory = useAppStore((s) => s.setThemeCategory);
   const setLanguage = useAppStore((s) => s.setLanguage);
   const setStartupRestoreLastProject = useAppStore((s) => s.setStartupRestoreLastProject);
   const setProjectOpenBehavior = useAppStore((s) => s.setProjectOpenBehavior);
+  const setTerminalScrollback = useAppStore((s) => s.setTerminalScrollback);
   const setExplorerContextMenuEnabledInStore = useAppStore(
     (s) => s.setExplorerContextMenuEnabled
   );
@@ -536,6 +539,23 @@ function GeneralPage() {
             value={language}
             options={langOptions}
             onChange={(v) => setLanguage(v as Language)}
+          />
+        </SettingRow>
+      </SettingSection>
+
+      <SettingSection title={t("settings.general.terminalSection")}>
+        <SettingRow
+          label={t("settings.general.terminalScrollback")}
+          desc={t("settings.general.terminalScrollbackDesc")}
+        >
+          <Select
+            className="w-[150px]"
+            value={terminalScrollback}
+            options={TERMINAL_SCROLLBACK_OPTIONS.map((rows) => ({
+              value: rows,
+              label: rows.toLocaleString(),
+            }))}
+            onChange={setTerminalScrollback}
           />
         </SettingRow>
       </SettingSection>

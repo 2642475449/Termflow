@@ -30,6 +30,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   FilePathLinkProvider,
   resolveTerminalFilePath,
+  type ParsedPath,
 } from "@/components/terminal/FilePathLinkProvider";
 import {
   consumeTerminalTitleInput,
@@ -125,6 +126,10 @@ interface SideQuestionDraft {
   projectPath: string;
 }
 
+type PendingTerminalLink =
+  | { kind: "external"; href: string }
+  | { kind: "project"; path: ParsedPath };
+
 export function normalizeDecscusrCursorStyle(param: number | undefined): {
   cursorBlink: boolean;
   cursorStyle: "block" | "underline" | "bar";
@@ -167,6 +172,8 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
   const [installedAgents, setInstalledAgents] = useState<AgentCliInfo[]>([]);
   const [sideQuestionDraft, setSideQuestionDraft] = useState<SideQuestionDraft | null>(null);
   const [sideQuestionText, setSideQuestionText] = useState("");
+  const [pendingTerminalLink, setPendingTerminalLink] = useState<PendingTerminalLink | null>(null);
+  const [openingTerminalLink, setOpeningTerminalLink] = useState(false);
   const captureInputForAutoTitleRef = useRef<((data: string) => void) | undefined>(undefined);
   const isDropPositionInsideTerminalRef = useRef<((position: { x: number; y: number }) => boolean) | undefined>(undefined);
   const currentSessionPathRef = useRef("");
@@ -175,6 +182,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
   const fontSize = useAppStore((s) => s.terminalFontSize);
   const cursorBlink = useAppStore((s) => s.terminalCursorBlink);
   const lineHeight = useAppStore((s) => s.terminalLineHeight);
+  const terminalScrollback = useRef(useAppStore.getState().terminalScrollback).current;
   const terminalRenderer = useAppStore((s) => s.terminalRenderer);
   const resourceDragState = useAppStore((s) => s.resourceDragState);
   const setResourceDragState = useAppStore((s) => s.setResourceDragState);
@@ -430,6 +438,55 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
     setContextMenuSelection(term?.hasSelection() ? term.getSelection() : "");
   }, []);
 
+  const handleConfirmTerminalLinkOpen = useCallback(async () => {
+    if (!pendingTerminalLink || openingTerminalLink) return;
+
+    setOpeningTerminalLink(true);
+    try {
+      if (pendingTerminalLink.kind === "external") {
+        await openUrl(pendingTerminalLink.href);
+        return;
+      }
+
+      const projectPath = currentSessionPathRef.current;
+      if (!projectPath) return;
+
+      const resolvedPath = resolveTerminalFilePath(pendingTerminalLink.path.filePath, projectPath);
+      const target = await resolveProjectLink(projectPath, resolvedPath);
+      if (!target) return;
+
+      if (target.kind === "directory") {
+        setSidebarCollapsed(false);
+        setActiveSidebarSection("project");
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => revealExplorerPath(target.path, "directory"));
+        });
+        return;
+      }
+
+      const file = await inspectProjectFile(projectPath, target.path);
+      if (/\.(md|markdown|pdf)$/i.test(file.path)) {
+        openAuxiliaryFile({
+          projectPath,
+          path: file.path,
+          preview: true,
+        });
+        return;
+      }
+      openFileTab(file.path, { preview: false });
+    } catch {
+      const path = pendingTerminalLink.kind === "project" ? pendingTerminalLink.path.filePath : pendingTerminalLink.href;
+      message.error(
+        pendingTerminalLink.kind === "project"
+          ? t("terminal.openLinkedFileFailed", { path })
+          : t("terminal.openLinkFailed", { path }),
+      );
+    } finally {
+      setOpeningTerminalLink(false);
+      setPendingTerminalLink(null);
+    }
+  }, [openFileTab, openingTerminalLink, pendingTerminalLink, setActiveSidebarSection, setSidebarCollapsed, t]);
+
   const isDropPositionInsideTerminal = useCallback((position: { x: number; y: number }) => {
     const container = containerRef.current;
     if (!container) return false;
@@ -582,7 +639,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       theme: termTheme.theme,
       minimumContrastRatio: termTheme.minimumContrastRatio,
       cursorBlink: forceStableCursor ? false : cursorBlink,
-      scrollback: 5000,
+      scrollback: terminalScrollback,
       overviewRuler: { width: TERMINAL_SCROLLBAR_INTERACTION_WIDTH },
       convertEol: true,
       disableStdin: !currentSession?.active || currentSession?.status === "starting",
@@ -590,13 +647,11 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
 
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
-    // URL 链接：使用 Tauri 原生方式打开系统浏览器
+    // URL 链接：单击后先确认，再使用 Tauri 原生方式打开系统浏览器。
     term.loadAddon(
-      new WebLinksAddon((_event, uri) => {
-        if (!_event.ctrlKey) {
-          return;
-        }
-        openUrl(uri);
+      new WebLinksAddon((event, uri) => {
+        if (event.button !== 0) return;
+        setPendingTerminalLink({ kind: "external", href: uri });
       }),
     );
 
@@ -607,7 +662,6 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       expiresAt: number;
       result: Promise<{ path: string; kind: "file" | "directory" } | null>;
     }>();
-    const openingLinkedPaths = new Set<string>();
     const getLinkedTarget = (parsed: { filePath: string }) => {
       const projectPath = currentSessionPathRef.current;
       if (!projectPath) return Promise.resolve(null);
@@ -633,41 +687,11 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       });
       return result;
     };
-    const filePathProvider = new FilePathLinkProvider(term, async (parsed) => {
-      const projectPath = currentSessionPathRef.current;
-      if (!projectPath) return;
-      const resolvedPath = resolveTerminalFilePath(parsed.filePath, projectPath);
-      if (openingLinkedPaths.has(resolvedPath)) return;
-      openingLinkedPaths.add(resolvedPath);
-
-      try {
-        const target = await getLinkedTarget(parsed);
-        if (!target) return;
-          if (target.kind === "directory") {
-            setSidebarCollapsed(false);
-            setActiveSidebarSection("project");
-            window.requestAnimationFrame(() => {
-              window.requestAnimationFrame(() => revealExplorerPath(target.path, "directory"));
-            });
-            return;
-          }
-
-        const file = await inspectProjectFile(projectPath, target.path);
-        if (/\.(md|markdown|pdf)$/i.test(file.path)) {
-          openAuxiliaryFile({
-            projectPath,
-            path: file.path,
-            preview: true,
-          });
-          return;
-        }
-        openFileTab(file.path, { preview: false });
-      } catch {
-        message.error(t("terminal.openLinkedFileFailed", { path: parsed.filePath }));
-      } finally {
-        openingLinkedPaths.delete(resolvedPath);
-      }
-    }, async (parsed) => (await getLinkedTarget(parsed)) !== null);
+    const filePathProvider = new FilePathLinkProvider(
+      term,
+      (parsed) => setPendingTerminalLink({ kind: "project", path: parsed }),
+      async (parsed) => (await getLinkedTarget(parsed)) !== null,
+    );
     const filePathDisposable = term.registerLinkProvider(filePathProvider);
     term.open(containerRef.current);
     terminalRef.current = term;
@@ -1051,6 +1075,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
     fontSize,
     cursorBlink,
     lineHeight,
+    terminalScrollback,
     terminalRenderer,
     forceStableCursor,
     t,
@@ -1154,6 +1179,22 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
         onCancel={closeSideQuestionComposer}
         onSubmit={handleSideQuestionSubmit}
       />
+      <Modal
+        open={Boolean(pendingTerminalLink)}
+        title={t("terminal.openLinkConfirmTitle")}
+        okText={t("terminal.openLinkConfirmOk")}
+        cancelText={t("common.cancel")}
+        confirmLoading={openingTerminalLink}
+        onOk={() => void handleConfirmTerminalLinkOpen()}
+        onCancel={() => !openingTerminalLink && setPendingTerminalLink(null)}
+      >
+        <p>{t("terminal.openLinkConfirmContent")}</p>
+        <p className="break-all text-sm" style={{ color: "var(--cs-text-secondary)" }}>
+          {pendingTerminalLink?.kind === "project"
+            ? pendingTerminalLink.path.filePath
+            : pendingTerminalLink?.href}
+        </p>
+      </Modal>
     </>
   );
 }

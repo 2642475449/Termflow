@@ -34,6 +34,10 @@ import {
   sanitizePersistedSessionEvents,
 } from "@/lib/attentionPersistence";
 import {
+  DEFAULT_TERMINAL_SCROLLBACK,
+  normalizeTerminalScrollback,
+} from "@/lib/terminalSettings";
+import {
   isEphemeralTerminalSession,
   toPersistedProjectSessions,
 } from "@/lib/sessions";
@@ -235,6 +239,7 @@ export function getPersistentSettingsSnapshot(): PersistentSettings {
     terminalFontSize: state.terminalFontSize,
     terminalCursorBlink: state.terminalCursorBlink,
     terminalLineHeight: state.terminalLineHeight,
+    terminalScrollback: state.terminalScrollback,
     terminalRenderer: state.terminalRenderer,
     terminalQuickCommands: state.terminalQuickCommands,
     defaultAgentId: state.defaultAgentId,
@@ -277,6 +282,7 @@ export function applyPersistentSettingsToStore(settings: PersistentSettings) {
     terminalFontSize: Math.max(10, Math.round(settings.terminalFontSize || 14)),
     terminalCursorBlink: settings.terminalCursorBlink ?? false,
     terminalLineHeight: settings.terminalLineHeight || 1.2,
+    terminalScrollback: normalizeTerminalScrollback(settings.terminalScrollback),
     terminalRenderer: normalizeTerminalRendererValue(settings.terminalRenderer),
     terminalQuickCommands: normalizeQuickCommands(settings.terminalQuickCommands),
     defaultAgentId: normalizeDefaultAgentId(settings.defaultAgentId),
@@ -558,6 +564,7 @@ interface AppState {
   terminalFontSize: number;
   terminalCursorBlink: boolean;
   terminalLineHeight: number;
+  terminalScrollback: number;
   terminalRenderer: TerminalRenderer;
   defaultTerminalShell: TerminalShell;
   // Quick Commands
@@ -656,6 +663,7 @@ interface AppState {
   setTerminalFontSize: (size: number) => void;
   setTerminalCursorBlink: (blink: boolean) => void;
   setTerminalLineHeight: (height: number) => void;
+  setTerminalScrollback: (rows: number) => void;
   setTerminalRenderer: (renderer: TerminalRenderer) => void;
   setDefaultTerminalShell: (shell: TerminalShell) => void;
   // Quick Commands actions
@@ -1443,6 +1451,7 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
       terminalFontSize: 14,
       terminalCursorBlink: false,
       terminalLineHeight: 1.2,
+      terminalScrollback: DEFAULT_TERMINAL_SCROLLBACK,
       terminalRenderer: "standard",
       defaultTerminalShell: "powershell",
       terminalQuickCommands: [],
@@ -2276,6 +2285,8 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
       setTerminalFontSize: (size) => set({ terminalFontSize: size }),
       setTerminalCursorBlink: (blink) => set({ terminalCursorBlink: blink }),
       setTerminalLineHeight: (height) => set({ terminalLineHeight: height }),
+      setTerminalScrollback: (rows) =>
+        set({ terminalScrollback: normalizeTerminalScrollback(rows) }),
       setTerminalRenderer: (renderer) => set({ terminalRenderer: renderer }),
       setDefaultTerminalShell: (shell) => set({ defaultTerminalShell: shell }),
       setTerminalQuickCommands: (commands) => set({ terminalQuickCommands: commands }),
@@ -2674,6 +2685,9 @@ function rehydrateMigrationState(persistedState: Partial<AppState> | undefined) 
     );
     migratedState.terminalRenderer = normalizeTerminalRendererValue(
       migratedState.terminalRenderer
+    );
+    migratedState.terminalScrollback = normalizeTerminalScrollback(
+      migratedState.terminalScrollback
     );
     migratedState.voiceTriggerVisible = migratedState.voiceTriggerVisible ?? true;
     migratedState.startupRestoreLastProject = normalizeStartupRestoreLastProjectValue(

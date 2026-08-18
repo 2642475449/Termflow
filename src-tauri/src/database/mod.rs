@@ -75,6 +75,10 @@ fn default_terminal_renderer() -> String {
     "auto".into()
 }
 
+fn default_terminal_scrollback() -> i64 {
+    5_000
+}
+
 fn default_editor_font_size() -> i64 {
     14
 }
@@ -132,6 +136,8 @@ pub struct PersistentSettingsRecord {
     pub terminal_font_size: i64,
     pub terminal_cursor_blink: bool,
     pub terminal_line_height: f64,
+    #[serde(default = "default_terminal_scrollback")]
+    pub terminal_scrollback: i64,
     #[serde(default = "default_terminal_renderer")]
     pub terminal_renderer: String,
     #[serde(default = "default_agent_permission_defaults")]
@@ -175,6 +181,7 @@ impl Default for PersistentSettingsRecord {
             terminal_font_size: 14,
             terminal_cursor_blink: true,
             terminal_line_height: 1.2,
+            terminal_scrollback: default_terminal_scrollback(),
             terminal_renderer: default_terminal_renderer(),
             agent_permission_defaults: default_agent_permission_defaults(),
             notification_enabled: true,
@@ -305,6 +312,8 @@ impl Database {
             read_setting(&conn, "terminal.cursorBlink")?.unwrap_or(settings.terminal_cursor_blink);
         settings.terminal_line_height =
             read_setting(&conn, "terminal.lineHeight")?.unwrap_or(settings.terminal_line_height);
+        settings.terminal_scrollback =
+            read_setting(&conn, "terminal.scrollback")?.unwrap_or(settings.terminal_scrollback);
         settings.terminal_renderer =
             read_setting(&conn, "terminal.renderer")?.unwrap_or(settings.terminal_renderer);
         settings.agent_permission_defaults = read_setting(&conn, "agents.permissionDefaults")?
@@ -459,6 +468,7 @@ impl Database {
             &settings.terminal_cursor_blink,
         )?;
         write_setting(&conn, "terminal.lineHeight", &settings.terminal_line_height)?;
+        write_setting(&conn, "terminal.scrollback", &settings.terminal_scrollback)?;
         write_setting(&conn, "terminal.renderer", &settings.terminal_renderer)?;
         write_setting(
             &conn,
@@ -844,6 +854,41 @@ mod tests {
     #[test]
     fn persistent_settings_default_to_enabled_explorer_context_menu() {
         assert!(PersistentSettingsRecord::default().explorer_context_menu_enabled);
+    }
+
+    #[test]
+    fn persistent_settings_default_to_five_thousand_scrollback_rows() {
+        assert_eq!(
+            PersistentSettingsRecord::default().terminal_scrollback,
+            5_000
+        );
+    }
+
+    #[test]
+    fn persistent_settings_without_scrollback_remain_backward_compatible() {
+        let mut value = serde_json::to_value(PersistentSettingsRecord::default()).unwrap();
+        value.as_object_mut().unwrap().remove("terminalScrollback");
+
+        let restored: PersistentSettingsRecord = serde_json::from_value(value).unwrap();
+
+        assert_eq!(restored.terminal_scrollback, 5_000);
+    }
+
+    #[test]
+    fn terminal_scrollback_preference_round_trips_through_the_database() {
+        let database = Database::open_in_memory();
+        let mut settings = PersistentSettingsRecord::default();
+        settings.terminal_scrollback = 20_000;
+
+        database.save_persistent_settings(&settings).unwrap();
+
+        assert_eq!(
+            database
+                .load_persistent_settings()
+                .unwrap()
+                .terminal_scrollback,
+            20_000
+        );
     }
 
     #[test]

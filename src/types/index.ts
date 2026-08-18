@@ -34,6 +34,7 @@ export interface PersistentSettings {
   terminalFontSize: number;
   terminalCursorBlink: boolean;
   terminalLineHeight: number;
+  terminalScrollback: number;
   terminalRenderer: string;
   agentPermissionDefaults: AgentPermissionDefaults;
   notificationEnabled: boolean;

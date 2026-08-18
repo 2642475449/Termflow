@@ -164,7 +164,7 @@ export class FilePathLinkProvider implements ILinkProvider {
         text: detected.text,
         decorations: { pointerCursor: true, underline: true },
         activate: (event) => {
-          if (event.button !== 0 || !event.ctrlKey) return;
+          if (event.button !== 0) return;
           const path = {
             filePath: detected.filePath,
             line: detected.line,

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
-import { ReloadOutlined } from "@ant-design/icons";
-import { Skeleton } from "antd";
+import { ExclamationCircleOutlined, ReloadOutlined } from "@ant-design/icons";
+import { Popover, Skeleton } from "antd";
 import {
   AGENT_USAGE_HISTORY_CHANGED_EVENT,
   getAgentUsageOverview,
@@ -1033,9 +1033,24 @@ function HomePage() {
                 {subtitle}
               </div>
               {usageScope && (
-                <div className="mt-1 text-[11px]" style={{ color: "var(--cs-text-tertiary)" }}>
-                  {usageScope}
-                </div>
+                <Popover
+                  trigger="click"
+                  placement="bottomLeft"
+                  content={
+                    <div className="max-w-[420px] text-xs leading-5" style={{ color: "var(--cs-text-secondary)" }}>
+                      {usageScope}
+                    </div>
+                  }
+                >
+                  <button
+                    type="button"
+                    className="mt-2 inline-flex h-4 w-4 items-center justify-center rounded-full border-0 bg-transparent p-0 text-[13px]"
+                    aria-label={homeCopy(i18n.language, "查看统计范围说明", "View usage scope details", "集計範囲の詳細を表示")}
+                    style={{ color: "var(--cs-text-tertiary)" }}
+                  >
+                    <ExclamationCircleOutlined />
+                  </button>
+                </Popover>
               )}
             </div>
 

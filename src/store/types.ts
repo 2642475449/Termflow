@@ -179,6 +179,7 @@ export interface AppState {
   terminalFontSize: number;
   terminalCursorBlink: boolean;
   terminalLineHeight: number;
+  terminalScrollback: number;
   terminalRenderer: TerminalRenderer;
   defaultTerminalShell: TerminalShell;
   defaultAgentId: AiAgentId | null;
@@ -240,6 +241,7 @@ export interface AppState {
   setTerminalFontSize: (size: number) => void;
   setTerminalCursorBlink: (blink: boolean) => void;
   setTerminalLineHeight: (height: number) => void;
+  setTerminalScrollback: (rows: number) => void;
   setTerminalRenderer: (renderer: TerminalRenderer) => void;
   setDefaultTerminalShell: (shell: TerminalShell) => void;
   // Security actions

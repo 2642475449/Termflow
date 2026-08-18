@@ -1,0 +1,100 @@
+{
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "command": "node \"C:\\\\Users\\\\26424\\\\.claude\\\\hooks\\\\termflow-hook.cjs\" permissionrequest",
+            "timeout": 3000,
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "node \"C:\\\\Users\\\\26424\\\\.claude\\\\hooks\\\\termflow-hook.cjs\" posttooluse",
+            "timeout": 3000,
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "command": "node \"C:\\\\Users\\\\26424\\\\.claude\\\\hooks\\\\termflow-hook.cjs\" posttoolusefailure",
+            "timeout": 3000,
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "node \"C:\\\\Users\\\\26424\\\\.claude\\\\hooks\\\\termflow-hook.cjs\" pretooluse",
+            "timeout": 3000,
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "node \"C:\\\\Users\\\\26424\\\\.claude\\\\hooks\\\\termflow-hook.cjs\" stop",
+            "timeout": 3000,
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "command": "node \"C:\\\\Users\\\\26424\\\\.claude\\\\hooks\\\\termflow-hook.cjs\" subagentstart",
+            "timeout": 3000,
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "command": "node \"C:\\\\Users\\\\26424\\\\.claude\\\\hooks\\\\termflow-hook.cjs\" subagentstop",
+            "timeout": 3000,
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "command": "node \"C:\\\\Users\\\\26424\\\\.claude\\\\hooks\\\\termflow-hook.cjs\" userpromptsubmit",
+            "timeout": 3000,
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ]
+  }
+}
