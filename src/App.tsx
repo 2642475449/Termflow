@@ -97,6 +97,10 @@ function App() {
   const terminalRenderer = useAppStore((s) => s.terminalRenderer);
   const terminalQuickCommands = useAppStore((s) => s.terminalQuickCommands);
   const defaultAgentId = useAppStore((s) => s.defaultAgentId);
+  const gitCommitMessageProfiles = useAppStore((s) => s.gitCommitMessageProfiles);
+  const defaultGitCommitMessageProfileId = useAppStore(
+    (s) => s.defaultGitCommitMessageProfileId,
+  );
   const agentPermissionDefaults = useAppStore((s) => s.agentPermissionDefaults);
   const notificationEnabled = useAppStore((s) => s.notificationEnabled);
   const notificationSoundEnabled = useAppStore((s) => s.notificationSoundEnabled);
@@ -150,6 +154,8 @@ function App() {
       terminalRenderer,
       terminalQuickCommands,
       defaultAgentId,
+      gitCommitMessageProfiles,
+      defaultGitCommitMessageProfileId,
       agentPermissionDefaults,
       notificationEnabled,
       notificationSoundEnabled,
@@ -194,6 +200,8 @@ function App() {
       terminalRenderer,
       terminalQuickCommands,
       defaultAgentId,
+      gitCommitMessageProfiles,
+      defaultGitCommitMessageProfileId,
       themeCategory,
       voiceInputTarget,
       voiceShortcut,

@@ -1082,6 +1082,31 @@ describe("language persistence", () => {
   });
 });
 
+describe("git commit message profile settings", () => {
+  const originalSettings = getPersistentSettingsSnapshot();
+
+  afterEach(() => {
+    applyPersistentSettingsToStore(originalSettings);
+  });
+
+  it("round-trips profiles and repairs a missing default", () => {
+    applyPersistentSettingsToStore({
+      ...originalSettings,
+      gitCommitMessageProfiles: [
+        { id: "custom", name: "Custom", instructions: "One line only" },
+      ],
+      defaultGitCommitMessageProfileId: "missing",
+    });
+
+    expect(getPersistentSettingsSnapshot()).toMatchObject({
+      gitCommitMessageProfiles: [
+        { id: "custom", name: "Custom", instructions: "One line only" },
+      ],
+      defaultGitCommitMessageProfileId: "custom",
+    });
+  });
+});
+
 describe("terminal scrollback settings", () => {
   const originalSettings = getPersistentSettingsSnapshot();
 

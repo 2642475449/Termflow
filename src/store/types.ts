@@ -1,4 +1,4 @@
-import type { AiAgentId, ClaudeCliInfo, ProjectOpenBehavior, Session, WindowMode, WindowProjectContext } from "@/types";
+import type { AiAgentId, ClaudeCliInfo, GitCommitMessageProfile, ProjectOpenBehavior, Session, WindowMode, WindowProjectContext } from "@/types";
 
 export type ThemeMode = "light-glass" | "light-warm" | "dark-starry" | "dark-mocha";
 export type ThemeCategory = "light" | "dark" | "system";
@@ -183,6 +183,8 @@ export interface AppState {
   terminalRenderer: TerminalRenderer;
   defaultTerminalShell: TerminalShell;
   defaultAgentId: AiAgentId | null;
+  gitCommitMessageProfiles: GitCommitMessageProfile[];
+  defaultGitCommitMessageProfileId: string;
   // Security
   skipPermissions: boolean;
   // Notification
@@ -197,6 +199,10 @@ export interface AppState {
   unreadTotal: number;
   setClaudeCliInfo: (info: ClaudeCliInfo | null) => void;
   setDefaultAgentId: (agentId: AiAgentId | null) => void;
+  setGitCommitMessageProfiles: (
+    profiles: GitCommitMessageProfile[],
+    defaultProfileId: string,
+  ) => void;
   initializeWindowContext: (context: WindowProjectContext) => void;
   // Project actions
   setLastProject: (project: ProjectInfo | null) => void;

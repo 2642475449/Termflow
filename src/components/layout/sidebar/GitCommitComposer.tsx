@@ -9,6 +9,7 @@ import {
 } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { getGitSyncPlan } from "@/lib/gitSyncPolicy";
+import type { GitCommitMessageProfile } from "@/types";
 
 interface GitCommitComposerProps {
   branchName: string;
@@ -23,13 +24,15 @@ interface GitCommitComposerProps {
   canGenerateCommitMessage: boolean;
   generateCommitMessageHint?: string;
   generatingCommitMessage: boolean;
+  commitMessageProfiles: GitCommitMessageProfile[];
+  defaultCommitMessageProfileId: string;
   onCommit: (message: string) => Promise<void>;
   onCommitAmend: (message: string) => Promise<void>;
   onCommitAndPush: (message: string) => Promise<void>;
   onCommitAndSync: (message: string) => Promise<void>;
   onPull: () => Promise<void>;
   onSyncChanges: () => Promise<void>;
-  onGenerateCommitMessage: () => Promise<string | null>;
+  onGenerateCommitMessage: (profileId?: string) => Promise<string | null>;
 }
 
 interface PendingCommitAction {
@@ -50,6 +53,8 @@ export function GitCommitComposer({
   canGenerateCommitMessage,
   generateCommitMessageHint,
   generatingCommitMessage,
+  commitMessageProfiles,
+  defaultCommitMessageProfileId,
   onCommit,
   onCommitAmend,
   onCommitAndPush,
@@ -260,10 +265,10 @@ export function GitCommitComposer({
     [handleCommit, handleCommitAmend, handleCommitAndPush, handleCommitAndSync, onPull, onSyncChanges]
   );
 
-  const handleGenerateCommitMessage = useCallback(async () => {
+  const handleGenerateCommitMessage = useCallback(async (profileId?: string) => {
     if (!canGenerateCommitMessage || generatingCommitMessage) return;
     try {
-      const generatedMessage = await onGenerateCommitMessage();
+      const generatedMessage = await onGenerateCommitMessage(profileId);
       if (generatedMessage?.trim()) {
         setCommitMessage(generatedMessage.trim());
       }
@@ -271,6 +276,25 @@ export function GitCommitComposer({
       // The generator owns its global Toast feedback.
     }
   }, [canGenerateCommitMessage, generatingCommitMessage, onGenerateCommitMessage]);
+
+  const defaultCommitMessageProfile = commitMessageProfiles.find(
+    (profile) => profile.id === defaultCommitMessageProfileId,
+  ) ?? commitMessageProfiles[0];
+  const commitMessageProfileMenuItems: MenuProps["items"] = commitMessageProfiles.map(
+    (profile) => ({
+      key: profile.id,
+      label: (
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="min-w-0 flex-1 truncate">{profile.name}</span>
+          {profile.id === defaultCommitMessageProfileId && (
+            <span className="text-[10px]" style={{ color: "var(--cs-text-tertiary)" }}>
+              {t("sidebar.gitCommitMessageProfileDefault")}
+            </span>
+          )}
+        </span>
+      ),
+    }),
+  );
 
   return (
     <div className="shrink-0 px-2 pb-1.5 pt-1.5">
@@ -320,36 +344,61 @@ export function GitCommitComposer({
               minHeight: 0,
             }}
           />
-          <Tooltip
-            title={
-              generatingCommitMessage
-                ? t("sidebar.gitGenerateCommitMessageLoading")
-                : generateCommitMessageHint ?? t("sidebar.gitGenerateCommitMessage")
-            }
-            mouseEnterDelay={0.4}
-          >
-            <Button
-              type="text"
-              size="small"
-              onClick={handleGenerateCommitMessage}
-              disabled={!canGenerateCommitMessage}
-              className="shrink-0 ml-1"
-              style={{
-                width: 24,
-                height: 24,
-                padding: 0,
-                color: canGenerateCommitMessage
-                  ? "color-mix(in srgb, var(--cs-primary) 76%, var(--cs-text-primary) 24%)"
-                  : "var(--cs-text-tertiary)",
-              }}
+          <div className="ml-1 flex shrink-0 items-center">
+            <Tooltip
+              title={
+                generatingCommitMessage
+                  ? t("sidebar.gitGenerateCommitMessageLoading")
+                  : `${generateCommitMessageHint ?? t("sidebar.gitGenerateCommitMessage")} · ${defaultCommitMessageProfile?.name ?? ""}`
+              }
+              mouseEnterDelay={0.4}
             >
-              {generatingCommitMessage ? (
-                <LoadingOutlined />
-              ) : (
-                <span className="text-[11px] font-semibold tracking-[0.02em]">AI</span>
-              )}
-            </Button>
-          </Tooltip>
+              <Button
+                type="text"
+                size="small"
+                onClick={() => void handleGenerateCommitMessage()}
+                disabled={!canGenerateCommitMessage}
+                style={{
+                  width: 24,
+                  height: 24,
+                  padding: 0,
+                  color: canGenerateCommitMessage
+                    ? "color-mix(in srgb, var(--cs-primary) 76%, var(--cs-text-primary) 24%)"
+                    : "var(--cs-text-tertiary)",
+                }}
+              >
+                {generatingCommitMessage ? (
+                  <LoadingOutlined />
+                ) : (
+                  <span className="text-[11px] font-semibold tracking-[0.02em]">AI</span>
+                )}
+              </Button>
+            </Tooltip>
+            <Dropdown
+              trigger={["click"]}
+              disabled={!canGenerateCommitMessage}
+              menu={{
+                items: commitMessageProfileMenuItems,
+                onClick: ({ key }) => void handleGenerateCommitMessage(key),
+              }}
+              placement="bottomRight"
+            >
+              <Button
+                type="text"
+                size="small"
+                aria-label={t("sidebar.gitChooseCommitMessageProfile")}
+                icon={<DownOutlined className="text-[9px]" />}
+                style={{
+                  width: 18,
+                  height: 24,
+                  padding: 0,
+                  color: canGenerateCommitMessage
+                    ? "var(--cs-text-secondary)"
+                    : "var(--cs-text-tertiary)",
+                }}
+              />
+            </Dropdown>
+          </div>
         </div>
       </div>
 

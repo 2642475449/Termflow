@@ -99,6 +99,35 @@ fn default_agent_permission_defaults() -> serde_json::Value {
     serde_json::Value::Object(Default::default())
 }
 
+fn default_git_commit_message_profiles() -> serde_json::Value {
+    serde_json::json!([
+        {
+            "id": "conventional-zh-full",
+            "name": "默认",
+            "instructions": "使用中文生成 Conventional Commit。第一行为 type(scope): summary 风格标题，标题后空一行，再输出 2-4 条以 `- ` 开头的正文要点。"
+        },
+        {
+            "id": "concise-en-title",
+            "name": "精简",
+            "instructions": "只输出一行简洁的英文 Conventional Commit 标题，不要正文，标题尽量控制在 72 个字符以内。"
+        },
+        {
+            "id": "team-standard",
+            "name": "团队规范",
+            "instructions": "使用 type(scope): subject 格式；标题使用中文，正文固定为“变更内容”和“影响范围”两个要点，不要添加无法从变更概览确认的信息。"
+        },
+        {
+            "id": "emoji",
+            "name": "Emoji",
+            "instructions": "在 Conventional Commit 标题前添加一个最符合改动类型的 Emoji，例如 ✨ feat:、🐛 fix: 或 📝 docs:；正文使用中文并保持简洁。"
+        }
+    ])
+}
+
+fn default_git_commit_message_profile_id() -> String {
+    "conventional-zh-full".into()
+}
+
 fn default_asr_auth_mode() -> String {
     "token-plan".into()
 }
@@ -164,6 +193,10 @@ pub struct PersistentSettingsRecord {
     pub terminal_quick_commands: serde_json::Value,
     #[serde(default)]
     pub default_agent_id: Option<String>,
+    #[serde(default = "default_git_commit_message_profiles")]
+    pub git_commit_message_profiles: serde_json::Value,
+    #[serde(default = "default_git_commit_message_profile_id")]
+    pub default_git_commit_message_profile_id: String,
 }
 
 impl Default for PersistentSettingsRecord {
@@ -200,6 +233,8 @@ impl Default for PersistentSettingsRecord {
             voice_trigger_visible: true,
             terminal_quick_commands: serde_json::Value::Array(vec![]),
             default_agent_id: None,
+            git_commit_message_profiles: default_git_commit_message_profiles(),
+            default_git_commit_message_profile_id: default_git_commit_message_profile_id(),
         }
     }
 }
@@ -348,6 +383,11 @@ impl Database {
             .unwrap_or(settings.terminal_quick_commands);
         settings.default_agent_id =
             read_setting(&conn, "agents.defaultAgentId")?.unwrap_or(settings.default_agent_id);
+        settings.git_commit_message_profiles = read_setting(&conn, "git.commitMessageProfiles")?
+            .unwrap_or(settings.git_commit_message_profiles);
+        settings.default_git_commit_message_profile_id =
+            read_setting(&conn, "git.defaultCommitMessageProfileId")?
+                .unwrap_or(settings.default_git_commit_message_profile_id);
 
         Ok(settings)
     }
@@ -527,6 +567,16 @@ impl Database {
             &settings.terminal_quick_commands,
         )?;
         write_setting(&conn, "agents.defaultAgentId", &settings.default_agent_id)?;
+        write_setting(
+            &conn,
+            "git.commitMessageProfiles",
+            &settings.git_commit_message_profiles,
+        )?;
+        write_setting(
+            &conn,
+            "git.defaultCommitMessageProfileId",
+            &settings.default_git_commit_message_profile_id,
+        )?;
 
         Ok(())
     }
@@ -872,6 +922,44 @@ mod tests {
         let restored: PersistentSettingsRecord = serde_json::from_value(value).unwrap();
 
         assert_eq!(restored.terminal_scrollback, 5_000);
+    }
+
+    #[test]
+    fn git_commit_message_profiles_remain_backward_compatible_and_round_trip() {
+        let mut legacy_value = serde_json::to_value(PersistentSettingsRecord::default()).unwrap();
+        let legacy_object = legacy_value.as_object_mut().unwrap();
+        legacy_object.remove("gitCommitMessageProfiles");
+        legacy_object.remove("defaultGitCommitMessageProfileId");
+
+        let restored_legacy: PersistentSettingsRecord =
+            serde_json::from_value(legacy_value).unwrap();
+        assert_eq!(
+            restored_legacy.default_git_commit_message_profile_id,
+            "conventional-zh-full"
+        );
+        assert_eq!(
+            restored_legacy
+                .git_commit_message_profiles
+                .as_array()
+                .unwrap()
+                .len(),
+            4
+        );
+
+        let database = Database::open_in_memory();
+        let mut settings = PersistentSettingsRecord::default();
+        settings.git_commit_message_profiles = serde_json::json!([
+            { "id": "custom", "name": "Custom", "instructions": "One line only" }
+        ]);
+        settings.default_git_commit_message_profile_id = "custom".into();
+        database.save_persistent_settings(&settings).unwrap();
+
+        let restored = database.load_persistent_settings().unwrap();
+        assert_eq!(restored.default_git_commit_message_profile_id, "custom");
+        assert_eq!(
+            restored.git_commit_message_profiles,
+            settings.git_commit_message_profiles
+        );
     }
 
     #[test]

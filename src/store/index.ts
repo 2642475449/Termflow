@@ -6,6 +6,7 @@ import type {
   AgentPermissionDefaults,
   SessionLaunchOptions,
   GitCloneTask,
+  GitCommitMessageProfile,
   PersistentSettings,
   ProjectOpenBehavior,
   Session,
@@ -14,6 +15,12 @@ import type {
   WindowProjectContext,
 } from "@/types";
 import { normalizeQuickCommands } from "@/lib/quickCommands";
+import {
+  DEFAULT_GIT_COMMIT_MESSAGE_PROFILE_ID,
+  createDefaultGitCommitMessageProfiles,
+  normalizeDefaultGitCommitMessageProfileId,
+  normalizeGitCommitMessageProfiles,
+} from "@/lib/gitCommitMessageProfiles";
 import { getPermissionDefaultsForLaunch, isAiAgentId } from "@/lib/agents";
 import {
   markAttentionForSessionViewed,
@@ -243,6 +250,8 @@ export function getPersistentSettingsSnapshot(): PersistentSettings {
     terminalRenderer: state.terminalRenderer,
     terminalQuickCommands: state.terminalQuickCommands,
     defaultAgentId: state.defaultAgentId,
+    gitCommitMessageProfiles: state.gitCommitMessageProfiles,
+    defaultGitCommitMessageProfileId: state.defaultGitCommitMessageProfileId,
     agentPermissionDefaults: state.agentPermissionDefaults,
     notificationEnabled: state.notificationEnabled,
     notificationSoundEnabled: state.notificationSoundEnabled,
@@ -263,6 +272,9 @@ export function getPersistentSettingsSnapshot(): PersistentSettings {
 
 export function applyPersistentSettingsToStore(settings: PersistentSettings) {
   const lastProjectPath = normalizeLastProjectPathValue(settings.lastProjectPath);
+  const gitCommitMessageProfiles = normalizeGitCommitMessageProfiles(
+    settings.gitCommitMessageProfiles,
+  );
   useAppStore.setState({
     lightTheme: normalizeThemeModeValue(settings.lightTheme),
     darkTheme: normalizeDarkThemeModeValue(settings.darkTheme),
@@ -286,6 +298,11 @@ export function applyPersistentSettingsToStore(settings: PersistentSettings) {
     terminalRenderer: normalizeTerminalRendererValue(settings.terminalRenderer),
     terminalQuickCommands: normalizeQuickCommands(settings.terminalQuickCommands),
     defaultAgentId: normalizeDefaultAgentId(settings.defaultAgentId),
+    gitCommitMessageProfiles,
+    defaultGitCommitMessageProfileId: normalizeDefaultGitCommitMessageProfileId(
+      settings.defaultGitCommitMessageProfileId,
+      gitCommitMessageProfiles,
+    ),
     agentPermissionDefaults: normalizeAgentPermissionDefaults(settings.agentPermissionDefaults),
     notificationEnabled: settings.notificationEnabled ?? true,
     notificationSoundEnabled: settings.notificationSoundEnabled ?? true,
@@ -571,6 +588,8 @@ interface AppState {
   terminalQuickCommands: TerminalQuickCommand[];
   // Agents
   defaultAgentId: AiAgentId | null;
+  gitCommitMessageProfiles: GitCommitMessageProfile[];
+  defaultGitCommitMessageProfileId: string;
   // Security
   agentPermissionDefaults: AgentPermissionDefaults;
   // Notification
@@ -671,6 +690,10 @@ interface AppState {
   removeTerminalQuickCommand: (id: string) => void;
   // Agent actions
   setDefaultAgentId: (agentId: AiAgentId | null) => void;
+  setGitCommitMessageProfiles: (
+    profiles: GitCommitMessageProfile[],
+    defaultProfileId: string,
+  ) => void;
   // Security actions
   setAgentPermissionDefaults: (agentId: AiAgentId, launchOptions?: SessionLaunchOptions) => void;
   // Notification actions
@@ -1456,6 +1479,8 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
       defaultTerminalShell: "powershell",
       terminalQuickCommands: [],
       defaultAgentId: null,
+      gitCommitMessageProfiles: createDefaultGitCommitMessageProfiles(),
+      defaultGitCommitMessageProfileId: DEFAULT_GIT_COMMIT_MESSAGE_PROFILE_ID,
       agentPermissionDefaults: {},
       notificationEnabled: true,
       notificationSoundEnabled: true,
@@ -1489,6 +1514,16 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
 
       setClaudeCliInfo: (claudeCliInfo) => set({ claudeCliInfo }),
       setDefaultAgentId: (defaultAgentId) => set({ defaultAgentId }),
+      setGitCommitMessageProfiles: (profiles, defaultProfileId) => {
+        const normalizedProfiles = normalizeGitCommitMessageProfiles(profiles);
+        set({
+          gitCommitMessageProfiles: normalizedProfiles,
+          defaultGitCommitMessageProfileId: normalizeDefaultGitCommitMessageProfileId(
+            defaultProfileId,
+            normalizedProfiles,
+          ),
+        });
+      },
 
       setRecentProjects: (projects) =>
         set({

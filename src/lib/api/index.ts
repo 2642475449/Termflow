@@ -1099,8 +1099,13 @@ export async function gitCommit(
 export async function gitGenerateCommitMessage(
   projectPath: string,
   agentId: AiAgentId,
+  profileInstructions: string,
 ): Promise<string> {
-  return await invoke("git_generate_commit_message", { projectPath, agentId });
+  return await invoke("git_generate_commit_message", {
+    projectPath,
+    agentId,
+    profileInstructions,
+  });
 }
 
 export async function gitCloneRepository(options: {

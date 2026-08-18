@@ -17,7 +17,11 @@ fn commit_message_generation_allows_eight_claude_turns_with_a_ninety_second_time
 }
 
 /// Build a provider-neutral prompt for generating a commit message.
-fn build_commit_prompt(project_path: &str, repo: &git2::Repository) -> Result<String, String> {
+fn build_commit_prompt(
+    project_path: &str,
+    repo: &git2::Repository,
+    profile_instructions: &str,
+) -> Result<String, String> {
     let branch_name = resolve_branch_info(repo)
         .map(|info| info.branch_name)
         .unwrap_or_else(|_| "HEAD".to_string());
@@ -41,6 +45,11 @@ fn build_commit_prompt(project_path: &str, repo: &git2::Repository) -> Result<St
         return Err("当前没有可用于生成提交信息的 Git 变更".to_string());
     }
 
+    let profile_instructions = profile_instructions.trim();
+    if profile_instructions.is_empty() {
+        return Err("提交信息风格的生成规则不能为空".to_string());
+    }
+
     let truncate_block = |text: &str, limit: usize| -> String {
         let trimmed = text.trim();
         if trimmed.chars().count() <= limit {
@@ -52,28 +61,19 @@ fn build_commit_prompt(project_path: &str, repo: &git2::Repository) -> Result<St
     };
 
     Ok(format!(
-        "你是一个资深 Git 提交信息助手。请根据下面仓库的改动生成一条可以直接使用的完整提交信息。\n\
-        要求：\n\
-        1. 默认输出完整提交信息，而不是只输出标题\n\
-        2. 第一行必须是 Conventional Commit 风格标题，格式尽量为 type(scope): summary\n\
-        3. 标题简洁、准确、可读，尽量控制在 50 个字符以内\n\
-        4. 标题后空一行，再输出 2-4 条正文要点\n\
-        5. 正文每行使用 `- ` 开头，概括本次改动的关键点、结构变化或交互变化\n\
-        6. 只输出最终提交信息，不要解释，不要代码块，不要额外前后缀\n\
-        7. 默认使用中文，但如果改动明显是英文语境或英文约定，可输出英文\n\
-        8. 优先概括源码和配置改动，弱化或忽略构建产物、二进制、bundle 等派生产物\n\
-        9. 如果同时存在多类改动，提炼最主要的 2-4 个点，不要把所有文件逐一罗列\n\
-        10. 输入中提供的是 Git 变更概览而非完整 patch，请优先根据文件分布、变更统计和状态信息概括提交意图\n\n\
-        输出格式示例：\n\
-        feat(git, sidebar): 添加 AI 生成提交信息功能\n\n\
-        - 新增后端命令，调用默认智能体生成完整提交信息\n\
-        - 在 Git 提交输入框加入 AI 生成入口与加载状态\n\
-        - 优化侧边栏 Git 变更交互与右键操作\n\n\
+        "你是一个资深 Git 提交信息助手。请根据下面仓库的改动生成一条可以直接使用的提交信息。\n\
+        固定要求（优先级高于风格规则）：\n\
+        1. 只输出最终提交信息，不要解释，不要代码块，不要额外前后缀\n\
+        2. 不要编造变更概览中无法确认的功能、Issue 编号或测试结果\n\
+        3. 优先概括源码和配置改动，弱化或忽略构建产物、二进制、bundle 等派生产物\n\
+        4. 输入中提供的是 Git 变更概览而非完整 patch，请根据文件分布、变更统计和状态信息概括提交意图\n\n\
+        当前选择的风格规则：\n{profile_instructions}\n\n\
         当前分支：\n{branch_name}\n\n\
         Git Status:\n{status}\n\n\
         Staged Summary:\n{staged}\n\n\
         Unstaged Summary:\n{unstaged}",
         branch_name = branch_name,
+        profile_instructions = truncate_block(profile_instructions, 6000),
         status = truncate_block(&status_text, 4000),
         staged = truncate_block(&staged_summary, 4000),
         unstaged = truncate_block(&unstaged_summary, 4000),
@@ -128,9 +128,10 @@ fn sanitize_generated_commit_message(input: &str) -> Option<String> {
 fn git_generate_commit_message_sync(
     project_path: String,
     agent_id: String,
+    profile_instructions: String,
 ) -> Result<String, String> {
     let repo = open_repo(&project_path)?;
-    let prompt = build_commit_prompt(&project_path, &repo)?;
+    let prompt = build_commit_prompt(&project_path, &repo, &profile_instructions)?;
     let normalized_path = normalize_input_path(&project_path);
     let stdout = run_agent_text(
         &agent_id,
@@ -150,9 +151,10 @@ fn git_generate_commit_message_sync(
 pub async fn git_generate_commit_message(
     project_path: String,
     agent_id: String,
+    profile_instructions: String,
 ) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        git_generate_commit_message_sync(project_path, agent_id)
+        git_generate_commit_message_sync(project_path, agent_id, profile_instructions)
     })
     .await
     .map_err(|e| format!("AI 提交信息后台任务失败: {}", e))?

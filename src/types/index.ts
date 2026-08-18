@@ -21,6 +21,12 @@ export interface PersistentFeishuNotificationEvents {
   permission: boolean;
 }
 
+export interface GitCommitMessageProfile {
+  id: string;
+  name: string;
+  instructions: string;
+}
+
 export interface PersistentSettings {
   lightTheme: string;
   darkTheme: string;
@@ -53,6 +59,8 @@ export interface PersistentSettings {
   voiceTriggerVisible: boolean;
   terminalQuickCommands: TerminalQuickCommand[];
   defaultAgentId: AiAgentId | null;
+  gitCommitMessageProfiles: GitCommitMessageProfile[];
+  defaultGitCommitMessageProfileId: string;
 }
 
 // ── 快速命令类型 ──────────────────────────────────────────────

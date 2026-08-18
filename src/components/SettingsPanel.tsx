@@ -3193,10 +3193,6 @@ function hookAgentLabel(agent: HookAgent, t: (key: string) => string) {
   return t(`settings.hooks.agents.${agent}`);
 }
 
-function hookAgentCapabilityKey(agent: HookAgent) {
-  return `settings.hooks.agentCapability.${agent}`;
-}
-
 function HooksPage() {
   const { t } = useTranslation();
   const currentProject = useAppStore((s) => s.currentProject);
@@ -3514,26 +3510,6 @@ function HooksPage() {
           </>
         }
       >
-        <div
-          className="mb-3 rounded-xl px-3 py-2 text-xs"
-          style={{
-            background: "color-mix(in srgb, var(--cs-primary) 7%, transparent)",
-            border: "1px solid color-mix(in srgb, var(--cs-primary) 16%, transparent)",
-            color: "var(--cs-text-secondary)",
-          }}
-        >
-          {t(hookAgentCapabilityKey(activeAgent))}
-        </div>
-        <div
-          className="mb-3 rounded-xl px-3 py-2 text-xs"
-          style={{
-            background: "color-mix(in srgb, #55b685 9%, transparent)",
-            border: "1px solid color-mix(in srgb, #55b685 22%, transparent)",
-            color: "var(--cs-text-secondary)",
-          }}
-        >
-          {t("settings.hooks.globalManagedNotice")}
-        </div>
         {workspaceManagedHookCount > 0 && (
           <div
             className="mb-3 rounded-xl px-3 py-2 text-xs flex items-center justify-between gap-3"

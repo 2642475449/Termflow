@@ -98,6 +98,10 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
   const setGitChangeCount = useAppStore((s) => s.setGitChangeCount);
   const setGitSyncCounts = useAppStore((s) => s.setGitSyncCounts);
   const defaultAgentId = useAppStore((s) => s.defaultAgentId);
+  const gitCommitMessageProfiles = useAppStore((s) => s.gitCommitMessageProfiles);
+  const defaultGitCommitMessageProfileId = useAppStore(
+    (s) => s.defaultGitCommitMessageProfileId,
+  );
   const diffOpenRequestRef = useRef(0);
 
   // 使用 useGitStatus hook 管理 Git 状态
@@ -464,17 +468,30 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
     []
   );
 
-  const handleGenerateCommitMessage = useCallback(async () => {
+  const handleGenerateCommitMessage = useCallback(async (profileId?: string) => {
     if (!currentProject || generatingCommitMessage || fileStatuses.length === 0) return null;
     if (!defaultAgentId) {
       message.warning(t("settings.agents.defaultRequired"));
       return null;
     }
+    const selectedProfile = gitCommitMessageProfiles.find(
+      (profile) => profile.id === (profileId ?? defaultGitCommitMessageProfileId),
+    ) ?? gitCommitMessageProfiles[0];
+    if (!selectedProfile) {
+      message.warning(t("sidebar.gitCommitMessageProfileRequired"));
+      return null;
+    }
 
     setGeneratingCommitMessage(true);
     try {
-      const generatedMessage = await gitGenerateCommitMessage(currentProject.path, defaultAgentId);
-      message.success(t("sidebar.gitGenerateCommitMessageSuccess"));
+      const generatedMessage = await gitGenerateCommitMessage(
+        currentProject.path,
+        defaultAgentId,
+        selectedProfile.instructions,
+      );
+      message.success(t("sidebar.gitGenerateCommitMessageSuccessWithProfile", {
+        profile: selectedProfile.name,
+      }));
       return generatedMessage;
     } catch (error) {
       const detail = `${t("sidebar.gitGenerateCommitMessageFailed")}: ${
@@ -485,7 +502,15 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
     } finally {
       setGeneratingCommitMessage(false);
     }
-  }, [currentProject, defaultAgentId, fileStatuses.length, generatingCommitMessage, t]);
+  }, [
+    currentProject,
+    defaultAgentId,
+    defaultGitCommitMessageProfileId,
+    fileStatuses.length,
+    generatingCommitMessage,
+    gitCommitMessageProfiles,
+    t,
+  ]);
 
   const handleDiscardConfirm = useCallback(async () => {
     if (!currentProject || discardConfirmFiles.length === 0) return;
@@ -715,6 +740,8 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
                       : t("settings.agents.defaultRequired")
                   }
                   generatingCommitMessage={generatingCommitMessage}
+                  commitMessageProfiles={gitCommitMessageProfiles}
+                  defaultCommitMessageProfileId={defaultGitCommitMessageProfileId}
                   onCommit={commit}
                   onCommitAmend={commitAmend}
                   onCommitAndPush={commitAndPush}
