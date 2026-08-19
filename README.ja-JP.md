@@ -20,6 +20,18 @@
 
 ![Termflow の概要](public/images/termflow-overview.png)
 
+## 対応エージェント
+
+Termflow は次の CLI エージェントをネイティブにサポートします。
+
+<p align="center">
+  <code><img src="public/agents/claude.svg" width="16" alt=""> Claude Code</code>
+  <code><img src="public/agents/codex.svg" width="16" alt=""> Codex</code>
+  <code><img src="public/agents/antigravity.svg" width="16" alt=""> Antigravity CLI</code>
+  <code><img src="public/agents/opencode.svg" width="16" alt=""> OpenCode</code>
+  <code><img src="public/agents/qoder.svg" width="16" alt=""> Qoder CLI</code>
+</p>
+
 ---
 
 ## 概要

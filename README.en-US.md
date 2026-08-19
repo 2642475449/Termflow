@@ -20,6 +20,18 @@
 
 ![Termflow overview](public/images/termflow-overview.png)
 
+## Supported agents
+
+Termflow natively supports the following CLI agents:
+
+<p align="center">
+  <code><img src="public/agents/claude.svg" width="16" alt=""> Claude Code</code>
+  <code><img src="public/agents/codex.svg" width="16" alt=""> Codex</code>
+  <code><img src="public/agents/antigravity.svg" width="16" alt=""> Antigravity CLI</code>
+  <code><img src="public/agents/opencode.svg" width="16" alt=""> OpenCode</code>
+  <code><img src="public/agents/qoder.svg" width="16" alt=""> Qoder CLI</code>
+</p>
+
 ---
 
 ## Overview
