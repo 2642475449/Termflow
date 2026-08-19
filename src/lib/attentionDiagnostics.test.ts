@@ -54,4 +54,13 @@ describe("getNotificationSuppressionReason", () => {
       })
     ).toBeNull();
   });
+
+  it("requires a measured lifecycle duration for every completion alert", () => {
+    expect(
+      getNotificationSuppressionReason({
+        ...defaults,
+        durationMs: null,
+      })
+    ).toBe("completion-duration-unavailable");
+  });
 });

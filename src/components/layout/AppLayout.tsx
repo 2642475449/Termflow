@@ -1425,9 +1425,10 @@ function AppLayout() {
         .pop();
       const sessionLabel = session?.name ?? normalized.sessionName ?? "Termflow";
       const systemSuppressionReason = getNotificationSuppressionReason({
-        enabled: notificationEnabled,
-        foreground,
-        eventType: normalized.eventType,
+          enabled: notificationEnabled,
+          foreground,
+          // 完成通知必须有 Hook 生命周期提供的实际耗时，两个渠道遵循同一规则。
+          eventType: normalized.eventType,
         durationMs,
         completionThresholdMs: notificationThresholdMs,
       });

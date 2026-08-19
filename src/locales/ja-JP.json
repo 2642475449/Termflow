@@ -408,6 +408,7 @@
       "reason": {
         "notifications-disabled": "アプリ通知が無効です",
         "foreground-session": "対象セッションがフォアグラウンドです",
+        "completion-duration-unavailable": "タスク時間を取得できなかったため、完了通知は送信されませんでした",
         "below-duration-threshold": "タスク時間が完了通知のしきい値未満です",
         "permission-denied": "システム通知の権限がありません"
       }

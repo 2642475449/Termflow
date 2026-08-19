@@ -228,7 +228,6 @@ pub fn run() {
             commands::session::get_claude_cli_info,
             commands::session::spawn_pty,
             commands::session::pty_input,
-            commands::session::mark_session_prompt_submitted,
             commands::session::submit_agent_turn_input,
             commands::session::complete_agent_turn,
             commands::session::generate_session_title,

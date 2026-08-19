@@ -6,6 +6,7 @@ export type NotificationChannel = "system" | "feishu";
 export type NotificationSuppressionReason =
   | "notifications-disabled"
   | "foreground-session"
+  | "completion-duration-unavailable"
   | "below-duration-threshold"
   | "permission-denied";
 
@@ -68,12 +69,13 @@ export function getNotificationSuppressionReason({
 }: NotificationPolicyInput): NotificationSuppressionReason | null {
   if (!enabled) return "notifications-disabled";
   if (suppressWhenForeground && foreground) return "foreground-session";
-  if (
-    eventType === "assistant_complete" &&
-    durationMs !== null &&
-    durationMs < completionThresholdMs
-  ) {
-    return "below-duration-threshold";
+  if (eventType === "assistant_complete") {
+    if (durationMs === null) {
+      return "completion-duration-unavailable";
+    }
+    if (durationMs !== null && durationMs < completionThresholdMs) {
+      return "below-duration-threshold";
+    }
   }
   return null;
 }

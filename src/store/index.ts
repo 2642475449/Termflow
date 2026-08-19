@@ -466,6 +466,7 @@ export interface GitDiffDocumentState {
   name: string;
   staged: boolean;
   revision?: string | null;
+  changeKind?: string | null;
   hunkActionsAvailable?: boolean;
   originalContent: string;
   modifiedContent: string;

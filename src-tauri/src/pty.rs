@@ -69,7 +69,6 @@ impl Drop for PtySession {
 pub struct PtyManager {
     sessions: Mutex<HashMap<String, PtySession>>,
     next_instance_id: AtomicU64,
-    prompt_started_at: Mutex<HashMap<String, i64>>,
     active_turns: Mutex<HashMap<String, ActiveAgentTurn>>,
     ingest_config: Arc<HookIngestConfig>,
 }
@@ -91,7 +90,6 @@ impl PtyManager {
         Arc::new(Self {
             sessions: Mutex::new(HashMap::new()),
             next_instance_id: AtomicU64::new(1),
-            prompt_started_at: Mutex::new(HashMap::new()),
             active_turns: Mutex::new(HashMap::new()),
             ingest_config,
         })
@@ -276,7 +274,6 @@ impl PtyManager {
             if !manager.remove_session_instance(&sid, instance_id) {
                 return;
             }
-            manager.prompt_started_at.lock().remove(&sid);
             if let Ok(Some(review)) = manager.complete_active_turn(&sid, "process_exit") {
                 let _ = app_clone.emit("checkpoint-review-ready", review);
             }
@@ -320,12 +317,6 @@ impl PtyManager {
             .write_all(data.as_bytes())
             .map_err(|e| format!("写入失败: {}", e))?;
         Ok(())
-    }
-
-    pub fn mark_prompt_submitted(&self, session_id: &str) {
-        self.prompt_started_at
-            .lock()
-            .insert(session_id.to_string(), now_ms());
     }
 
     pub fn session_context(&self, session_id: &str) -> Option<(String, String)> {
@@ -394,11 +385,6 @@ impl PtyManager {
         }
     }
 
-    pub fn take_prompt_duration_ms(&self, session_id: &str, completed_at: i64) -> Option<i64> {
-        let started_at = self.prompt_started_at.lock().remove(session_id)?;
-        Some((completed_at - started_at).max(0))
-    }
-
     pub fn resize(&self, session_id: &str, rows: u16, cols: u16) -> Result<(), String> {
         let sessions = self.sessions.lock();
         let session = sessions.get(session_id).ok_or("会话不存在")?;
@@ -417,7 +403,6 @@ impl PtyManager {
 
     pub fn close(&self, session_id: &str) {
         self.sessions.lock().remove(session_id);
-        self.prompt_started_at.lock().remove(session_id);
     }
 
     pub fn close_project_sessions(&self, project_path: &str) {
@@ -922,7 +907,6 @@ mod tests {
         });
         let manager = PtyManager::new(config);
         assert!(manager.sessions.lock().is_empty());
-        assert!(manager.prompt_started_at.lock().is_empty());
     }
 
     #[test]
@@ -933,34 +917,6 @@ mod tests {
         });
         let manager = PtyManager::new(config);
         assert!(!manager.is_session_active("nonexistent"));
-    }
-
-    #[test]
-    fn test_take_prompt_duration_ms_returns_none_for_unknown() {
-        let config = Arc::new(HookIngestConfig {
-            port: 0,
-            token: "test".to_string(),
-        });
-        let manager = PtyManager::new(config);
-        assert!(manager
-            .take_prompt_duration_ms("nonexistent", 1000)
-            .is_none());
-    }
-
-    #[test]
-    fn test_take_prompt_duration_ms_calculates_correctly() {
-        let config = Arc::new(HookIngestConfig {
-            port: 0,
-            token: "test".to_string(),
-        });
-        let manager = PtyManager::new(config);
-
-        let start = now_ms();
-        manager.mark_prompt_submitted("session-1");
-
-        let duration = manager.take_prompt_duration_ms("session-1", start + 500);
-        assert!(duration.is_some());
-        assert!(duration.unwrap() >= 0);
     }
 
     #[test]
@@ -1153,29 +1109,6 @@ mod tests {
         // cleanup_all should work even with no sessions
         manager.cleanup_all();
         assert!(manager.sessions.lock().is_empty());
-    }
-
-    #[test]
-    fn test_close_removes_session_and_prompt_data() {
-        let config = Arc::new(HookIngestConfig {
-            port: 0,
-            token: "test".to_string(),
-        });
-        let manager = PtyManager::new(config);
-
-        // Add some prompt data
-        manager.mark_prompt_submitted("test-session");
-        assert!(manager
-            .prompt_started_at
-            .lock()
-            .contains_key("test-session"));
-
-        // Close should clean up prompt data even if session doesn't exist
-        manager.close("test-session");
-        assert!(!manager
-            .prompt_started_at
-            .lock()
-            .contains_key("test-session"));
     }
 
     #[test]

@@ -434,6 +434,7 @@
       "reason": {
         "notifications-disabled": "应用通知开关已关闭",
         "foreground-session": "目标会话正在前台",
+        "completion-duration-unavailable": "未获取到任务耗时，未发送完成通知",
         "below-duration-threshold": "任务时长低于完成阈值",
         "permission-denied": "系统通知权限未授予"
       }

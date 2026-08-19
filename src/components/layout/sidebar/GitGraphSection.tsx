@@ -31,6 +31,7 @@ import {
 } from "@/lib/gitGraphEvents";
 import { GitGraphRenderer } from "./GitGraphRenderer";
 import { splitWorktreeReferences } from "./gitGraphReferences";
+import { linearizeFileHistoryCommits } from "@/lib/gitFileHistory";
 
 const GRAPH_HOVER_CARD_WIDTH = 360;
 const GRAPH_HOVER_CARD_OFFSET = 8;
@@ -548,6 +549,7 @@ export function GitGraphSection({
             name: pathSegments[pathSegments.length - 1] ?? diffDocument.filePath,
             staged: false,
             revision: commit.oid,
+            changeKind: file.status,
             hunkActionsAvailable: false,
             originalContent: diffDocument.originalContent,
             modifiedContent: diffDocument.modifiedContent,
@@ -612,6 +614,13 @@ export function GitGraphSection({
       zIndex: 1500,
     };
   }, [graphHover]);
+
+  const renderedGraphCommits = useMemo(
+    () => fileHistoryPath
+      ? linearizeFileHistoryCommits(graphCommits)
+      : graphCommits,
+    [fileHistoryPath, graphCommits],
+  );
 
   return (
     <div
@@ -687,7 +696,7 @@ export function GitGraphSection({
         ) : (
           <>
             <GitGraphRenderer
-              commits={graphCommits}
+              commits={renderedGraphCommits}
               selectedCommitOid={selectedCommit?.oid ?? null}
               expandedCommitOid={fileHistoryPath ? null : selectedCommit?.oid ?? null}
               expandedFiles={selectedCommitDetail?.files ?? []}

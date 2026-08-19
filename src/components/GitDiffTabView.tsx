@@ -15,6 +15,7 @@ import {
   getModifiedDiffTargetLine,
   type DiffNavigationDirection,
 } from "@/lib/gitDiffNavigation";
+import { shouldRenderGitDiffSideBySide } from "@/lib/gitDiffLayout";
 import {
   disableMonacoCommandPalette,
   getMonacoLanguage,
@@ -234,7 +235,7 @@ function GitDiffTabView({ tabId }: GitDiffTabViewProps) {
             readOnly: true,
             originalEditable: false,
             contextmenu: false,
-            renderSideBySide: true,
+            renderSideBySide: shouldRenderGitDiffSideBySide(document.changeKind),
             automaticLayout: true,
             minimap: { enabled: false },
             scrollBeyondLastLine: false,

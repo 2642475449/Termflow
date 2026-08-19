@@ -6,7 +6,7 @@ import {
   DownOutlined,
   MinusOutlined,
 } from "@ant-design/icons";
-import type { GitFileStatus } from "@/types";
+import type { GitFileStatus, GitStatusType } from "@/types";
 import { getFileIconByName } from "@/lib/fileIcon";
 
 /** 文件状态徽章配置 */
@@ -62,6 +62,7 @@ interface GitFileListProps {
     oldFilePath?: string | null,
     hunkActionsAvailable?: boolean,
     preview?: boolean,
+    changeKind?: GitStatusType,
   ) => void;
   /** 暂存/取消暂存单个文件 */
   onToggleFile: (file: GitFileStatus) => void;
@@ -175,6 +176,8 @@ export function GitFileList({
                       staged,
                       file.oldPath,
                       hunkActionsAvailable,
+                      true,
+                      file.statusType,
                     );
                   }}
                   onDoubleClick={() => {
@@ -184,6 +187,7 @@ export function GitFileList({
                       file.oldPath,
                       hunkActionsAvailable,
                       false,
+                      file.statusType,
                     );
                   }}
                 >

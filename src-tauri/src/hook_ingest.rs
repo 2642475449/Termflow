@@ -259,7 +259,7 @@ fn handle_agent_status(
         .unwrap_or_else(|| payload.session_id.clone());
     let event_type = normalize_event_type(state, payload.event_type.as_deref()).map(str::to_string);
     let agent_session_id = normalize_provider_session_id(payload.provider_session_id.as_deref());
-    let (revision, status_changed, completion_candidate) = {
+    let (revision, status_changed, completion_candidate, duration_ms) = {
         let Ok(mut map) = guards.lock() else { return };
         if !map.contains_key(&payload.session_id) && map.len() >= MAX_STATUS_GUARDS {
             if let Some(stale_key) = map.keys().next().cloned() {
@@ -271,9 +271,6 @@ fn handle_agent_status(
             return;
         }
 
-        if task_lifecycle_event == Some(ClaudeTaskLifecycleEvent::UserPromptSubmit) {
-            begin_task_generation(&mut guard.task_coordinator, created_at);
-        }
         if task_lifecycle_event == Some(ClaudeTaskLifecycleEvent::Stop)
             && is_child_stop(
                 &guard.task_coordinator,
@@ -301,12 +298,20 @@ fn handle_agent_status(
                 return;
             }
         }
+        let previous_state = guard.last_state.clone();
         let Some(result) =
             accept_guard_event(guard, &event_id, state, event_type.as_deref(), created_at)
         else {
             return;
         };
-        if state != "completed" {
+        if should_begin_task_generation(
+            &guard.task_coordinator,
+            state,
+            previous_state.as_deref(),
+            permission_lifecycle_event,
+        ) {
+            begin_task_generation(&mut guard.task_coordinator, created_at);
+        } else if state != "completed" {
             invalidate_task_completion(&mut guard.task_coordinator);
         }
         let completion_candidate = if state == "completed" {
@@ -314,7 +319,9 @@ fn handle_agent_status(
         } else {
             None
         };
-        (result.0, result.1, completion_candidate)
+        let duration_ms = completion_candidate
+            .and_then(|_| task_duration_ms(&guard.task_coordinator, created_at));
+        (result.0, result.1, completion_candidate, duration_ms)
     };
 
     if state == "completed" && completion_candidate.is_none() {
@@ -325,11 +332,6 @@ fn handle_agent_status(
         return;
     }
 
-    let duration_ms = if state == "completed" {
-        manager.take_prompt_duration_ms(&payload.session_id, created_at)
-    } else {
-        None
-    };
     // Provider hook payloads can contain prompts, commands, environment data,
     // or credentials. Attention events persist locally, so use a positive
     // allowlist and never forward the raw provider payload.
@@ -519,6 +521,30 @@ fn begin_task_generation(coordinator: &mut TaskCompletionCoordinator, created_at
     coordinator.subagent_seen = false;
     coordinator.unverifiable_subagent_seen = false;
     coordinator.activity_epoch = coordinator.activity_epoch.wrapping_add(1);
+}
+
+/// 通知计时以 Hook 生命周期为准。终端输入只是提问进入智能体的其中一条路径：
+/// 拖放、语音和恢复的会话都会绕过它，因此不能作为唯一事实来源。
+fn should_begin_task_generation(
+    coordinator: &TaskCompletionCoordinator,
+    state: &str,
+    previous_state: Option<&str>,
+    permission_event: Option<PermissionLifecycleEvent>,
+) -> bool {
+    if state != "running" {
+        return false;
+    }
+
+    if permission_event == Some(PermissionLifecycleEvent::UserPromptSubmit) {
+        return true;
+    }
+
+    coordinator.generation == 0 || matches!(previous_state, Some("completed" | "error"))
+}
+
+fn task_duration_ms(coordinator: &TaskCompletionCoordinator, completed_at: i64) -> Option<i64> {
+    (coordinator.generation > 0 && coordinator.generation_started_at > 0)
+        .then(|| (completed_at - coordinator.generation_started_at).max(0))
 }
 
 fn invalidate_task_completion(coordinator: &mut TaskCompletionCoordinator) {
@@ -1005,10 +1031,10 @@ mod tests {
         normalize_claude_task_lifecycle_event, normalize_event_type,
         normalize_permission_lifecycle_event, normalize_provider_session_id, normalize_state,
         parse_actor_fingerprint, parse_tool_permission_correlation,
-        prepare_permission_lifecycle_event, sanitized_metadata, should_emit_attention_event,
-        should_suppress_uncorrelated_running, update_subagent_lifecycle, ClaudeTaskLifecycleEvent,
-        PermissionLifecycleEvent, SessionStatusGuard, StatusGuards, TaskCompletionCoordinator,
-        ToolPermissionCorrelation,
+        prepare_permission_lifecycle_event, sanitized_metadata, should_begin_task_generation,
+        should_emit_attention_event, should_suppress_uncorrelated_running, task_duration_ms,
+        update_subagent_lifecycle, ClaudeTaskLifecycleEvent, PermissionLifecycleEvent,
+        SessionStatusGuard, StatusGuards, TaskCompletionCoordinator, ToolPermissionCorrelation,
     };
     use serde_json::json;
 
@@ -1076,6 +1102,32 @@ mod tests {
 
         assert!(!claim_task_completion(&mut coordinator, candidate));
         assert_eq!(coordinator.generation, 2);
+    }
+
+    #[test]
+    fn tracks_completion_duration_from_hook_lifecycle() {
+        let mut coordinator = TaskCompletionCoordinator::default();
+        begin_task_generation(&mut coordinator, 1_000);
+
+        assert_eq!(task_duration_ms(&coordinator, 2_500), Some(1_500));
+        assert!(!should_begin_task_generation(
+            &coordinator,
+            "running",
+            Some("waiting"),
+            Some(PermissionLifecycleEvent::PermissionReplied),
+        ));
+    }
+
+    #[test]
+    fn starts_a_hook_lifecycle_for_a_new_running_agent() {
+        let coordinator = TaskCompletionCoordinator::default();
+
+        assert!(should_begin_task_generation(
+            &coordinator,
+            "running",
+            Some("waiting"),
+            None,
+        ));
     }
 
     #[test]

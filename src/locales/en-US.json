@@ -408,6 +408,7 @@
       "reason": {
         "notifications-disabled": "App notifications are disabled",
         "foreground-session": "The target Session is in the foreground",
+        "completion-duration-unavailable": "Task duration was unavailable, so the completion notification was not sent",
         "below-duration-threshold": "Task duration is below the completion threshold",
         "permission-denied": "System notification permission was not granted"
       }

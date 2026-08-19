@@ -228,6 +228,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
       oldFilePath?: string | null,
       hunkActionsAvailable?: boolean,
       preview = true,
+      changeKind?: GitFileStatus["statusType"],
     ) => {
       if (!currentProject) return;
       const requestId = ++diffOpenRequestRef.current;
@@ -241,6 +242,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
           oldPath: oldFilePath,
           name: splitGitPath(diffDocument.filePath).fileName,
           staged,
+          changeKind,
           hunkActionsAvailable,
           originalContent: diffDocument.originalContent,
           modifiedContent: diffDocument.modifiedContent,
@@ -444,6 +446,8 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
                 staged,
                 file.oldPath,
                 canOperateOnHunks(file),
+                true,
+                file.statusType,
               );
               break;
             case "open-file":

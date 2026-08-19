@@ -468,10 +468,6 @@ export async function ptyInput(sessionId: string, data: string): Promise<void> {
   await invoke("pty_input", { sessionId, data });
 }
 
-export async function markSessionPromptSubmitted(sessionId: string): Promise<void> {
-  await invoke("mark_session_prompt_submitted", { sessionId });
-}
-
 export async function generateSessionTitle(prompt: string, path: string): Promise<string> {
   return await invoke("generate_session_title", { prompt, path });
 }

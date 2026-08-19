@@ -134,7 +134,6 @@ pub async fn spawn_pty(
     };
     if result.is_ok() {
         if let Some(turn) = initial_turn {
-            manager.mark_prompt_submitted(&turn.session_id);
             manager.replace_active_turn(
                 &turn.session_id,
                 ActiveAgentTurn {
@@ -185,12 +184,6 @@ pub fn pty_input(
     manager: State<'_, Arc<PtyManager>>,
 ) -> Result<(), String> {
     manager.write_input(&session_id, &data)
-}
-
-/// 标记一轮用户提问已提交，用于计算 Claude 回答耗时
-#[tauri::command]
-pub fn mark_session_prompt_submitted(session_id: String, manager: State<'_, Arc<PtyManager>>) {
-    manager.mark_prompt_submitted(&session_id);
 }
 
 /// Atomically capture a provider-independent turn baseline before forwarding Enter to the PTY.
@@ -271,7 +264,6 @@ pub async fn submit_agent_turn_input(
     // The baseline exists before Enter reaches the agent, so pre-existing dirty changes
     // cannot be attributed to this turn.
     manager.write_input(&session_id, &data)?;
-    manager.mark_prompt_submitted(&session_id);
     if let Some(review) = checkpoint_result.completed_previous.clone() {
         let _ = app.emit("checkpoint-review-ready", review);
     }
