@@ -87,10 +87,11 @@ describe("getAgentCommandShell", () => {
 
 describe("agent capability registry", () => {
   it("keeps unsupported and partial integrations explicit", () => {
+    expect(supportsAgentCapability("antigravity", "usageTelemetry")).toBe(true);
     expect(supportsAgentCapability("qoder", "interactiveTerminal")).toBe(true);
     expect(supportsAgentCapability("qoder", "skills")).toBe(true);
     expect(supportsAgentCapability("qoder", "mcpManagement")).toBe(true);
-    expect(supportsAgentCapability("qoder", "usageTelemetry")).toBe(false);
+    expect(supportsAgentCapability("qoder", "usageTelemetry")).toBe(true);
     expect(getAgentIdsWithCapability("mcpManagement")).toEqual([
       "claude",
       "codex",

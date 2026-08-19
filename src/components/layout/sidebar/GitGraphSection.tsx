@@ -5,6 +5,7 @@ import { Button, message, Tooltip } from "antd";
 import type { MenuProps } from "antd";
 import {
   BranchesOutlined,
+  CloseOutlined,
   CopyOutlined,
   DownOutlined,
   HistoryOutlined,
@@ -129,6 +130,8 @@ interface GitGraphSectionProps {
   sectionTitle: string;
   refreshText: string;
   placeholderText: string;
+  fileHistoryPath?: string | null;
+  onClearFileHistory?: () => void;
 }
 
 export function GitGraphSection({
@@ -138,6 +141,8 @@ export function GitGraphSection({
   sectionTitle,
   refreshText,
   placeholderText,
+  fileHistoryPath = null,
+  onClearFileHistory,
 }: GitGraphSectionProps) {
   const { i18n, t } = useTranslation();
   const openGitDiffTab = useAppStore((state) => state.openGitDiffTab);
@@ -163,6 +168,7 @@ export function GitGraphSection({
   const graphContainerRef = useRef<HTMLDivElement>(null);
   const graphLoadMoreSentinelRef = useRef<HTMLDivElement>(null);
   const graphLoadingRef = useRef(false);
+  const graphLoadRequestRef = useRef(0);
   const graphFetchingRef = useRef(false);
   const graphProjectPathRef = useRef(projectPath);
   const previousCollapsedRef = useRef(collapsed);
@@ -175,9 +181,16 @@ export function GitGraphSection({
       if (!reset && !cursor) return;
 
       graphLoadingRef.current = true;
+      const requestId = ++graphLoadRequestRef.current;
       setGraphLoading(true);
       try {
-        const page = await gitGraphHistory(projectPath, GRAPH_PAGE_SIZE, cursor);
+        const page = await gitGraphHistory(
+          projectPath,
+          GRAPH_PAGE_SIZE,
+          cursor,
+          fileHistoryPath,
+        );
+        if (requestId !== graphLoadRequestRef.current) return;
         setGraphCommits((current) => {
           if (reset) return page;
           const knownOids = new Set(current.map((commit) => commit.oid));
@@ -187,10 +200,17 @@ export function GitGraphSection({
         setGraphInitialized(true);
         if (reset) {
           setSelectedCommit((current) =>
-            current ? page.find((commit) => commit.oid === current.oid) ?? null : null
+            current
+              ? page.find((commit) => commit.oid === current.oid) ?? page[0] ?? null
+              : fileHistoryPath ? page[0] ?? null : null
           );
         }
-      } catch {
+      } catch (error) {
+        if (requestId !== graphLoadRequestRef.current) return;
+        if (fileHistoryPath) {
+          const detail = error instanceof Error ? error.message : String(error);
+          message.error(`${t("sidebar.gitFileHistoryLoadFailed")}: ${detail}`);
+        }
         if (reset) {
           setGraphCommits([]);
           setSelectedCommit(null);
@@ -198,11 +218,13 @@ export function GitGraphSection({
           setGraphInitialized(true);
         }
       } finally {
-        graphLoadingRef.current = false;
-        setGraphLoading(false);
+        if (requestId === graphLoadRequestRef.current) {
+          graphLoadingRef.current = false;
+          setGraphLoading(false);
+        }
       }
     },
-    [graphCommits, graphHasMore, projectPath]
+    [fileHistoryPath, graphCommits, graphHasMore, projectPath, t]
   );
 
   const loadCommitDetail = useCallback(
@@ -364,9 +386,11 @@ export function GitGraphSection({
 
   const handleGraphCommitSelect = useCallback((commit: GitGraphCommit) => {
     setSelectedGraphFileKey(null);
-    setSelectedCommit((current) => current?.oid === commit.oid ? null : commit);
+    setSelectedCommit((current) =>
+      fileHistoryPath ? commit : current?.oid === commit.oid ? null : commit
+    );
     closeGraphHoverCard();
-  }, [closeGraphHoverCard]);
+  }, [closeGraphHoverCard, fileHistoryPath]);
 
   const buildGraphCommitMenu = useCallback(
     (commit: GitGraphCommit): MenuProps => ({
@@ -392,6 +416,9 @@ export function GitGraphSection({
   );
 
   useEffect(() => {
+    graphLoadRequestRef.current += 1;
+    graphLoadingRef.current = false;
+    setGraphLoading(false);
     graphHoverDetailCacheRef.current.clear();
     closeGraphHoverCard();
     setGraphCommits([]);
@@ -406,6 +433,23 @@ export function GitGraphSection({
     setGraphHasMore(true);
     setGraphInitialized(false);
   }, [projectPath, closeGraphHoverCard]);
+
+  useEffect(() => {
+    graphLoadRequestRef.current += 1;
+    graphLoadingRef.current = false;
+    setGraphLoading(false);
+    graphHoverDetailCacheRef.current.clear();
+    closeGraphHoverCard();
+    setGraphCommits([]);
+    setSelectedCommit(null);
+    setSelectedCommitDetail(null);
+    setSelectedCommitLoading(false);
+    setSelectedCommitError(false);
+    setSelectedGraphFileKey(null);
+    setOpeningGraphDiffKey(null);
+    setGraphHasMore(true);
+    setGraphInitialized(false);
+  }, [fileHistoryPath, closeGraphHoverCard]);
 
   useEffect(() => {
     if (!graphHover) return;
@@ -522,6 +566,27 @@ export function GitGraphSection({
     },
     [openGitDiffTab, projectPath, t],
   );
+
+  const autoOpenedHistoryDiffRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!fileHistoryPath || !selectedCommit || !selectedCommitDetail) {
+      autoOpenedHistoryDiffRef.current = null;
+      return;
+    }
+    const normalize = (path: string | null | undefined) =>
+      (path ?? "").replace(/\\/g, "/").replace(/^\.\//, "");
+    const normalizedHistoryPath = normalize(fileHistoryPath);
+    const file = selectedCommitDetail.files.find((item) =>
+      normalize(item.path) === normalizedHistoryPath
+      || normalize(item.oldPath) === normalizedHistoryPath
+    );
+    if (!file) return;
+
+    const requestKey = `${selectedCommit.oid}:${file.path}`;
+    if (autoOpenedHistoryDiffRef.current === requestKey) return;
+    autoOpenedHistoryDiffRef.current = requestKey;
+    void handleGraphFileSelect(selectedCommit, file);
+  }, [fileHistoryPath, handleGraphFileSelect, selectedCommit, selectedCommitDetail]);
   const graphHoverCardStyle = useMemo(() => {
     if (!graphHover || typeof window === "undefined") {
       return null;
@@ -549,15 +614,19 @@ export function GitGraphSection({
   }, [graphHover]);
 
   return (
-    <div ref={graphContainerRef} className="flex flex-col min-h-0" style={{ borderTop: "1px solid var(--cs-border-sidebar)" }}>
+    <div
+      ref={graphContainerRef}
+      className={`flex min-h-0 flex-col ${fileHistoryPath ? "flex-1" : ""}`}
+      style={{ borderTop: "1px solid var(--cs-border-sidebar)" }}
+    >
       <div className="flex items-center justify-between px-2" style={{ height: 22 }}>
         <button
           className="flex items-center gap-1.5 text-left text-[13px] font-semibold"
           style={{ color: "var(--cs-text-primary)" }}
-          onClick={onToggleCollapse}
+          onClick={fileHistoryPath ? undefined : onToggleCollapse}
         >
           <DownOutlined className={`text-[9px] transition-transform ${collapsed ? "-rotate-90" : ""}`} />
-          <span>{sectionTitle}</span>
+          <span>{fileHistoryPath ? t("sidebar.gitFileHistoryPanel") : sectionTitle}</span>
         </button>
         <div className="flex items-center gap-1">
           <Tooltip title={refreshText} mouseEnterDelay={0.4}>
@@ -578,6 +647,30 @@ export function GitGraphSection({
         </div>
       </div>
 
+      {fileHistoryPath ? (
+        <div
+          className="mx-2 mb-1.5 flex min-w-0 items-center gap-1.5 rounded px-2 py-1.5 text-[11px]"
+          style={{
+            background: "color-mix(in srgb, var(--cs-primary) 10%, transparent)",
+            color: "var(--cs-text-secondary)",
+          }}
+          title={fileHistoryPath}
+        >
+          <HistoryOutlined className="shrink-0" />
+          <span className="min-w-0 flex-1 truncate">{fileHistoryPath}</span>
+          <Tooltip title={t("sidebar.gitFileHistoryClear")} mouseEnterDelay={0.4}>
+            <Button
+              type="text"
+              size="small"
+              icon={<CloseOutlined />}
+              aria-label={t("sidebar.gitFileHistoryClear")}
+              onClick={onClearFileHistory}
+              style={{ width: 20, height: 20, minWidth: 20, padding: 0 }}
+            />
+          </Tooltip>
+        </div>
+      ) : null}
+
       {!collapsed && (
         graphLoading && graphCommits.length === 0 ? (
           <div className="flex items-center justify-center gap-2 py-6" style={{ color: "var(--cs-text-tertiary)" }}>
@@ -587,14 +680,16 @@ export function GitGraphSection({
         ) : graphCommits.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 py-8" style={{ color: "var(--cs-text-tertiary)" }}>
             <BranchesOutlined className="text-2xl" />
-            <span className="text-sm">{placeholderText}</span>
+            <span className="text-sm">
+              {fileHistoryPath ? t("sidebar.gitFileHistoryPlaceholder") : placeholderText}
+            </span>
           </div>
         ) : (
           <>
             <GitGraphRenderer
               commits={graphCommits}
               selectedCommitOid={selectedCommit?.oid ?? null}
-              expandedCommitOid={selectedCommit?.oid ?? null}
+              expandedCommitOid={fileHistoryPath ? null : selectedCommit?.oid ?? null}
               expandedFiles={selectedCommitDetail?.files ?? []}
               expandedFilesLoading={selectedCommitLoading}
               expandedFilesError={selectedCommitError}

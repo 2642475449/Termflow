@@ -10,6 +10,7 @@ import {
   FileOutlined,
   FolderOpenFilled,
   FolderOutlined,
+  HistoryOutlined,
   ReloadOutlined,
   RightOutlined,
   SearchOutlined,
@@ -37,6 +38,7 @@ import {
 import type { ExplorerRevealPathDetail } from "@/lib/explorer";
 import { getFileIcon } from "@/lib/fileIcon";
 import { openGlobalTextSearch } from "@/lib/globalSearch";
+import { dispatchGitFileHistoryOpen } from "@/lib/gitGraphEvents";
 import { useAppStore } from "@/store";
 import type { FileTreeEntry, FileTreeEntryKind } from "@/types";
 import { useTranslation } from "react-i18next";
@@ -1385,6 +1387,17 @@ function SidebarProjectPanel({
             return;
           }
 
+          if (key === "git-file-history" && !isDirectory && currentProject) {
+            const state = useAppStore.getState();
+            state.setSidebarCollapsed(false);
+            state.setActiveSidebarSection("git");
+            dispatchGitFileHistoryOpen({
+              projectPath: currentProject.path,
+              filePath: relativePath,
+            });
+            return;
+          }
+
           if (key === "find-in-directory" && isDirectory) {
             openGlobalTextSearch(entry.path);
             return;
@@ -1447,6 +1460,15 @@ function SidebarProjectPanel({
             icon: <FolderOpenFilled />,
             label: openInManagerText,
           },
+          ...(!isDirectory
+            ? [
+              {
+                key: "git-file-history",
+                icon: <HistoryOutlined />,
+                label: t("sidebar.gitFileHistory"),
+              },
+            ]
+            : []),
           {
             key: "copy-relative-path",
             icon: <CopyOutlined />,

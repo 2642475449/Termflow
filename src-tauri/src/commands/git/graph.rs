@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use git2::{Delta, ErrorCode, Oid, Repository, Tree};
+use git2::{Commit, Delta, DiffOptions, ErrorCode, Oid, Repository, Tree};
 
 use super::types::{
     GitDiffContentResult, GitGraphChangedFile, GitGraphCommit, GitGraphCommitDetail,
@@ -20,9 +20,10 @@ pub async fn git_graph_history(
     project_path: String,
     limit: Option<usize>,
     cursor: Option<String>,
+    file_path: Option<String>,
 ) -> Result<Vec<GitGraphCommit>, String> {
     run_git_blocking("读取 Git 提交历史", move || {
-        git_graph_history_sync(project_path, limit, cursor)
+        git_graph_history_sync(project_path, limit, cursor, file_path)
     })
     .await
 }
@@ -31,8 +32,12 @@ fn git_graph_history_sync(
     project_path: String,
     limit: Option<usize>,
     cursor: Option<String>,
+    file_path: Option<String>,
 ) -> Result<Vec<GitGraphCommit>, String> {
     let repo = open_repo(&project_path)?;
+    let file_path = file_path
+        .map(|path| path.trim().replace('\\', "/"))
+        .filter(|path| !path.is_empty());
     let refs_by_oid = collect_commit_refs(&repo)?;
     let mut revwalk = repo
         .revwalk()
@@ -67,6 +72,11 @@ fn git_graph_history_sync(
         let commit = repo
             .find_commit(oid)
             .map_err(|e| format!("读取提交 {} 失败: {}", oid, e))?;
+        if let Some(file_path) = file_path.as_deref() {
+            if !commit_touches_path(&repo, &commit, file_path)? {
+                continue;
+            }
+        }
         let oid_string = oid.to_string();
         let short_oid: String = oid_string.chars().take(SHORT_OID_LENGTH).collect();
         let parent_oids = commit
@@ -92,6 +102,43 @@ fn git_graph_history_sync(
     }
 
     Ok(commits)
+}
+
+fn commit_touches_path(
+    repo: &Repository,
+    commit: &Commit<'_>,
+    file_path: &str,
+) -> Result<bool, String> {
+    let tree = commit
+        .tree()
+        .map_err(|e| format!("读取提交 {} 的树失败: {}", commit.id(), e))?;
+    let parent_tree = if commit.parent_count() > 0 {
+        Some(
+            commit
+                .parent(0)
+                .map_err(|e| format!("读取提交 {} 的父提交失败: {}", commit.id(), e))?
+                .tree()
+                .map_err(|e| format!("读取提交 {} 的父树失败: {}", commit.id(), e))?,
+        )
+    } else {
+        None
+    };
+    let mut options = DiffOptions::new();
+    options.pathspec(file_path).disable_pathspec_match(true);
+    let diff = repo
+        .diff_tree_to_tree(parent_tree.as_ref(), Some(&tree), Some(&mut options))
+        .map_err(|e| {
+            format!(
+                "读取文件 {} 在提交 {} 的更改失败: {}",
+                file_path,
+                commit.id(),
+                e
+            )
+        })?;
+    let changed = diff
+        .deltas()
+        .any(|delta| delta.status() != Delta::Unmodified);
+    Ok(changed)
 }
 
 /// Get commit detail for graph hover card.
@@ -290,21 +337,62 @@ fn git_graph_file_diff_sync(
 #[cfg(test)]
 mod tests {
     use super::git_graph_history_sync;
-    use git2::{Repository, Signature};
+    use git2::{Oid, Repository, Signature};
     use std::fs;
+    use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    #[test]
-    fn graph_history_includes_remote_tracking_commits() {
+    fn test_repo_path(prefix: &str) -> PathBuf {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let repo_path = std::env::temp_dir().join(format!(
-            "termflow-graph-remote-{}-{}",
-            std::process::id(),
-            suffix
-        ));
+        let test_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join("test-repos");
+        fs::create_dir_all(&test_root).unwrap();
+        test_root.join(format!("{}-{}-{}", prefix, std::process::id(), suffix))
+    }
+
+    fn commit_file(
+        repo: &Repository,
+        signature: &Signature<'_>,
+        file_path: &str,
+        content: &str,
+        message: &str,
+    ) -> Oid {
+        fs::write(repo.workdir().unwrap().join(file_path), content).unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new(file_path)).unwrap();
+        index.write().unwrap();
+        let tree_oid = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_oid).unwrap();
+        let parent = repo
+            .head()
+            .ok()
+            .and_then(|head| head.target())
+            .map(|oid| repo.find_commit(oid).unwrap());
+
+        match parent.as_ref() {
+            Some(parent) => repo
+                .commit(
+                    Some("HEAD"),
+                    signature,
+                    signature,
+                    message,
+                    &tree,
+                    &[parent],
+                )
+                .unwrap(),
+            None => repo
+                .commit(Some("HEAD"), signature, signature, message, &tree, &[])
+                .unwrap(),
+        }
+    }
+
+    #[test]
+    fn graph_history_includes_remote_tracking_commits() {
+        let repo_path = test_repo_path("termflow-graph-remote");
         let repo = Repository::init(&repo_path).unwrap();
         let signature = Signature::now("Termflow Test", "termflow@example.com").unwrap();
         let tree_oid = repo.index().unwrap().write_tree().unwrap();
@@ -334,9 +422,13 @@ mod tests {
         drop(tree);
         drop(repo);
 
-        let commits =
-            git_graph_history_sync(repo_path.to_string_lossy().into_owned(), Some(100), None)
-                .unwrap();
+        let commits = git_graph_history_sync(
+            repo_path.to_string_lossy().into_owned(),
+            Some(100),
+            None,
+            None,
+        )
+        .unwrap();
         let remote_commit = commits
             .iter()
             .find(|commit| commit.oid == remote_oid.to_string())
@@ -345,6 +437,36 @@ mod tests {
             .refs
             .iter()
             .any(|reference| reference.kind == "remote" && reference.name == "origin/master"));
+
+        fs::remove_dir_all(repo_path).unwrap();
+    }
+
+    #[test]
+    fn graph_history_can_be_filtered_to_one_file() {
+        let repo_path = test_repo_path("termflow-graph-file-history");
+        let repo = Repository::init(&repo_path).unwrap();
+        let signature = Signature::now("Termflow Test", "termflow@example.com").unwrap();
+        let target_created = commit_file(&repo, &signature, "target.txt", "one", "create target");
+        let unrelated = commit_file(&repo, &signature, "other.txt", "other", "change other");
+        let target_updated = commit_file(&repo, &signature, "target.txt", "two", "update target");
+        drop(repo);
+
+        let commits = git_graph_history_sync(
+            repo_path.to_string_lossy().into_owned(),
+            Some(100),
+            None,
+            Some("target.txt".to_string()),
+        )
+        .unwrap();
+        assert!(commits
+            .iter()
+            .any(|commit| commit.oid == target_created.to_string()));
+        assert!(commits
+            .iter()
+            .any(|commit| commit.oid == target_updated.to_string()));
+        assert!(!commits
+            .iter()
+            .any(|commit| commit.oid == unrelated.to_string()));
 
         fs::remove_dir_all(repo_path).unwrap();
     }

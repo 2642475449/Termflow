@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Input, Modal, Select, Spin, Switch } from "antd";
 import dayjs from "dayjs";
 import { useTranslation } from "react-i18next";
@@ -234,6 +234,11 @@ export function NewSessionDialog({
       qoderPermissionMode,
     ],
   );
+  const handleConfirmCreate = useCallback(() => {
+    if (canCreate && selectedAgent) {
+      onCreate(name.trim(), selectedAgent, launchOptions, titleSource);
+    }
+  }, [canCreate, launchOptions, name, onCreate, selectedAgent, titleSource]);
 
   return (
     <Modal
@@ -243,7 +248,7 @@ export function NewSessionDialog({
       cancelText={t("common.cancel")}
       confirmLoading={creating}
       okButtonProps={{ disabled: !canCreate }}
-      onOk={() => selectedAgent && onCreate(name.trim(), selectedAgent, launchOptions, titleSource)}
+      onOk={handleConfirmCreate}
       onCancel={onCancel}
       destroyOnHidden
       width={480}
@@ -262,10 +267,10 @@ export function NewSessionDialog({
             placeholder={t("newSession.namePlaceholder")}
             maxLength={80}
             autoFocus
-            onPressEnter={() => {
-              if (canCreate && selectedAgent) {
-                onCreate(name.trim(), selectedAgent, launchOptions, titleSource);
-              }
+            onPressEnter={(event) => {
+              if (event.nativeEvent.isComposing) return;
+              event.preventDefault();
+              handleConfirmCreate();
             }}
           />
         </div>

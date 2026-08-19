@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Dropdown, Input, message, Modal, Tooltip } from "antd";
 import type { MenuProps } from "antd";
 import {
@@ -20,6 +20,11 @@ import {
   openInFileManager,
 } from "@/lib/api";
 import { revealExplorerPath } from "@/lib/explorer";
+import {
+  GIT_FILE_HISTORY_OPEN_EVENT,
+  takePendingGitFileHistoryOpen,
+  type GitFileHistoryOpenDetail,
+} from "@/lib/gitGraphEvents";
 import { useAppStore } from "@/store";
 import { useGitStatus } from "@/hooks/useGitStatus";
 import { useGitCommit } from "@/hooks/useGitCommit";
@@ -103,6 +108,31 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
     (s) => s.defaultGitCommitMessageProfileId,
   );
   const diffOpenRequestRef = useRef(0);
+  const [fileHistoryPath, setFileHistoryPath] = useState<string | null>(null);
+
+  useEffect(() => {
+    setFileHistoryPath(null);
+    const projectPath = currentProject?.path;
+    if (!projectPath) return;
+
+    const applyRequest = (detail: GitFileHistoryOpenDetail | undefined) => {
+      if (!detail || detail.projectPath !== projectPath) return;
+      setFileHistoryPath(detail.filePath);
+    };
+    const handleRequest = (event: Event) => {
+      const detail = (event as CustomEvent<GitFileHistoryOpenDetail>).detail;
+      applyRequest(detail);
+      if (detail?.projectPath === projectPath) {
+        takePendingGitFileHistoryOpen(projectPath);
+      }
+    };
+
+    window.addEventListener(GIT_FILE_HISTORY_OPEN_EVENT, handleRequest as EventListener);
+    applyRequest(takePendingGitFileHistoryOpen(projectPath) ?? undefined);
+    return () => {
+      window.removeEventListener(GIT_FILE_HISTORY_OPEN_EVENT, handleRequest as EventListener);
+    };
+  }, [currentProject?.path]);
 
   // 使用 useGitStatus hook 管理 Git 状态
   const {
@@ -671,7 +701,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
       {/* Scrollable content */}
       <div className="flex flex-1 min-h-0 flex-col overflow-y-auto app-project-tree-scroll px-1 py-1">
         {/* Conflict panel */}
-        {(() => {
+        {!fileHistoryPath && (() => {
           const conflictFiles = unstagedFiles.filter(
             (f) => f.statusType === "conflicted"
           );
@@ -690,7 +720,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
         })()}
 
         {/* Changes section */}
-        {showGitChangesPanel && (
+        {showGitChangesPanel && !fileHistoryPath && (
           <div>
             <div className="flex items-center justify-between px-2 py-1.5">
               <button
@@ -810,14 +840,21 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
 
         {/* Graph section */}
         {showGitGraphPanel && (
-          <div className={showGitChangesPanel && !gitChangesCollapsed ? "mt-auto shrink-0" : "shrink-0"}>
+          <div className={fileHistoryPath
+            ? "flex min-h-0 flex-1 flex-col"
+            : showGitChangesPanel && !gitChangesCollapsed
+              ? "mt-auto shrink-0"
+              : "shrink-0"}
+          >
             <GitGraphSection
               projectPath={currentProject?.path ?? null}
-              collapsed={gitGraphCollapsed}
+              collapsed={fileHistoryPath ? false : gitGraphCollapsed}
               onToggleCollapse={toggleGitGraphCollapsed}
               sectionTitle={t("sidebar.gitGraphPanel")}
               refreshText={t("sidebar.gitRefresh")}
               placeholderText={t("sidebar.gitGraphPlaceholder")}
+              fileHistoryPath={fileHistoryPath}
+              onClearFileHistory={() => setFileHistoryPath(null)}
             />
           </div>
         )}

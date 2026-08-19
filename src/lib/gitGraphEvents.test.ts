@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  GIT_FILE_HISTORY_OPEN_EVENT,
   GIT_GRAPH_REFRESH_EVENT,
+  dispatchGitFileHistoryOpen,
   refreshGitStateAndGraph,
   shouldReloadGitGraphOnExpand,
+  takePendingGitFileHistoryOpen,
 } from "./gitGraphEvents";
 
 class CustomEventStub<T> {
@@ -63,5 +66,38 @@ describe("shouldReloadGitGraphOnExpand", () => {
     expect(shouldReloadGitGraphOnExpand(false, false, true)).toBe(false);
     expect(shouldReloadGitGraphOnExpand(false, true, true)).toBe(false);
     expect(shouldReloadGitGraphOnExpand(true, false, false)).toBe(false);
+  });
+});
+
+describe("file history open requests", () => {
+  it("keeps a request until the Git panel mounts", () => {
+    const dispatchEvent = vi.fn((event: CustomEventStub<{ projectPath: string; filePath: string }>) => {
+      void event;
+      return true;
+    });
+    vi.stubGlobal("window", { dispatchEvent });
+    vi.stubGlobal("CustomEvent", CustomEventStub);
+
+    dispatchGitFileHistoryOpen({
+      projectPath: "D:\\workspace\\demo\\",
+      filePath: "src/main.ts",
+    });
+
+    expect(dispatchEvent.mock.calls[0][0].type).toBe(GIT_FILE_HISTORY_OPEN_EVENT);
+    expect(takePendingGitFileHistoryOpen("d:/workspace/demo")?.filePath).toBe("src/main.ts");
+    expect(takePendingGitFileHistoryOpen("D:/workspace/demo")).toBeNull();
+  });
+
+  it("does not let another project consume the request", () => {
+    vi.stubGlobal("window", { dispatchEvent: vi.fn(() => true) });
+    vi.stubGlobal("CustomEvent", CustomEventStub);
+
+    dispatchGitFileHistoryOpen({
+      projectPath: "D:/workspace/one",
+      filePath: "README.md",
+    });
+
+    expect(takePendingGitFileHistoryOpen("D:/workspace/two")).toBeNull();
+    expect(takePendingGitFileHistoryOpen("D:/workspace/one")?.filePath).toBe("README.md");
   });
 });

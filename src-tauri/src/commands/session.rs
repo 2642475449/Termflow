@@ -357,7 +357,10 @@ pub fn open_in_explorer(path: String) -> Result<(), String> {
     {
         let mut command = Command::new("explorer.exe");
         if target.is_file() {
-            command.arg(format!("/select,{}", target.display()));
+            // Keep the switch and target as separate arguments. Passing them as
+            // one quoted argument makes Explorer ignore `/select,` for paths
+            // containing spaces or non-ASCII characters, opening only the folder.
+            command.arg("/select,").arg(&target);
         } else {
             command.arg(target);
         }

@@ -189,6 +189,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
   const [sideQuestionText, setSideQuestionText] = useState("");
   const [pendingTerminalLink, setPendingTerminalLink] = useState<PendingTerminalLink | null>(null);
   const [openingTerminalLink, setOpeningTerminalLink] = useState(false);
+  const openingTerminalLinkRef = useRef(false);
   const captureInputForAutoTitleRef = useRef<((data: string) => void) | undefined>(undefined);
   const isDropPositionInsideTerminalRef = useRef<((position: { x: number; y: number }) => boolean) | undefined>(undefined);
   const currentSessionPathRef = useRef("");
@@ -459,20 +460,21 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
     setContextMenuSelection(term?.hasSelection() ? term.getSelection() : "");
   }, []);
 
-  const handleConfirmTerminalLinkOpen = useCallback(async () => {
-    if (!pendingTerminalLink || openingTerminalLink) return;
+  const openTerminalLink = useCallback(async (link: PendingTerminalLink) => {
+    if (openingTerminalLinkRef.current) return;
 
+    openingTerminalLinkRef.current = true;
     setOpeningTerminalLink(true);
     try {
-      if (pendingTerminalLink.kind === "external") {
-        await openUrl(pendingTerminalLink.href);
+      if (link.kind === "external") {
+        await openUrl(link.href);
         return;
       }
 
       const projectPath = currentSessionPathRef.current;
       if (!projectPath) return;
 
-      const resolvedPath = resolveTerminalFilePath(pendingTerminalLink.path.filePath, projectPath);
+      const resolvedPath = resolveTerminalFilePath(link.path.filePath, projectPath);
       const target = await resolveProjectLink(projectPath, resolvedPath);
       if (!target) return;
 
@@ -496,17 +498,24 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       }
       openFileTab(file.path, { preview: false });
     } catch {
-      const path = pendingTerminalLink.kind === "project" ? pendingTerminalLink.path.filePath : pendingTerminalLink.href;
+      const path = link.kind === "project" ? link.path.filePath : link.href;
       message.error(
-        pendingTerminalLink.kind === "project"
+        link.kind === "project"
           ? t("terminal.openLinkedFileFailed", { path })
           : t("terminal.openLinkFailed", { path }),
       );
     } finally {
+      openingTerminalLinkRef.current = false;
       setOpeningTerminalLink(false);
-      setPendingTerminalLink(null);
     }
-  }, [openFileTab, openingTerminalLink, pendingTerminalLink, setActiveSidebarSection, setSidebarCollapsed, t]);
+  }, [openFileTab, setActiveSidebarSection, setSidebarCollapsed, t]);
+
+  const handleConfirmTerminalLinkOpen = useCallback(async () => {
+    if (!pendingTerminalLink || openingTerminalLink) return;
+
+    await openTerminalLink(pendingTerminalLink);
+    setPendingTerminalLink(null);
+  }, [openTerminalLink, openingTerminalLink, pendingTerminalLink]);
 
   const isDropPositionInsideTerminal = useCallback((position: { x: number; y: number }) => {
     const container = containerRef.current;
@@ -710,7 +719,12 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
     };
     const filePathProvider = new FilePathLinkProvider(
       term,
-      (parsed) => setPendingTerminalLink({ kind: "project", path: parsed }),
+      (parsed, openDirectly) => {
+        const link = { kind: "project" as const, path: parsed };
+        return openDirectly
+          ? openTerminalLink(link)
+          : setPendingTerminalLink(link);
+      },
       async (parsed) => (await getLinkedTarget(parsed)) !== null,
     );
     const filePathDisposable = term.registerLinkProvider(filePathProvider);
@@ -1101,6 +1115,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
     terminalScrollback,
     terminalRenderer,
     forceStableCursor,
+    openTerminalLink,
     t,
     openFileTab,
     setActiveSidebarSection,

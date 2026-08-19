@@ -98,7 +98,7 @@ export const AGENT_DEFINITIONS: Record<AiAgentId, AgentDefinition> = {
       skills: "full",
       instructions: "partial",
       mcpManagement: "full",
-      usageTelemetry: "unsupported",
+      usageTelemetry: "partial",
     },
   },
   opencode: {
@@ -136,7 +136,7 @@ export const AGENT_DEFINITIONS: Record<AiAgentId, AgentDefinition> = {
       skills: "partial",
       instructions: "partial",
       mcpManagement: "full",
-      usageTelemetry: "unsupported",
+      usageTelemetry: "partial",
     },
   },
 };

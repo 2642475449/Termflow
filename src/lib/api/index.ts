@@ -1187,12 +1187,14 @@ export async function gitPullRebase(
 export async function gitGraphHistory(
   projectPath: string,
   limit?: number,
-  cursor?: string
+  cursor?: string,
+  filePath?: string | null,
 ): Promise<GitGraphCommit[]> {
   return await invoke("git_graph_history", {
     projectPath,
     limit: limit ?? null,
     cursor: cursor ?? null,
+    filePath: filePath ?? null,
   });
 }
 

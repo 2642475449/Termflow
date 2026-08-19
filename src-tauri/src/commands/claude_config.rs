@@ -2,6 +2,7 @@ use crate::hook_ingest::HookIngestConfig;
 use crate::path_utils::{display_path, normalize_input_path};
 use crate::qoder_config::{qoder_user_config_root, qoder_workspace_config_root};
 use chrono::{DateTime, Duration, Local, NaiveDate, TimeZone, Timelike, Utc};
+use regex::Regex;
 use rusqlite::{Connection, OpenFlags};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -1929,6 +1930,423 @@ fn build_opencode_usage_stats() -> Result<AggregatedTranscriptStats, String> {
     Ok(aggregate)
 }
 
+fn antigravity_gemini_home() -> Option<PathBuf> {
+    for variable in [
+        "TERMFLOW_ANTIGRAVITY_HOME",
+        "ANTIGRAVITY_HOME",
+        "GEMINI_HOME",
+    ] {
+        if let Some(value) = env::var_os(variable).filter(|value| !value.is_empty()) {
+            return Some(PathBuf::from(value));
+        }
+    }
+    dirs_next::home_dir().map(|home_dir| home_dir.join(".gemini"))
+}
+
+fn collect_antigravity_transcript_files() -> Vec<PathBuf> {
+    let Some(gemini_home) = antigravity_gemini_home() else {
+        return Vec::new();
+    };
+    let mut paths = BTreeMap::<String, PathBuf>::new();
+    for variant in ["antigravity", "antigravity-ide", "antigravity-cli"] {
+        let brain_directory = gemini_home.join(variant).join("brain");
+        let Ok(entries) = fs::read_dir(brain_directory) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let transcript = entry
+                .path()
+                .join(".system_generated")
+                .join("logs")
+                .join("transcript.jsonl");
+            if transcript.is_file() {
+                paths.insert(local_path_key(&transcript), transcript);
+            }
+        }
+    }
+    paths.into_values().collect()
+}
+
+fn estimate_antigravity_tokens(value: &str) -> u64 {
+    let mut cjk_characters = 0_u64;
+    let mut other_characters = 0_u64;
+    for character in value.chars() {
+        let codepoint = character as u32;
+        if (0x3400..=0x4dbf).contains(&codepoint)
+            || (0x4e00..=0x9fff).contains(&codepoint)
+            || (0x3040..=0x30ff).contains(&codepoint)
+        {
+            cjk_characters += 1;
+        } else {
+            other_characters += 1;
+        }
+    }
+    cjk_characters + other_characters.div_ceil(4)
+}
+
+fn estimate_antigravity_value_tokens(value: Option<&Value>) -> u64 {
+    match value {
+        Some(Value::String(value)) => estimate_antigravity_tokens(value),
+        Some(Value::Null) | None => 0,
+        Some(value) => serde_json::to_string(value)
+            .map(|serialized| estimate_antigravity_tokens(&serialized))
+            .unwrap_or(0),
+    }
+}
+
+fn normalize_antigravity_model(model: &str) -> Option<String> {
+    let mut normalized = model
+        .trim()
+        .to_ascii_lowercase()
+        .split_whitespace()
+        .filter(|part| {
+            !matches!(
+                *part,
+                "thinking" | "xhigh" | "high" | "medium" | "low" | "fast"
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("-");
+    normalized = normalized
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || character == '.' {
+                character
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>();
+    while normalized.contains("--") {
+        normalized = normalized.replace("--", "-");
+    }
+    for suffix in ["-thinking", "-xhigh", "-high", "-medium", "-low", "-fast"] {
+        if let Some(value) = normalized.strip_suffix(suffix) {
+            normalized = value.to_string();
+        }
+    }
+    let normalized = normalized.trim_matches('-');
+    if normalized.is_empty() {
+        return None;
+    }
+    for marker in ["gemini", "claude", "gpt"] {
+        if let Some(index) = normalized.find(marker) {
+            return Some(normalized[index..].to_string());
+        }
+    }
+    Some(format!("antigravity-{normalized}"))
+}
+
+fn extract_antigravity_model_selection(content: &str) -> Option<String> {
+    let pattern = Regex::new(
+        r"(?i)changed setting `Model Selection` from .*? to ([^`\n]+?)(?:\s*\([^)]*\))?\.(?:\s+|$)",
+    )
+    .ok()?;
+    normalize_antigravity_model(pattern.captures(content)?.get(1)?.as_str())
+}
+
+fn antigravity_default_model(transcript_path: &Path) -> Option<String> {
+    let mut variant_directory = transcript_path.to_path_buf();
+    for _ in 0..5 {
+        variant_directory = variant_directory.parent()?.to_path_buf();
+    }
+    let settings = fs::read_to_string(variant_directory.join("settings.json")).ok()?;
+    let parsed = serde_json::from_str::<Value>(&settings).ok()?;
+    let model = parsed.get("model")?.as_str()?;
+    normalize_antigravity_model(model)
+}
+
+fn antigravity_session_id(transcript_path: &Path) -> String {
+    transcript_path
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .and_then(Path::file_name)
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .unwrap_or("unknown")
+        .to_string()
+}
+
+fn build_antigravity_usage_stats_from_files(
+    transcript_files: Vec<PathBuf>,
+) -> Result<AggregatedTranscriptStats, String> {
+    let mut aggregate = AggregatedTranscriptStats::default();
+    let mut sessions = BTreeMap::<String, UsageSessionSpan>::new();
+
+    for transcript_path in transcript_files {
+        let file = fs::File::open(&transcript_path).map_err(|error| {
+            format!(
+                "无法读取 Antigravity transcript {}: {error}",
+                display_path(&transcript_path)
+            )
+        })?;
+        let session_id = antigravity_session_id(&transcript_path);
+        let mut current_model = antigravity_default_model(&transcript_path);
+        let mut context_tokens = 0_u64;
+        let mut previous_context_tokens = 0_u64;
+
+        for line in BufReader::new(file).lines() {
+            let line =
+                line.map_err(|error| format!("读取 Antigravity transcript 失败: {error}"))?;
+            let Ok(record) = serde_json::from_str::<Value>(&line) else {
+                continue;
+            };
+            let Some(record_type) = record.get("type").and_then(Value::as_str) else {
+                continue;
+            };
+            if matches!(record_type, "USER_INPUT" | "USER_SETTINGS_CHANGE") {
+                if let Some(model) = record
+                    .get("content")
+                    .and_then(Value::as_str)
+                    .and_then(extract_antigravity_model_selection)
+                {
+                    current_model = Some(model);
+                }
+            }
+
+            let event_context_tokens = estimate_antigravity_value_tokens(record.get("content"))
+                + estimate_antigravity_value_tokens(record.get("tool_calls"));
+            if record_type == "PLANNER_RESPONSE" {
+                let timestamp = record
+                    .get("created_at")
+                    .and_then(Value::as_str)
+                    .and_then(parse_timestamp_utc);
+                if let Some(timestamp) = timestamp {
+                    let input_tokens = context_tokens.saturating_sub(previous_context_tokens);
+                    let output_tokens = estimate_antigravity_value_tokens(record.get("content"))
+                        + estimate_antigravity_value_tokens(record.get("tool_calls"));
+                    let reasoning_output_tokens =
+                        estimate_antigravity_value_tokens(record.get("thinking"));
+                    let total_tokens = input_tokens + output_tokens + reasoning_output_tokens;
+                    if total_tokens > 0 {
+                        let raw_usage = RawTokenUsage {
+                            input_tokens,
+                            cached_input_tokens: 0,
+                            output_tokens,
+                            reasoning_output_tokens,
+                            total_tokens,
+                        };
+                        let mut token_breakdown = AgentUsageTokenBreakdown::default();
+                        // Antigravity's transcript reports answer content and thinking separately.
+                        // OpenCode's normalization keeps those two output categories independent,
+                        // while Codex's treats reasoning as a subset of output.
+                        token_breakdown.add_opencode_usage(raw_usage, total_tokens);
+                        record_generic_usage_event(
+                            &mut aggregate,
+                            &mut sessions,
+                            ParsedAgentUsageEvent {
+                                session_id: session_id.clone(),
+                                timestamp,
+                                model: current_model
+                                    .clone()
+                                    .unwrap_or_else(|| "antigravity-unknown".to_string()),
+                                total_tokens,
+                                token_breakdown,
+                            },
+                        );
+                    }
+                    previous_context_tokens = context_tokens;
+                }
+            }
+            context_tokens += event_context_tokens;
+        }
+    }
+
+    finalize_generic_sessions(&mut aggregate, sessions);
+    Ok(aggregate)
+}
+
+fn build_antigravity_usage_stats() -> Result<AggregatedTranscriptStats, String> {
+    build_antigravity_usage_stats_from_files(collect_antigravity_transcript_files())
+}
+
+#[derive(Debug, Clone)]
+struct QoderUsageRow {
+    id: String,
+    session_id: String,
+    token_info: String,
+    model_info: Option<String>,
+    created_at: Option<i64>,
+}
+
+fn qoder_database_path(env_prefix: &str, app_directory: &str) -> Option<PathBuf> {
+    let database_override = format!("{env_prefix}_DB_PATH");
+    if let Some(value) = env::var_os(&database_override).filter(|value| !value.is_empty()) {
+        return Some(PathBuf::from(value));
+    }
+
+    let home_override = format!("{env_prefix}_HOME");
+    if let Some(value) = env::var_os(&home_override).filter(|value| !value.is_empty()) {
+        return Some(
+            PathBuf::from(value)
+                .join("SharedClientCache")
+                .join("cache")
+                .join("db")
+                .join("local.db"),
+        );
+    }
+
+    let home_dir = dirs_next::home_dir()?;
+    let root = if cfg!(windows) {
+        env::var_os("APPDATA")
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home_dir.join("AppData").join("Roaming"))
+    } else if cfg!(target_os = "macos") {
+        home_dir.join("Library").join("Application Support")
+    } else {
+        env::var_os("XDG_CONFIG_HOME")
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home_dir.join(".config"))
+    };
+    Some(
+        root.join(app_directory)
+            .join("SharedClientCache")
+            .join("cache")
+            .join("db")
+            .join("local.db"),
+    )
+}
+
+fn local_path_key(path: &Path) -> String {
+    let path = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let key = path.to_string_lossy().replace('\\', "/");
+    if cfg!(windows) {
+        key.to_ascii_lowercase()
+    } else {
+        key
+    }
+}
+
+fn collect_qoder_database_paths() -> Vec<PathBuf> {
+    let mut paths = BTreeMap::<String, PathBuf>::new();
+    // Termflow starts qoderclicn, whose desktop client stores history under
+    // QoderCN. Keep Qoder too: both desktop clients may coexist and each has
+    // its own independent local history.
+    for (env_prefix, app_directory) in [("QODER", "Qoder"), ("QODER_CN", "QoderCN")] {
+        let Some(path) = qoder_database_path(env_prefix, app_directory) else {
+            continue;
+        };
+        if path.is_file() {
+            paths.insert(local_path_key(&path), path);
+        }
+    }
+    paths.into_values().collect()
+}
+
+fn select_qoder_usage_rows(connection: &Connection) -> Result<Vec<QoderUsageRow>, String> {
+    if !sqlite_table_exists(connection, "chat_message")
+        || !["id", "session_id", "role", "token_info", "gmt_create"]
+            .iter()
+            .all(|column| sqlite_column_exists(connection, "chat_message", column))
+    {
+        return Ok(Vec::new());
+    }
+
+    let model_info_select = sqlite_select_column(connection, "chat_message", "cm", "model_info");
+    let sql = format!(
+        "SELECT cm.id, cm.session_id, cm.token_info, {model_info_select}, cm.gmt_create
+         FROM chat_message cm
+         WHERE cm.role = 'assistant'
+           AND cm.token_info IS NOT NULL
+           AND trim(cm.token_info) NOT IN ('', '{{}}')
+         ORDER BY cm.gmt_create, cm.rowid"
+    );
+    let mut statement = connection
+        .prepare(&sql)
+        .map_err(|error| format!("读取 Qoder 用量记录失败: {error}"))?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok(QoderUsageRow {
+                id: row_optional_string(row, "id").unwrap_or_else(|| "unknown".to_string()),
+                session_id: row_optional_string(row, "session_id")
+                    .unwrap_or_else(|| "unknown".to_string()),
+                token_info: row_optional_string(row, "token_info").unwrap_or_default(),
+                model_info: row_optional_string(row, "model_info"),
+                created_at: row_optional_i64(row, "gmt_create"),
+            })
+        })
+        .map_err(|error| format!("读取 Qoder 用量记录失败: {error}"))?;
+    Ok(rows.filter_map(Result::ok).collect())
+}
+
+fn extract_qoder_model(model_info: Option<&str>) -> Option<String> {
+    let parsed = serde_json::from_str::<Value>(model_info?).ok()?;
+    let record = parsed.as_object()?;
+    extract_json_string(record.get("model_key"))
+        .or_else(|| extract_json_string(record.get("modelKey")))
+}
+
+fn parse_qoder_usage_row(row: QoderUsageRow) -> Option<ParsedAgentUsageEvent> {
+    let token_info = serde_json::from_str::<Value>(&row.token_info).ok()?;
+    let prompt_tokens = json_u64(token_info.get("prompt_tokens"));
+    let cached_input_tokens = json_u64(token_info.get("cached_tokens")).min(prompt_tokens);
+    let output_tokens = json_u64(token_info.get("completion_tokens"));
+    let total_tokens = prompt_tokens + output_tokens;
+    if total_tokens == 0 {
+        return None;
+    }
+
+    let timestamp = Utc
+        .timestamp_millis_opt(normalize_millis(row.created_at)?)
+        .single()?;
+    let raw_usage = RawTokenUsage {
+        input_tokens: prompt_tokens,
+        cached_input_tokens,
+        output_tokens,
+        reasoning_output_tokens: 0,
+        total_tokens,
+    };
+    let mut token_breakdown = AgentUsageTokenBreakdown::default();
+    // Qoder's cached_tokens is a subset of prompt_tokens. Reuse the Codex
+    // breakdown so cached input is displayed without inflating the total.
+    token_breakdown.add_codex_usage(raw_usage, total_tokens);
+
+    Some(ParsedAgentUsageEvent {
+        session_id: if row.session_id == "unknown" {
+            row.id
+        } else {
+            row.session_id
+        },
+        timestamp,
+        model: extract_qoder_model(row.model_info.as_deref())
+            .unwrap_or_else(|| "qoder-agent".to_string()),
+        total_tokens,
+        token_breakdown,
+    })
+}
+
+fn build_qoder_usage_stats_from_paths(
+    database_paths: Vec<PathBuf>,
+) -> Result<AggregatedTranscriptStats, String> {
+    let mut aggregate = AggregatedTranscriptStats::default();
+    let mut sessions = BTreeMap::<String, UsageSessionSpan>::new();
+
+    for db_path in database_paths {
+        let connection = Connection::open_with_flags(&db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .map_err(|error| {
+                format!(
+                    "打开 Qoder 本地数据库失败 {}: {error}",
+                    display_path(&db_path)
+                )
+            })?;
+        for row in select_qoder_usage_rows(&connection)? {
+            if let Some(event) = parse_qoder_usage_row(row) {
+                record_generic_usage_event(&mut aggregate, &mut sessions, event);
+            }
+        }
+    }
+
+    finalize_generic_sessions(&mut aggregate, sessions);
+    Ok(aggregate)
+}
+
+fn build_qoder_usage_stats() -> Result<AggregatedTranscriptStats, String> {
+    build_qoder_usage_stats_from_paths(collect_qoder_database_paths())
+}
+
 fn parse_ymd_prefix(input: &str) -> Option<(i32, u32, u32)> {
     let date = input.get(0..10)?;
     let year = date.get(0..4)?.parse::<i32>().ok()?;
@@ -2216,20 +2634,46 @@ pub(crate) fn build_agent_usage_overview(
         )),
     }
 
-    providers.push(build_empty_provider_summary(
-        "antigravity",
-        "Antigravity CLI",
-        "unsupported",
-        "No stable public Antigravity usage telemetry source",
-        Some("Antigravity CLI 暂未提供可稳定读取的本地用量统计接口".to_string()),
-    ));
-    providers.push(build_empty_provider_summary(
-        "qoder",
-        "Qoder CLI",
-        "unsupported",
-        "No stable public Qoder CLI usage telemetry source",
-        Some("Qoder CLI 暂未提供可稳定读取的本地用量统计接口".to_string()),
-    ));
+    match build_antigravity_usage_stats() {
+        Ok(stats) => {
+            providers.push(build_provider_summary(
+                "antigravity",
+                "Antigravity CLI",
+                "partial",
+                "~/.gemini/{antigravity,antigravity-ide,antigravity-cli}/brain/**/transcript.jsonl (local estimate)",
+                &stats,
+                None,
+            ));
+            merge_aggregated_stats(&mut aggregate, stats);
+        }
+        Err(error) => providers.push(build_empty_provider_summary(
+            "antigravity",
+            "Antigravity CLI",
+            "partial",
+            "~/.gemini/{antigravity,antigravity-ide,antigravity-cli}/brain/**/transcript.jsonl (local estimate)",
+            Some(error),
+        )),
+    }
+    match build_qoder_usage_stats() {
+        Ok(stats) => {
+            providers.push(build_provider_summary(
+                "qoder",
+                "Qoder CLI",
+                "partial",
+                "Qoder/QoderCN SharedClientCache/cache/db/local.db (assistant token_info only)",
+                &stats,
+                None,
+            ));
+            merge_aggregated_stats(&mut aggregate, stats);
+        }
+        Err(error) => providers.push(build_empty_provider_summary(
+            "qoder",
+            "Qoder CLI",
+            "partial",
+            "Qoder/QoderCN SharedClientCache/cache/db/local.db (assistant token_info only)",
+            Some(error),
+        )),
+    }
 
     build_usage_overview_from_aggregate(aggregate, providers)
 }
@@ -3883,5 +4327,105 @@ mod tests {
         assert_eq!(event.token_breakdown.cache_read_tokens, 80);
         assert_eq!(event.token_breakdown.reasoning_output_tokens, 15);
         assert_eq!(event.token_breakdown.total_tokens, event.total_tokens);
+    }
+
+    #[test]
+    fn reads_qoder_token_info_without_double_counting_cached_input() {
+        let directory = tempfile::tempdir().unwrap();
+        let database_path = directory.path().join("local.db");
+        let connection = Connection::open(&database_path).unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE chat_message (
+                    id TEXT,
+                    session_id TEXT,
+                    role TEXT,
+                    token_info TEXT,
+                    model_info TEXT,
+                    gmt_create INTEGER
+                );",
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO chat_message (id, session_id, role, token_info, model_info, gmt_create)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                rusqlite::params![
+                    "message-1",
+                    "session-1",
+                    "assistant",
+                    r#"{"prompt_tokens":1200,"cached_tokens":800,"completion_tokens":200}"#,
+                    r#"{"model_key":"qoder-max"}"#,
+                    1_752_109_300_000_i64,
+                ],
+            )
+            .unwrap();
+        drop(connection);
+
+        let stats = build_qoder_usage_stats_from_paths(vec![database_path]).unwrap();
+
+        assert_eq!(stats.total_tokens(), 1_400);
+        assert_eq!(stats.total_messages(), 1);
+        assert_eq!(stats.total_sessions, 1);
+        assert_eq!(stats.token_breakdown.input_tokens, 400);
+        assert_eq!(stats.token_breakdown.cache_read_tokens, 800);
+        assert_eq!(stats.token_breakdown.output_tokens, 200);
+        assert_eq!(stats.token_breakdown.total_tokens, 1_400);
+        assert_eq!(stats.daily_model_tokens.len(), 1);
+        assert_eq!(
+            stats
+                .daily_model_tokens
+                .values()
+                .next()
+                .and_then(|models| models.get("qoder-max")),
+            Some(&1_400)
+        );
+    }
+
+    #[test]
+    fn estimates_antigravity_transcript_usage_without_persisting_transcript_content() {
+        let directory = tempfile::tempdir().unwrap();
+        let variant_directory = directory.path().join("antigravity-cli");
+        let transcript_path = variant_directory
+            .join("brain")
+            .join("session-1")
+            .join(".system_generated")
+            .join("logs")
+            .join("transcript.jsonl");
+        fs::create_dir_all(transcript_path.parent().unwrap()).unwrap();
+        fs::write(
+            variant_directory.join("settings.json"),
+            r#"{"model":"Gemini 2.5 Pro"}"#,
+        )
+        .unwrap();
+        fs::write(
+            &transcript_path,
+            concat!(
+                r#"{"type":"USER_INPUT","content":"abcdefgh","created_at":"2026-08-19T00:00:00Z"}"#,
+                "\n",
+                r#"{"type":"PLANNER_RESPONSE","content":"abcd","thinking":"efgh","created_at":"2026-08-19T00:01:00Z"}"#,
+                "\n"
+            ),
+        )
+        .unwrap();
+
+        let stats = build_antigravity_usage_stats_from_files(vec![transcript_path]).unwrap();
+
+        assert_eq!(estimate_antigravity_tokens("abcde"), 2);
+        assert_eq!(estimate_antigravity_tokens("中文"), 2);
+        assert_eq!(stats.total_tokens(), 4);
+        assert_eq!(stats.total_messages(), 1);
+        assert_eq!(stats.total_sessions, 1);
+        assert_eq!(stats.token_breakdown.input_tokens, 2);
+        assert_eq!(stats.token_breakdown.output_tokens, 1);
+        assert_eq!(stats.token_breakdown.reasoning_output_tokens, 1);
+        assert_eq!(
+            stats
+                .daily_model_tokens
+                .values()
+                .next()
+                .and_then(|models| models.get("gemini-2.5-pro")),
+            Some(&4)
+        );
     }
 }

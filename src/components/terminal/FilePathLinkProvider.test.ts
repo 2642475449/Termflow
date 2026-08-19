@@ -166,9 +166,9 @@ describe("terminal file path links", () => {
         },
       },
     } as unknown as Terminal;
-    const activated: string[] = [];
-    const provider = new FilePathLinkProvider(terminal, (path) => {
-      activated.push(path.filePath);
+    const activated: Array<{ path: string; openDirectly: boolean }> = [];
+    const provider = new FilePathLinkProvider(terminal, (path, openDirectly) => {
+      activated.push({ path: path.filePath, openDirectly });
     });
     let providedLinks: Parameters<Parameters<typeof provider.provideLinks>[1]>[0];
 
@@ -181,7 +181,37 @@ describe("terminal file path links", () => {
 
     link?.activate({ button: 0, ctrlKey: false } as MouseEvent, link.text);
     link?.activate({ button: 1, ctrlKey: true } as MouseEvent, link.text);
-    expect(activated).toEqual(["src/Terminal.tsx"]);
+    expect(activated).toEqual([{ path: "src/Terminal.tsx", openDirectly: false }]);
+  });
+
+  it("marks Ctrl or Cmd left clicks for direct opening", async () => {
+    const terminal = {
+      cols: 80,
+      buffer: {
+        active: {
+          length: 1,
+          getLine() {
+            return { isWrapped: false, translateToString: () => "src/Terminal.tsx" };
+          },
+        },
+      },
+    } as unknown as Terminal;
+    const directOpenRequests: boolean[] = [];
+    const provider = new FilePathLinkProvider(terminal, (_path, openDirectly) => {
+      directOpenRequests.push(openDirectly);
+    });
+    let providedLinks: Parameters<Parameters<typeof provider.provideLinks>[1]>[0];
+
+    provider.provideLinks(1, (links) => {
+      providedLinks = links;
+    });
+
+    const link = providedLinks?.[0];
+    expect(link).toBeDefined();
+    link?.activate({ button: 0, ctrlKey: true, metaKey: false } as MouseEvent, link.text);
+    await Promise.resolve();
+    link?.activate({ button: 0, ctrlKey: false, metaKey: true } as MouseEvent, link.text);
+    expect(directOpenRequests).toEqual([true, true]);
   });
 
   it("deduplicates concurrent left clicks for the same link", async () => {
