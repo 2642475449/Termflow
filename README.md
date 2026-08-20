@@ -30,11 +30,11 @@
 Termflow 原生支持以下 CLI 智能体：
 
 <p align="center">
-  <code><img src="public/agents/claude.svg" width="16" alt=""> Claude Code</code>
-  <code><img src="public/agents/codex.svg" width="16" alt=""> Codex</code>
-  <code><img src="public/agents/antigravity.svg" width="16" alt=""> Antigravity CLI</code>
-  <code><img src="public/agents/opencode.svg" width="16" alt=""> OpenCode</code>
-  <code><img src="public/agents/qoder.svg" width="16" alt=""> Qoder CLI</code>
+  <code><img src="public/agents/claude.svg" width="16" alt="" align="absmiddle"> Claude Code</code>
+  <code><img src="public/agents/codex.svg" width="16" alt="" align="absmiddle"> Codex</code>
+  <code><img src="public/agents/antigravity.svg" width="16" alt="" align="absmiddle"> Antigravity CLI</code>
+  <code><img src="public/agents/opencode.svg" width="16" alt="" align="absmiddle"> OpenCode</code>
+  <code><img src="public/agents/qoder.svg" width="16" alt="" align="absmiddle"> Qoder CLI</code>
 </p>
 
 ---

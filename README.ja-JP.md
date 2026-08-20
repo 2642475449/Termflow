@@ -1,4 +1,7 @@
-# Termflow
+<h1 align="center">
+  <img src="public/logo.png" width="56" alt="Termflow Logo" align="absmiddle">
+  Termflow
+</h1>
 
 <p align="center">
   <a href="README.md">简体中文</a> | <a href="README.zh-TW.md">繁體中文</a> | <a href="README.en-US.md">English</a> | 日本語
@@ -25,11 +28,11 @@
 Termflow は次の CLI エージェントをネイティブにサポートします。
 
 <p align="center">
-  <code><img src="public/agents/claude.svg" width="16" alt=""> Claude Code</code>
-  <code><img src="public/agents/codex.svg" width="16" alt=""> Codex</code>
-  <code><img src="public/agents/antigravity.svg" width="16" alt=""> Antigravity CLI</code>
-  <code><img src="public/agents/opencode.svg" width="16" alt=""> OpenCode</code>
-  <code><img src="public/agents/qoder.svg" width="16" alt=""> Qoder CLI</code>
+  <code><img src="public/agents/claude.svg" width="16" alt="" align="absmiddle"> Claude Code</code>
+  <code><img src="public/agents/codex.svg" width="16" alt="" align="absmiddle"> Codex</code>
+  <code><img src="public/agents/antigravity.svg" width="16" alt="" align="absmiddle"> Antigravity CLI</code>
+  <code><img src="public/agents/opencode.svg" width="16" alt="" align="absmiddle"> OpenCode</code>
+  <code><img src="public/agents/qoder.svg" width="16" alt="" align="absmiddle"> Qoder CLI</code>
 </p>
 
 ---
