@@ -2090,9 +2090,6 @@ function CommandRow({
           <span className="text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>
             {command.name}
           </span>
-          <Tag className="!m-0" color={command.scope === "workspace" ? "blue" : "gold"}>
-            {scopeLabel(command.scope, t)}
-          </Tag>
           <Tag className="!m-0" color={command.format === "claude_native" ? "cyan" : "purple"}>
             {command.format === "claude_native" ? t("settings.commands.claudeNative") : t("settings.commands.extended")}
           </Tag>
@@ -3031,9 +3028,6 @@ function HookRow({
           <span className="text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>
             {hook.name}
           </span>
-          <Tag className="!m-0" color={hook.agent === "opencode" ? "green" : "geekblue"}>
-            {hookAgentLabel(hook.agent, t)}
-          </Tag>
           <Tag className="!m-0" color="purple">
             {formatHookEventLabel(hook.event)}
           </Tag>

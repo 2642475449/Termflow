@@ -282,30 +282,35 @@ export function NotificationsPage() {
             style={{ width: 140 }}
           />
         </NotificationRow>
-        <NotificationRow
-          label={t("settings.notifications.remoteThreshold")}
-          desc={t("settings.notifications.remoteThresholdDesc")}
-        >
-          <Select
-            size="small"
-            value={selectedChannel.thresholdMs}
-            options={remoteThresholdOptions}
-            onChange={(value) => setRemoteThreshold(selectedProvider, value)}
-            style={{ width: 140 }}
-          />
-        </NotificationRow>
-        {remoteEventEntries.map(({ event, label, desc }) => (
-          <NotificationRow key={event} label={label} desc={desc}>
-            <Switch
-              checked={selectedChannel.events[event]}
-              onChange={(enabled) => setRemoteEvent(selectedProvider, event, enabled)}
-            />
-          </NotificationRow>
-        ))}
+        {selectedChannel.enabled && (
+          <>
+            <NotificationRow
+              label={t("settings.notifications.remoteThreshold")}
+              desc={t("settings.notifications.remoteThresholdDesc")}
+            >
+              <Select
+                size="small"
+                value={selectedChannel.thresholdMs}
+                options={remoteThresholdOptions}
+                onChange={(value) => setRemoteThreshold(selectedProvider, value)}
+                style={{ width: 140 }}
+              />
+            </NotificationRow>
+            {remoteEventEntries.map(({ event, label, desc }) => (
+              <NotificationRow key={event} label={label} desc={desc}>
+                <Switch
+                  checked={selectedChannel.events[event]}
+                  onChange={(enabled) => setRemoteEvent(selectedProvider, event, enabled)}
+                />
+              </NotificationRow>
+            ))}
+          </>
+        )}
       </NotificationSection>
 
-      <NotificationSection title={t("settings.notifications.remote.configuration")}>
-        <div className="space-y-4 px-4 py-4">
+      {selectedChannel.enabled && (
+        <NotificationSection title={t("settings.notifications.remote.configuration")}>
+          <div className="space-y-4 px-4 py-4">
           <div>
             <div className="mb-1.5 text-xs" style={{ color: "var(--cs-text-secondary)" }}>
               {t("settings.notifications.remote.provider")}
@@ -401,8 +406,9 @@ export function NotificationsPage() {
               </Popconfirm>
             )}
           </div>
-        </div>
-      </NotificationSection>
+          </div>
+        </NotificationSection>
+      )}
 
       <NotificationSection title={t("settings.general.sound")}>
         <NotificationRow label={t("settings.general.sound")} desc={t("settings.general.soundDesc")}>

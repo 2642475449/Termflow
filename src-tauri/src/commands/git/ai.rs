@@ -40,6 +40,12 @@ fn build_commit_prompt(
         project_path,
         &["diff", "--no-ext-diff", "--stat=160,120", "--summary"],
     )?;
+    let staged_diff = run_git_text_command(
+        project_path,
+        &["diff", "--cached", "--no-ext-diff", "--unified=3"],
+    )?;
+    let unstaged_diff =
+        run_git_text_command(project_path, &["diff", "--no-ext-diff", "--unified=3"])?;
 
     if status_text.trim().is_empty() {
         return Err("当前没有可用于生成提交信息的 Git 变更".to_string());
@@ -66,17 +72,24 @@ fn build_commit_prompt(
         1. 只输出最终提交信息，不要解释，不要代码块，不要额外前后缀\n\
         2. 不要编造变更概览中无法确认的功能、Issue 编号或测试结果\n\
         3. 优先概括源码和配置改动，弱化或忽略构建产物、二进制、bundle 等派生产物\n\
-        4. 输入中提供的是 Git 变更概览而非完整 patch，请根据文件分布、变更统计和状态信息概括提交意图\n\n\
+        4. 正文要点必须基于提供的文件路径和 diff，写明“哪里改了什么”。只有 diff 能直接证实时才说明用户行为、兼容性或性能影响；否则陈述可验证的实现事实\n\
+        5. 按独立改动主题组织正文，不要为了凑条目拆分同一项改动，也不要机械罗列每个文件\n\
+        6. 不要只写“优化”“调整”“重构”等空泛描述；不要声称测试已通过，除非输入明确提供了测试运行结果\n\
+        7. 输入的 diff 可能因长度限制而截断；只描述能从输入确认的改动，不要臆测\n\n\
         当前选择的风格规则：\n{profile_instructions}\n\n\
         当前分支：\n{branch_name}\n\n\
         Git Status:\n{status}\n\n\
         Staged Summary:\n{staged}\n\n\
-        Unstaged Summary:\n{unstaged}",
+        Unstaged Summary:\n{unstaged}\n\n\
+        Staged Diff:\n{staged_diff}\n\n\
+        Unstaged Diff:\n{unstaged_diff}",
         branch_name = branch_name,
         profile_instructions = truncate_block(profile_instructions, 6000),
         status = truncate_block(&status_text, 4000),
         staged = truncate_block(&staged_summary, 4000),
         unstaged = truncate_block(&unstaged_summary, 4000),
+        staged_diff = truncate_block(&staged_diff, 12000),
+        unstaged_diff = truncate_block(&unstaged_diff, 12000),
     ))
 }
 
