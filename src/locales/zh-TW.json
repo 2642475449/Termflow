@@ -821,6 +821,12 @@
         "about": "關於"
       }
     },
+    "persistence": {
+      "loadFailedTitle": "設定載入失敗",
+      "loadFailedDescription": "無法載入本機設定，本次執行期間的設定變更將不會儲存。請重新啟動 Termflow 後再試。錯誤：{{error}}",
+      "saveFailedTitle": "設定尚未儲存",
+      "saveFailedDescription": "無法儲存本機設定。請檢查磁碟空間或檔案權限後再試；儲存恢復後此提示會自動消失。錯誤：{{error}}"
+    },
     "agents": {
       "title": "智慧體",
       "subtitle": "檢查本機常用 AI 程式設計智慧體的安裝狀態",
@@ -1552,6 +1558,7 @@
       "instantSearchDescription": "允許為目前程式碼庫建立本機索引；索引尚未就緒時自動使用快速掃描。所有資料均儲存在本機。",
       "preflightDescription": "正在依忽略規則尋找可索引檔案；此階段搜尋繼續使用快速掃描。",
       "buildingDescription": "正在將文字寫入本機 FTS5 索引；未完成的暫存索引不會用於搜尋。",
+      "pausedDescription": "索引建置已暫停；搜尋會繼續使用快速掃描。",
       "updatingDescription": "正在將變更檔案批次同步至本機 FTS5 索引；同步期間搜尋會安全使用快速掃描。",
       "readyDescription": "FTS5 索引已就緒。一般文字查詢會用索引篩選候選檔案後再精確驗證；短查詢與正規表示式會自動使用快速掃描。",
       "staleDescription": "偵測到程式碼庫變更，索引正等待自動重建；此時搜尋會安全退回快速掃描。",
@@ -1561,6 +1568,12 @@
       "available": "可啟用",
       "preflight": "預掃描",
       "building": "建置中",
+      "paused": "已暫停",
+      "pause": "暫停",
+      "resume": "繼續",
+      "pausedSuccess": "索引建置已暫停",
+      "resumedSuccess": "索引建置已繼續",
+      "pauseFailed": "無法更新索引暫停狀態：{{error}}",
       "updating": "同步中",
       "ready": "已就緒",
       "stale": "等待同步",

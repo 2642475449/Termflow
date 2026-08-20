@@ -821,6 +821,12 @@
         "about": "About"
       }
     },
+    "persistence": {
+      "loadFailedTitle": "Settings could not be loaded",
+      "loadFailedDescription": "Local settings could not be loaded. Changes made during this run will not be saved. Restart Termflow and try again. Error: {{error}}",
+      "saveFailedTitle": "Settings were not saved",
+      "saveFailedDescription": "Local settings could not be saved. Check available disk space or file permissions and try again. This notice will disappear after saving recovers. Error: {{error}}"
+    },
     "agents": {
       "title": "Agents",
       "subtitle": "Check whether popular AI coding agents are installed on this system",
@@ -1555,6 +1561,7 @@
       "instantSearchDescription": "Allow a local index for the current repository. Fast scan is used automatically until the index is ready. All data stays on this device.",
       "preflightDescription": "Discovering indexable files with repository ignore rules. Search continues to use fast scan during this phase.",
       "buildingDescription": "Writing text to the local FTS5 index. An incomplete temporary index is never used for search.",
+      "pausedDescription": "Index building is paused. Search continues to use the fast scan.",
       "updatingDescription": "Applying changed files to the local FTS5 index in a batch. Search safely uses fast scan while the update is in progress.",
       "readyDescription": "The FTS5 index is ready. Plain text queries use it to select candidates and then verify exact matches; short and regex queries automatically use fast scan.",
       "staleDescription": "Repository changes were detected and the index is waiting for an automatic rebuild. Search safely falls back to fast scan meanwhile.",
@@ -1564,6 +1571,12 @@
       "available": "Available",
       "preflight": "Preflight",
       "building": "Building",
+      "paused": "Paused",
+      "pause": "Pause",
+      "resume": "Resume",
+      "pausedSuccess": "Index building paused",
+      "resumedSuccess": "Index building resumed",
+      "pauseFailed": "Unable to update the index pause state: {{error}}",
       "updating": "Updating",
       "ready": "Ready",
       "stale": "Sync pending",

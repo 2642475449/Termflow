@@ -821,6 +821,12 @@
         "about": "关于"
       }
     },
+    "persistence": {
+      "loadFailedTitle": "设置加载失败",
+      "loadFailedDescription": "无法加载本地设置，本次运行中的设置修改不会被保存。请重启 Termflow 后重试。错误：{{error}}",
+      "saveFailedTitle": "设置未保存",
+      "saveFailedDescription": "无法保存本地设置。请检查磁盘空间或文件权限后重试；保存恢复后此提示会自动消失。错误：{{error}}"
+    },
     "agents": {
       "title": "智能体",
       "subtitle": "检查本机常用 AI 编程智能体的安装状态",

@@ -7,7 +7,6 @@ import { getExistingProjectPaths, openProjectWindow } from "@/lib/api";
 import type { ProjectOpenDisposition } from "@/types";
 import { useAppStore } from "@/store";
 import { broadcastRecentProjectOpened } from "@/hooks/useRecentProjectSync";
-import { isSessionTurnRunning } from "@/lib/sessions";
 
 function sortRecentProjects<T extends { lastOpenedAt: number }>(items: T[]) {
   return [...items].sort((a, b) => b.lastOpenedAt - a.lastOpenedAt);
@@ -19,8 +18,6 @@ export function useProjectLauncher() {
   const windowLabel = useAppStore((s) => s.windowLabel);
   const windowMode = useAppStore((s) => s.windowMode);
   const recentProjectsState = useAppStore((s) => s.recentProjects);
-  const projectOpenBehavior = useAppStore((s) => s.projectOpenBehavior);
-  const setProjectOpenBehavior = useAppStore((s) => s.setProjectOpenBehavior);
   const initializeWindowContext = useAppStore((s) => s.initializeWindowContext);
   const setRecentProjects = useAppStore((s) => s.setRecentProjects);
 
@@ -32,19 +29,7 @@ export function useProjectLauncher() {
   const openProject = useCallback(
     async (path: string, requestedDisposition?: ProjectOpenDisposition) => {
       const launchedFromLauncher = windowMode === "launcher";
-      let disposition: ProjectOpenDisposition = requestedDisposition ?? "auto";
-
-      if (!requestedDisposition && !launchedFromLauncher && currentProject?.path !== path) {
-        const state = useAppStore.getState();
-        const runningSessionCount = state.sessions.filter(isSessionTurnRunning).length;
-        const dirtyFileCount = Object.values(state.tabsById).filter((tab) => tab.dirty).length;
-        const mustConfirmCurrentWindow =
-          projectOpenBehavior === "current_window" &&
-          (runningSessionCount > 0 || dirtyFileCount > 0);
-        disposition = projectOpenBehavior === "ask" || mustConfirmCurrentWindow
-          ? "new_window"
-          : projectOpenBehavior;
-      }
+      const disposition: ProjectOpenDisposition = requestedDisposition ?? "auto";
 
       const previousProjectPath = currentProject?.path ?? null;
       const context = await openProjectWindow(path, disposition);
@@ -90,24 +75,27 @@ export function useProjectLauncher() {
         await getCurrentWindow().close().catch(() => {});
       }
     },
-    [currentProject?.path, initializeWindowContext, projectOpenBehavior, setProjectOpenBehavior, t, windowLabel, windowMode]
+    [currentProject?.path, initializeWindowContext, windowLabel, windowMode]
   );
 
-  const handleOpenFolder = useCallback(async () => {
+  const selectProjectFolder = useCallback(async (): Promise<string | null> => {
     const selected = await open({
       directory: true,
       multiple: false,
       title: t("sidebar.selectProjectTitle"),
     });
 
-    if (!selected) return;
+    return selected ? selected as string : null;
+  }, [t]);
 
-    const path = selected as string;
+  const handleOpenFolder = useCallback(async () => {
+    const path = await selectProjectFolder();
+    if (!path) return;
     await openProject(path).catch((error) => {
       console.error("Failed to open project window:", error);
       message.error(t("sidebar.projectWindowOpenFailed"));
     });
-  }, [openProject, t]);
+  }, [openProject, selectProjectFolder, t]);
 
   const removeRecentProject = useCallback(
     (path: string) => {
@@ -145,6 +133,7 @@ export function useProjectLauncher() {
     currentProject,
     recentProjects,
     openProject,
+    selectProjectFolder,
     handleOpenFolder,
     removeRecentProject,
   };

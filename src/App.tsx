@@ -22,7 +22,7 @@ import {
 } from "./lib/api";
 import i18n, { toI18nLanguage } from "./i18n";
 import { useRecentProjectSync } from "./hooks/useRecentProjectSync";
-import { TOAST_NOTIFICATION_CONFIG, ToastHost } from "./lib/toast";
+import { message, TOAST_NOTIFICATION_CONFIG, ToastHost } from "./lib/toast";
 
 const THEME_COLORS: Record<ThemeMode, string> = {
   "light-glass": "#4f6cf7",
@@ -35,6 +35,8 @@ const STARTUP_THEME_STORAGE_KEY = "termflow-startup-theme";
 const PERSISTENT_THEME_UPDATED_EVENT = "persistent-theme-updated";
 const PERSISTENT_EXPLORER_CONTEXT_MENU_UPDATED_EVENT =
   "persistent-explorer-context-menu-updated";
+const PERSISTENT_SETTINGS_LOAD_ERROR_KEY = "persistent-settings-load-error";
+const PERSISTENT_SETTINGS_SAVE_ERROR_KEY = "persistent-settings-save-error";
 
 interface PersistentThemeUpdate {
   lightTheme: ThemeMode;
@@ -257,6 +259,7 @@ function App() {
     initializePersistentSettings(getPersistentSettingsSnapshot())
       .then((settings) => {
         if (!disposed) {
+          message.destroy(PERSISTENT_SETTINGS_LOAD_ERROR_KEY);
           applyPersistentSettingsToStore(settings);
           lastPersistedSnapshotRef.current = JSON.stringify(settings);
           if (settings.explorerContextMenuEnabled === false) {
@@ -269,6 +272,16 @@ function App() {
       })
       .catch((error) => {
         console.error("Failed to initialize persistent settings from SQLite:", error);
+        if (!disposed) {
+          message.error({
+            key: PERSISTENT_SETTINGS_LOAD_ERROR_KEY,
+            title: i18n.t("settings.persistence.loadFailedTitle"),
+            content: i18n.t("settings.persistence.loadFailedDescription", {
+              error: error instanceof Error ? error.message : String(error),
+            }),
+            duration: 0,
+          });
+        }
       });
 
     return () => {
@@ -290,9 +303,18 @@ function App() {
       savePersistentSettings(persistentSettings)
         .then(() => {
           lastPersistedSnapshotRef.current = serialized;
+          message.destroy(PERSISTENT_SETTINGS_SAVE_ERROR_KEY);
         })
         .catch((error) => {
           console.error("Failed to persist settings to SQLite:", error);
+          message.error({
+            key: PERSISTENT_SETTINGS_SAVE_ERROR_KEY,
+            title: i18n.t("settings.persistence.saveFailedTitle"),
+            content: i18n.t("settings.persistence.saveFailedDescription", {
+              error: error instanceof Error ? error.message : String(error),
+            }),
+            duration: 0,
+          });
         });
     }, 250);
 

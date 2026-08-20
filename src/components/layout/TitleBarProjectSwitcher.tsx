@@ -8,7 +8,7 @@ import {
   RightOutlined,
 } from "@ant-design/icons";
 import { Button, Checkbox, Modal, Popover, message } from "antd";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useProjectLauncher } from "@/hooks/useProjectLauncher";
 import CloneRepositoryModal from "@/components/layout/CloneRepositoryModal";
@@ -43,7 +43,7 @@ function TitleBarProjectSwitcher() {
     currentProject,
     recentProjects,
     openProject,
-    handleOpenFolder,
+    selectProjectFolder,
     removeRecentProject,
   } = useProjectLauncher();
   const upsertGitCloneTask = useAppStore((state) => state.upsertGitCloneTask);
@@ -54,39 +54,44 @@ function TitleBarProjectSwitcher() {
   const [pendingProjectPath, setPendingProjectPath] = useState<string | null>(null);
   const [rememberOpenChoice, setRememberOpenChoice] = useState(false);
 
-  const quickActions = useMemo(
-    () => [
-      {
-        key: "open-folder",
-        icon: <FolderOutlined />,
-        label: t("titleBar.projectSwitcherOpenAction"),
-        onClick: async () => {
-          await handleOpenFolder();
-        },
+  const quickActions = [
+    {
+      key: "open-folder",
+      icon: <FolderOutlined />,
+      label: t("titleBar.projectSwitcherOpenAction"),
+      onClick: async () => {
+        const path = await selectProjectFolder();
+        if (path) await requestProjectOpen(path);
       },
-      {
-        key: "clone-repo",
-        icon: <BranchesOutlined />,
-        label: t("projectLauncher.cloneRepo"),
-        onClick: async () => {
-          setCloneOpen(true);
-        },
+    },
+    {
+      key: "clone-repo",
+      icon: <BranchesOutlined />,
+      label: t("projectLauncher.cloneRepo"),
+      onClick: async () => {
+        setCloneOpen(true);
       },
-    ],
-    [handleOpenFolder, t]
-  );
+    },
+  ];
 
   async function handleQuickAction(action: (typeof quickActions)[number]) {
     setOpen(false);
     await waitForPopoverToClose();
     try {
       await action.onClick();
-    } catch {}
+    } catch (error) {
+      console.error(`Failed to run project switcher action ${action.key}:`, error);
+      message.error(t("sidebar.projectWindowOpenFailed"));
+    }
   }
 
   async function handleOpenRecentProject(path: string) {
     setOpen(false);
     await waitForPopoverToClose();
+    await requestProjectOpen(path);
+  }
+
+  async function requestProjectOpen(path: string) {
     if (currentProject?.path === path) return;
 
     try {

@@ -207,10 +207,6 @@ Relevant settings:
 
 The quick-command system lets you create, edit, and delete commands; group them by project or purpose; use variable substitution in templates; and run them via a shortcut or button.
 
-### Themes
-
-Four built-in themes are selected with the `data-theme` attribute. Theme changes update the title bar, sidebar, content area, and terminal colours together.
-
 ### Localization
 
 The application uses i18next and supports dynamic switching between:
