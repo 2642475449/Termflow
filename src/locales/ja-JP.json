@@ -646,6 +646,23 @@
     "closeAllTabs": "すべてのタブを閉じる",
     "newSessionTooltip": "新規セッション (Ctrl+N)"
   },
+  "contentOverview": {
+    "title": "内容の概要",
+    "tooltip": "内容の概要",
+    "tooShort": "現在の内容は短すぎます",
+    "summary": "要約",
+    "keyPoints": "要点",
+    "sections": "構成",
+    "running": "回答の生成中です。概要は不完全な場合があります。",
+    "partial": "現在読み取れる内容から生成しました。",
+    "updated": "内容が更新されました。再生成すると概要を更新できます。",
+    "regenerate": "再生成",
+    "copy": "コピー",
+    "copySuccess": "概要をコピーしました",
+    "copyFailed": "概要をコピーできませんでした",
+    "sectionNotFound": "このセクションはターミナルバッファにありません",
+    "empty": "概要が必要な長い回答はまだありません。"
+  },
   "newSessionMenu": {
     "tooltip": "新しいエージェントまたはターミナル",
     "terminals": "ターミナル",

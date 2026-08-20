@@ -236,6 +236,7 @@ function WorkspacePane({ paneId }: { paneId: string }) {
                   ) : session?.active ? (
                     <Terminal
                       sessionId={tabId}
+                      overviewNavigationId={`${pane.id}:${tabId}`}
                       onExit={() => updateSession(tabId, { active: false })}
                       onClose={() => closeTab(tabId)}
                     />

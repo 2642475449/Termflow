@@ -646,6 +646,23 @@
     "closeAllTabs": "关闭所有标签",
     "newSessionTooltip": "新建会话 (Ctrl+N)"
   },
+  "contentOverview": {
+    "title": "内容概览",
+    "tooltip": "内容概览",
+    "tooShort": "当前内容较短",
+    "summary": "一句话总结",
+    "keyPoints": "关键要点",
+    "sections": "内容结构",
+    "running": "回答仍在生成，当前概览可能不完整。",
+    "partial": "仅基于当前可读取内容生成。",
+    "updated": "内容已更新，可重新生成概览。",
+    "regenerate": "重新生成",
+    "copy": "复制摘要",
+    "copySuccess": "概览已复制",
+    "copyFailed": "无法复制概览",
+    "sectionNotFound": "终端缓冲区中已找不到该章节",
+    "empty": "当前还没有需要概览的长回答。"
+  },
   "newSessionMenu": {
     "tooltip": "新建智能体或终端",
     "terminals": "终端",

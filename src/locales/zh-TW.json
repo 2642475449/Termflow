@@ -646,6 +646,23 @@
     "closeAllTabs": "關閉所有標籤",
     "newSessionTooltip": "新建工作階段 (Ctrl+N)"
   },
+  "contentOverview": {
+    "title": "內容概覽",
+    "tooltip": "內容概覽",
+    "tooShort": "目前內容較短",
+    "summary": "一句話總結",
+    "keyPoints": "關鍵要點",
+    "sections": "內容結構",
+    "running": "回答仍在產生，目前概覽可能不完整。",
+    "partial": "僅依據目前可讀取的內容產生。",
+    "updated": "內容已更新，可重新產生概覽。",
+    "regenerate": "重新產生",
+    "copy": "複製摘要",
+    "copySuccess": "概覽已複製",
+    "copyFailed": "無法複製概覽",
+    "sectionNotFound": "終端機緩衝區中已找不到該章節",
+    "empty": "目前還沒有需要概覽的長回答。"
+  },
   "newSessionMenu": {
     "tooltip": "新建智慧體或終端機",
     "terminals": "終端機",

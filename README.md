@@ -65,7 +65,7 @@ Termflow 最初是为了做一款符合自己使用习惯的应用。在功能�
 | 功能说明 | 界面预览 |
 | :--- | :--- |
 | **项目与会话工作区**：按项目目录自动组织不同智能体的会话，快速创建和切换任务，并实时掌握每个会话的运行状态。 | ![Termflow 项目与会话工作区演示](public/images/demos/multi-session-management.gif) |
-| **多智能体终端**：在统一工作台中使用 Claude Code、Codex、Antigravity CLI、OpenCode 与 Qoder CLI；基于 xterm.js + ConPTY 提供完整的终端交互体验。 | ![Termflow 多智能体终端](public/images/termflow-overview.png) |
+| **旁路任务与辅助工作区**：遇到终端报错或文件问题时，可从终端选区发起侧边提问，并在右侧同时查看相关文件或运行独立任务；主会话保持原位，排查完成后随时返回。 | 终端选区 → 在侧边栏提问 → 独立侧边任务；或在右侧打开相关文件继续排查。 |
 | **文件与上下文协作**：浏览、搜索和编辑项目文件，预览 Markdown，并将文件从项目树拖放到当前 CLI 输入框，为智能体快速补充上下文。 | ![Termflow 文件与上下文协作](public/images/termflow-overview.png) |
 | **Git 变更工作流**：集中完成变更查看、暂存、分支管理、提交、推送、拉取和同步，并可使用 AI 生成提交信息。 | ![Termflow Git 变更工作流](public/images/termflow-overview.png) |
 | **检查点与差异审阅**：自动记录 Agent 回合检查点，集中查看文件摘要和变更差异，并可回到任意检查点。 | ![Termflow 检查点与差异审阅](public/images/termflow-overview.png) |

@@ -646,6 +646,23 @@
     "closeAllTabs": "Close All Tabs",
     "newSessionTooltip": "New Session (Ctrl+N)"
   },
+  "contentOverview": {
+    "title": "Content overview",
+    "tooltip": "Content overview",
+    "tooShort": "The current content is too short",
+    "summary": "Summary",
+    "keyPoints": "Key points",
+    "sections": "Structure",
+    "running": "The response is still being generated; this overview may be incomplete.",
+    "partial": "Generated from the currently available content.",
+    "updated": "The content has changed. Regenerate to refresh the overview.",
+    "regenerate": "Regenerate",
+    "copy": "Copy",
+    "copySuccess": "Overview copied",
+    "copyFailed": "Could not copy the overview",
+    "sectionNotFound": "This section is no longer in the terminal buffer",
+    "empty": "There is no long response to summarize yet."
+  },
   "newSessionMenu": {
     "tooltip": "New agent or terminal",
     "terminals": "Terminals",

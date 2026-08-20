@@ -20,17 +20,13 @@ import {
   getMonacoContextMenuAvailability,
   type MonacoContextMenuFacts,
 } from "@/lib/monacoContextMenu";
+import {
+  isMonacoContextMenuCommand,
+  runMonacoContextMenuCommand,
+  type MonacoContextMenuCommand,
+} from "@/lib/monacoContextMenuActions";
 
-const MONACO_ACTION_IDS = {
-  undo: "undo",
-  redo: "redo",
-  cut: "editor.action.clipboardCutAction",
-  copy: "editor.action.clipboardCopyAction",
-  paste: "editor.action.clipboardPasteAction",
-  selectAll: "editor.action.selectAll",
-} as const;
-
-type MonacoContextMenuAction = keyof typeof MONACO_ACTION_IDS | "save";
+type MonacoContextMenuAction = MonacoContextMenuCommand | "save";
 
 interface MonacoContextMenuSaveAction {
   enabled: boolean;
@@ -170,25 +166,18 @@ function MonacoContextMenu({
     }
   }
 
-  function runMonacoAction(action: Exclude<MonacoContextMenuAction, "save">) {
-    const editor = activeEditorRef.current;
-    if (!editor) return;
-
-    editor.focus();
-    const monacoAction = editor.getAction(MONACO_ACTION_IDS[action]);
-    if (!monacoAction?.isSupported()) return;
-    void monacoAction.run();
-  }
-
   function handleMenuClick({ key }: { key: string }) {
     const action = key as MonacoContextMenuAction;
+    const editor = activeEditorRef.current;
+    setOpen(false);
+
     if (action === "save") {
       if (availability.save) saveAction?.run();
       return;
     }
 
-    if (action in MONACO_ACTION_IDS) {
-      runMonacoAction(action);
+    if (editor && isMonacoContextMenuCommand(action)) {
+      runMonacoContextMenuCommand(editor, action);
     }
   }
 

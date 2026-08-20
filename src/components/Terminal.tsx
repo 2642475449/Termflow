@@ -50,6 +50,11 @@ import {
   hasTerminalPromptText,
 } from "@/lib/terminalSubmission";
 import { AgentIcon } from "@/components/AgentIcon";
+import {
+  beginContentOverviewTurn,
+  registerContentOverviewNavigator,
+  registerContentOverviewOutputSource,
+} from "@/lib/contentOverview";
 import { SideQuestionComposer } from "@/components/SideQuestionComposer";
 import { getAgentDisplayName, getAgentTerminalBehavior, isAiAgentId } from "@/lib/agents";
 import { isSessionTurnRunning } from "@/lib/sessions";
@@ -117,6 +122,7 @@ function shouldAttemptWebgl(renderer: TerminalRenderer): boolean {
 
 interface TerminalProps {
   sessionId: string;
+  overviewNavigationId?: string;
   onExit?: () => void;
   onClose?: () => void;
 }
@@ -165,7 +171,7 @@ export function normalizeDecscusrCursorStyle(param: number | undefined): {
   }
 }
 
-function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
+function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: TerminalProps) {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<XTerm | null>(null);
@@ -730,6 +736,26 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
     const filePathDisposable = term.registerLinkProvider(filePathProvider);
     term.open(containerRef.current);
     terminalRef.current = term;
+    const unregisterOverviewNavigator = registerContentOverviewNavigator(
+      overviewNavigationId ?? sessionId,
+      (anchorText) => {
+        const normalizedAnchor = anchorText.replace(/\s+/g, " ").trim().toLocaleLowerCase();
+        if (!normalizedAnchor) return false;
+        const buffer = term.buffer.active;
+        for (let lineIndex = 0; lineIndex < buffer.length; lineIndex += 1) {
+          const line = buffer.getLine(lineIndex)?.translateToString(true)
+            .replace(/\s+/g, " ")
+            .trim()
+            .toLocaleLowerCase();
+          if (line?.includes(normalizedAnchor)) {
+            term.scrollToLine(Math.max(0, lineIndex - 1));
+            return true;
+          }
+        }
+        return false;
+      },
+    );
+    const overviewOutputSource = registerContentOverviewOutputSource(sessionId);
 
     const cursorStyleDisposable = forceStableCursor
       ? term.parser.registerCsiHandler({ intermediates: " ", final: "q" }, (params) => {
@@ -865,6 +891,12 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
 
         enqueueInput(async () => {
           try {
+            const submittingSession = useAppStore.getState().sessions.find(
+              (item) => item.id === sessionId,
+            );
+            if (submittingSession?.agentId && isAiAgentId(submittingSession.agentId)) {
+              beginContentOverviewTurn(sessionId);
+            }
             const result = await submitAgentTurnInput(sessionId, data);
             updateSession(sessionId, {
               hasPromptHistory: true,
@@ -1011,6 +1043,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       "pty-output",
       (event) => {
         if (event.payload.session_id === sessionId) {
+          overviewOutputSource.append(event.payload.data);
           if (isComposing) {
             pendingOutput += event.payload.data;
           } else {
@@ -1097,6 +1130,8 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
         textarea.removeEventListener("compositionend", onCompositionEnd);
       }
       filePathDisposable.dispose();
+      unregisterOverviewNavigator();
+      overviewOutputSource.dispose();
       voiceInputPromise.then((unlisten) => unlisten());
       cursorStyleDisposable?.dispose();
       disposeWebglAddon();
@@ -1108,6 +1143,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
     };
   }, [
     sessionId,
+    overviewNavigationId,
     termTheme,
     fontSize,
     cursorBlink,
