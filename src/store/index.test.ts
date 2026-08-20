@@ -1008,16 +1008,17 @@ describe("useAppStore actions", () => {
   });
 });
 
-describe("Feishu notification settings", () => {
+describe("Remote notification settings", () => {
   const originalSettings = getPersistentSettingsSnapshot();
 
   afterEach(() => {
     applyPersistentSettingsToStore(originalSettings);
   });
 
-  it("round-trips non-sensitive Feishu preferences through persistent settings", () => {
+  it("migrates legacy Feishu preferences into a remote notification channel", () => {
     applyPersistentSettingsToStore({
       ...originalSettings,
+      remoteNotifications: undefined,
       feishuNotificationEnabled: true,
       feishuNotificationThresholdMs: 600000,
       feishuNotificationEvents: {
@@ -1029,13 +1030,17 @@ describe("Feishu notification settings", () => {
     });
 
     expect(getPersistentSettingsSnapshot()).toMatchObject({
-      feishuNotificationEnabled: true,
-      feishuNotificationThresholdMs: 600000,
-      feishuNotificationEvents: {
-        completed: true,
-        error: true,
-        waiting: false,
-        permission: true,
+      remoteNotifications: {
+        feishu: {
+          enabled: true,
+          thresholdMs: 600000,
+          events: {
+            completed: true,
+            error: true,
+            waiting: false,
+            permission: true,
+          },
+        },
       },
     });
   });

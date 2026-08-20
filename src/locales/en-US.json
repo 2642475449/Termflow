@@ -953,6 +953,8 @@
       "channels": "Notification channels",
       "triggerPolicy": "Trigger policy",
       "systemThreshold": "System notification threshold",
+      "remoteThreshold": "Remote notification long-task threshold",
+      "remoteThresholdDesc": "Only completion uses this threshold; errors, input waits, and permission requests notify immediately",
       "feishuThreshold": "Feishu long-task threshold",
       "feishuThresholdDesc": "Only completion uses this threshold; errors, input waits, and permission requests notify immediately",
       "threshold": { "min5": "5 minutes", "min10": "10 minutes", "min30": "30 minutes", "hour1": "1 hour" },
@@ -961,6 +963,14 @@
         "error": "Task failed", "errorDesc": "Notify immediately on process or hook errors",
         "waiting": "Waiting for input", "waitingDesc": "Notify when the agent needs an answer",
         "permission": "Permission request", "permissionDesc": "Notify when the agent is waiting for approval"
+      },
+      "remote": {
+        "channelName": "Remote notifications", "channelDesc": "Deliver task status to configured remote services; multiple providers can be added over time.",
+        "configured": "Configured", "notConfigured": "Not configured", "configuration": "Remote notification configuration", "provider": "Notification service",
+        "comingSoon": "Coming soon", "providers": { "feishu": "Feishu", "dingtalk": "DingTalk", "wechat": "WeChat", "qq": "QQ", "telegram": "Telegram" },
+        "saved": "Remote notification configuration saved securely", "cleared": "Remote notification configuration cleared", "configureFirst": "Save and test this notification service first",
+        "loadFailed": "Failed to load remote notification configuration: {{error}}", "saveFailed": "Failed to save remote notification configuration: {{error}}", "clearFailed": "Failed to clear remote notification configuration: {{error}}",
+        "testSent": "Test notification sent", "testFailed": "Remote notification test failed: {{error}}", "sendTest": "Send test", "clear": "Clear configuration", "clearConfirm": "Clear the current notification service configuration?"
       },
       "feishu": {
         "channelName": "Feishu notifications", "channelDesc": "Send long-task status cards through a group custom-bot webhook",

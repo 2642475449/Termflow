@@ -18,8 +18,15 @@ export type NotificationSoundType =
   | "aurora"
   | "hush";
 export type NotificationEvent = "taskComplete" | "error" | "waiting";
-export type FeishuNotificationEvent = "completed" | "error" | "waiting" | "permission";
-export type FeishuNotificationEventMap = Record<FeishuNotificationEvent, boolean>;
+export type RemoteNotificationProvider = "feishu" | "dingtalk" | "wechat" | "qq" | "telegram";
+export type RemoteNotificationEvent = "completed" | "error" | "waiting" | "permission";
+export type RemoteNotificationEventMap = Record<RemoteNotificationEvent, boolean>;
+export interface RemoteNotificationChannel {
+  enabled: boolean;
+  thresholdMs: number;
+  events: RemoteNotificationEventMap;
+}
+export type RemoteNotificationChannels = Record<RemoteNotificationProvider, RemoteNotificationChannel>;
 export type SessionRuntimeStatus = "starting" | "running" | "waiting" | "completed" | "error" | "stopped";
 export type TerminalShell = "powershell" | "cmd";
 export type TerminalRenderer = "webgl" | "standard";
@@ -192,9 +199,7 @@ export interface AppState {
   notificationSoundEnabled: boolean;
   notificationSoundMap: NotificationSoundMap;
   notificationThresholdMs: number;
-  feishuNotificationEnabled: boolean;
-  feishuNotificationThresholdMs: number;
-  feishuNotificationEvents: FeishuNotificationEventMap;
+  remoteNotificationChannels: RemoteNotificationChannels;
   sessionEvents: SessionStreamEvent[];
   unreadTotal: number;
   setClaudeCliInfo: (info: ClaudeCliInfo | null) => void;
@@ -257,9 +262,13 @@ export interface AppState {
   setNotificationSoundEnabled: (enabled: boolean) => void;
   setNotificationSoundMap: (event: NotificationEvent, sound: NotificationSoundType) => void;
   setNotificationThreshold: (thresholdMs: number) => void;
-  setFeishuNotificationEnabled: (enabled: boolean) => void;
-  setFeishuNotificationThreshold: (thresholdMs: number) => void;
-  setFeishuNotificationEvent: (event: FeishuNotificationEvent, enabled: boolean) => void;
+  setRemoteNotificationEnabled: (provider: RemoteNotificationProvider, enabled: boolean) => void;
+  setRemoteNotificationThreshold: (provider: RemoteNotificationProvider, thresholdMs: number) => void;
+  setRemoteNotificationEvent: (
+    provider: RemoteNotificationProvider,
+    event: RemoteNotificationEvent,
+    enabled: boolean,
+  ) => void;
   pushSessionEvent: (event: SessionStreamEvent) => "accepted" | "duplicate" | "stale";
   markSessionRead: (sessionId: string) => void;
   focusSessionFromEvent: (event: SessionStreamEvent) => void;

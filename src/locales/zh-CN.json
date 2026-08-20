@@ -953,6 +953,8 @@
       "channels": "通知渠道",
       "triggerPolicy": "触发策略",
       "systemThreshold": "系统通知阈值",
+      "remoteThreshold": "远程通知长任务阈值",
+      "remoteThresholdDesc": "仅任务完成事件使用该阈值；失败、等待输入和权限请求会立即通知",
       "feishuThreshold": "飞书长任务阈值",
       "feishuThresholdDesc": "仅任务完成事件使用该阈值；失败、等待输入和权限请求会立即通知",
       "threshold": { "min5": "5 分钟", "min10": "10 分钟", "min30": "30 分钟", "hour1": "1 小时" },
@@ -961,6 +963,14 @@
         "error": "任务失败", "errorDesc": "任务发生进程或 Hook 错误时立即通知",
         "waiting": "等待输入", "waitingDesc": "智能体需要你回答问题时立即通知",
         "permission": "权限请求", "permissionDesc": "智能体等待权限批准时立即通知"
+      },
+      "remote": {
+        "channelName": "远程通知", "channelDesc": "将任务状态投递到已配置的远程服务；可逐步接入多个服务商",
+        "configured": "已配置", "notConfigured": "未配置", "configuration": "远程通知配置", "provider": "通知服务",
+        "comingSoon": "即将支持", "providers": { "feishu": "飞书", "dingtalk": "钉钉", "wechat": "微信", "qq": "QQ", "telegram": "Telegram" },
+        "saved": "远程通知配置已安全保存", "cleared": "远程通知配置已清除", "configureFirst": "请先保存并测试通知服务配置",
+        "loadFailed": "读取远程通知配置失败：{{error}}", "saveFailed": "保存远程通知配置失败：{{error}}", "clearFailed": "清除远程通知配置失败：{{error}}",
+        "testSent": "测试通知已发送", "testFailed": "远程通知测试发送失败：{{error}}", "sendTest": "发送测试", "clear": "清除配置", "clearConfirm": "确定清除当前通知服务配置吗？"
       },
       "feishu": {
         "channelName": "飞书通知", "channelDesc": "通过群自定义机器人 Webhook 推送长任务状态卡片",

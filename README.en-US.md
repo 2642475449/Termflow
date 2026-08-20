@@ -207,15 +207,6 @@ Relevant settings:
 
 The quick-command system lets you create, edit, and delete commands; group them by project or purpose; use variable substitution in templates; and run them via a shortcut or button.
 
-### Localization
-
-The application uses i18next and supports dynamic switching between:
-
-- Simplified Chinese (`zh-CN`, default)
-- Traditional Chinese (`zh-TW`)
-- English (`en-US`)
-- Japanese (`ja-JP`)
-
 ## How it works
 
 The following is the shared PTY session flow, using Claude Code as an example. Every agent reuses this flow, while the agent adapter generates its own native start and resume commands.

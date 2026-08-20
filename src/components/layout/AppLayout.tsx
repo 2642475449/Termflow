@@ -13,6 +13,7 @@ import { NewSessionDialog } from "@/components/NewSessionDialog";
 import GlobalTextSearchDialog from "@/components/GlobalTextSearchDialog";
 import { VoiceTrigger } from "@/components/VoiceButton";
 import { useAppStore, type LayoutNode } from "@/store";
+import { REMOTE_NOTIFICATION_PROVIDERS } from "@/lib/remoteNotifications";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useResumeSession } from "@/hooks/useResumeSession";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -21,7 +22,7 @@ import {
   getClaudeCliInfo,
   ensureAgentStatusHook,
   sendSessionNotification,
-  sendFeishuNotification,
+  sendRemoteNotification,
   getWindowProjectContext,
   configureVoiceGlobalShortcut,
   isVoiceGlobalShortcutRegistered,
@@ -446,7 +447,7 @@ function getEventDurationMs(metadata: Record<string, unknown> | undefined): numb
   const value = metadata?.durationMs;
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
-function getFeishuEventType(eventType: string): "completed" | "error" | "waiting" | "permission" | null {
+function getRemoteNotificationEventType(eventType: string): "completed" | "error" | "waiting" | "permission" | null {
   if (eventType === "assistant_complete") return "completed";
   if (eventType === "permission_request") return "permission";
   if (eventType === "waiting_input" || eventType === "tool_blocked") return "waiting";
@@ -492,9 +493,7 @@ function AppLayout() {
   const soundEnabled = useAppStore((s) => s.notificationSoundEnabled);
   const soundMap = useAppStore((s) => s.notificationSoundMap);
   const notificationThresholdMs = useAppStore((s) => s.notificationThresholdMs);
-  const feishuNotificationEnabled = useAppStore((s) => s.feishuNotificationEnabled);
-  const feishuNotificationThresholdMs = useAppStore((s) => s.feishuNotificationThresholdMs);
-  const feishuNotificationEvents = useAppStore((s) => s.feishuNotificationEvents);
+  const remoteNotificationChannels = useAppStore((s) => s.remoteNotificationChannels);
   const windowContextReady = useAppStore((s) => s.windowContextReady);
   const windowMode = useAppStore((s) => s.windowMode);
   const windowLabel = useAppStore((s) => s.windowLabel);
@@ -1505,82 +1504,74 @@ function AppLayout() {
           });
       }
 
-      const feishuEventType = getFeishuEventType(normalized.eventType);
-      if (
-        feishuNotificationEnabled &&
-        feishuEventType &&
-        feishuNotificationEvents[feishuEventType]
-      ) {
-        const feishuSuppressionReason = getNotificationSuppressionReason({
-          enabled: true,
-          foreground,
-          // Feishu is an external long-task channel. Unlike a local toast, it
-          // must still reach the group when the completed session is visible.
-          suppressWhenForeground: false,
-          eventType: normalized.eventType,
-          durationMs,
-          completionThresholdMs: feishuNotificationThresholdMs,
-        });
-        if (feishuSuppressionReason) {
-          useAppStore.getState().recordNotificationDelivery({
-            channel: "feishu",
-            eventId: normalized.id,
-            eventType: normalized.eventType,
-            status: "suppressed",
-            reason: feishuSuppressionReason,
-            updatedAt: Date.now(),
-          });
-        } else {
-          const agentLabel =
-            session?.agentId && isAiAgentId(session.agentId)
-              ? getAgentDisplayName(session.agentId)
-              : normalized.source || "Termflow";
-          const fields = [
-            {
-              label: i18n.t("settings.notifications.feishu.card.project"),
-              value: projectFolder ?? normalized.projectPath,
-            },
-            {
-              label: i18n.t("settings.notifications.feishu.card.task"),
-              value: sessionLabel,
-            },
-            {
-              label: i18n.t("settings.notifications.feishu.card.agent"),
-              value: agentLabel,
-            },
-          ];
-          if (durationMs !== null) {
-            fields.push({
-              label: i18n.t("settings.notifications.feishu.card.duration"),
-              value: formatNotificationDuration(durationMs, i18n.language),
-            });
-          }
+      const remoteEventType = getRemoteNotificationEventType(normalized.eventType);
+      if (remoteEventType) {
+        const agentLabel =
+          session?.agentId && isAiAgentId(session.agentId)
+            ? getAgentDisplayName(session.agentId)
+            : normalized.source || "Termflow";
+        const fields = [
+          { label: i18n.t("settings.notifications.feishu.card.project"), value: projectFolder ?? normalized.projectPath },
+          { label: i18n.t("settings.notifications.feishu.card.task"), value: sessionLabel },
+          { label: i18n.t("settings.notifications.feishu.card.agent"), value: agentLabel },
+        ];
+        if (durationMs !== null) {
           fields.push({
-            label: i18n.t("settings.notifications.feishu.card.occurredAt"),
-            value: new Intl.DateTimeFormat(i18n.language.replace("_", "-"), {
-              dateStyle: "short",
-              timeStyle: "short",
-            }).format(new Date(normalized.createdAt)),
+            label: i18n.t("settings.notifications.feishu.card.duration"),
+            value: formatNotificationDuration(durationMs, i18n.language),
           });
-          void sendFeishuNotification({
-            eventType: feishuEventType,
-            title: i18n.t(`settings.notifications.feishu.card.${feishuEventType}`),
+        }
+        fields.push({
+          label: i18n.t("settings.notifications.feishu.card.occurredAt"),
+          value: new Intl.DateTimeFormat(i18n.language.replace("_", "-"), {
+            dateStyle: "short",
+            timeStyle: "short",
+          }).format(new Date(normalized.createdAt)),
+        });
+
+        for (const { id: provider, supported } of REMOTE_NOTIFICATION_PROVIDERS) {
+          const channel = remoteNotificationChannels[provider];
+          if (!supported || !channel.enabled || !channel.events[remoteEventType]) continue;
+          const suppressionReason = getNotificationSuppressionReason({
+            enabled: true,
+            foreground,
+            // Remote notifications should reach the recipient even when the
+            // completed session is currently visible in this window.
+            suppressWhenForeground: false,
+            eventType: normalized.eventType,
+            durationMs,
+            completionThresholdMs: channel.thresholdMs,
+          });
+          if (suppressionReason) {
+            useAppStore.getState().recordNotificationDelivery({
+              channel: provider,
+              eventId: normalized.id,
+              eventType: normalized.eventType,
+              status: "suppressed",
+              reason: suppressionReason,
+              updatedAt: Date.now(),
+            });
+            continue;
+          }
+          void sendRemoteNotification(provider, {
+            eventType: remoteEventType,
+            title: i18n.t(`settings.notifications.feishu.card.${remoteEventType}`),
             fields,
           })
             .then(() => {
               useAppStore.getState().recordNotificationDelivery({
-                channel: "feishu",
+                channel: provider,
                 eventId: normalized.id,
                 eventType: normalized.eventType,
                 status: "sent",
                 updatedAt: Date.now(),
               });
             })
-            .catch((error) => {
+            .catch((error: unknown) => {
               const errorText = error instanceof Error ? error.message : String(error);
-              console.warn("Failed to send Feishu notification:", error);
+              console.warn(`Failed to send ${provider} remote notification:`, error);
               useAppStore.getState().recordNotificationDelivery({
-                channel: "feishu",
+                channel: provider,
                 eventId: normalized.id,
                 eventType: normalized.eventType,
                 status: "failed",
@@ -1600,9 +1591,7 @@ function AppLayout() {
     soundEnabled,
     soundMap,
     notificationThresholdMs,
-    feishuNotificationEnabled,
-    feishuNotificationThresholdMs,
-    feishuNotificationEvents,
+    remoteNotificationChannels,
   ]);
 
   useEffect(() => {

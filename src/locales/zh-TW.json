@@ -951,13 +951,21 @@
     "notifications": {
       "headerDesc": "管理任務事件的通知管道、觸發條件、提示音與投遞狀態。",
       "channels": "通知管道", "triggerPolicy": "觸發策略", "systemThreshold": "系統通知門檻", "feishuThreshold": "飛書長任務門檻",
-      "feishuThresholdDesc": "僅任務完成事件使用此門檻；失敗、等待輸入與權限請求會立即通知",
+      "feishuThresholdDesc": "僅任務完成事件使用此門檻；失敗、等待輸入與權限請求會立即通知", "remoteThreshold": "遠端通知長任務門檻", "remoteThresholdDesc": "僅任務完成事件使用此門檻；失敗、等待輸入與權限請求會立即通知",
       "threshold": { "min5": "5 分鐘", "min10": "10 分鐘", "min30": "30 分鐘", "hour1": "1 小時" },
       "events": {
         "completed": "長任務完成", "completedDesc": "任務時間超過飛書門檻後傳送完成卡片",
         "error": "任務失敗", "errorDesc": "程序或 Hook 發生錯誤時立即通知",
         "waiting": "等待輸入", "waitingDesc": "智慧體需要你回答問題時立即通知",
         "permission": "權限請求", "permissionDesc": "智慧體等待權限核准時立即通知"
+      },
+      "remote": {
+        "channelName": "遠端通知", "channelDesc": "將任務狀態投遞到已設定的遠端服務；可逐步接入多個服務提供者。",
+        "configured": "已設定", "notConfigured": "未設定", "configuration": "遠端通知設定", "provider": "通知服務",
+        "comingSoon": "即將支援", "providers": { "feishu": "飛書", "dingtalk": "釘釘", "wechat": "微信", "qq": "QQ", "telegram": "Telegram" },
+        "saved": "遠端通知設定已安全儲存", "cleared": "遠端通知設定已清除", "configureFirst": "請先儲存並測試此通知服務",
+        "loadFailed": "讀取遠端通知設定失敗：{{error}}", "saveFailed": "儲存遠端通知設定失敗：{{error}}", "clearFailed": "清除遠端通知設定失敗：{{error}}",
+        "testSent": "測試通知已傳送", "testFailed": "遠端通知測試失敗：{{error}}", "sendTest": "傳送測試", "clear": "清除設定", "clearConfirm": "確定清除目前通知服務設定嗎？"
       },
       "feishu": {
         "channelName": "飛書通知", "channelDesc": "透過群組自訂機器人 Webhook 推送長任務狀態卡片",

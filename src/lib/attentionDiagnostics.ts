@@ -1,7 +1,8 @@
 import type { AiAgentId } from "@/types";
+import type { RemoteNotificationProvider } from "@/lib/remoteNotifications";
 
 export type EventIngestOutcome = "accepted" | "duplicate" | "stale";
-export type NotificationChannel = "system" | "feishu";
+export type NotificationChannel = "system" | RemoteNotificationProvider;
 
 export type NotificationSuppressionReason =
   | "notifications-disabled"

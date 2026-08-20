@@ -1,13 +1,15 @@
 import type { StateCreator } from "zustand";
 import type {
   AppState,
-  FeishuNotificationEvent,
-  FeishuNotificationEventMap,
+  RemoteNotificationChannels,
+  RemoteNotificationEvent,
+  RemoteNotificationProvider,
   NotificationEvent,
   NotificationSoundMap,
   NotificationSoundType,
   SessionStreamEvent,
 } from "../types";
+import { createDefaultRemoteNotificationChannels } from "../../lib/remoteNotifications";
 import { mapStatusFromEvent } from "../utils/session";
 import { createDefaultWorkspace, syncWorkspaceSnapshot, normalizeWorkspace } from "../utils/workspace";
 
@@ -16,18 +18,20 @@ export interface NotificationSlice {
   notificationSoundEnabled: boolean;
   notificationSoundMap: NotificationSoundMap;
   notificationThresholdMs: number;
-  feishuNotificationEnabled: boolean;
-  feishuNotificationThresholdMs: number;
-  feishuNotificationEvents: FeishuNotificationEventMap;
+  remoteNotificationChannels: RemoteNotificationChannels;
   sessionEvents: SessionStreamEvent[];
   unreadTotal: number;
   setNotificationEnabled: (enabled: boolean) => void;
   setNotificationSoundEnabled: (enabled: boolean) => void;
   setNotificationSoundMap: (event: NotificationEvent, sound: NotificationSoundType) => void;
   setNotificationThreshold: (thresholdMs: number) => void;
-  setFeishuNotificationEnabled: (enabled: boolean) => void;
-  setFeishuNotificationThreshold: (thresholdMs: number) => void;
-  setFeishuNotificationEvent: (event: FeishuNotificationEvent, enabled: boolean) => void;
+  setRemoteNotificationEnabled: (provider: RemoteNotificationProvider, enabled: boolean) => void;
+  setRemoteNotificationThreshold: (provider: RemoteNotificationProvider, thresholdMs: number) => void;
+  setRemoteNotificationEvent: (
+    provider: RemoteNotificationProvider,
+    event: RemoteNotificationEvent,
+    enabled: boolean,
+  ) => void;
   pushSessionEvent: (event: SessionStreamEvent) => void;
   markSessionRead: (sessionId: string) => void;
   focusSessionFromEvent: (event: SessionStreamEvent) => void;
@@ -42,14 +46,7 @@ export const createNotificationSlice: StateCreator<AppState, [], [], Notificatio
     waiting: "pulse",
   },
   notificationThresholdMs: 10000,
-  feishuNotificationEnabled: false,
-  feishuNotificationThresholdMs: 300000,
-  feishuNotificationEvents: {
-    completed: true,
-    error: true,
-    waiting: true,
-    permission: true,
-  },
+  remoteNotificationChannels: createDefaultRemoteNotificationChannels(),
   sessionEvents: [],
   unreadTotal: 0,
   setNotificationEnabled: (enabled) => set({ notificationEnabled: enabled }),
@@ -59,12 +56,29 @@ export const createNotificationSlice: StateCreator<AppState, [], [], Notificatio
       notificationSoundMap: { ...state.notificationSoundMap, [event]: sound },
     })),
   setNotificationThreshold: (notificationThresholdMs) => set({ notificationThresholdMs }),
-  setFeishuNotificationEnabled: (feishuNotificationEnabled) => set({ feishuNotificationEnabled }),
-  setFeishuNotificationThreshold: (feishuNotificationThresholdMs) =>
-    set({ feishuNotificationThresholdMs }),
-  setFeishuNotificationEvent: (event, enabled) =>
+  setRemoteNotificationEnabled: (provider, enabled) =>
     set((state) => ({
-      feishuNotificationEvents: { ...state.feishuNotificationEvents, [event]: enabled },
+      remoteNotificationChannels: {
+        ...state.remoteNotificationChannels,
+        [provider]: { ...state.remoteNotificationChannels[provider], enabled },
+      },
+    })),
+  setRemoteNotificationThreshold: (provider, thresholdMs) =>
+    set((state) => ({
+      remoteNotificationChannels: {
+        ...state.remoteNotificationChannels,
+        [provider]: { ...state.remoteNotificationChannels[provider], thresholdMs },
+      },
+    })),
+  setRemoteNotificationEvent: (provider, event, enabled) =>
+    set((state) => ({
+      remoteNotificationChannels: {
+        ...state.remoteNotificationChannels,
+        [provider]: {
+          ...state.remoteNotificationChannels[provider],
+          events: { ...state.remoteNotificationChannels[provider].events, [event]: enabled },
+        },
+      },
     })),
   pushSessionEvent: (event) => {
     let outcome: "accepted" | "duplicate" | "stale" = "accepted";

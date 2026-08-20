@@ -11,6 +11,7 @@ import "dayjs/locale/zh-tw";
 import { useTranslation } from "react-i18next";
 import { sendSessionNotification } from "@/lib/api";
 import { getAgentDisplayName, getAgentIdsWithCapability } from "@/lib/agents";
+import { REMOTE_NOTIFICATION_PROVIDERS } from "@/lib/remoteNotifications";
 import { playNotificationSound } from "@/lib/sounds";
 import { useAppStore } from "@/store";
 
@@ -36,7 +37,12 @@ export function NotificationDiagnostics() {
   const soundMap = useAppStore((state) => state.notificationSoundMap);
   const recordNotificationDelivery = useAppStore((state) => state.recordNotificationDelivery);
   const systemDelivery = diagnostics.lastNotifications?.system ?? diagnostics.lastNotification;
-  const feishuDelivery = diagnostics.lastNotifications?.feishu;
+  const remoteProvider = REMOTE_NOTIFICATION_PROVIDERS
+    .map(({ id }) => id)
+    .find((provider) => diagnostics.lastNotifications?.[provider]);
+  const remoteDelivery = remoteProvider
+    ? diagnostics.lastNotifications?.[remoteProvider]
+    : undefined;
   const configuredHookCount = DIAGNOSTIC_AGENTS.filter(
     (agentId) => diagnostics.hooks[agentId]?.configured
   ).length;
@@ -170,22 +176,26 @@ export function NotificationDiagnostics() {
 
       <div className="border-t py-2" style={{ borderColor: "var(--cs-border-card)" }}>
         <div className="flex items-center justify-between gap-3">
-          <span>{t("settings.notifications.feishu.channelName")}</span>
+          <span>
+            {remoteProvider
+              ? t(`settings.notifications.remote.providers.${remoteProvider}`)
+              : t("settings.notifications.remote.channelName")}
+          </span>
           <span className="truncate" style={{ color: "var(--cs-text-primary)" }}>
-            {feishuDelivery
-              ? t(`sidebar.attentionDiagnostics.delivery.${feishuDelivery.status}`)
+            {remoteDelivery
+              ? t(`sidebar.attentionDiagnostics.delivery.${remoteDelivery.status}`)
               : t("sidebar.attentionDiagnostics.none")}
           </span>
         </div>
-        {feishuDelivery?.reason && (
+        {remoteDelivery?.reason && (
           <div className="mt-1 text-right text-[11px]" style={{ color: "#d99b2b" }}>
-            {t(`sidebar.attentionDiagnostics.reason.${feishuDelivery.reason}`)}
+            {t(`sidebar.attentionDiagnostics.reason.${remoteDelivery.reason}`)}
           </div>
         )}
-        {feishuDelivery?.error && (
-          <Tooltip title={feishuDelivery.error}>
+        {remoteDelivery?.error && (
+          <Tooltip title={remoteDelivery.error}>
             <div className="mt-1 truncate text-right text-[11px]" style={{ color: "#e06060" }}>
-              {feishuDelivery.error}
+              {remoteDelivery.error}
             </div>
           </Tooltip>
         )}

@@ -3,16 +3,20 @@ import { NotificationOutlined, PlayCircleOutlined, SoundOutlined } from "@ant-de
 import { Button, Input, message, Popconfirm, Select, Spin, Switch, Tag } from "antd";
 import { useTranslation } from "react-i18next";
 import {
-  clearFeishuNotificationCredentials,
-  getFeishuNotificationConfig,
-  saveFeishuNotificationCredentials,
-  sendFeishuNotification,
-  type FeishuCredentialStatus,
+  clearRemoteNotificationCredentials,
+  getRemoteNotificationConfig,
+  saveRemoteNotificationCredentials,
+  sendRemoteNotification,
+  type RemoteNotificationCredentialStatus,
 } from "@/lib/api";
+import {
+  REMOTE_NOTIFICATION_PROVIDERS,
+  type RemoteNotificationProvider,
+} from "@/lib/remoteNotifications";
 import { playNotificationSound, SOUND_OPTIONS } from "@/lib/sounds";
 import {
   useAppStore,
-  type FeishuNotificationEvent,
+  type RemoteNotificationEvent,
   type NotificationEvent,
   type NotificationSoundType,
 } from "@/store";
@@ -71,20 +75,19 @@ export function NotificationsPage() {
   const soundEnabled = useAppStore((state) => state.notificationSoundEnabled);
   const soundMap = useAppStore((state) => state.notificationSoundMap);
   const notificationThresholdMs = useAppStore((state) => state.notificationThresholdMs);
-  const feishuEnabled = useAppStore((state) => state.feishuNotificationEnabled);
-  const feishuThresholdMs = useAppStore((state) => state.feishuNotificationThresholdMs);
-  const feishuEvents = useAppStore((state) => state.feishuNotificationEvents);
+  const remoteNotificationChannels = useAppStore((state) => state.remoteNotificationChannels);
   const setNotificationEnabled = useAppStore((state) => state.setNotificationEnabled);
   const setSoundEnabled = useAppStore((state) => state.setNotificationSoundEnabled);
   const setSoundMap = useAppStore((state) => state.setNotificationSoundMap);
   const setNotificationThreshold = useAppStore((state) => state.setNotificationThreshold);
-  const setFeishuEnabled = useAppStore((state) => state.setFeishuNotificationEnabled);
-  const setFeishuThreshold = useAppStore((state) => state.setFeishuNotificationThreshold);
-  const setFeishuEvent = useAppStore((state) => state.setFeishuNotificationEvent);
-  const [credentialStatus, setCredentialStatus] = useState<FeishuCredentialStatus | null>(null);
+  const setRemoteEnabled = useAppStore((state) => state.setRemoteNotificationEnabled);
+  const setRemoteThreshold = useAppStore((state) => state.setRemoteNotificationThreshold);
+  const setRemoteEvent = useAppStore((state) => state.setRemoteNotificationEvent);
+  const [selectedProvider, setSelectedProvider] = useState<RemoteNotificationProvider>("feishu");
+  const [credentialStatus, setCredentialStatus] = useState<RemoteNotificationCredentialStatus | null>(null);
   const [credentialLoading, setCredentialLoading] = useState(true);
   const [credentialSaving, setCredentialSaving] = useState(false);
-  const [testingFeishu, setTestingFeishu] = useState(false);
+  const [testingRemote, setTestingRemote] = useState(false);
   const [webhookUrl, setWebhookUrl] = useState("");
   const [signingSecret, setSigningSecret] = useState("");
   const [signingSecretTouched, setSigningSecretTouched] = useState(false);
@@ -92,13 +95,14 @@ export function NotificationsPage() {
   useEffect(() => {
     let cancelled = false;
     setCredentialLoading(true);
-    getFeishuNotificationConfig()
+    setCredentialStatus(null);
+    getRemoteNotificationConfig(selectedProvider)
       .then((status) => {
         if (!cancelled) setCredentialStatus(status);
       })
       .catch((error) => {
         if (!cancelled) {
-          message.error(t("settings.notifications.feishu.loadFailed", { error: String(error) }));
+          message.error(t("settings.notifications.remote.loadFailed", { error: String(error) }));
         }
       })
       .finally(() => {
@@ -107,7 +111,7 @@ export function NotificationsPage() {
     return () => {
       cancelled = true;
     };
-  }, [t]);
+  }, [selectedProvider, t]);
 
   const systemThresholdOptions = [
     { label: t("settings.notificationThreshold.immediate"), value: 0 },
@@ -116,7 +120,7 @@ export function NotificationsPage() {
     { label: t("settings.notificationThreshold.sec30"), value: 30000 },
     { label: t("settings.notificationThreshold.min1"), value: 60000 },
   ];
-  const feishuThresholdOptions = [
+  const remoteThresholdOptions = [
     { label: t("settings.notificationThreshold.min1"), value: 60000 },
     { label: t("settings.notifications.threshold.min5"), value: 300000 },
     { label: t("settings.notifications.threshold.min10"), value: 600000 },
@@ -132,7 +136,7 @@ export function NotificationsPage() {
     { event: "error", label: t("sounds.error") },
     { event: "waiting", label: t("sounds.waitingEvent") },
   ];
-  const feishuEventEntries: { event: FeishuNotificationEvent; label: string; desc: string }[] = [
+  const remoteEventEntries: { event: RemoteNotificationEvent; label: string; desc: string }[] = [
     {
       event: "completed",
       label: t("settings.notifications.events.completed"),
@@ -159,7 +163,8 @@ export function NotificationsPage() {
     if (!webhookUrl.trim() || credentialSaving) return;
     setCredentialSaving(true);
     try {
-      const status = await saveFeishuNotificationCredentials(
+      const status = await saveRemoteNotificationCredentials(
+        selectedProvider,
         webhookUrl.trim(),
         signingSecretTouched ? signingSecret : null
       );
@@ -167,9 +172,9 @@ export function NotificationsPage() {
       setWebhookUrl("");
       setSigningSecret("");
       setSigningSecretTouched(false);
-      message.success(t("settings.notifications.feishu.saved"));
+      message.success(t("settings.notifications.remote.saved"));
     } catch (error) {
-      message.error(t("settings.notifications.feishu.saveFailed", { error: String(error) }));
+      message.error(t("settings.notifications.remote.saveFailed", { error: String(error) }));
     } finally {
       setCredentialSaving(false);
     }
@@ -177,23 +182,23 @@ export function NotificationsPage() {
 
   async function clearCredentials() {
     try {
-      const status = await clearFeishuNotificationCredentials();
+      const status = await clearRemoteNotificationCredentials(selectedProvider);
       setCredentialStatus(status);
-      setFeishuEnabled(false);
+      setRemoteEnabled(selectedProvider, false);
       setWebhookUrl("");
       setSigningSecret("");
       setSigningSecretTouched(false);
-      message.success(t("settings.notifications.feishu.cleared"));
+      message.success(t("settings.notifications.remote.cleared"));
     } catch (error) {
-      message.error(t("settings.notifications.feishu.clearFailed", { error: String(error) }));
+      message.error(t("settings.notifications.remote.clearFailed", { error: String(error) }));
     }
   }
 
-  async function testFeishu() {
-    if (!credentialStatus?.configured || testingFeishu) return;
-    setTestingFeishu(true);
+  async function testRemoteNotification() {
+    if (!credentialStatus?.configured || testingRemote) return;
+    setTestingRemote(true);
     try {
-      await sendFeishuNotification({
+      await sendRemoteNotification(selectedProvider, {
         eventType: "test",
         title: t("settings.notifications.feishu.testCardTitle"),
         fields: [
@@ -207,21 +212,23 @@ export function NotificationsPage() {
           },
         ],
       });
-      message.success(t("settings.notifications.feishu.testSent"));
+      message.success(t("settings.notifications.remote.testSent"));
     } catch (error) {
-      message.error(t("settings.notifications.feishu.testFailed", { error: String(error) }));
+      message.error(t("settings.notifications.remote.testFailed", { error: String(error) }));
     } finally {
-      setTestingFeishu(false);
+      setTestingRemote(false);
     }
   }
 
-  function changeFeishuEnabled(enabled: boolean) {
+  function changeRemoteEnabled(enabled: boolean) {
     if (enabled && !credentialStatus?.configured) {
-      message.warning(t("settings.notifications.feishu.configureFirst"));
+      message.warning(t("settings.notifications.remote.configureFirst"));
       return;
     }
-    setFeishuEnabled(enabled);
+    setRemoteEnabled(selectedProvider, enabled);
   }
+
+  const selectedChannel = remoteNotificationChannels[selectedProvider];
 
   return (
     <>
@@ -238,8 +245,8 @@ export function NotificationsPage() {
           <Switch checked={notificationEnabled} onChange={setNotificationEnabled} />
         </NotificationRow>
         <NotificationRow
-          label={t("settings.notifications.feishu.channelName")}
-          desc={t("settings.notifications.feishu.channelDesc")}
+          label={t("settings.notifications.remote.channelName")}
+          desc={t("settings.notifications.remote.channelDesc")}
         >
           <div className="flex items-center gap-3">
             {credentialLoading ? (
@@ -248,15 +255,15 @@ export function NotificationsPage() {
               <Tag color={credentialStatus?.configured ? "success" : "default"}>
                 {t(
                   credentialStatus?.configured
-                    ? "settings.notifications.feishu.configured"
-                    : "settings.notifications.feishu.notConfigured"
+                    ? "settings.notifications.remote.configured"
+                    : "settings.notifications.remote.notConfigured"
                 )}
               </Tag>
             )}
             <Switch
-              checked={feishuEnabled}
+              checked={selectedChannel.enabled}
               disabled={credentialLoading}
-              onChange={changeFeishuEnabled}
+              onChange={changeRemoteEnabled}
             />
           </div>
         </NotificationRow>
@@ -276,29 +283,46 @@ export function NotificationsPage() {
           />
         </NotificationRow>
         <NotificationRow
-          label={t("settings.notifications.feishuThreshold")}
-          desc={t("settings.notifications.feishuThresholdDesc")}
+          label={t("settings.notifications.remoteThreshold")}
+          desc={t("settings.notifications.remoteThresholdDesc")}
         >
           <Select
             size="small"
-            value={feishuThresholdMs}
-            options={feishuThresholdOptions}
-            onChange={setFeishuThreshold}
+            value={selectedChannel.thresholdMs}
+            options={remoteThresholdOptions}
+            onChange={(value) => setRemoteThreshold(selectedProvider, value)}
             style={{ width: 140 }}
           />
         </NotificationRow>
-        {feishuEventEntries.map(({ event, label, desc }) => (
+        {remoteEventEntries.map(({ event, label, desc }) => (
           <NotificationRow key={event} label={label} desc={desc}>
             <Switch
-              checked={feishuEvents[event]}
-              onChange={(enabled) => setFeishuEvent(event, enabled)}
+              checked={selectedChannel.events[event]}
+              onChange={(enabled) => setRemoteEvent(selectedProvider, event, enabled)}
             />
           </NotificationRow>
         ))}
       </NotificationSection>
 
-      <NotificationSection title={t("settings.notifications.feishu.configuration")}>
+      <NotificationSection title={t("settings.notifications.remote.configuration")}>
         <div className="space-y-4 px-4 py-4">
+          <div>
+            <div className="mb-1.5 text-xs" style={{ color: "var(--cs-text-secondary)" }}>
+              {t("settings.notifications.remote.provider")}
+            </div>
+            <Select
+              value={selectedProvider}
+              options={REMOTE_NOTIFICATION_PROVIDERS.map(({ id, supported }) => ({
+                value: id,
+                disabled: !supported,
+                label: `${t(`settings.notifications.remote.providers.${id}`)}${
+                  supported ? "" : ` · ${t("settings.notifications.remote.comingSoon")}`
+                }`,
+              }))}
+              onChange={setSelectedProvider}
+              style={{ width: 240 }}
+            />
+          </div>
           <div
             className="rounded-lg px-3 py-2 text-[11px] leading-5"
             style={{ background: "var(--cs-bg-hover)", color: "var(--cs-text-secondary)" }}
@@ -311,7 +335,7 @@ export function NotificationsPage() {
                 {t("settings.notifications.feishu.currentWebhook")}
               </span>
               <span className="font-mono" style={{ color: "var(--cs-text-primary)" }}>
-                {credentialStatus.webhookHint}
+                {credentialStatus.endpointHint}
               </span>
             </div>
           )}
@@ -361,19 +385,19 @@ export function NotificationsPage() {
               </Button>
               <Button
                 icon={<NotificationOutlined />}
-                loading={testingFeishu}
+                loading={testingRemote}
                 disabled={!credentialStatus?.configured}
-                onClick={() => void testFeishu()}
+                onClick={() => void testRemoteNotification()}
               >
-                {t("settings.notifications.feishu.sendTest")}
+                {t("settings.notifications.remote.sendTest")}
               </Button>
             </div>
             {credentialStatus?.configured && (
               <Popconfirm
-                title={t("settings.notifications.feishu.clearConfirm")}
+                title={t("settings.notifications.remote.clearConfirm")}
                 onConfirm={() => void clearCredentials()}
               >
-                <Button danger>{t("settings.notifications.feishu.clear")}</Button>
+                <Button danger>{t("settings.notifications.remote.clear")}</Button>
               </Popconfirm>
             )}
           </div>

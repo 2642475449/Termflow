@@ -989,50 +989,57 @@ export async function sendSessionNotification(
 ): Promise<void> {
   await invoke("send_session_notification", { title, body, sessionId, projectPath });
 }
-export interface FeishuCredentialStatus {
+export interface RemoteNotificationCredentialStatus {
   configured: boolean;
-  webhookHint: string | null;
+  endpointHint: string | null;
   signingSecretConfigured: boolean;
   secureStorageAvailable: boolean;
 }
 
-export interface FeishuNotificationField {
+export interface RemoteNotificationField {
   label: string;
   value: string;
 }
 
-export interface FeishuNotificationPayload {
+export interface RemoteNotificationPayload {
   eventType: "completed" | "error" | "waiting" | "permission" | "test";
   title: string;
-  fields: FeishuNotificationField[];
+  fields: RemoteNotificationField[];
 }
 
-export interface FeishuSendResult {
+export interface RemoteNotificationSendResult {
   deliveredAt: number;
 }
 
-export async function getFeishuNotificationConfig(): Promise<FeishuCredentialStatus> {
-  return await invoke("get_feishu_notification_config");
+export async function getRemoteNotificationConfig(
+  provider: string,
+): Promise<RemoteNotificationCredentialStatus> {
+  return await invoke("get_remote_notification_config", { provider });
 }
 
-export async function saveFeishuNotificationCredentials(
+export async function saveRemoteNotificationCredentials(
+  provider: string,
   webhookUrl: string,
   signingSecret?: string | null
-): Promise<FeishuCredentialStatus> {
-  return await invoke("save_feishu_notification_credentials", {
+): Promise<RemoteNotificationCredentialStatus> {
+  return await invoke("save_remote_notification_credentials", {
+    provider,
     webhookUrl,
     signingSecret,
   });
 }
 
-export async function clearFeishuNotificationCredentials(): Promise<FeishuCredentialStatus> {
-  return await invoke("clear_feishu_notification_credentials");
+export async function clearRemoteNotificationCredentials(
+  provider: string,
+): Promise<RemoteNotificationCredentialStatus> {
+  return await invoke("clear_remote_notification_credentials", { provider });
 }
 
-export async function sendFeishuNotification(
-  payload: FeishuNotificationPayload
-): Promise<FeishuSendResult> {
-  return await invoke("send_feishu_notification", { payload });
+export async function sendRemoteNotification(
+  provider: string,
+  payload: RemoteNotificationPayload,
+): Promise<RemoteNotificationSendResult> {
+  return await invoke("send_remote_notification", { provider, payload });
 }
 
 export async function saveClipboardImage(

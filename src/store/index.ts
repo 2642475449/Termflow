@@ -50,6 +50,10 @@ import {
 } from "@/lib/sessions";
 import { normalizeArchivedSessionGroups } from "@/lib/archivedSessions";
 import {
+  createDefaultRemoteNotificationChannels,
+  type RemoteNotificationProvider,
+} from "@/lib/remoteNotifications";
+import {
   DEFAULT_MIMO_AUTH_MODE,
   normalizeMimoAuthMode,
   type MimoAuthMode,
@@ -82,8 +86,15 @@ export type NotificationSoundType =
   | "aurora"
   | "hush";
 export type NotificationEvent = "taskComplete" | "error" | "waiting";
-export type FeishuNotificationEvent = "completed" | "error" | "waiting" | "permission";
-export type FeishuNotificationEventMap = Record<FeishuNotificationEvent, boolean>;
+export type RemoteNotificationEvent = "completed" | "error" | "waiting" | "permission";
+export type RemoteNotificationEventMap = Record<RemoteNotificationEvent, boolean>;
+export interface RemoteNotificationChannel {
+  enabled: boolean;
+  thresholdMs: number;
+  events: RemoteNotificationEventMap;
+}
+export type RemoteNotificationChannels = Record<RemoteNotificationProvider, RemoteNotificationChannel>;
+export type { RemoteNotificationProvider } from "@/lib/remoteNotifications";
 export type SessionRuntimeStatus = "starting" | "running" | "waiting" | "completed" | "error" | "stopped";
 export type VoiceInputTarget = "terminal" | "system";
 export type DashScopeRegion = "beijing" | "singapore" | "us";
@@ -257,9 +268,7 @@ export function getPersistentSettingsSnapshot(): PersistentSettings {
     notificationSoundEnabled: state.notificationSoundEnabled,
     notificationSoundMap: state.notificationSoundMap,
     notificationThresholdMs: state.notificationThresholdMs,
-    feishuNotificationEnabled: state.feishuNotificationEnabled,
-    feishuNotificationThresholdMs: state.feishuNotificationThresholdMs,
-    feishuNotificationEvents: state.feishuNotificationEvents,
+    remoteNotifications: state.remoteNotificationChannels,
     asrApiKey: state.asrApiKey,
     asrAuthMode: state.asrAuthMode,
     asrModel: state.asrModel,
@@ -312,17 +321,7 @@ export function applyPersistentSettingsToStore(settings: PersistentSettings) {
       waiting: normalizeNotificationSoundValue(settings.notificationSoundMap?.waiting),
     },
     notificationThresholdMs: Math.max(0, Math.round(settings.notificationThresholdMs ?? 10000)),
-    feishuNotificationEnabled: settings.feishuNotificationEnabled ?? false,
-    feishuNotificationThresholdMs: Math.max(
-      0,
-      Math.round(settings.feishuNotificationThresholdMs ?? 300000)
-    ),
-    feishuNotificationEvents: {
-      completed: settings.feishuNotificationEvents?.completed ?? true,
-      error: settings.feishuNotificationEvents?.error ?? true,
-      waiting: settings.feishuNotificationEvents?.waiting ?? true,
-      permission: settings.feishuNotificationEvents?.permission ?? true,
-    },
+    remoteNotificationChannels: normalizeRemoteNotificationChannels(settings),
     asrApiKey: settings.asrApiKey ?? "",
     asrAuthMode: normalizeMimoAuthMode(settings.asrAuthMode, settings.asrApiKey),
     asrModel: normalizeAsrModel(settings.asrModel),
@@ -331,6 +330,43 @@ export function applyPersistentSettingsToStore(settings: PersistentSettings) {
     voiceInputTarget: normalizeVoiceInputTarget(settings.voiceInputTarget),
     voiceTriggerVisible: settings.voiceTriggerVisible ?? true,
   });
+}
+
+function normalizeRemoteNotificationChannels(settings: PersistentSettings): RemoteNotificationChannels {
+  const channels = createDefaultRemoteNotificationChannels();
+  for (const provider of Object.keys(channels) as RemoteNotificationProvider[]) {
+    const saved = settings.remoteNotifications?.[provider];
+    if (!saved) continue;
+    channels[provider] = {
+      enabled: saved.enabled ?? channels[provider].enabled,
+      thresholdMs: Math.max(0, Math.round(saved.thresholdMs ?? channels[provider].thresholdMs)),
+      events: {
+        completed: saved.events?.completed ?? channels[provider].events.completed,
+        error: saved.events?.error ?? channels[provider].events.error,
+        waiting: saved.events?.waiting ?? channels[provider].events.waiting,
+        permission: saved.events?.permission ?? channels[provider].events.permission,
+      },
+    };
+  }
+
+  // Persisted versions before remote notifications stored the only channel as
+  // three Feishu-specific fields. Retain the user's existing preferences.
+  if (!settings.remoteNotifications?.feishu) {
+    channels.feishu = {
+      enabled: settings.feishuNotificationEnabled ?? channels.feishu.enabled,
+      thresholdMs: Math.max(
+        0,
+        Math.round(settings.feishuNotificationThresholdMs ?? channels.feishu.thresholdMs),
+      ),
+      events: {
+        completed: settings.feishuNotificationEvents?.completed ?? channels.feishu.events.completed,
+        error: settings.feishuNotificationEvents?.error ?? channels.feishu.events.error,
+        waiting: settings.feishuNotificationEvents?.waiting ?? channels.feishu.events.waiting,
+        permission: settings.feishuNotificationEvents?.permission ?? channels.feishu.events.permission,
+      },
+    };
+  }
+  return channels;
 }
 
 function normalizeAgentPermissionDefaults(value: unknown): AgentPermissionDefaults {
@@ -598,9 +634,7 @@ interface AppState {
   notificationSoundEnabled: boolean;
   notificationSoundMap: NotificationSoundMap;
   notificationThresholdMs: number;
-  feishuNotificationEnabled: boolean;
-  feishuNotificationThresholdMs: number;
-  feishuNotificationEvents: FeishuNotificationEventMap;
+  remoteNotificationChannels: RemoteNotificationChannels;
   sessionEvents: SessionStreamEvent[];
   projectAttentionItems: Record<string, AttentionItem[]>;
   attentionDiagnostics: AttentionDiagnostics;
@@ -702,9 +736,13 @@ interface AppState {
   setNotificationSoundEnabled: (enabled: boolean) => void;
   setNotificationSoundMap: (event: NotificationEvent, sound: NotificationSoundType) => void;
   setNotificationThreshold: (thresholdMs: number) => void;
-  setFeishuNotificationEnabled: (enabled: boolean) => void;
-  setFeishuNotificationThreshold: (thresholdMs: number) => void;
-  setFeishuNotificationEvent: (event: FeishuNotificationEvent, enabled: boolean) => void;
+  setRemoteNotificationEnabled: (provider: RemoteNotificationProvider, enabled: boolean) => void;
+  setRemoteNotificationThreshold: (provider: RemoteNotificationProvider, thresholdMs: number) => void;
+  setRemoteNotificationEvent: (
+    provider: RemoteNotificationProvider,
+    event: RemoteNotificationEvent,
+    enabled: boolean,
+  ) => void;
   pushSessionEvent: (event: SessionStreamEvent) => "accepted" | "duplicate" | "stale";
   markSessionRead: (sessionId: string) => void;
   focusSessionFromEvent: (event: SessionStreamEvent) => void;
@@ -1491,14 +1529,7 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
         waiting: "pulse",
       },
       notificationThresholdMs: 10000,
-      feishuNotificationEnabled: false,
-      feishuNotificationThresholdMs: 300000,
-      feishuNotificationEvents: {
-        completed: true,
-        error: true,
-        waiting: true,
-        permission: true,
-      },
+      remoteNotificationChannels: createDefaultRemoteNotificationChannels(),
       sessionEvents: [],
       projectAttentionItems: {},
       attentionDiagnostics: { hooks: {} },
@@ -2344,13 +2375,29 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
           notificationSoundMap: { ...state.notificationSoundMap, [event]: sound },
         })),
       setNotificationThreshold: (notificationThresholdMs) => set({ notificationThresholdMs }),
-      setFeishuNotificationEnabled: (feishuNotificationEnabled) =>
-        set({ feishuNotificationEnabled }),
-      setFeishuNotificationThreshold: (feishuNotificationThresholdMs) =>
-        set({ feishuNotificationThresholdMs }),
-      setFeishuNotificationEvent: (event, enabled) =>
+      setRemoteNotificationEnabled: (provider, enabled) =>
         set((state) => ({
-          feishuNotificationEvents: { ...state.feishuNotificationEvents, [event]: enabled },
+          remoteNotificationChannels: {
+            ...state.remoteNotificationChannels,
+            [provider]: { ...state.remoteNotificationChannels[provider], enabled },
+          },
+        })),
+      setRemoteNotificationThreshold: (provider, thresholdMs) =>
+        set((state) => ({
+          remoteNotificationChannels: {
+            ...state.remoteNotificationChannels,
+            [provider]: { ...state.remoteNotificationChannels[provider], thresholdMs },
+          },
+        })),
+      setRemoteNotificationEvent: (provider, event, enabled) =>
+        set((state) => ({
+          remoteNotificationChannels: {
+            ...state.remoteNotificationChannels,
+            [provider]: {
+              ...state.remoteNotificationChannels[provider],
+              events: { ...state.remoteNotificationChannels[provider].events, [event]: enabled },
+            },
+          },
         })),
       upsertGitCloneTask: (task) =>
         set((state) => {

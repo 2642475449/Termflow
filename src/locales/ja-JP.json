@@ -951,13 +951,21 @@
     "notifications": {
       "headerDesc": "タスクイベントの通知先、通知条件、サウンド、配信状態を管理します。",
       "channels": "通知チャネル", "triggerPolicy": "通知条件", "systemThreshold": "システム通知のしきい値", "feishuThreshold": "Feishu 長時間タスクのしきい値",
-      "feishuThresholdDesc": "完了通知だけに適用され、エラー・入力待ち・権限要求は直ちに通知されます",
+      "feishuThresholdDesc": "完了通知だけに適用され、エラー・入力待ち・権限要求は直ちに通知されます", "remoteThreshold": "リモート通知の長時間タスクしきい値", "remoteThresholdDesc": "完了通知だけに適用され、エラー・入力待ち・権限要求は直ちに通知されます",
       "threshold": { "min5": "5 分", "min10": "10 分", "min30": "30 分", "hour1": "1 時間" },
       "events": {
         "completed": "長時間タスクの完了", "completedDesc": "実行時間が Feishu のしきい値を超えた場合に完了カードを送信",
         "error": "タスク失敗", "errorDesc": "プロセスまたは Hook のエラーを直ちに通知",
         "waiting": "入力待ち", "waitingDesc": "エージェントが回答を必要とするときに通知",
         "permission": "権限要求", "permissionDesc": "エージェントが承認を待っているときに通知"
+      },
+      "remote": {
+        "channelName": "リモート通知", "channelDesc": "設定済みのリモートサービスへタスクの状態を送信します。複数のサービスを順次追加できます。",
+        "configured": "設定済み", "notConfigured": "未設定", "configuration": "リモート通知の設定", "provider": "通知サービス",
+        "comingSoon": "対応予定", "providers": { "feishu": "Feishu", "dingtalk": "DingTalk", "wechat": "WeChat", "qq": "QQ", "telegram": "Telegram" },
+        "saved": "リモート通知の設定を安全に保存しました", "cleared": "リモート通知の設定を消去しました", "configureFirst": "先にこの通知サービスを保存してテストしてください",
+        "loadFailed": "リモート通知の設定読み込みに失敗しました：{{error}}", "saveFailed": "リモート通知の設定保存に失敗しました：{{error}}", "clearFailed": "リモート通知の設定消去に失敗しました：{{error}}",
+        "testSent": "テスト通知を送信しました", "testFailed": "リモート通知テストに失敗しました：{{error}}", "sendTest": "テスト送信", "clear": "設定を消去", "clearConfirm": "現在の通知サービス設定を消去しますか？"
       },
       "feishu": {
         "channelName": "Feishu 通知", "channelDesc": "グループのカスタム Bot Webhook で長時間タスクの状態カードを送信",

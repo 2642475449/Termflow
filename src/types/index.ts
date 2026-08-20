@@ -14,11 +14,17 @@ export interface PersistentNotificationSoundMap {
   waiting: string;
 }
 
-export interface PersistentFeishuNotificationEvents {
+export interface PersistentRemoteNotificationEvents {
   completed: boolean;
   error: boolean;
   waiting: boolean;
   permission: boolean;
+}
+
+export interface PersistentRemoteNotificationChannel {
+  enabled: boolean;
+  thresholdMs: number;
+  events: PersistentRemoteNotificationEvents;
 }
 
 export interface GitCommitMessageProfile {
@@ -47,9 +53,13 @@ export interface PersistentSettings {
   notificationSoundEnabled: boolean;
   notificationSoundMap: PersistentNotificationSoundMap;
   notificationThresholdMs: number;
-  feishuNotificationEnabled: boolean;
-  feishuNotificationThresholdMs: number;
-  feishuNotificationEvents: PersistentFeishuNotificationEvents;
+  remoteNotifications?: Partial<Record<"feishu" | "dingtalk" | "wechat" | "qq" | "telegram", PersistentRemoteNotificationChannel>>;
+  /** @deprecated Migrated to remoteNotifications.feishu when settings are loaded. */
+  feishuNotificationEnabled?: boolean;
+  /** @deprecated Migrated to remoteNotifications.feishu when settings are loaded. */
+  feishuNotificationThresholdMs?: number;
+  /** @deprecated Migrated to remoteNotifications.feishu when settings are loaded. */
+  feishuNotificationEvents?: PersistentRemoteNotificationEvents;
   asrApiKey: string;
   asrAuthMode: string;
   asrModel: string;

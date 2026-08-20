@@ -108,9 +108,7 @@ function App() {
   const notificationSoundEnabled = useAppStore((s) => s.notificationSoundEnabled);
   const notificationSoundMap = useAppStore((s) => s.notificationSoundMap);
   const notificationThresholdMs = useAppStore((s) => s.notificationThresholdMs);
-  const feishuNotificationEnabled = useAppStore((s) => s.feishuNotificationEnabled);
-  const feishuNotificationThresholdMs = useAppStore((s) => s.feishuNotificationThresholdMs);
-  const feishuNotificationEvents = useAppStore((s) => s.feishuNotificationEvents);
+  const remoteNotificationChannels = useAppStore((s) => s.remoteNotificationChannels);
   const asrApiKey = useAppStore((s) => s.asrApiKey);
   const asrAuthMode = useAppStore((s) => s.asrAuthMode);
   const asrModel = useAppStore((s) => s.asrModel);
@@ -163,9 +161,7 @@ function App() {
       notificationSoundEnabled,
       notificationSoundMap,
       notificationThresholdMs,
-      feishuNotificationEnabled,
-      feishuNotificationThresholdMs,
-      feishuNotificationEvents,
+      remoteNotifications: remoteNotificationChannels,
       asrApiKey,
       asrAuthMode,
       asrModel,
@@ -188,9 +184,7 @@ function App() {
       notificationSoundEnabled,
       notificationSoundMap,
       notificationThresholdMs,
-      feishuNotificationEnabled,
-      feishuNotificationThresholdMs,
-      feishuNotificationEvents,
+      remoteNotificationChannels,
       agentPermissionDefaults,
       startupRestoreLastProject,
       projectOpenBehavior,

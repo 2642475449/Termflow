@@ -19,7 +19,7 @@ struct FeishuCredentials {
 #[serde(rename_all = "camelCase")]
 pub struct FeishuCredentialStatus {
     configured: bool,
-    webhook_hint: Option<String>,
+    endpoint_hint: Option<String>,
     signing_secret_configured: bool,
     secure_storage_available: bool,
 }
@@ -104,7 +104,7 @@ fn status_from_credentials(
 ) -> FeishuCredentialStatus {
     FeishuCredentialStatus {
         configured: credentials.is_some(),
-        webhook_hint: credentials.map(|value| mask_webhook(&value.webhook_url)),
+        endpoint_hint: credentials.map(|value| mask_webhook(&value.webhook_url)),
         signing_secret_configured: credentials
             .and_then(|value| value.signing_secret.as_ref())
             .is_some_and(|value| !value.is_empty()),
