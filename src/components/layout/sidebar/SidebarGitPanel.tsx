@@ -558,8 +558,13 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
       setDiscardConfirmVisible(false);
       setDiscardConfirmFiles([]);
       await loadGitData();
-    } catch {
-      message.error(t("sidebar.gitDiscardFailed"));
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      message.error(
+        detail && detail !== "[object Object]"
+          ? `${t("sidebar.gitDiscardFailed")}: ${detail}`
+          : t("sidebar.gitDiscardFailed"),
+      );
       // 失败时回滚
       await loadGitData();
     } finally {

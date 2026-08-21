@@ -108,8 +108,7 @@ fn git_discard_changes_sync(project_path: String, files: Vec<String>) -> Result<
         }
     }
 
-    let mut checkout_opts = git2::build::CheckoutBuilder::new();
-    let mut has_checkout_target = false;
+    let mut tracked_paths = Vec::new();
     for file in &files {
         let status = status_map
             .get(file.as_str())
@@ -129,14 +128,66 @@ fn git_discard_changes_sync(project_path: String, files: Vec<String>) -> Result<
             continue;
         }
 
-        checkout_opts.path(file);
-        has_checkout_target = true;
+        // `StatusEntry::path` is the canonical path for the current worktree
+        // change. Ignore an old rename path passed by the UI: restoring it can
+        // make libgit2 report success without touching the actual file.
+        if status != git2::Status::CURRENT {
+            tracked_paths.push(file.as_str());
+        }
     }
 
-    if has_checkout_target {
-        // Restore the working tree from the index so staged content is preserved.
-        repo.checkout_index(None, Some(checkout_opts.force()))
-            .map_err(|e| format!("丢弃更改失败: {}", e))?;
+    if !tracked_paths.is_empty() {
+        // Restore the working tree from the index, retaining any staged change.
+        // Use Git itself instead of libgit2's selective checkout: on Windows the
+        // latter can return success while a path was not actually updated.
+        let output = git_command()
+            .args(["restore", "--worktree", "--"])
+            .args(&tracked_paths)
+            .current_dir(crate::path_utils::normalize_input_path(&project_path))
+            .output()
+            .map_err(|e| format!("执行 git restore 失败: {}", e))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            return Err(if !stderr.is_empty() {
+                stderr
+            } else if !stdout.is_empty() {
+                stdout
+            } else {
+                "丢弃更改失败".to_string()
+            });
+        }
+
+        let mut verify_opts = git2::StatusOptions::new();
+        verify_opts
+            .include_untracked(true)
+            .include_ignored(false)
+            .recurse_untracked_dirs(true);
+        let remaining_paths: Vec<String> = repo
+            .statuses(Some(&mut verify_opts))
+            .map_err(|e| format!("验证丢弃结果失败: {}", e))?
+            .iter()
+            .filter_map(|entry| {
+                let path = entry.path()?;
+                let has_worktree_change = entry.status().intersects(
+                    git2::Status::WT_NEW
+                        | git2::Status::WT_MODIFIED
+                        | git2::Status::WT_DELETED
+                        | git2::Status::WT_RENAMED
+                        | git2::Status::WT_TYPECHANGE
+                        | git2::Status::CONFLICTED,
+                );
+                (has_worktree_change && tracked_paths.contains(&path)).then(|| path.to_string())
+            })
+            .collect();
+
+        if !remaining_paths.is_empty() {
+            return Err(format!(
+                "以下文件仍有未暂存更改: {}",
+                remaining_paths.join(", ")
+            ));
+        }
     }
 
     Ok(())
@@ -209,4 +260,80 @@ fn read_head_commit_oid(project_path: &str) -> Result<String, String> {
         .peel_to_commit()
         .map_err(|e| format!("获取 HEAD 提交失败: {}", e))?;
     Ok(commit.id().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::git_discard_changes_sync;
+    use git2::{Repository, Signature, Status};
+    use std::fs;
+    use tempfile::TempDir;
+
+    fn committed_repo() -> (TempDir, Repository) {
+        let temp_dir = TempDir::new().unwrap();
+        let repo = Repository::init(temp_dir.path()).unwrap();
+        repo.config()
+            .unwrap()
+            .set_bool("core.autocrlf", false)
+            .unwrap();
+        fs::write(temp_dir.path().join("tracked.txt"), "base\n").unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(std::path::Path::new("tracked.txt")).unwrap();
+        index.write().unwrap();
+        let tree_id = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_id).unwrap();
+        let signature = Signature::now("Termflow Test", "termflow@example.com").unwrap();
+        repo.commit(Some("HEAD"), &signature, &signature, "initial", &tree, &[])
+            .unwrap();
+        drop(tree);
+        (temp_dir, repo)
+    }
+
+    #[test]
+    fn discard_restores_an_unstaged_file_from_the_index() {
+        let (temp_dir, repo) = committed_repo();
+        fs::write(temp_dir.path().join("tracked.txt"), "changed\n").unwrap();
+
+        git_discard_changes_sync(
+            temp_dir.path().to_string_lossy().into_owned(),
+            vec!["tracked.txt".to_string()],
+        )
+        .unwrap();
+
+        assert_eq!(
+            fs::read_to_string(temp_dir.path().join("tracked.txt")).unwrap(),
+            "base\n"
+        );
+        assert_eq!(
+            repo.status_file(std::path::Path::new("tracked.txt"))
+                .unwrap(),
+            Status::CURRENT
+        );
+    }
+
+    #[test]
+    fn discard_preserves_staged_content_and_removes_only_worktree_changes() {
+        let (temp_dir, repo) = committed_repo();
+        fs::write(temp_dir.path().join("tracked.txt"), "staged\n").unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(std::path::Path::new("tracked.txt")).unwrap();
+        index.write().unwrap();
+        fs::write(temp_dir.path().join("tracked.txt"), "unstaged\n").unwrap();
+
+        git_discard_changes_sync(
+            temp_dir.path().to_string_lossy().into_owned(),
+            vec!["tracked.txt".to_string()],
+        )
+        .unwrap();
+
+        assert_eq!(
+            fs::read_to_string(temp_dir.path().join("tracked.txt")).unwrap(),
+            "staged\n"
+        );
+        assert_eq!(
+            repo.status_file(std::path::Path::new("tracked.txt"))
+                .unwrap(),
+            Status::INDEX_MODIFIED
+        );
+    }
 }
