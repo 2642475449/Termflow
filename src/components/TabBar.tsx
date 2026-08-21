@@ -23,7 +23,6 @@ import { getKeysForAction } from "@/constants/shortcuts";
 import { closeTabRuntime, confirmCloseTab } from "@/lib/tabClose";
 import { AgentIcon } from "@/components/AgentIcon";
 import { AgentActivityIcon } from "@/components/AgentActivityIcon";
-import { ContentOverviewPopover } from "@/components/ContentOverviewPopover";
 import {
   getAgentIdsWithCapability,
   getAgentDisplayName,
@@ -168,7 +167,6 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
     () => new Map(sessions.map((session) => [session.id, session])),
     [sessions]
   );
-  const activeSession = activeSessionId ? sessionById.get(activeSessionId) ?? null : null;
 
   const loadAvailableAgents = useCallback(async (
     options?: { forceRefresh?: boolean; showLoading?: boolean },
@@ -732,13 +730,6 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
           </Tooltip>
           </Dropdown>
         </div>
-      )}
-      {activeSession?.agentId && isAiAgentId(activeSession.agentId) && (
-        <ContentOverviewPopover
-          sessionId={activeSession.id}
-          navigationId={`${paneId}:${activeSession.id}`}
-          isRunning={activeSession.status === "starting" || activeSession.status === "running"}
-        />
       )}
       {dragPreview && typeof document !== "undefined" &&
         createPortal(

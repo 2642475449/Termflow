@@ -2311,40 +2311,37 @@ html, body, #root {
 }
 
 .content-overview-trigger-wrap {
-  position: sticky;
-  right: 0;
-  z-index: 12;
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 20;
   display: flex;
-  min-height: 36px;
-  flex: 0 0 auto;
   align-items: center;
-  padding: 0 8px 0 4px;
-  background: linear-gradient(90deg, transparent, var(--cs-bg-content) 18%);
 }
 
 .content-overview-trigger {
   display: inline-flex;
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   align-items: center;
   justify-content: center;
-  border: 0;
-  border-radius: 7px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--cs-border-card, var(--cs-border-sidebar)) 88%, transparent);
+  border-radius: 999px;
   color: var(--cs-text-secondary);
-  background: transparent;
+  background: color-mix(in srgb, var(--cs-bg-card-solid, var(--cs-bg-card)) 94%, transparent);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  backdrop-filter: blur(14px) saturate(145%);
   cursor: pointer;
-  transition: color 120ms ease, background 120ms ease;
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
 }
 
-.content-overview-trigger:hover:not(:disabled) {
+.content-overview-trigger:hover,
+.content-overview-trigger[data-open] {
   color: var(--cs-primary);
-  background: color-mix(in srgb, var(--cs-primary) 10%, transparent);
-}
-
-.content-overview-trigger:disabled {
-  color: var(--cs-text-tertiary);
-  cursor: default;
-  opacity: 0.48;
+  border-color: color-mix(in srgb, var(--cs-primary) 34%, var(--cs-border-card, var(--cs-border-sidebar)));
+  background: color-mix(in srgb, var(--cs-bg-card-solid, var(--cs-bg-card)) 88%, var(--cs-primary) 12%);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16);
 }
 
 .content-overview-popover .ant-popover-inner {
@@ -2353,7 +2350,7 @@ html, body, #root {
   padding: 0;
   overflow: hidden;
   border: 1px solid var(--cs-border-card, var(--cs-border-sidebar));
-  border-radius: 12px;
+  border-radius: 16px;
   background: color-mix(in srgb, var(--cs-bg-card-solid, var(--cs-bg-card)) 96%, transparent);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.22);
   backdrop-filter: blur(18px) saturate(150%);

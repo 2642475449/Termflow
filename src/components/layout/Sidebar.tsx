@@ -284,7 +284,7 @@ function Sidebar({ collapsed, section }: SidebarProps) {
       },
       {
         key: "copy-path",
-        label: t("common.copyPath"),
+        label: t("sidebar.copyProjectPath"),
         icon: <CopyOutlined />,
         onClick: () => navigator.clipboard.writeText(session.path).then(() => message.success(t("sidebar.copyPathSuccess"))),
       },

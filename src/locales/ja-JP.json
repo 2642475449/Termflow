@@ -369,6 +369,7 @@
     "resourceFileCreateFailed": "ファイルを作成できませんでした",
     "resourceFolderCreateFailed": "フォルダーを作成できませんでした",
     "openSession": "セッションを開く",
+    "copyProjectPath": "プロジェクトパスをコピー",
     "deleteSession": "セッションを削除",
     "renameSession": "セッション名を変更",
     "pinSession": "セッションをピン留め",

@@ -7,6 +7,7 @@ import PrimarySidebarRail from "./PrimarySidebarRail";
 import Sidebar from "./Sidebar";
 import AuxiliaryDock from "./AuxiliaryDock";
 import TabBar from "@/components/TabBar";
+import { ContentOverviewPopover } from "@/components/ContentOverviewPopover";
 import HomePage from "@/pages/home";
 import SessionCheckpointSummaryBar from "@/components/SessionCheckpointSummaryBar";
 import { NewSessionDialog } from "@/components/NewSessionDialog";
@@ -77,6 +78,7 @@ import {
   type OpenAuxiliaryQuestionDetail,
 } from "@/lib/auxiliaryDock";
 import { isSessionVisibleInAuxiliaryDock } from "@/store/auxiliaryDock";
+import { isSessionTurnRunning } from "@/lib/sessions";
 
 const { Content } = Layout;
 const SETTINGS_ID = "__settings__";
@@ -261,6 +263,13 @@ function WorkspacePane({ paneId }: { paneId: string }) {
               </div>
             );
           })
+        )}
+        {activeSession?.agentId && isAiAgentId(activeSession.agentId) && (
+          <ContentOverviewPopover
+            sessionId={activeSession.id}
+            navigationId={`${pane.id}:${activeSession.id}`}
+            isRunning={isSessionTurnRunning(activeSession)}
+          />
         )}
       </div>
     </div>

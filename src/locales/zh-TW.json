@@ -369,6 +369,7 @@
     "resourceFileCreateFailed": "新建檔案失敗",
     "resourceFolderCreateFailed": "新建資料夾失敗",
     "openSession": "開啟工作階段",
+    "copyProjectPath": "複製專案路徑",
     "deleteSession": "刪除工作階段",
     "renameSession": "重新命名工作階段",
     "noProject": "請先開啟一個專案視窗",

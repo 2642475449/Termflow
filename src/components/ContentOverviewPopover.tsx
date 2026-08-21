@@ -36,6 +36,9 @@ export function ContentOverviewPopover({
 
   useEffect(() => setOpen(false), [sessionId]);
   useEffect(() => {
+    if (!snapshot.canGenerate) setOpen(false);
+  }, [snapshot.canGenerate]);
+  useEffect(() => {
     if (
       !isRunning &&
       snapshot.canGenerate &&
@@ -76,9 +79,7 @@ export function ContentOverviewPopover({
   };
 
   const overview = snapshot.overview;
-  const tooltip = snapshot.canGenerate
-    ? t("contentOverview.tooltip")
-    : t("contentOverview.tooShort");
+  const tooltip = t("contentOverview.tooltip");
 
   const content = overview ? (
     <div className="content-overview-panel">
@@ -92,13 +93,15 @@ export function ContentOverviewPopover({
             }).format(overview.generatedAt)}
           </div>
         </div>
-        <Button
-          type="text"
-          size="small"
-          aria-label={t("common.close")}
-          icon={<CloseOutlined />}
-          onClick={() => setOpen(false)}
-        />
+        <Tooltip title={t("common.collapse")} mouseEnterDelay={0.4}>
+          <Button
+            type="text"
+            size="small"
+            aria-label={t("common.collapse")}
+            icon={<CloseOutlined />}
+            onClick={() => setOpen(false)}
+          />
+        </Tooltip>
       </div>
 
       {(isRunning || overview.coverage === "partial" || snapshot.contentUpdated) && (
@@ -163,6 +166,8 @@ export function ContentOverviewPopover({
     <div className="content-overview-empty">{t("contentOverview.empty")}</div>
   );
 
+  if (!snapshot.canGenerate) return null;
+
   return (
     <div className="content-overview-trigger-wrap">
       <Popover
@@ -179,8 +184,9 @@ export function ContentOverviewPopover({
             <button
               type="button"
               className="content-overview-trigger"
-              disabled={!snapshot.canGenerate}
               aria-label={t("contentOverview.title")}
+              aria-expanded={open}
+              data-open={open || undefined}
             >
               <FileSearchOutlined />
             </button>

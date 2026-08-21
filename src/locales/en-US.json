@@ -369,6 +369,7 @@
     "resourceFileCreateFailed": "Failed to create file",
     "resourceFolderCreateFailed": "Failed to create folder",
     "openSession": "Open Session",
+    "copyProjectPath": "Copy Project Path",
     "deleteSession": "Delete Session",
     "renameSession": "Rename Session",
     "pinSession": "Pin Session",
