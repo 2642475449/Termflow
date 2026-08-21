@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  RESOURCE_SIDE_QUESTION_PRESETS,
   SIDE_QUESTION_PRESETS,
+  buildResourceSideQuestionContext,
+  buildResourceSideQuestionPrompt,
   buildSideQuestionPrompt,
   canSubmitSideQuestion,
   sanitizeTerminalSelection,
@@ -47,9 +50,10 @@ describe("side question context", () => {
 
   it("requires a custom question and selected terminal context before sending", () => {
     const selection = sanitizeTerminalSelection("build failed");
+    const context = { kind: "terminal", selection } as const;
 
-    expect(canSubmitSideQuestion("为什么失败？", selection)).toBe(true);
-    expect(canSubmitSideQuestion("   ", selection)).toBe(false);
+    expect(canSubmitSideQuestion("为什么失败？", context)).toBe(true);
+    expect(canSubmitSideQuestion("   ", context)).toBe(false);
     expect(canSubmitSideQuestion("为什么失败？", null)).toBe(false);
   });
 
@@ -59,6 +63,60 @@ describe("side question context", () => {
       "failure",
       "fix",
       "next",
+    ]);
+  });
+
+  it("builds a bounded, deduplicated resource context with project-relative paths", () => {
+    const context = buildResourceSideQuestionContext("D:\\repo", [
+      { path: "D:\\repo\\src\\main.ts", kind: "file" },
+      { path: "D:\\repo\\src\\main.ts", kind: "file" },
+      { path: "D:\\repo\\src\\components", kind: "directory" },
+      { path: "D:\\repo\\README.md", kind: "file" },
+    ], 2);
+
+    expect(context).toEqual({
+      resources: [
+        { path: "src/main.ts", kind: "file" },
+        { path: "src/components", kind: "directory" },
+      ],
+      totalCount: 3,
+      truncated: true,
+      containsDirectory: true,
+    });
+  });
+
+  it("builds a resource prompt without preloading file contents", () => {
+    const context = buildResourceSideQuestionContext("D:/repo", [
+      { path: "D:/repo/src/main.ts", kind: "file" },
+    ]);
+    const prompt = buildResourceSideQuestionPrompt({
+      question: "它负责什么？",
+      projectPath: "D:/repo",
+      context,
+    });
+
+    expect(prompt).toContain("工作目录：D:/repo");
+    expect(prompt).toContain('<project_resources>\n[\n  {\n    "path": "src/main.ts"');
+    expect(prompt).toContain('"kind": "file"');
+    expect(prompt).toContain("用户问题：\n它负责什么？");
+    expect(prompt).not.toContain("文件内容");
+  });
+
+  it("accepts a custom question when resource context is present", () => {
+    const resourceContext = buildResourceSideQuestionContext("D:/repo", [
+      { path: "D:/repo/src", kind: "directory" },
+    ]);
+
+    expect(canSubmitSideQuestion("请分析", { kind: "resources", resourceContext })).toBe(true);
+    expect(canSubmitSideQuestion(" ", { kind: "resources", resourceContext })).toBe(false);
+  });
+
+  it("offers file-browser presets in the intended order", () => {
+    expect(RESOURCE_SIDE_QUESTION_PRESETS.map((preset) => preset.id)).toEqual([
+      "explain",
+      "review",
+      "change",
+      "related",
     ]);
   });
 });

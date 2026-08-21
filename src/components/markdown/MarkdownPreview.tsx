@@ -14,10 +14,15 @@ import {
 import { convertFileSrc } from "@tauri-apps/api/core";
 import mermaid from "mermaid";
 import { readProjectImage } from "@/lib/api";
+import type { ElementContent, Root, RootContent } from "hast";
 import {
   getMarkdownSourceBlocks,
   type MarkdownSourceBlock,
 } from "@/components/markdown/markdownSourceBlocks";
+import {
+  canHighlightWithStarryNight,
+  getStarryNightLanguageFlag,
+} from "@/components/markdown/starryNightEligibility";
 
 type TableAlignment = "left" | "center" | "right";
 type ListItem = {
@@ -768,6 +773,56 @@ export function renderInlineMarkdown(
   return nodes.length > 0 ? nodes : <span>{text}</span>;
 }
 
+function getStarryNightClassName(className: unknown): string | undefined {
+  if (typeof className === "string") return className;
+  if (!Array.isArray(className)) return undefined;
+  const values = className.filter((value): value is string => typeof value === "string");
+  return values.length > 0 ? values.join(" ") : undefined;
+}
+
+function renderStarryNightNode(
+  node: RootContent | ElementContent,
+  key: string,
+): ReactNode {
+  if (node.type === "text") return node.value;
+  if (node.type !== "element" || node.tagName !== "span") return null;
+
+  return (
+    <span key={key} className={getStarryNightClassName(node.properties.className)}>
+      {node.children.map((child, index) => renderStarryNightNode(child, `${key}-${index}`))}
+    </span>
+  );
+}
+
+export function renderStarryNightTree(tree: Root): ReactNode {
+  return tree.children.map((node, index) => renderStarryNightNode(node, `starry-${index}`));
+}
+
+function HighlightedCode({ code, language }: { code: string; language?: string }) {
+  const [tree, setTree] = useState<Root | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setTree(null);
+    if (!getStarryNightLanguageFlag(language) || !canHighlightWithStarryNight(code)) return;
+
+    void import("./starryNight")
+      .then(({ highlightWithStarryNight }) => highlightWithStarryNight(code, language))
+      .then((nextTree) => {
+        if (!cancelled) setTree(nextTree);
+      })
+      .catch(() => {
+        if (!cancelled) setTree(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [code, language]);
+
+  return <>{tree ? renderStarryNightTree(tree) : code}</>;
+}
+
 function CodeBlock({ code, language }: { code: string; language?: string }) {
   const [copied, setCopied] = useState(false);
   const resetTimerRef = useRef<number | null>(null);
@@ -819,7 +874,7 @@ function CodeBlock({ code, language }: { code: string; language?: string }) {
         className="m-0 overflow-x-auto p-4 text-xs leading-6"
         style={{ color: "var(--cs-text-secondary)" }}
       >
-        <code>{code}</code>
+        <code><HighlightedCode code={code} language={language} /></code>
       </pre>
     </div>
   );

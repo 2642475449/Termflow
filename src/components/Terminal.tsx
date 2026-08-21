@@ -1253,7 +1253,9 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
       <SideQuestionComposer
         open={Boolean(sideQuestionDraft)}
         agent={sideQuestionDraft?.agent ?? null}
-        selection={sideQuestionDraft?.context ?? null}
+        context={sideQuestionDraft
+          ? { kind: "terminal", selection: sideQuestionDraft.context }
+          : null}
         question={sideQuestionText}
         onQuestionChange={setSideQuestionText}
         onCancel={closeSideQuestionComposer}

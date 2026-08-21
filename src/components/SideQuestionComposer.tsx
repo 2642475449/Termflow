@@ -3,16 +3,17 @@ import { Alert, Button, Input, Modal } from "antd";
 import { useTranslation } from "react-i18next";
 import { AgentIcon } from "@/components/AgentIcon";
 import {
+  RESOURCE_SIDE_QUESTION_PRESETS,
   SIDE_QUESTION_PRESETS,
   canSubmitSideQuestion,
-  type SanitizedTerminalSelection,
+  type SideQuestionContext,
 } from "@/lib/sideQuestion";
 import type { AgentCliInfo } from "@/types";
 
 interface SideQuestionComposerProps {
   open: boolean;
   agent: AgentCliInfo | null;
-  selection: SanitizedTerminalSelection | null;
+  context: SideQuestionContext | null;
   question: string;
   onQuestionChange: (question: string) => void;
   onCancel: () => void;
@@ -22,14 +23,16 @@ interface SideQuestionComposerProps {
 export function SideQuestionComposer({
   open,
   agent,
-  selection,
+  context,
   question,
   onQuestionChange,
   onCancel,
   onSubmit,
 }: SideQuestionComposerProps) {
   const { t } = useTranslation();
-  const canSubmit = Boolean(agent && canSubmitSideQuestion(question, selection));
+  const canSubmit = Boolean(agent && canSubmitSideQuestion(question, context));
+  const isResourceQuestion = context?.kind === "resources";
+  const presets = isResourceQuestion ? RESOURCE_SIDE_QUESTION_PRESETS : SIDE_QUESTION_PRESETS;
 
   const handleQuestionKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && canSubmit) {
@@ -68,7 +71,11 @@ export function SideQuestionComposer({
             value={question}
             onChange={(event) => onQuestionChange(event.target.value)}
             onKeyDown={handleQuestionKeyDown}
-            placeholder={t("terminal.sideQuestionQuestionPlaceholder")}
+            placeholder={t(
+              isResourceQuestion
+                ? "sidebar.sideQuestionQuestionPlaceholder"
+                : "terminal.sideQuestionQuestionPlaceholder"
+            )}
             autoSize={{ minRows: 3, maxRows: 8 }}
             maxLength={4000}
             showCount
@@ -83,7 +90,7 @@ export function SideQuestionComposer({
             {t("terminal.sideQuestionQuickQuestions")}
           </div>
           <div className="flex flex-wrap gap-2">
-            {SIDE_QUESTION_PRESETS.map((preset) => {
+            {presets.map((preset) => {
               const presetQuestion = t(preset.questionKey);
               return (
                 <Button
@@ -99,14 +106,14 @@ export function SideQuestionComposer({
           </div>
         </div>
 
-        {selection ? (
+        {context?.kind === "terminal" ? (
           <div>
             <div className="mb-2 flex items-center justify-between gap-3 text-sm">
               <span style={{ color: "var(--cs-text-secondary)" }}>
                 {t("terminal.sideQuestionSelectionPreview")}
               </span>
               <span className="text-xs" style={{ color: "var(--cs-text-tertiary)" }}>
-                {t("terminal.sideQuestionSelectionMeta", { count: selection.lineCount })}
+                {t("terminal.sideQuestionSelectionMeta", { count: context.selection.lineCount })}
               </span>
             </div>
             <pre
@@ -118,9 +125,9 @@ export function SideQuestionComposer({
                 fontFamily: "monospace",
               }}
             >
-              {selection.text}
+              {context.selection.text}
             </pre>
-            {selection.truncated ? (
+            {context.selection.truncated ? (
               <div className="mt-1.5 text-xs" style={{ color: "var(--cs-warning, #d89614)" }}>
                 {t("terminal.sideQuestionTruncatedDraft")}
               </div>
@@ -128,7 +135,62 @@ export function SideQuestionComposer({
           </div>
         ) : null}
 
-        {selection?.potentialSecret ? (
+        {context?.kind === "resources" ? (
+          <div>
+            <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+              <span style={{ color: "var(--cs-text-secondary)" }}>
+                {t("sidebar.sideQuestionResourcePreview")}
+              </span>
+              <span className="text-xs" style={{ color: "var(--cs-text-tertiary)" }}>
+                {t("sidebar.sideQuestionResourceMeta", {
+                  count: context.resourceContext.totalCount,
+                })}
+              </span>
+            </div>
+            <div
+              className="max-h-40 overflow-auto rounded-md border p-2"
+              style={{
+                borderColor: "var(--cs-border-secondary)",
+                background: "var(--cs-bg-hover)",
+              }}
+            >
+              {context.resourceContext.resources.map((resource) => (
+                <div
+                  key={`${resource.kind}:${resource.path}`}
+                  className="flex min-w-0 items-center gap-2 px-1 py-1 text-xs"
+                  style={{ color: "var(--cs-text-secondary)" }}
+                >
+                  <span className="shrink-0" style={{ color: "var(--cs-text-tertiary)" }}>
+                    {t(
+                      resource.kind === "directory"
+                        ? "sidebar.sideQuestionResourceDirectory"
+                        : "sidebar.sideQuestionResourceFile"
+                    )}
+                  </span>
+                  <code className="min-w-0 break-all">{resource.path}</code>
+                </div>
+              ))}
+            </div>
+            {context.resourceContext.truncated ? (
+              <div className="mt-1.5 text-xs" style={{ color: "var(--cs-warning, #d89614)" }}>
+                {t("sidebar.sideQuestionResourcesTruncated", {
+                  count: context.resourceContext.resources.length,
+                })}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {context?.kind === "resources" && context.resourceContext.containsDirectory ? (
+          <Alert
+            type="info"
+            showIcon
+            message={t("sidebar.sideQuestionDirectoryTitle")}
+            description={t("sidebar.sideQuestionDirectoryHint")}
+          />
+        ) : null}
+
+        {context?.kind === "terminal" && context.selection.potentialSecret ? (
           <Alert
             type="warning"
             showIcon
