@@ -34,10 +34,7 @@ export function ContentOverviewPopover({
   const getSnapshot = useCallback(() => getContentOverviewSnapshot(sessionId), [sessionId]);
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
-  useEffect(() => setOpen(false), [sessionId]);
-  useEffect(() => {
-    if (!snapshot.canGenerate) setOpen(false);
-  }, [snapshot.canGenerate]);
+  useEffect(() => setOpen(false), [navigationId, sessionId]);
   useEffect(() => {
     if (
       !isRunning &&
@@ -49,8 +46,11 @@ export function ContentOverviewPopover({
   }, [isRunning, sessionId, snapshot.canGenerate, snapshot.overview]);
 
   const handleOpenChange = (nextOpen: boolean) => {
-    if (nextOpen && !snapshot.canGenerate) return;
-    if (nextOpen && (!snapshot.overview || snapshot.contentUpdated)) {
+    if (
+      nextOpen &&
+      snapshot.canGenerate &&
+      (!snapshot.overview || snapshot.contentUpdated)
+    ) {
       generateContentOverview(sessionId, { partial: isRunning });
     }
     setOpen(nextOpen);
@@ -166,8 +166,6 @@ export function ContentOverviewPopover({
     <div className="content-overview-empty">{t("contentOverview.empty")}</div>
   );
 
-  if (!snapshot.canGenerate) return null;
-
   return (
     <div className="content-overview-trigger-wrap">
       <Popover
@@ -183,10 +181,10 @@ export function ContentOverviewPopover({
           <span>
             <button
               type="button"
-              className="content-overview-trigger"
+              className="content-overview-trigger app-rail-button app-marker-host app-marker-rail mr-1 flex h-8 w-10 items-center justify-center rounded-md"
               aria-label={t("contentOverview.title")}
-              aria-expanded={open}
-              data-open={open || undefined}
+              aria-pressed={open}
+              data-active={open ? "true" : "false"}
             >
               <FileSearchOutlined />
             </button>

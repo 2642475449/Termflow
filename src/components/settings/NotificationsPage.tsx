@@ -22,6 +22,37 @@ import {
 } from "@/store";
 import { NotificationDiagnostics } from "./NotificationDiagnostics";
 import { SettingsPageHeader } from "./SettingsPageHeader";
+import feishuIcon from "@/assets/remote-notification-icons/feishu.svg";
+import dingtalkIcon from "@/assets/remote-notification-icons/dingtalk.svg";
+import wechatIcon from "@/assets/remote-notification-icons/wechat.svg";
+import qqIcon from "@/assets/remote-notification-icons/qq.svg";
+import telegramIcon from "@/assets/remote-notification-icons/telegram.svg";
+
+const REMOTE_NOTIFICATION_PROVIDER_ICONS: Record<RemoteNotificationProvider, string> = {
+  feishu: feishuIcon,
+  dingtalk: dingtalkIcon,
+  wechat: wechatIcon,
+  qq: qqIcon,
+  telegram: telegramIcon,
+};
+
+function RemoteNotificationProviderIcon({
+  provider,
+  muted = false,
+}: {
+  provider: RemoteNotificationProvider;
+  muted?: boolean;
+}) {
+  return (
+    <img
+      src={REMOTE_NOTIFICATION_PROVIDER_ICONS[provider]}
+      alt=""
+      aria-hidden="true"
+      className="h-4 w-4 shrink-0 object-contain"
+      style={muted ? { opacity: 0.45 } : undefined}
+    />
+  );
+}
 
 function NotificationSection({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -320,9 +351,15 @@ export function NotificationsPage() {
               options={REMOTE_NOTIFICATION_PROVIDERS.map(({ id, supported }) => ({
                 value: id,
                 disabled: !supported,
-                label: `${t(`settings.notifications.remote.providers.${id}`)}${
-                  supported ? "" : ` · ${t("settings.notifications.remote.comingSoon")}`
-                }`,
+                label: (
+                  <span className="flex items-center gap-2">
+                    <RemoteNotificationProviderIcon provider={id} muted={!supported} />
+                    <span>
+                      {t(`settings.notifications.remote.providers.${id}`)}
+                      {!supported && ` · ${t("settings.notifications.remote.comingSoon")}`}
+                    </span>
+                  </span>
+                ),
               }))}
               onChange={setSelectedProvider}
               style={{ width: 240 }}

@@ -99,6 +99,10 @@ fn default_agent_permission_defaults() -> serde_json::Value {
     serde_json::Value::Object(Default::default())
 }
 
+fn default_remote_notifications() -> serde_json::Value {
+    serde_json::Value::Object(Default::default())
+}
+
 fn default_git_commit_message_profiles() -> serde_json::Value {
     serde_json::json!([
         {
@@ -175,6 +179,10 @@ pub struct PersistentSettingsRecord {
     pub notification_sound_enabled: bool,
     pub notification_sound_map: NotificationSoundMapRecord,
     pub notification_threshold_ms: i64,
+    #[serde(default = "default_remote_notifications")]
+    pub remote_notifications: serde_json::Value,
+    // Kept in sync with `remote_notifications.feishu` for databases and
+    // clients that still use the pre-channel notification fields.
     #[serde(default)]
     pub feishu_notification_enabled: bool,
     #[serde(default = "default_feishu_notification_threshold_ms")]
@@ -221,6 +229,7 @@ impl Default for PersistentSettingsRecord {
             notification_sound_enabled: true,
             notification_sound_map: NotificationSoundMapRecord::default(),
             notification_threshold_ms: 10_000,
+            remote_notifications: default_remote_notifications(),
             feishu_notification_enabled: false,
             feishu_notification_threshold_ms: default_feishu_notification_threshold_ms(),
             feishu_notification_events: FeishuNotificationEventsRecord::default(),
@@ -237,6 +246,63 @@ impl Default for PersistentSettingsRecord {
             default_git_commit_message_profile_id: default_git_commit_message_profile_id(),
         }
     }
+}
+
+fn legacy_feishu_notification_values(
+    settings: &PersistentSettingsRecord,
+) -> (bool, i64, FeishuNotificationEventsRecord) {
+    let Some(channel) = settings
+        .remote_notifications
+        .get("feishu")
+        .and_then(serde_json::Value::as_object)
+    else {
+        return (
+            settings.feishu_notification_enabled,
+            settings.feishu_notification_threshold_ms,
+            settings.feishu_notification_events.clone(),
+        );
+    };
+
+    let mut events = settings.feishu_notification_events.clone();
+    if let Some(event_values) = channel.get("events").and_then(serde_json::Value::as_object) {
+        if let Some(value) = event_values
+            .get("completed")
+            .and_then(serde_json::Value::as_bool)
+        {
+            events.completed = value;
+        }
+        if let Some(value) = event_values
+            .get("error")
+            .and_then(serde_json::Value::as_bool)
+        {
+            events.error = value;
+        }
+        if let Some(value) = event_values
+            .get("waiting")
+            .and_then(serde_json::Value::as_bool)
+        {
+            events.waiting = value;
+        }
+        if let Some(value) = event_values
+            .get("permission")
+            .and_then(serde_json::Value::as_bool)
+        {
+            events.permission = value;
+        }
+    }
+
+    (
+        channel
+            .get("enabled")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(settings.feishu_notification_enabled),
+        channel
+            .get("thresholdMs")
+            .and_then(serde_json::Value::as_i64)
+            .filter(|value| *value >= 0)
+            .unwrap_or(settings.feishu_notification_threshold_ms),
+        events,
+    )
 }
 
 pub struct Database {
@@ -361,6 +427,8 @@ impl Database {
             .unwrap_or(settings.notification_sound_map);
         settings.notification_threshold_ms = read_setting(&conn, "notification.thresholdMs")?
             .unwrap_or(settings.notification_threshold_ms);
+        settings.remote_notifications = read_setting(&conn, "notification.remoteNotifications")?
+            .unwrap_or(settings.remote_notifications);
         settings.feishu_notification_enabled = read_setting(&conn, "notification.feishu.enabled")?
             .unwrap_or(settings.feishu_notification_enabled);
         settings.feishu_notification_threshold_ms =
@@ -537,19 +605,18 @@ impl Database {
         )?;
         write_setting(
             &conn,
-            "notification.feishu.enabled",
-            &settings.feishu_notification_enabled,
+            "notification.remoteNotifications",
+            &settings.remote_notifications,
         )?;
+        let (feishu_enabled, feishu_threshold_ms, feishu_events) =
+            legacy_feishu_notification_values(settings);
+        write_setting(&conn, "notification.feishu.enabled", &feishu_enabled)?;
         write_setting(
             &conn,
             "notification.feishu.thresholdMs",
-            &settings.feishu_notification_threshold_ms,
+            &feishu_threshold_ms,
         )?;
-        write_setting(
-            &conn,
-            "notification.feishu.events",
-            &settings.feishu_notification_events,
-        )?;
+        write_setting(&conn, "notification.feishu.events", &feishu_events)?;
         write_setting(&conn, "voice.apiKey", &settings.asr_api_key)?;
         write_setting(&conn, "voice.authMode", &settings.asr_auth_mode)?;
         write_setting(&conn, "voice.model", &settings.asr_model)?;
@@ -925,6 +992,19 @@ mod tests {
     }
 
     #[test]
+    fn persistent_settings_without_remote_notifications_remain_backward_compatible() {
+        let mut value = serde_json::to_value(PersistentSettingsRecord::default()).unwrap();
+        value.as_object_mut().unwrap().remove("remoteNotifications");
+
+        let restored: PersistentSettingsRecord = serde_json::from_value(value).unwrap();
+
+        assert_eq!(
+            restored.remote_notifications,
+            serde_json::Value::Object(Default::default())
+        );
+    }
+
+    #[test]
     fn git_commit_message_profiles_remain_backward_compatible_and_round_trip() {
         let mut legacy_value = serde_json::to_value(PersistentSettingsRecord::default()).unwrap();
         let legacy_object = legacy_value.as_object_mut().unwrap();
@@ -977,6 +1057,53 @@ mod tests {
                 .terminal_scrollback,
             20_000
         );
+    }
+
+    #[test]
+    fn remote_notification_channels_round_trip_and_sync_legacy_feishu_fields() {
+        let database = Database::open_in_memory();
+        let mut settings = PersistentSettingsRecord::default();
+        let remote_notifications = serde_json::json!({
+            "feishu": {
+                "enabled": true,
+                "thresholdMs": 600_000,
+                "events": { "completed": false, "error": true, "waiting": false, "permission": true }
+            },
+            "dingtalk": {
+                "enabled": true,
+                "thresholdMs": 100,
+                "events": { "completed": true, "error": false, "waiting": true, "permission": false }
+            },
+            "wechat": {
+                "enabled": false,
+                "thresholdMs": 200,
+                "events": { "completed": false, "error": true, "waiting": true, "permission": false }
+            },
+            "qq": {
+                "enabled": true,
+                "thresholdMs": 300,
+                "events": { "completed": true, "error": true, "waiting": false, "permission": false }
+            },
+            "telegram": {
+                "enabled": false,
+                "thresholdMs": 400,
+                "events": { "completed": false, "error": false, "waiting": true, "permission": true }
+            }
+        });
+        settings.remote_notifications = remote_notifications.clone();
+
+        database
+            .save_general_persistent_settings(&settings)
+            .unwrap();
+
+        let restored = database.load_persistent_settings().unwrap();
+        assert_eq!(restored.remote_notifications, remote_notifications);
+        assert!(restored.feishu_notification_enabled);
+        assert_eq!(restored.feishu_notification_threshold_ms, 600_000);
+        assert!(!restored.feishu_notification_events.completed);
+        assert!(restored.feishu_notification_events.error);
+        assert!(!restored.feishu_notification_events.waiting);
+        assert!(restored.feishu_notification_events.permission);
     }
 
     #[test]

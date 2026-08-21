@@ -27,6 +27,59 @@ pub struct PtyExitPayload {
     pub code: Option<i32>,
 }
 
+/// Decodes PTY output while retaining an incomplete UTF-8 sequence until the
+/// next read. PTY reads are byte-oriented, so a character can straddle two
+/// buffers even when the process only writes valid UTF-8.
+#[derive(Default)]
+struct PtyOutputDecoder {
+    pending: Vec<u8>,
+}
+
+impl PtyOutputDecoder {
+    fn decode(&mut self, chunk: &[u8]) -> String {
+        self.pending.extend_from_slice(chunk);
+
+        let mut output = String::new();
+        loop {
+            match std::str::from_utf8(&self.pending) {
+                Ok(decoded) => {
+                    output.push_str(decoded);
+                    self.pending.clear();
+                    return output;
+                }
+                Err(error) => {
+                    let valid_up_to = error.valid_up_to();
+                    // `valid_up_to` is guaranteed by `Utf8Error` to delimit
+                    // a valid UTF-8 prefix.
+                    output.push_str(
+                        std::str::from_utf8(&self.pending[..valid_up_to])
+                            .expect("UTF-8 error reported an invalid valid-prefix boundary"),
+                    );
+
+                    let Some(error_len) = error.error_len() else {
+                        // The remaining bytes are a valid prefix of a UTF-8
+                        // character, not malformed input. Keep them for the
+                        // next PTY read instead of emitting U+FFFD.
+                        self.pending.drain(..valid_up_to);
+                        return output;
+                    };
+
+                    // Match `from_utf8_lossy` for genuinely invalid input,
+                    // then continue in case an incomplete character follows.
+                    output.push('\u{FFFD}');
+                    self.pending.drain(..valid_up_to + error_len);
+                }
+            }
+        }
+    }
+
+    fn finish(&mut self) -> String {
+        let remaining = String::from_utf8_lossy(&self.pending).into_owned();
+        self.pending.clear();
+        remaining
+    }
+}
+
 struct PtySession {
     instance_id: u64,
     project_path: String,
@@ -252,6 +305,7 @@ impl PtyManager {
         std::thread::spawn(move || {
             let mut reader = reader;
             let mut buf = [0u8; 8192];
+            let mut decoder = PtyOutputDecoder::default();
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) => break,
@@ -259,16 +313,30 @@ impl PtyManager {
                         if !manager.is_session_instance_current(&sid, instance_id) {
                             return;
                         }
-                        let s = String::from_utf8_lossy(&buf[..n]);
-                        let _ = app_clone.emit(
-                            "pty-output",
-                            PtyOutputPayload {
-                                session_id: sid.clone(),
-                                data: s.into_owned(),
-                            },
-                        );
+                        let data = decoder.decode(&buf[..n]);
+                        if !data.is_empty() {
+                            let _ = app_clone.emit(
+                                "pty-output",
+                                PtyOutputPayload {
+                                    session_id: sid.clone(),
+                                    data,
+                                },
+                            );
+                        }
                     }
                     Err(_) => break,
+                }
+            }
+            if manager.is_session_instance_current(&sid, instance_id) {
+                let data = decoder.finish();
+                if !data.is_empty() {
+                    let _ = app_clone.emit(
+                        "pty-output",
+                        PtyOutputPayload {
+                            session_id: sid.clone(),
+                            data,
+                        },
+                    );
                 }
             }
             if !manager.remove_session_instance(&sid, instance_id) {
@@ -897,6 +965,44 @@ mod tests {
         assert_eq!(runtime_agent_label(Some("powershell")), "PowerShell");
         assert_eq!(runtime_agent_label(Some("cmd")), "Command Prompt");
         assert_eq!(runtime_agent_label(Some("unknown")), "智能体");
+    }
+
+    #[test]
+    fn pty_output_decoder_preserves_utf8_split_across_reads() {
+        let mut decoder = PtyOutputDecoder::default();
+        let character = "你".as_bytes();
+
+        assert_eq!(decoder.decode(&character[..1]), "");
+        assert_eq!(decoder.decode(&character[1..]), "你");
+        assert_eq!(decoder.finish(), "");
+    }
+
+    #[test]
+    fn pty_output_decoder_preserves_split_emoji_after_valid_text() {
+        let mut decoder = PtyOutputDecoder::default();
+        let emoji = "🙂".as_bytes();
+
+        assert_eq!(
+            decoder.decode(&[b'o', b'k', b' ', emoji[0], emoji[1]]),
+            "ok "
+        );
+        assert_eq!(decoder.decode(&emoji[2..]), "🙂");
+    }
+
+    #[test]
+    fn pty_output_decoder_flushes_incomplete_utf8_at_end_of_stream() {
+        let mut decoder = PtyOutputDecoder::default();
+
+        assert_eq!(decoder.decode(&[0xE4, 0xBD]), "");
+        assert_eq!(decoder.finish(), "�");
+    }
+
+    #[test]
+    fn pty_output_decoder_replaces_invalid_bytes_without_losing_later_input() {
+        let mut decoder = PtyOutputDecoder::default();
+
+        assert_eq!(decoder.decode(&[b'a', 0xFF, 0xE4, 0xBD]), "a�");
+        assert_eq!(decoder.decode(&[0xA0]), "你");
     }
 
     #[test]
