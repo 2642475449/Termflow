@@ -10,7 +10,10 @@ import { useCallback, useEffect, useState } from "react";
 import TitleBarQuickSearch from "./TitleBarQuickSearch";
 import TitleBarProjectSwitcher from "./TitleBarProjectSwitcher";
 import { QuickCommandsButton } from "@/components/QuickCommandsButton";
+import { ContentOverviewPopover } from "@/components/ContentOverviewPopover";
 import { useAuxiliaryDockStore } from "@/store/auxiliaryDock";
+import { isAiAgentId } from "@/lib/agents";
+import { isSessionTurnRunning } from "@/lib/sessions";
 import { Tooltip } from "antd";
 import { useTranslation } from "react-i18next";
 
@@ -35,9 +38,16 @@ function TitleBar() {
   const windowMode = useAppStore((s) => s.windowMode);
   const windowProject = useAppStore((s) => s.windowProject);
   const currentProject = useAppStore((s) => s.currentProject);
+  const activePaneId = useAppStore((s) => s.activePaneId);
+  const panesById = useAppStore((s) => s.panesById);
+  const sessions = useAppStore((s) => s.sessions);
   const auxiliaryOpen = useAuxiliaryDockStore((state) => state.open);
   const toggleAuxiliary = useAuxiliaryDockStore((state) => state.toggle);
   const [isMaximized, setIsMaximized] = useState(false);
+  const activeTabId = activePaneId ? panesById[activePaneId]?.activeTabId ?? null : null;
+  const activeSession = activeTabId
+    ? sessions.find((session) => session.id === activeTabId) ?? null
+    : null;
 
   const titleText =
     windowMode === "project" && windowProject?.name
@@ -150,6 +160,15 @@ function TitleBar() {
             <div className="h-full shrink-0 flex items-center justify-center pl-2 pr-1">
               <QuickCommandsButton />
             </div>
+            {activeSession?.agentId && isAiAgentId(activeSession.agentId) && (
+              <ContentOverviewPopover
+                sessionId={activeSession.id}
+                navigationId={activePaneId
+                  ? `${activePaneId}:${activeSession.id}`
+                  : activeSession.id}
+                isRunning={isSessionTurnRunning(activeSession)}
+              />
+            )}
             <Tooltip title={t("auxiliaryDock.toggle")}>
               <button
                 type="button"

@@ -27,6 +27,7 @@ import type {
   ProjectSearchIndexStatus,
   SearchIndexStorageStatus,
   SavedImagePayload,
+  ImagePreviewPayload,
   WindowProjectContext,
   SkillCatalog,
   SkillDetail,
@@ -1109,6 +1110,10 @@ export async function gitGenerateCommitMessage(
     agentId,
     profileInstructions,
   });
+}
+
+export async function readImagePreview(path: string): Promise<ImagePreviewPayload> {
+  return await invoke("read_image_preview", { path });
 }
 
 export async function gitCloneRepository(options: {

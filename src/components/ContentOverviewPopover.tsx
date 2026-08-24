@@ -34,7 +34,7 @@ export function ContentOverviewPopover({
   const getSnapshot = useCallback(() => getContentOverviewSnapshot(sessionId), [sessionId]);
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
-  useEffect(() => setOpen(false), [sessionId]);
+  useEffect(() => setOpen(false), [navigationId, sessionId]);
   useEffect(() => {
     if (
       !isRunning &&
@@ -46,8 +46,11 @@ export function ContentOverviewPopover({
   }, [isRunning, sessionId, snapshot.canGenerate, snapshot.overview]);
 
   const handleOpenChange = (nextOpen: boolean) => {
-    if (nextOpen && !snapshot.canGenerate) return;
-    if (nextOpen && (!snapshot.overview || snapshot.contentUpdated)) {
+    if (
+      nextOpen &&
+      snapshot.canGenerate &&
+      (!snapshot.overview || snapshot.contentUpdated)
+    ) {
       generateContentOverview(sessionId, { partial: isRunning });
     }
     setOpen(nextOpen);
@@ -76,9 +79,7 @@ export function ContentOverviewPopover({
   };
 
   const overview = snapshot.overview;
-  const tooltip = snapshot.canGenerate
-    ? t("contentOverview.tooltip")
-    : t("contentOverview.tooShort");
+  const tooltip = t("contentOverview.tooltip");
 
   const content = overview ? (
     <div className="content-overview-panel">
@@ -92,13 +93,15 @@ export function ContentOverviewPopover({
             }).format(overview.generatedAt)}
           </div>
         </div>
-        <Button
-          type="text"
-          size="small"
-          aria-label={t("common.close")}
-          icon={<CloseOutlined />}
-          onClick={() => setOpen(false)}
-        />
+        <Tooltip title={t("common.collapse")} mouseEnterDelay={0.4}>
+          <Button
+            type="text"
+            size="small"
+            aria-label={t("common.collapse")}
+            icon={<CloseOutlined />}
+            onClick={() => setOpen(false)}
+          />
+        </Tooltip>
       </div>
 
       {(isRunning || overview.coverage === "partial" || snapshot.contentUpdated) && (
@@ -178,9 +181,10 @@ export function ContentOverviewPopover({
           <span>
             <button
               type="button"
-              className="content-overview-trigger"
-              disabled={!snapshot.canGenerate}
+              className="content-overview-trigger app-rail-button app-marker-host app-marker-rail mr-1 flex h-8 w-10 items-center justify-center rounded-md"
               aria-label={t("contentOverview.title")}
+              aria-pressed={open}
+              data-active={open ? "true" : "false"}
             >
               <FileSearchOutlined />
             </button>

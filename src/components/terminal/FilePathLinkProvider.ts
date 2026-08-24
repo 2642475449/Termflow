@@ -13,6 +13,7 @@ export interface DetectedFilePath extends ParsedPath {
 
 export type FilePathLinkValidator = (path: ParsedPath) => Promise<boolean>;
 export type FilePathLinkHandler = (path: ParsedPath, openDirectly: boolean) => unknown;
+export type FilePathLinkHoverHandler = (path: ParsedPath, event: MouseEvent) => unknown;
 
 interface LogicalBufferLineSegment {
   row: number;
@@ -30,6 +31,7 @@ const FILE_EXTENSIONS = [
   "c", "cpp", "h", "hpp", "css", "scss", "less", "html", "vue", "svelte",
   "json", "jsonc", "yaml", "yml", "toml", "xml", "md", "mdx", "txt",
   "sh", "bash", "zsh", "ps1", "sql", "graphql", "gql", "proto", "env", "lock", "pdf",
+  "png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "avif",
 ];
 
 const EXTENSION_PATTERN = [...FILE_EXTENSIONS]
@@ -134,6 +136,8 @@ export class FilePathLinkProvider implements ILinkProvider {
     private readonly terminal: Terminal,
     private readonly onActivate: FilePathLinkHandler,
     private readonly validatePath?: FilePathLinkValidator,
+    private readonly onHover?: FilePathLinkHoverHandler,
+    private readonly onLeave?: () => void,
   ) {}
 
   provideLinks(bufferLineNumber: number, callback: (links: ILink[] | undefined) => void): void {
@@ -183,6 +187,8 @@ export class FilePathLinkProvider implements ILinkProvider {
             throw error;
           }
         },
+        hover: (event) => this.onHover?.(detected, event),
+        leave: () => this.onLeave?.(),
       });
 
     if (!this.validatePath) {

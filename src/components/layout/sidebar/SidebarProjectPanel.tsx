@@ -1635,7 +1635,7 @@ function SidebarProjectPanel({
       emptyFolderText,
       filterValue,
       handleCancelRename,
-      actionableSelectedEntries.length,
+      actionableSelectedEntries,
       handleCopyEntries,
       handlePasteEntries,
       handleRequestDeleteEntries,

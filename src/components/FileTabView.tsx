@@ -736,6 +736,14 @@ function FileTabView({ tabId, projectPath, path, isActive }: FileTabViewProps) {
             editBlockLabel={t("fileTabs.markdownEditBlock")}
             finishEditingLabel={t("fileTabs.markdownFinishBlockEditing")}
             cancelEditingLabel={t("fileTabs.markdownCancelBlockEditing")}
+            formattingMenuLabel={t("fileTabs.markdownFormattingMenu")}
+            headingLabel={t("fileTabs.markdownHeading")}
+            boldLabel={t("fileTabs.markdownBold")}
+            italicLabel={t("fileTabs.markdownItalic")}
+            inlineCodeLabel={t("fileTabs.markdownInlineCode")}
+            linkLabel={t("fileTabs.markdownLink")}
+            bulletListLabel={t("fileTabs.markdownBulletList")}
+            orderedListLabel={t("fileTabs.markdownOrderedList")}
             onOpenExternalLink={(href) => {
               void handleOpenExternalLink(href);
             }}

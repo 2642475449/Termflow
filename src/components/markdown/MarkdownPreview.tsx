@@ -1,23 +1,34 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
-import { Empty } from "antd";
+import { Dropdown, Empty, type MenuProps } from "antd";
 import {
   CheckOutlined,
   CloseOutlined,
+  CodeOutlined,
   CopyOutlined,
+  BoldOutlined,
   EditOutlined,
   FullscreenExitOutlined,
   FullscreenOutlined,
+  ItalicOutlined,
+  LinkOutlined,
+  OrderedListOutlined,
   RotateLeftOutlined,
+  UnorderedListOutlined,
   ZoomInOutlined,
   ZoomOutOutlined,
 } from "@ant-design/icons";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import mermaid from "mermaid";
 import { readProjectImage } from "@/lib/api";
+import type { ElementContent, Root, RootContent } from "hast";
 import {
   getMarkdownSourceBlocks,
   type MarkdownSourceBlock,
 } from "@/components/markdown/markdownSourceBlocks";
+import {
+  canHighlightWithStarryNight,
+  getStarryNightLanguageFlag,
+} from "@/components/markdown/starryNightEligibility";
 
 type TableAlignment = "left" | "center" | "right";
 type ListItem = {
@@ -768,6 +779,56 @@ export function renderInlineMarkdown(
   return nodes.length > 0 ? nodes : <span>{text}</span>;
 }
 
+function getStarryNightClassName(className: unknown): string | undefined {
+  if (typeof className === "string") return className;
+  if (!Array.isArray(className)) return undefined;
+  const values = className.filter((value): value is string => typeof value === "string");
+  return values.length > 0 ? values.join(" ") : undefined;
+}
+
+function renderStarryNightNode(
+  node: RootContent | ElementContent,
+  key: string,
+): ReactNode {
+  if (node.type === "text") return node.value;
+  if (node.type !== "element" || node.tagName !== "span") return null;
+
+  return (
+    <span key={key} className={getStarryNightClassName(node.properties.className)}>
+      {node.children.map((child, index) => renderStarryNightNode(child, `${key}-${index}`))}
+    </span>
+  );
+}
+
+export function renderStarryNightTree(tree: Root): ReactNode {
+  return tree.children.map((node, index) => renderStarryNightNode(node, `starry-${index}`));
+}
+
+function HighlightedCode({ code, language }: { code: string; language?: string }) {
+  const [tree, setTree] = useState<Root | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setTree(null);
+    if (!getStarryNightLanguageFlag(language) || !canHighlightWithStarryNight(code)) return;
+
+    void import("./starryNight")
+      .then(({ highlightWithStarryNight }) => highlightWithStarryNight(code, language))
+      .then((nextTree) => {
+        if (!cancelled) setTree(nextTree);
+      })
+      .catch(() => {
+        if (!cancelled) setTree(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [code, language]);
+
+  return <>{tree ? renderStarryNightTree(tree) : code}</>;
+}
+
 function CodeBlock({ code, language }: { code: string; language?: string }) {
   const [copied, setCopied] = useState(false);
   const resetTimerRef = useRef<number | null>(null);
@@ -819,7 +880,7 @@ function CodeBlock({ code, language }: { code: string; language?: string }) {
         className="m-0 overflow-x-auto p-4 text-xs leading-6"
         style={{ color: "var(--cs-text-secondary)" }}
       >
-        <code>{code}</code>
+        <code><HighlightedCode code={code} language={language} /></code>
       </pre>
     </div>
   );
@@ -857,6 +918,14 @@ export interface MarkdownPreviewProps {
   editBlockLabel?: string;
   finishEditingLabel?: string;
   cancelEditingLabel?: string;
+  formattingMenuLabel?: string;
+  headingLabel?: string;
+  boldLabel?: string;
+  italicLabel?: string;
+  inlineCodeLabel?: string;
+  linkLabel?: string;
+  bulletListLabel?: string;
+  orderedListLabel?: string;
 }
 
 function MarkdownPreviewRenderer({
@@ -1534,6 +1603,7 @@ function EditableMarkdownBlock({
   onCancel,
 }: EditableMarkdownBlockProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const pendingSelectionRef = useRef<{ start: number; end: number } | null>(null);
 
   useEffect(() => {
     if (!active || !textareaRef.current) return;
@@ -1551,16 +1621,82 @@ function EditableMarkdownBlock({
     textarea.style.height = `${Math.max(96, textarea.scrollHeight)}px`;
   }, [active, draft]);
 
+  useEffect(() => {
+    const selection = pendingSelectionRef.current;
+    if (!active || !selection || !textareaRef.current) return;
+    textareaRef.current.focus();
+    textareaRef.current.setSelectionRange(selection.start, selection.end);
+    pendingSelectionRef.current = null;
+  }, [active, draft]);
+
+  const applyFormat = (format: "heading" | "bold" | "italic" | "code" | "link" | "bullet" | "ordered") => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selected = draft.slice(start, end);
+    let next = draft;
+    let selectionStart = start;
+    let selectionEnd = end;
+
+    if (format === "heading") {
+      const heading = selected || "Heading";
+      next = `${draft.slice(0, start)}## ${heading}${draft.slice(end)}`;
+      selectionStart = start + 3;
+      selectionEnd = selectionStart + heading.length;
+    } else if (format === "bold" || format === "italic" || format === "code") {
+      const marker = format === "bold" ? "**" : format === "italic" ? "*" : "`";
+      next = `${draft.slice(0, start)}${marker}${selected || "text"}${marker}${draft.slice(end)}`;
+      selectionStart = start + marker.length;
+      selectionEnd = selectionStart + (selected || "text").length;
+    } else if (format === "link") {
+      const label = selected || "link text";
+      next = `${draft.slice(0, start)}[${label}](url)${draft.slice(end)}`;
+      selectionStart = start + label.length + 3;
+      selectionEnd = selectionStart + 3;
+    } else {
+      const prefix = format === "bullet" ? "- " : "1. ";
+      const lines = (selected || "list item").split("\n");
+      const formatted = lines.map((line, index) => `${format === "ordered" ? `${index + 1}. ` : prefix}${line}`).join("\n");
+      next = `${draft.slice(0, start)}${formatted}${draft.slice(end)}`;
+      selectionStart = start;
+      selectionEnd = start + formatted.length;
+    }
+
+    pendingSelectionRef.current = { start: selectionStart, end: selectionEnd };
+    onDraftChange(next);
+  };
+
+  const formatMenuItems: MenuProps["items"] = [
+    { key: "heading", label: previewProps.headingLabel ?? "Heading" },
+    { type: "divider" },
+    { key: "bold", icon: <BoldOutlined />, label: previewProps.boldLabel ?? "Bold", extra: "Ctrl+B" },
+    { key: "italic", icon: <ItalicOutlined />, label: previewProps.italicLabel ?? "Italic", extra: "Ctrl+I" },
+    { key: "code", icon: <CodeOutlined />, label: previewProps.inlineCodeLabel ?? "Inline code" },
+    { key: "link", icon: <LinkOutlined />, label: previewProps.linkLabel ?? "Link" },
+    { type: "divider" },
+    { key: "bullet", icon: <UnorderedListOutlined />, label: previewProps.bulletListLabel ?? "Bullet list" },
+    { key: "ordered", icon: <OrderedListOutlined />, label: previewProps.orderedListLabel ?? "Ordered list" },
+  ];
+
   if (active) {
     return (
       <div className="app-markdown-editable-block is-editing" data-markdown-block-kind={block.kind}>
-        <textarea
-          ref={textareaRef}
-          className="app-markdown-block-editor"
-          value={draft}
-          spellCheck={false}
-          onChange={(event) => onDraftChange(event.target.value)}
-          onKeyDown={(event) => {
+        <Dropdown
+          trigger={["contextMenu"]}
+          menu={{
+            items: formatMenuItems,
+            onClick: ({ key }) => applyFormat(key as "heading" | "bold" | "italic" | "code" | "link" | "bullet" | "ordered"),
+          }}
+        >
+          <textarea
+            ref={textareaRef}
+            className="app-markdown-block-editor"
+            value={draft}
+            spellCheck={false}
+            aria-label={previewProps.formattingMenuLabel ?? "Markdown editor"}
+            onChange={(event) => onDraftChange(event.target.value)}
+            onKeyDown={(event) => {
             if (event.key === "Escape") {
               event.preventDefault();
               onCancel();
@@ -1569,9 +1705,20 @@ function EditableMarkdownBlock({
             if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
               event.preventDefault();
               onCommit();
+              return;
             }
-          }}
-        />
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "b") {
+              event.preventDefault();
+              applyFormat("bold");
+              return;
+            }
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "i") {
+              event.preventDefault();
+              applyFormat("italic");
+            }
+            }}
+          />
+        </Dropdown>
         <div className="app-markdown-block-actions is-editing">
           <span className="app-markdown-block-shortcut">Esc</span>
           <button

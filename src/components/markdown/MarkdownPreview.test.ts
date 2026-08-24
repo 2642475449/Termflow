@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import type { Root } from "hast";
 import MarkdownPreview, {
   isLikelyMarkdownPath,
   renderInlineMarkdown,
+  renderStarryNightTree,
 } from "./MarkdownPreview";
 
 describe("isLikelyMarkdownPath", () => {
@@ -59,6 +61,32 @@ describe("Markdown rendering", () => {
     expect(markup).toContain("<hr/>");
     expect(markup).toContain("const ready = true;");
     expect(markup).toContain('aria-label="复制代码"');
+  });
+
+  it("only renders safe Starry Night text and span nodes", () => {
+    const markup = renderToStaticMarkup(
+      createElement("code", null, renderStarryNightTree({
+        type: "root",
+        children: [
+          {
+            type: "element",
+            tagName: "span",
+            properties: { className: ["pl-k"] },
+            children: [{ type: "text", value: "const" }],
+          },
+          {
+            type: "element",
+            tagName: "script",
+            properties: {},
+            children: [{ type: "text", value: "alert(1)" }],
+          },
+        ],
+      } as Root)),
+    );
+
+    expect(markup).toContain('<span class="pl-k">const</span>');
+    expect(markup).not.toContain("script");
+    expect(markup).not.toContain("alert(1)");
   });
 
   it("uses standard heading anchors so in-document links can navigate", () => {

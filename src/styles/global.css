@@ -1233,6 +1233,36 @@ html, body, #root {
   line-height: 1.65;
   user-select: text;
   -webkit-user-select: text;
+  --color-prettylights-syntax-comment: var(--cs-text-tertiary);
+  --color-prettylights-syntax-constant: color-mix(in srgb, var(--cs-accent) 82%, var(--cs-text-primary));
+  --color-prettylights-syntax-constant-other-reference-link: var(--cs-primary);
+  --color-prettylights-syntax-entity: var(--cs-primary);
+  --color-prettylights-syntax-entity-tag: color-mix(in srgb, var(--cs-accent) 76%, var(--cs-text-primary));
+  --color-prettylights-syntax-storage-modifier-import: var(--cs-primary);
+  --color-prettylights-syntax-keyword: color-mix(in srgb, var(--cs-primary) 84%, var(--cs-text-primary));
+  --color-prettylights-syntax-string: color-mix(in srgb, var(--cs-success) 80%, var(--cs-text-primary));
+  --color-prettylights-syntax-string-regexp: color-mix(in srgb, var(--cs-success) 92%, var(--cs-text-primary));
+  --color-prettylights-syntax-variable: var(--cs-text-secondary);
+  --color-prettylights-syntax-brackethighlighter-unmatched: var(--cs-error);
+  --color-prettylights-syntax-brackethighlighter-angle: var(--cs-text-tertiary);
+  --color-prettylights-syntax-invalid-illegal-text: #fff;
+  --color-prettylights-syntax-invalid-illegal-bg: var(--cs-error);
+  --color-prettylights-syntax-carriage-return-text: #fff;
+  --color-prettylights-syntax-carriage-return-bg: var(--cs-error);
+  --color-prettylights-syntax-markup-list: var(--cs-primary);
+  --color-prettylights-syntax-markup-heading: var(--cs-primary);
+  --color-prettylights-syntax-markup-italic: var(--cs-text-secondary);
+  --color-prettylights-syntax-markup-bold: var(--cs-text-primary);
+  --color-prettylights-syntax-markup-deleted-text: var(--cs-error);
+  --color-prettylights-syntax-markup-deleted-bg: color-mix(in srgb, var(--cs-error) 14%, transparent);
+  --color-prettylights-syntax-markup-inserted-text: var(--cs-success);
+  --color-prettylights-syntax-markup-inserted-bg: color-mix(in srgb, var(--cs-success) 14%, transparent);
+  --color-prettylights-syntax-markup-changed-text: var(--cs-warning);
+  --color-prettylights-syntax-markup-changed-bg: color-mix(in srgb, var(--cs-warning) 14%, transparent);
+  --color-prettylights-syntax-markup-ignored-text: var(--cs-text-tertiary);
+  --color-prettylights-syntax-markup-ignored-bg: color-mix(in srgb, var(--cs-text-tertiary) 14%, transparent);
+  --color-prettylights-syntax-meta-diff-range: var(--cs-primary);
+  --color-prettylights-syntax-sublimelinter-gutter-mark: var(--cs-text-tertiary);
 }
 
 .app-markdown-preview *,
@@ -1270,7 +1300,7 @@ html, body, #root {
 
 .app-markdown-editable-block.is-editing {
   margin-bottom: 6px;
-  padding-bottom: 8px;
+  padding: 3px 12px 8px;
   border-color: color-mix(in srgb, var(--cs-primary) 58%, var(--cs-border-card) 42%);
   background: var(--cs-bg-primary);
   box-shadow: 0 8px 28px color-mix(in srgb, var(--cs-primary) 10%, transparent);
@@ -1319,7 +1349,7 @@ html, body, #root {
 .app-markdown-block-editor {
   display: block;
   width: 100%;
-  min-height: 96px;
+  min-height: 72px;
   resize: vertical;
   border: 0;
   outline: 0;
@@ -2281,40 +2311,10 @@ html, body, #root {
 }
 
 .content-overview-trigger-wrap {
-  position: sticky;
-  right: 0;
-  z-index: 12;
+  position: relative;
   display: flex;
-  min-height: 36px;
-  flex: 0 0 auto;
+  height: 100%;
   align-items: center;
-  padding: 0 8px 0 4px;
-  background: linear-gradient(90deg, transparent, var(--cs-bg-content) 18%);
-}
-
-.content-overview-trigger {
-  display: inline-flex;
-  width: 26px;
-  height: 26px;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: 7px;
-  color: var(--cs-text-secondary);
-  background: transparent;
-  cursor: pointer;
-  transition: color 120ms ease, background 120ms ease;
-}
-
-.content-overview-trigger:hover:not(:disabled) {
-  color: var(--cs-primary);
-  background: color-mix(in srgb, var(--cs-primary) 10%, transparent);
-}
-
-.content-overview-trigger:disabled {
-  color: var(--cs-text-tertiary);
-  cursor: default;
-  opacity: 0.48;
 }
 
 .content-overview-popover .ant-popover-inner {
@@ -2323,7 +2323,7 @@ html, body, #root {
   padding: 0;
   overflow: hidden;
   border: 1px solid var(--cs-border-card, var(--cs-border-sidebar));
-  border-radius: 12px;
+  border-radius: 16px;
   background: color-mix(in srgb, var(--cs-bg-card-solid, var(--cs-bg-card)) 96%, transparent);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.22);
   backdrop-filter: blur(18px) saturate(150%);

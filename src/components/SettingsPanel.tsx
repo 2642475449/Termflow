@@ -101,7 +101,9 @@ import { SHORTCUTS } from "@/constants/shortcuts";
 import ClaudeMdPage from "@/components/settings/ClaudeMdPage";
 import { QuickCommandsPage } from "@/components/settings/QuickCommandsPage";
 import { AgentIcon } from "@/components/AgentIcon";
+import { GitIcon } from "@/components/GitIcon";
 import { AgentsPage } from "@/components/settings/AgentsPage";
+import { GitSettingsPage } from "@/components/settings/GitSettingsPage";
 import { ArchivedSessionsPage } from "@/components/settings/ArchivedSessionsPage";
 import { DataPrivacyPage } from "@/components/settings/DataPrivacyPage";
 import { SearchIndexPage } from "@/components/settings/SearchIndexPage";
@@ -122,7 +124,7 @@ const ABOUT_LINKS: Record<"website" | "github", string | null> = {
   github: "https://github.com/2642475449/Termflow",
 };
 
-type SettingsPage = "general" | "notifications" | "agents" | "terminal" | "voiceRecognition" | "shortcuts" | "skills" | "hooks" | "mcpServers" | "commands" | "quickCommands" | "claudeMd" | "searchIndex" | "dataPrivacy" | "archived" | "about";
+type SettingsPage = "general" | "notifications" | "agents" | "git" | "terminal" | "voiceRecognition" | "shortcuts" | "skills" | "hooks" | "mcpServers" | "commands" | "quickCommands" | "claudeMd" | "searchIndex" | "dataPrivacy" | "archived" | "about";
 
 interface SettingsMenuItem {
   key: SettingsPage;
@@ -153,6 +155,7 @@ const menuGroups: SettingsMenuGroup[] = [
     labelKey: "settings.menu.groups.agentExtensions",
     items: [
       { key: "agents", icon: <RobotOutlined />, labelKey: "settings.menu.agents" },
+      { key: "git", icon: <GitIcon />, labelKey: "settings.menu.git" },
       { key: "skills", icon: <AppstoreOutlined />, labelKey: "settings.menu.skills" },
       { key: "hooks", icon: <ApiOutlined />, labelKey: "settings.menu.hooks" },
       { key: "mcpServers", icon: <CloudServerOutlined />, labelKey: "settings.menu.mcpServers" },
@@ -4976,6 +4979,7 @@ const pageComponents: Record<SettingsPage, React.FC> = {
   general: GeneralPage,
   notifications: NotificationsPage,
   agents: AgentsPage,
+  git: GitSettingsPage,
   terminal: TerminalPage,
   voiceRecognition: VoiceRecognitionPage,
   shortcuts: ShortcutsPage,

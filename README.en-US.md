@@ -21,7 +21,7 @@
   <img src="https://img.shields.io/badge/v1.8.20-blue?style=flat-square" alt="Version">
 </p>
 
-![Termflow overview](public/images/termflow-overview.png)
+![Termflow overview](.github/assets/termflow-overview.png)
 
 ## Supported agents
 
@@ -62,13 +62,13 @@ Termflow started as an application built around the workflow I wanted to use eve
 
 | Feature | What it provides |
 | :--- | :--- |
-| **Project and session workspace** | Automatically organize sessions from different agents by project directory, create and switch tasks quickly, and see the live state of every session.<br><br>![Termflow project and session workspace demo](public/images/demos/multi-session-management.gif) |
+| **Project and session workspace** | Automatically organize sessions from different agents by project directory, create and switch tasks quickly, and see the live state of every session.<br><br>![Termflow project and session workspace demo](.github/assets/demos/multi-session-management.gif) |
 | **Side tasks and auxiliary workspace** | When a terminal error or file issue appears, launch a side question from the selected terminal output, then inspect related files or run an independent task in the right-hand workspace without leaving the main session. |
 | **File and context collaboration** | Browse, search, and edit project files, preview Markdown, and drag files from the project tree into the active CLI input to give an agent context quickly. |
 | **Git change workflow** | Review and stage changes, manage branches, commit, push, pull, and sync from one place, with optional AI-generated commit messages. |
 | **Checkpoint and diff review** | Record checkpoints for agent turns automatically, review file summaries and diffs, and return to any checkpoint. |
 | **Quick commands and voice input** | Run common actions through searchable, parameterized quick commands; use MiMo or DashScope ASR with a global shortcut and recording-status overlay. |
-| **Work status overview** | Summarize session activity, token usage, and work patterns, while the attention center and smart notifications highlight tasks that need action.<br><br>![Termflow work status overview demo](public/images/demos/work-status-overview.gif) |
+| **Work status overview** | Summarize session activity, token usage, and work patterns, while the attention center and smart notifications highlight tasks that need action.<br><br>![Termflow work status overview demo](.github/assets/demos/work-status-overview.gif) |
 
 Additional capabilities include persistent sessions, a custom title bar and borderless window controls, dark/light/system themes, and Simplified Chinese, Traditional Chinese, English, and Japanese interfaces.
 
