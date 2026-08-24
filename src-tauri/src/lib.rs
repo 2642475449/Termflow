@@ -320,6 +320,7 @@ pub fn run() {
             commands::remote_notification::clear_remote_notification_credentials,
             commands::remote_notification::send_remote_notification,
             commands::image::save_clipboard_image,
+            commands::image::read_image_preview,
             commands::system_input::send_text_to_focused_window,
             commands::voice::transcribe_audio,
             commands::voice_shortcut::configure_voice_global_shortcut,

@@ -762,6 +762,14 @@
     "markdownEditBlock": "编辑此内容块",
     "markdownFinishBlockEditing": "完成编辑",
     "markdownCancelBlockEditing": "取消编辑",
+    "markdownFormattingMenu": "Markdown 格式菜单",
+    "markdownHeading": "标题",
+    "markdownBold": "加粗",
+    "markdownItalic": "斜体",
+    "markdownInlineCode": "行内代码",
+    "markdownLink": "链接",
+    "markdownBulletList": "无序列表",
+    "markdownOrderedList": "有序列表",
     "pdfLoading": "正在加载 PDF",
     "pdfLoadFailed": "PDF 加载失败",
     "pdfRenderFailed": "PDF 页面渲染失败",
@@ -835,6 +843,7 @@
       "general": "通用",
       "notifications": "通知",
       "agents": "智能体",
+      "git": "Git",
       "terminal": "终端",
       "voiceRecognition": "语音识别",
       "shortcuts": "快捷键",
@@ -877,9 +886,13 @@
       "unknown": "未知",
       "notFoundInPath": "未在 PATH 中找到",
       "versionError": "版本读取失败",
+      "installCommand": "安装命令（PowerShell）",
+      "copyInstallCommand": "复制安装命令",
+      "installCommandCopied": "已复制 {{name}} 的 {{shell}} 安装命令",
+      "installCommandCopyFailed": "无法复制安装命令，请手动复制",
       "defaultTitle": "默认智能体",
-      "defaultCurrent": "新会话、Git AI 和 AI 快捷命令将默认使用 {{name}}。",
-      "defaultMissing": "尚未设置默认智能体。Git AI 和 AI 快捷命令将保持不可用。",
+      "defaultCurrent": "新会话、Git AI 和快速命令将默认使用 {{name}}。",
+      "defaultMissing": "尚未设置默认智能体。Git AI 和快速命令将保持不可用。",
       "setDefault": "设为默认智能体",
       "defaultActive": "默认智能体",
       "defaultChanged": "已将 {{name}} 设为默认智能体",
@@ -929,7 +942,7 @@
         "unsupported": "不支持",
         "unknown": "未知"
       },
-      "pathHint": "检测结果以 Termflow 当前读取到的系统 PATH 为准。安装或更新智能体后，如果仍未检测到，请重启 Termflow 再试。"
+      "pathHint": "检测结果以 Termflow 当前读取到的系统 PATH 为准。安装或更新智能体后，如果仍未检测到，请重启电脑再试。"
     },
     "theme": {
       "dark-starry": {

@@ -11,7 +11,6 @@ import {
   FolderOpenFilled,
   FolderOutlined,
   HistoryOutlined,
-  MessageOutlined,
   ReloadOutlined,
   RightOutlined,
   SearchOutlined,
@@ -27,14 +26,10 @@ import {
   createProjectDirectory,
   createProjectFile,
   deleteProjectEntry,
-  inspectAgentClis,
   listProjectDirectory,
   renameProjectEntry,
   searchProjectEntries,
 } from "@/lib/api";
-import { AgentIcon } from "@/components/AgentIcon";
-import { SideQuestionComposer } from "@/components/SideQuestionComposer";
-import { openAuxiliaryQuestion } from "@/lib/auxiliaryDock";
 import {
   EXPLORER_REVEAL_PATH_EVENT,
   EXPLORER_SELECT_ALL_EVENT,
@@ -44,13 +39,8 @@ import type { ExplorerRevealPathDetail } from "@/lib/explorer";
 import { getFileIcon } from "@/lib/fileIcon";
 import { openGlobalTextSearch } from "@/lib/globalSearch";
 import { dispatchGitFileHistoryOpen } from "@/lib/gitGraphEvents";
-import {
-  buildResourceSideQuestionContext,
-  buildResourceSideQuestionPrompt,
-  type ResourceSideQuestionContext,
-} from "@/lib/sideQuestion";
 import { useAppStore } from "@/store";
-import type { AgentCliInfo, FileTreeEntry, FileTreeEntryKind } from "@/types";
+import type { FileTreeEntry, FileTreeEntryKind } from "@/types";
 import { useTranslation } from "react-i18next";
 
 interface ProjectRef {
@@ -102,12 +92,6 @@ interface PendingExternalCopy {
   destinationDirectory: string;
   newName: string;
   openAfterCopy: boolean;
-}
-
-interface ResourceSideQuestionDraft {
-  agent: AgentCliInfo;
-  context: ResourceSideQuestionContext;
-  projectPath: string;
 }
 
 function normalizePath(path: string): string {
@@ -430,14 +414,9 @@ function SidebarProjectPanel({
   const [pendingCreatedResource, setPendingCreatedResource] = useState<PendingCreatedResource | null>(null);
   const [pendingExternalCopy, setPendingExternalCopy] = useState<PendingExternalCopy | null>(null);
   const [externalCopySubmitting, setExternalCopySubmitting] = useState(false);
-  const [installedAgents, setInstalledAgents] = useState<AgentCliInfo[]>([]);
-  const [sideQuestionDraft, setSideQuestionDraft] = useState<ResourceSideQuestionDraft | null>(null);
-  const [sideQuestionText, setSideQuestionText] = useState("");
   const renameInputRef = useRef<InputRef | null>(null);
   const renameCommitInFlightRef = useRef(false);
   const suppressNextClickPathRef = useRef<string | null>(null);
-  const sideQuestionSubmittingRef = useRef(false);
-  const sideQuestionOpenTimerRef = useRef<number | null>(null);
   const [dragOverPath, setDragOverPath] = useState<string | null>(null);
   const [isExternalDragOver, setIsExternalDragOver] = useState(false);
   const treeContainerRef = useRef<HTMLDivElement | null>(null);
@@ -501,34 +480,8 @@ function SidebarProjectPanel({
     setSelectedPath(currentProject.path);
     setFilterValue("");
     setSearchResults([]);
-    setSideQuestionDraft(null);
-    setSideQuestionText("");
     void loadDirectory(null);
   }, [currentProject, loadDirectory]);
-
-  useEffect(() => {
-    let disposed = false;
-    void inspectAgentClis()
-      .then((agents) => {
-        if (!disposed) {
-          setInstalledAgents(agents.filter((agent) => agent.installed));
-        }
-      })
-      .catch((nextError) => {
-        console.warn("Failed to inspect agents for the file browser context menu:", nextError);
-        if (!disposed) setInstalledAgents([]);
-      });
-
-    return () => {
-      disposed = true;
-    };
-  }, []);
-
-  useEffect(() => () => {
-    if (sideQuestionOpenTimerRef.current !== null) {
-      window.clearTimeout(sideQuestionOpenTimerRef.current);
-    }
-  }, []);
 
   useEffect(() => {
     if (!selectedPath) {
@@ -818,57 +771,6 @@ function SidebarProjectPanel({
   const canCopySelection = actionableSelectedEntries.length > 0 && !renameSubmitting;
   const canDeleteSelection = actionableSelectedEntries.length > 0 && !deleteSubmitting && !renameSubmitting;
   const canPasteEntries = hasClipboardEntries && !pasteSubmitting && !renameSubmitting;
-
-  const closeSideQuestionComposer = useCallback(() => {
-    setSideQuestionDraft(null);
-    setSideQuestionText("");
-    sideQuestionSubmittingRef.current = false;
-  }, []);
-
-  const scheduleSideQuestionComposer = useCallback(
-    (agent: AgentCliInfo, entries: FileTreeEntry[]) => {
-      if (!currentProject) return;
-      const context = buildResourceSideQuestionContext(currentProject.path, entries);
-      if (context.resources.length === 0) return;
-
-      if (sideQuestionOpenTimerRef.current !== null) {
-        window.clearTimeout(sideQuestionOpenTimerRef.current);
-      }
-
-      // Let Ant Design close the context-menu portal before mounting the controlled modal.
-      sideQuestionOpenTimerRef.current = window.setTimeout(() => {
-        sideQuestionOpenTimerRef.current = null;
-        sideQuestionSubmittingRef.current = false;
-        setSideQuestionText("");
-        setSideQuestionDraft({
-          agent,
-          context,
-          projectPath: currentProject.path,
-        });
-      }, 0);
-    },
-    [currentProject],
-  );
-
-  const handleSideQuestionSubmit = useCallback(() => {
-    if (sideQuestionSubmittingRef.current) return;
-    const draft = sideQuestionDraft;
-    const question = sideQuestionText.trim();
-    if (!draft || !question) return;
-
-    sideQuestionSubmittingRef.current = true;
-    openAuxiliaryQuestion({
-      projectPath: draft.projectPath,
-      agent: draft.agent,
-      question,
-      prompt: buildResourceSideQuestionPrompt({
-        question,
-        projectPath: draft.projectPath,
-        context: draft.context,
-      }),
-    });
-    closeSideQuestionComposer();
-  }, [closeSideQuestionComposer, sideQuestionDraft, sideQuestionText]);
 
   const handleSelectAllVisible = useCallback(() => {
     const treeContainer = treeContainerRef.current;
@@ -1455,17 +1357,6 @@ function SidebarProjectPanel({
             selectOnlyPath(entry.path);
           }
 
-          if (key.startsWith("ask-in-sidebar:")) {
-            const agentId = key.slice("ask-in-sidebar:".length);
-            const agent = installedAgents.find((item) => item.id === agentId);
-            if (!agent) return;
-            const entries = isSelected && selectionCount > 1
-              ? actionableSelectedEntries
-              : [entry];
-            scheduleSideQuestionComposer(agent, entries);
-            return;
-          }
-
           if (key === "create-file") {
             void handleCreateResource("file", getCreateTargetDirectory(projectRootPath, entry));
             return;
@@ -1578,18 +1469,6 @@ function SidebarProjectPanel({
               },
             ]
             : []),
-          {
-            key: "ask-in-sidebar",
-            icon: <MessageOutlined />,
-            label: t("sidebar.askInSidebar"),
-            disabled: installedAgents.length === 0,
-            children: installedAgents.map((agent) => ({
-              key: `ask-in-sidebar:${agent.id}`,
-              icon: <AgentIcon agentId={agent.id} size={15} />,
-              label: agent.name,
-            })),
-          },
-          { type: "divider" },
           {
             key: "copy-relative-path",
             icon: <CopyOutlined />,
@@ -1766,7 +1645,6 @@ function SidebarProjectPanel({
       handleOpenRename,
       handleToggleDirectory,
       hasClipboardEntries,
-      installedAgents,
       loadingText,
       normalizedSelectedPaths,
       onOpenInAssociatedApp,
@@ -1775,7 +1653,6 @@ function SidebarProjectPanel({
       onOpenFile,
       pasteSubmitting,
       projectRootPath,
-      scheduleSideQuestionComposer,
       selectedPath,
       selectOnlyPath,
       dragOverPath,
@@ -1961,18 +1838,6 @@ function SidebarProjectPanel({
           </div>
         </Dropdown>
       </div>
-
-      <SideQuestionComposer
-        open={Boolean(sideQuestionDraft)}
-        agent={sideQuestionDraft?.agent ?? null}
-        context={sideQuestionDraft
-          ? { kind: "resources", resourceContext: sideQuestionDraft.context }
-          : null}
-        question={sideQuestionText}
-        onQuestionChange={setSideQuestionText}
-        onCancel={closeSideQuestionComposer}
-        onSubmit={handleSideQuestionSubmit}
-      />
 
       <Modal
         title={

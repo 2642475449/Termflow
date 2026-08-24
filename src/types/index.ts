@@ -653,6 +653,10 @@ export interface HookCatalog {
   userConfigPath: string;
 }
 
+export interface ImagePreviewPayload {
+  dataUrl: string;
+}
+
 export interface WorkspaceHookMigrationResult {
   removedCount: number;
   catalog: HookCatalog;

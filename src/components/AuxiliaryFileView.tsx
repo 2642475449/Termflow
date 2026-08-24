@@ -278,6 +278,14 @@ export default function AuxiliaryFileView({
                   editBlockLabel={t("fileTabs.markdownEditBlock")}
                   finishEditingLabel={t("fileTabs.markdownFinishBlockEditing")}
                   cancelEditingLabel={t("fileTabs.markdownCancelBlockEditing")}
+                  formattingMenuLabel={t("fileTabs.markdownFormattingMenu")}
+                  headingLabel={t("fileTabs.markdownHeading")}
+                  boldLabel={t("fileTabs.markdownBold")}
+                  italicLabel={t("fileTabs.markdownItalic")}
+                  inlineCodeLabel={t("fileTabs.markdownInlineCode")}
+                  linkLabel={t("fileTabs.markdownLink")}
+                  bulletListLabel={t("fileTabs.markdownBulletList")}
+                  orderedListLabel={t("fileTabs.markdownOrderedList")}
                   onOpenProjectPath={(targetPath) => {
                     openAuxiliaryFile({ projectPath, path: targetPath, preview: true });
                   }}

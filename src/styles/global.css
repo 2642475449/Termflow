@@ -1300,7 +1300,7 @@ html, body, #root {
 
 .app-markdown-editable-block.is-editing {
   margin-bottom: 6px;
-  padding-bottom: 8px;
+  padding: 3px 12px 8px;
   border-color: color-mix(in srgb, var(--cs-primary) 58%, var(--cs-border-card) 42%);
   background: var(--cs-bg-primary);
   box-shadow: 0 8px 28px color-mix(in srgb, var(--cs-primary) 10%, transparent);
@@ -1349,7 +1349,7 @@ html, body, #root {
 .app-markdown-block-editor {
   display: block;
   width: 100%;
-  min-height: 96px;
+  min-height: 72px;
   resize: vertical;
   border: 0;
   outline: 0;

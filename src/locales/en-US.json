@@ -762,6 +762,14 @@
     "markdownEditBlock": "Edit this block",
     "markdownFinishBlockEditing": "Finish editing",
     "markdownCancelBlockEditing": "Cancel editing",
+    "markdownFormattingMenu": "Markdown formatting menu",
+    "markdownHeading": "Heading",
+    "markdownBold": "Bold",
+    "markdownItalic": "Italic",
+    "markdownInlineCode": "Inline code",
+    "markdownLink": "Link",
+    "markdownBulletList": "Bullet list",
+    "markdownOrderedList": "Ordered list",
     "pdfLoading": "Loading PDF",
     "pdfLoadFailed": "Failed to load PDF",
     "pdfRenderFailed": "Failed to render PDF page",
@@ -835,6 +843,7 @@
       "general": "General",
       "notifications": "Notifications",
       "agents": "Agents",
+      "git": "Git",
       "terminal": "Terminal",
       "voiceRecognition": "Voice Recognition",
       "shortcuts": "Shortcuts",
@@ -877,9 +886,13 @@
       "unknown": "Unknown",
       "notFoundInPath": "Not found in PATH",
       "versionError": "Unable to read version",
+      "installCommand": "Install command (PowerShell)",
+      "copyInstallCommand": "Copy install command",
+      "installCommandCopied": "Copied the {{name}} {{shell}} install command",
+      "installCommandCopyFailed": "Could not copy the install command. Copy it manually instead.",
       "defaultTitle": "Default agent",
-      "defaultCurrent": "New sessions, Git AI, and AI quick commands will use {{name}} by default.",
-      "defaultMissing": "No default agent is configured. Git AI and AI quick commands will remain unavailable.",
+      "defaultCurrent": "New sessions, Git AI, and quick commands will use {{name}} by default.",
+      "defaultMissing": "No default agent is configured. Git AI and quick commands will remain unavailable.",
       "setDefault": "Set as default agent",
       "defaultActive": "Default agent",
       "defaultChanged": "{{name}} is now the default agent",
@@ -929,7 +942,7 @@
         "unsupported": "Unsupported",
         "unknown": "Unknown"
       },
-      "pathHint": "Detection uses the system PATH currently available to Termflow. If a newly installed or updated agent is not detected, restart Termflow and try again."
+      "pathHint": "Detection uses the system PATH currently available to Termflow. If a newly installed or updated agent is not detected, restart your computer and try again."
     },
     "theme": {
       "dark-starry": {

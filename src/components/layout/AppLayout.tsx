@@ -518,6 +518,12 @@ function AppLayout() {
   }>({ open: false, scopePath: null });
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
+  const visibleTerminalSessionKey = Object.values(panesById)
+    .map((pane) => pane.activeTabId)
+    .filter((tabId): tabId is string => Boolean(tabId && tabsById[tabId]?.kind === "session"))
+    .sort()
+    .join("\u0000");
+  const workspaceLayoutKey = JSON.stringify(workspaceLayout.root);
   const settingsVisible = Object.values(panesById).some((pane) => {
     const activeTabId = pane.activeTabId;
     return activeTabId === SETTINGS_ID || tabsById[activeTabId ?? ""]?.kind === "settings";
@@ -1337,6 +1343,26 @@ function AppLayout() {
       const sessionId = payload.sessionId ?? payload.session_id;
       const projectPath = payload.projectPath ?? payload.project_path;
       if (!sessionId || !projectPath) return;
+
+      // Side tasks have their own presentation surface. A permission/input
+      // notification must reveal that surface, rather than opening a second
+      // copy of the terminal in the main workspace (and potentially its
+      // active split pane).
+      const targetSession = useAppStore
+        .getState()
+        .projectSessions[projectPath]
+        ?.find((session) => session.id === sessionId);
+      if (targetSession?.presentation === "auxiliary") {
+        openAuxiliarySession({
+          sessionId: targetSession.id,
+          projectPath: targetSession.path,
+          title: targetSession.name,
+          kind: targetSession.ephemeral ? "terminal" : "task",
+        });
+        getCurrentWindow().setFocus().catch(() => {});
+        return;
+      }
+
       focusSessionFromEvent({
         id: `focus-${Date.now()}`,
         sessionId,
@@ -1596,9 +1622,10 @@ function AppLayout() {
   ]);
 
   useEffect(() => {
-    for (const pane of Object.values(panesById)) {
-      const tabId = pane.activeTabId;
-      if (!tabId || tabsById[tabId]?.kind !== "session") continue;
+    const visibleTerminalSessionIds = visibleTerminalSessionKey
+      ? visibleTerminalSessionKey.split("\u0000")
+      : [];
+    for (const tabId of visibleTerminalSessionIds) {
       window.dispatchEvent(
         new CustomEvent(TERMINAL_LAYOUT_SYNC_EVENT, {
           detail: {
@@ -1608,7 +1635,7 @@ function AppLayout() {
         })
       );
     }
-  }, [panesById, sidebarCollapsed, tabsById, workspaceLayout]);
+  }, [sidebarCollapsed, visibleTerminalSessionKey, workspaceLayoutKey]);
 
   const hasTabs = Object.values(panesById).some((pane) => pane.tabIds.length > 0);
   const displayVoiceState = workerVoiceState;

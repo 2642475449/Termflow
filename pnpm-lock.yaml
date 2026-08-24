@@ -86,6 +86,9 @@ importers:
       sql.js:
         specifier: ^1.14.1
         version: 1.14.1
+      vscode-oniguruma:
+        specifier: 2.0.1
+        version: 2.0.1
       zustand:
         specifier: ^5.0.5
         version: 5.0.14(@types/react@19.2.18)(react@19.2.8)(use-sync-external-store@1.6.0(react@19.2.8))
@@ -93,6 +96,9 @@ importers:
       '@tauri-apps/cli':
         specifier: ^2.5.0
         version: 2.11.4
+      '@types/hast':
+        specifier: 3.0.5
+        version: 3.0.5
       '@types/react':
         specifier: ^19.1.2
         version: 19.2.18

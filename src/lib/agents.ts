@@ -30,8 +30,15 @@ export interface AgentDefinition {
   command: string;
   iconPath: string;
   brandColor: string;
+  /** Official Windows commands offered when the CLI is not detected. */
+  installCommands: readonly AgentInstallCommand[];
   terminal?: AgentTerminalBehavior;
   capabilities: Record<AgentCapabilityKey, AgentCapabilityLevel>;
+}
+
+export interface AgentInstallCommand {
+  shell: "PowerShell" | "CMD";
+  command: string;
 }
 
 export interface AgentTerminalBehavior {
@@ -47,6 +54,9 @@ export const AGENT_DEFINITIONS: Record<AiAgentId, AgentDefinition> = {
     command: "claude",
     iconPath: "/agents/claude.svg",
     brandColor: "#d97757",
+    installCommands: [
+      { shell: "PowerShell", command: "irm https://claude.ai/install.ps1 | iex" },
+    ],
     capabilities: {
       interactiveTerminal: "full",
       initialPrompt: "full",
@@ -66,6 +76,9 @@ export const AGENT_DEFINITIONS: Record<AiAgentId, AgentDefinition> = {
     command: "codex",
     iconPath: "/agents/codex.svg",
     brandColor: "#10a37f",
+    installCommands: [
+      { shell: "PowerShell", command: "npm install -g @openai/codex" },
+    ],
     terminal: {
       forceStableCursor: true,
     },
@@ -88,6 +101,9 @@ export const AGENT_DEFINITIONS: Record<AiAgentId, AgentDefinition> = {
     command: "agy",
     iconPath: "/agents/antigravity.svg",
     brandColor: "#4285f4",
+    installCommands: [
+      { shell: "PowerShell", command: "irm https://antigravity.google/cli/install.ps1 | iex" },
+    ],
     capabilities: {
       interactiveTerminal: "full",
       initialPrompt: "full",
@@ -107,6 +123,9 @@ export const AGENT_DEFINITIONS: Record<AiAgentId, AgentDefinition> = {
     command: "opencode",
     iconPath: "/agents/opencode.svg",
     brandColor: "#6366f1",
+    installCommands: [
+      { shell: "PowerShell", command: "npm install -g opencode-ai@latest" },
+    ],
     capabilities: {
       interactiveTerminal: "full",
       initialPrompt: "full",
@@ -126,6 +145,10 @@ export const AGENT_DEFINITIONS: Record<AiAgentId, AgentDefinition> = {
     command: "qoderclicn",
     iconPath: "/agents/qoder.svg",
     brandColor: "#2adb5c",
+    installCommands: [
+      { shell: "PowerShell", command: "irm https://qoder.com.cn/install.ps1 | iex" },
+      { shell: "CMD", command: "curl -fsSL https://qoder.com.cn/install.cmd -o install.cmd && install.cmd" },
+    ],
     capabilities: {
       interactiveTerminal: "full",
       initialPrompt: "full",

@@ -25,6 +25,7 @@ import {
   inspectProjectFile,
   resolveProjectLink,
   inspectAgentClis,
+  readImagePreview,
 } from "@/lib/api";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
@@ -59,6 +60,7 @@ import { SideQuestionComposer } from "@/components/SideQuestionComposer";
 import { getAgentDisplayName, getAgentTerminalBehavior, isAiAgentId } from "@/lib/agents";
 import { isSessionTurnRunning } from "@/lib/sessions";
 import { getTerminalTheme } from "@/lib/terminalTheme";
+import { createPtyResizeGate } from "@/lib/terminalResize";
 import type { AgentCliInfo } from "@/types";
 import { useTranslation } from "react-i18next";
 import "@xterm/xterm/css/xterm.css";
@@ -150,6 +152,19 @@ type PendingTerminalLink =
   | { kind: "external"; href: string }
   | { kind: "project"; path: ParsedPath };
 
+interface TerminalImagePreview {
+  src: string;
+  alt: string;
+  x: number;
+  y: number;
+}
+
+const IMAGE_REFERENCE_PATTERN = /\.(?:png|jpe?g|gif|webp|bmp|svg|avif)(?:$|[?#])/i;
+
+function isImageReference(value: string): boolean {
+  return IMAGE_REFERENCE_PATTERN.test(value.trim());
+}
+
 export function normalizeDecscusrCursorStyle(param: number | undefined): {
   cursorBlink: boolean;
   cursorStyle: "block" | "underline" | "bar";
@@ -194,11 +209,14 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
   const [sideQuestionDraft, setSideQuestionDraft] = useState<SideQuestionDraft | null>(null);
   const [sideQuestionText, setSideQuestionText] = useState("");
   const [pendingTerminalLink, setPendingTerminalLink] = useState<PendingTerminalLink | null>(null);
+  const [imagePreview, setImagePreview] = useState<TerminalImagePreview | null>(null);
   const [openingTerminalLink, setOpeningTerminalLink] = useState(false);
   const openingTerminalLinkRef = useRef(false);
   const captureInputForAutoTitleRef = useRef<((data: string) => void) | undefined>(undefined);
   const isDropPositionInsideTerminalRef = useRef<((position: { x: number; y: number }) => boolean) | undefined>(undefined);
   const currentSessionPathRef = useRef("");
+  const imagePreviewRequestRef = useRef(0);
+  const imagePreviewDismissTimerRef = useRef<number | null>(null);
 
   const activeTheme = useAppStore((s) => s.activeTheme());
   const fontSize = useAppStore((s) => s.terminalFontSize);
@@ -665,6 +683,62 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
   isDropPositionInsideTerminalRef.current = isDropPositionInsideTerminal;
   currentSessionPathRef.current = currentSessionPath;
 
+  const cancelImagePreviewDismissal = useCallback(() => {
+    if (imagePreviewDismissTimerRef.current !== null) {
+      window.clearTimeout(imagePreviewDismissTimerRef.current);
+      imagePreviewDismissTimerRef.current = null;
+    }
+  }, []);
+
+  const hideImagePreview = useCallback(() => {
+    cancelImagePreviewDismissal();
+    imagePreviewRequestRef.current += 1;
+    setImagePreview(null);
+  }, [cancelImagePreviewDismissal]);
+
+  const scheduleImagePreviewDismissal = useCallback(() => {
+    cancelImagePreviewDismissal();
+    imagePreviewDismissTimerRef.current = window.setTimeout(hideImagePreview, 120);
+  }, [cancelImagePreviewDismissal, hideImagePreview]);
+
+  const previewPosition = useCallback((event: MouseEvent) => {
+    const bounds = containerRef.current?.getBoundingClientRect();
+    if (!bounds) return null;
+    return {
+      x: Math.max(8, Math.min(event.clientX - bounds.left + 14, bounds.width - 328)),
+      y: Math.max(8, Math.min(event.clientY - bounds.top + 14, bounds.height - 248)),
+    };
+  }, []);
+
+  const showLocalImagePreview = useCallback((path: ParsedPath, event: MouseEvent) => {
+    if (!isImageReference(path.filePath)) return;
+    const position = previewPosition(event);
+    if (!position) return;
+    cancelImagePreviewDismissal();
+    const requestId = imagePreviewRequestRef.current + 1;
+    imagePreviewRequestRef.current = requestId;
+    void readImagePreview(resolveTerminalFilePath(path.filePath, currentSessionPathRef.current))
+      .then(({ dataUrl }) => {
+        if (imagePreviewRequestRef.current === requestId) {
+          setImagePreview({ src: dataUrl, alt: path.filePath, ...position });
+        }
+      })
+      .catch(() => {
+        if (imagePreviewRequestRef.current === requestId) setImagePreview(null);
+      });
+  }, [cancelImagePreviewDismissal, previewPosition]);
+
+  const showExternalImagePreview = useCallback((url: string, event: MouseEvent) => {
+    if (!isImageReference(url)) return;
+    const position = previewPosition(event);
+    if (!position) return;
+    cancelImagePreviewDismissal();
+    imagePreviewRequestRef.current += 1;
+    setImagePreview({ src: url, alt: url, ...position });
+  }, [cancelImagePreviewDismissal, previewPosition]);
+
+  useEffect(() => () => cancelImagePreviewDismissal(), [cancelImagePreviewDismissal]);
+
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -688,6 +762,9 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
       new WebLinksAddon((event, uri) => {
         if (event.button !== 0) return;
         setPendingTerminalLink({ kind: "external", href: uri });
+      }, {
+        hover: (event, uri) => showExternalImagePreview(uri, event),
+        leave: scheduleImagePreviewDismissal,
       }),
     );
 
@@ -731,7 +808,9 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
           ? openTerminalLink(link)
           : setPendingTerminalLink(link);
       },
-      async (parsed) => (await getLinkedTarget(parsed)) !== null,
+      async (parsed) => isImageReference(parsed.filePath) || (await getLinkedTarget(parsed)) !== null,
+      showLocalImagePreview,
+      scheduleImagePreviewDismissal,
     );
     const filePathDisposable = term.registerLinkProvider(filePathProvider);
     term.open(containerRef.current);
@@ -973,24 +1052,35 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
       return true; // let xterm handle all other keys
     });
 
-    // Resize PTY to match terminal size
+    // Resize PTY only when the character grid changes. Claude and other
+    // full-screen TUIs redraw on SIGWINCH, so duplicate resize calls pollute
+    // the normal-screen scrollback with historical full-screen frames.
+    const requestPtyResize = createPtyResizeGate((rows, cols) => {
+      ptyResize(sessionId, rows, cols).catch(console.error);
+    });
+
     const syncSize = () => {
       if (!containerRef.current || containerRef.current.clientWidth === 0) return;
       fitAddon.fit();
-      ptyResize(sessionId, term.rows, term.cols).catch(console.error);
+      requestPtyResize(term.rows, term.cols);
     };
 
     // Full refresh: resize + force canvas redraw (for display:none → block transitions)
     const fullRefresh = () => {
       if (!containerRef.current || containerRef.current.clientWidth === 0) return;
       fitAddon.fit();
-      ptyResize(sessionId, term.rows, term.cols).catch(console.error);
+      requestPtyResize(term.rows, term.cols);
       // Force xterm.js to redraw the canvas after container becomes visible
       term.refresh(0, term.rows - 1);
     };
 
+    let layoutSyncAnimationFrame: number | null = null;
     const scheduleSync = () => {
-      requestAnimationFrame(() => fullRefresh());
+      if (layoutSyncAnimationFrame !== null) return;
+      layoutSyncAnimationFrame = requestAnimationFrame(() => {
+        layoutSyncAnimationFrame = null;
+        fullRefresh();
+      });
     };
 
     // Initial fit after DOM is ready
@@ -1120,6 +1210,10 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
         window.cancelAnimationFrame(fallbackAnimationFrame);
         fallbackAnimationFrame = null;
       }
+      if (layoutSyncAnimationFrame !== null) {
+        window.cancelAnimationFrame(layoutSyncAnimationFrame);
+        layoutSyncAnimationFrame = null;
+      }
       clearTimeout(fitTimeout);
       observer.disconnect();
       intersectionObserver.disconnect();
@@ -1156,6 +1250,9 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
     openFileTab,
     setActiveSidebarSection,
     setSidebarCollapsed,
+    showExternalImagePreview,
+    showLocalImagePreview,
+    scheduleImagePreviewDismissal,
   ]);
 
   useEffect(() => {
@@ -1246,6 +1343,28 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
               <div style={{ color: "var(--cs-text-secondary)" }}>
                 {t("terminal.dropFilesIntoAgentHint")}
               </div>
+            </div>
+          ) : null}
+          {imagePreview ? (
+            <div
+              className="xterm-hover absolute z-20 overflow-hidden rounded border p-1 shadow-lg"
+              style={{
+                left: imagePreview.x,
+                top: imagePreview.y,
+                maxWidth: 320,
+                maxHeight: 240,
+                borderColor: "var(--cs-border)",
+                background: "var(--cs-bg-card-solid, rgba(255,255,255,0.98))",
+              }}
+              onMouseEnter={cancelImagePreviewDismissal}
+              onMouseLeave={scheduleImagePreviewDismissal}
+            >
+              <img
+                src={imagePreview.src}
+                alt={imagePreview.alt}
+                className="block max-h-[230px] max-w-[310px] object-contain"
+                onError={hideImagePreview}
+              />
             </div>
           ) : null}
         </div>

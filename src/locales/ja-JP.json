@@ -762,6 +762,14 @@
     "markdownEditBlock": "このブロックを編集",
     "markdownFinishBlockEditing": "編集を完了",
     "markdownCancelBlockEditing": "編集をキャンセル",
+    "markdownFormattingMenu": "Markdown 書式メニュー",
+    "markdownHeading": "見出し",
+    "markdownBold": "太字",
+    "markdownItalic": "斜体",
+    "markdownInlineCode": "インラインコード",
+    "markdownLink": "リンク",
+    "markdownBulletList": "箇条書き",
+    "markdownOrderedList": "番号付きリスト",
     "pdfLoading": "PDF を読み込み中",
     "pdfLoadFailed": "PDF の読み込みに失敗しました",
     "pdfRenderFailed": "PDF ページの描画に失敗しました",
@@ -835,6 +843,7 @@
       "general": "一般",
       "notifications": "通知",
       "agents": "エージェント",
+      "git": "Git",
       "terminal": "ターミナル",
       "voiceRecognition": "音声認識",
       "shortcuts": "ショートカット",
@@ -877,9 +886,13 @@
       "unknown": "不明",
       "notFoundInPath": "PATH に見つかりません",
       "versionError": "バージョンを読み取れません",
+      "installCommand": "インストールコマンド（PowerShell）",
+      "copyInstallCommand": "インストールコマンドをコピー",
+      "installCommandCopied": "{{name}} の {{shell}} インストールコマンドをコピーしました",
+      "installCommandCopyFailed": "インストールコマンドをコピーできません。手動でコピーしてください。",
       "defaultTitle": "デフォルトエージェント",
-      "defaultCurrent": "新規セッション、Git AI、AI クイックコマンドは既定で {{name}} を使用します。",
-      "defaultMissing": "デフォルトエージェントが設定されていません。Git AI と AI クイックコマンドは利用できません。",
+      "defaultCurrent": "新規セッション、Git AI、クイックコマンドは既定で {{name}} を使用します。",
+      "defaultMissing": "デフォルトエージェントが設定されていません。Git AI とクイックコマンドは利用できません。",
       "setDefault": "デフォルトエージェントに設定",
       "defaultActive": "デフォルトエージェント",
       "defaultChanged": "{{name}} をデフォルトエージェントに設定しました",
@@ -929,7 +942,7 @@
         "unsupported": "非対応",
         "unknown": "不明"
       },
-      "pathHint": "検出には Termflow から利用できる現在のシステム PATH を使用します。新しくインストールまたは更新したエージェントが検出されない場合は、Termflow を再起動して再試行してください。"
+      "pathHint": "検出には Termflow から利用できる現在のシステム PATH を使用します。新しくインストールまたは更新したエージェントが検出されない場合は、コンピューターを再起動して再試行してください。"
     },
     "theme": {
       "dark-starry": {
