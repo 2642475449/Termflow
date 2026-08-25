@@ -161,6 +161,7 @@ interface TerminalImagePreview {
 }
 
 interface TerminalPastedImagePreview {
+  id: string;
   src: string;
   alt: string;
   insertedText: string;
@@ -217,8 +218,8 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
   const [sideQuestionText, setSideQuestionText] = useState("");
   const [pendingTerminalLink, setPendingTerminalLink] = useState<PendingTerminalLink | null>(null);
   const [imagePreview, setImagePreview] = useState<TerminalImagePreview | null>(null);
-  const [pastedImagePreview, setPastedImagePreview] = useState<TerminalPastedImagePreview | null>(null);
-  const [pastedImageDialogOpen, setPastedImageDialogOpen] = useState(false);
+  const [pastedImagePreviews, setPastedImagePreviews] = useState<TerminalPastedImagePreview[]>([]);
+  const [pastedImageDialogId, setPastedImageDialogId] = useState<string | null>(null);
   const [openingTerminalLink, setOpeningTerminalLink] = useState(false);
   const openingTerminalLinkRef = useRef(false);
   const captureInputForAutoTitleRef = useRef<((data: string) => void) | undefined>(undefined);
@@ -265,14 +266,18 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
     pendingSubmissionInputRef.current = submissionCapture.nextValue;
     pendingSubmissionEscapeSequenceRef.current = submissionCapture.pendingSequence;
     captureInputForAutoTitleRef.current?.(pastedImage.insertedText);
-    setPastedImagePreview(pastedImage);
-    setPastedImageDialogOpen(false);
+    setPastedImagePreviews((current) => [...current, pastedImage]);
+    setPastedImageDialogId(null);
   }, [sessionId, t]);
 
   useEffect(() => {
-    setPastedImagePreview(null);
-    setPastedImageDialogOpen(false);
+    setPastedImagePreviews([]);
+    setPastedImageDialogId(null);
   }, [sessionId]);
+
+  const pastedImageDialogPreview = pastedImagePreviews.find(
+    (preview) => preview.id === pastedImageDialogId,
+  ) ?? null;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -988,8 +993,8 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
       pendingSubmissionEscapeSequenceRef.current = submissionCapture.pendingSequence;
 
       if (data === "\r" || data === "\n") {
-        setPastedImagePreview(null);
-        setPastedImageDialogOpen(false);
+        setPastedImagePreviews([]);
+        setPastedImageDialogId(null);
         captureInputForAutoTitleRef.current?.(data);
         if (!hasTerminalPromptText(submissionCapture.submittedText)) {
           if (queuedInputOperations > 0) {
@@ -1400,44 +1405,51 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
               />
             </div>
           ) : null}
-          {pastedImagePreview ? (
+          {pastedImagePreviews.length > 0 ? (
             <div
-              className="absolute bottom-4 right-4 z-20 h-[92px] w-[116px] overflow-visible rounded-[10px] border p-1.5 shadow-xl"
-              style={{
-                borderColor: "var(--cs-border)",
-                background: "var(--cs-bg-card-solid, rgba(255,255,255,0.98))",
-              }}
+              className="absolute bottom-4 right-24 z-20 flex max-w-[calc(100%_-_120px)] items-end justify-end gap-3 overflow-x-auto px-2 pt-2"
             >
-              <button
-                type="button"
-                className="block h-full w-full overflow-hidden rounded-[6px] border-0 p-0"
-                style={{ background: "color-mix(in srgb, var(--cs-bg-sidebar) 88%, transparent)" }}
-                title={t("terminal.openPastedImagePreview")}
-                onClick={() => setPastedImageDialogOpen(true)}
-              >
-                <img
-                  src={pastedImagePreview.src}
-                  alt={pastedImagePreview.alt}
-                  className="block h-full w-full object-contain"
-                />
-              </button>
-              <button
-                type="button"
-                className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border shadow-md"
-                style={{
-                  borderColor: "var(--cs-border)",
-                  background: "var(--cs-bg-card-solid, #fff)",
-                  color: "var(--cs-text-secondary)",
-                }}
-                title={t("terminal.closePastedImagePreview")}
-                aria-label={t("terminal.closePastedImagePreview")}
-                onClick={() => {
-                  setPastedImageDialogOpen(false);
-                  setPastedImagePreview(null);
-                }}
-              >
-                <CloseOutlined style={{ fontSize: 11 }} />
-              </button>
+              {pastedImagePreviews.map((preview) => (
+                <div
+                  key={preview.id}
+                  className="relative h-[92px] w-[116px] shrink-0 overflow-visible rounded-[10px] border p-1.5 shadow-xl"
+                  style={{
+                    borderColor: "var(--cs-border)",
+                    background: "var(--cs-bg-card-solid, rgba(255,255,255,0.98))",
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="block h-full w-full overflow-hidden rounded-[6px] border-0 p-0"
+                    style={{ background: "color-mix(in srgb, var(--cs-bg-sidebar) 88%, transparent)" }}
+                    title={t("terminal.openPastedImagePreview")}
+                    onClick={() => setPastedImageDialogId(preview.id)}
+                  >
+                    <img
+                      src={preview.src}
+                      alt={preview.alt}
+                      className="block h-full w-full object-contain"
+                    />
+                  </button>
+                  <button
+                    type="button"
+                    className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border shadow-md"
+                    style={{
+                      borderColor: "var(--cs-border)",
+                      background: "var(--cs-bg-card-solid, #fff)",
+                      color: "var(--cs-text-secondary)",
+                    }}
+                    title={t("terminal.closePastedImagePreview")}
+                    aria-label={t("terminal.closePastedImagePreview")}
+                    onClick={() => {
+                      setPastedImageDialogId((current) => current === preview.id ? null : current);
+                      setPastedImagePreviews((current) => current.filter((item) => item.id !== preview.id));
+                    }}
+                  >
+                    <CloseOutlined style={{ fontSize: 11 }} />
+                  </button>
+                </div>
+              ))}
             </div>
           ) : null}
         </div>
@@ -1454,19 +1466,19 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
         onSubmit={handleSideQuestionSubmit}
       />
       <Modal
-        open={pastedImageDialogOpen && Boolean(pastedImagePreview)}
+        open={Boolean(pastedImageDialogPreview)}
         title={t("terminal.pastedImagePreviewTitle")}
         footer={null}
         width="min(880px, calc(100vw - 48px))"
         centered
-        onCancel={() => setPastedImageDialogOpen(false)}
+        onCancel={() => setPastedImageDialogId(null)}
         destroyOnHidden={false}
       >
-        {pastedImagePreview ? (
+        {pastedImageDialogPreview ? (
           <div className="flex max-h-[72vh] items-center justify-center overflow-auto rounded border p-2" style={{ borderColor: "var(--cs-border)" }}>
             <img
-              src={pastedImagePreview.src}
-              alt={pastedImagePreview.alt}
+              src={pastedImageDialogPreview.src}
+              alt={pastedImageDialogPreview.alt}
               className="block max-h-[68vh] max-w-full object-contain"
             />
           </div>
@@ -1518,6 +1530,7 @@ async function pasteClipboardIntoTerminal(
     const insertedText = quotePathForShell(saved.path);
     await ptyInput(sessionId, insertedText);
     return {
+      id: saved.path,
       src: `data:${clipboardImage.mimeType};base64,${dataBase64}`,
       alt: saved.fileName,
       insertedText,

@@ -40,7 +40,7 @@ afterEach(() => {
 });
 
 describe("useAppStore actions", () => {
-  it("initializeWindowContext hydrates project state and normalizes workspace", () => {
+  it("initializeWindowContext keeps session history but starts with an empty home workspace", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-05-15T12:00:00Z"));
 
@@ -65,8 +65,12 @@ describe("useAppStore actions", () => {
     expect(state.windowContextReady).toBe(true);
     expect(state.currentProject).toEqual({ path: projectPath, name: "demo" });
     expect(state.sessions).toHaveLength(1);
-    expect(state.openTabs).toEqual(["s1"]);
-    expect(state.activeSessionId).toBe("s1");
+    expect(state.openTabs).toEqual([]);
+    expect(state.activeSessionId).toBeNull();
+    expect(state.panesById.main.activeTabId).toBeNull();
+    expect(state.panesById.main.tabIds).toEqual([]);
+    expect(state.tabsById).toEqual({});
+    expect(state.focusedTabId).toBeNull();
     expect(state.unreadTotal).toBe(2);
     expect(state.recentProjects[0]).toMatchObject({
       path: projectPath,

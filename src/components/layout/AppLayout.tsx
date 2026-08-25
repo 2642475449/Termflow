@@ -202,65 +202,72 @@ function WorkspacePane({ paneId }: { paneId: string }) {
             {i18n.t("tabBar.emptyPane")}
           </div>
         ) : (
-          pane.tabIds.map((tabId) => {
-            const tab = tabsById[tabId];
-            const isSettings = tabId === SETTINGS_ID || tab?.kind === "settings";
-            const isFile = tab?.kind === "file";
-            const isDiff = tab?.kind === "diff";
-            const session = isSettings || isFile || isDiff
-              ? null
-              : sessions.find((item) => item.id === tabId);
-            if (!isSettings && !isFile && !isDiff && !session) return null;
-
-            return (
-              <div
-                key={tabId}
-                style={{
-                  display: tabId === pane.activeTabId ? "block" : "none",
-                  position: "absolute",
-                  inset: 0,
-                }}
-              >
-                <Suspense fallback={<WorkspaceContentFallback />}>
-                  {isSettings ? (
-                    <SettingsPanel />
-                  ) : isFile && currentProject ? (
-                    <FileTabView
-                      tabId={tabId}
-                      projectPath={currentProject.path}
-                      path={tab.resourceId}
-                      isActive={tabId === pane.activeTabId}
-                    />
-                  ) : isDiff ? (
-                    <GitDiffTabView tabId={tabId} />
-                  ) : session?.active ? (
-                    <Terminal
-                      sessionId={tabId}
-                      overviewNavigationId={`${pane.id}:${tabId}`}
-                      onExit={() => updateSession(tabId, { active: false })}
-                      onClose={() => closeTab(tabId)}
-                    />
-                  ) : (
-                    <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-                      <div className="text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>
-                        {i18n.t("terminal.sessionDisconnected")}
-                      </div>
-                      <div className="max-w-md text-xs" style={{ color: "var(--cs-text-tertiary)" }}>
-                        {i18n.t("terminal.sessionDisconnectedDesc")}
-                      </div>
-                      <Button
-                        type="primary"
-                        loading={session?.status === "starting"}
-                        onClick={() => void resumeSession(tabId)}
-                      >
-                        {i18n.t("terminal.resumeSession")}
-                      </Button>
-                    </div>
-                  )}
-                </Suspense>
+          <>
+            {!pane.activeTabId ? (
+              <div className="absolute inset-0 overflow-auto">
+                <HomePage />
               </div>
-            );
-          })
+            ) : null}
+            {pane.tabIds.map((tabId) => {
+              const tab = tabsById[tabId];
+              const isSettings = tabId === SETTINGS_ID || tab?.kind === "settings";
+              const isFile = tab?.kind === "file";
+              const isDiff = tab?.kind === "diff";
+              const session = isSettings || isFile || isDiff
+                ? null
+                : sessions.find((item) => item.id === tabId);
+              if (!isSettings && !isFile && !isDiff && !session) return null;
+
+              return (
+                <div
+                  key={tabId}
+                  style={{
+                    display: tabId === pane.activeTabId ? "block" : "none",
+                    position: "absolute",
+                    inset: 0,
+                  }}
+                >
+                  <Suspense fallback={<WorkspaceContentFallback />}>
+                    {isSettings ? (
+                      <SettingsPanel />
+                    ) : isFile && currentProject ? (
+                      <FileTabView
+                        tabId={tabId}
+                        projectPath={currentProject.path}
+                        path={tab.resourceId}
+                        isActive={tabId === pane.activeTabId}
+                      />
+                    ) : isDiff ? (
+                      <GitDiffTabView tabId={tabId} />
+                    ) : session?.active ? (
+                      <Terminal
+                        sessionId={tabId}
+                        overviewNavigationId={`${pane.id}:${tabId}`}
+                        onExit={() => updateSession(tabId, { active: false })}
+                        onClose={() => closeTab(tabId)}
+                      />
+                    ) : (
+                      <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+                        <div className="text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>
+                          {i18n.t("terminal.sessionDisconnected")}
+                        </div>
+                        <div className="max-w-md text-xs" style={{ color: "var(--cs-text-tertiary)" }}>
+                          {i18n.t("terminal.sessionDisconnectedDesc")}
+                        </div>
+                        <Button
+                          type="primary"
+                          loading={session?.status === "starting"}
+                          onClick={() => void resumeSession(tabId)}
+                        >
+                          {i18n.t("terminal.resumeSession")}
+                        </Button>
+                      </div>
+                    )}
+                  </Suspense>
+                </div>
+              );
+            })}
+          </>
         )}
       </div>
     </div>

@@ -1600,9 +1600,9 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
           }
 
           const sessions = state.projectSessions[windowProject.path] || [];
-          const workspace =
-            state.projectWorkspaces[windowProject.path] || createDefaultWorkspace();
-          const normalizedWorkspace = normalizeWorkspace(workspace, sessions);
+          // Start with a clean workspace: historical sessions remain available in the
+          // sidebar, but stale tabs are not restored into the tab bar on app startup.
+          const startupWorkspace = createDefaultWorkspace();
 
           return {
             windowContextReady: true,
@@ -1616,13 +1616,13 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
             sessions,
             projectWorkspaces: {
               ...state.projectWorkspaces,
-              [windowProject.path]: normalizedWorkspace,
+              [windowProject.path]: startupWorkspace,
             },
             unreadTotal: sessions.reduce(
               (acc, session) => acc + (session.unreadCount ?? 0),
               0
             ),
-            ...syncWorkspaceSnapshot(normalizedWorkspace),
+            ...syncWorkspaceSnapshot(startupWorkspace),
           };
         }),
 

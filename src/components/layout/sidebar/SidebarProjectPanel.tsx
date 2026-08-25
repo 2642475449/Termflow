@@ -1470,11 +1470,6 @@ function SidebarProjectPanel({
             ]
             : []),
           {
-            key: "copy-relative-path",
-            icon: <CopyOutlined />,
-            label: copyRelativePathText,
-          },
-          {
             key: "copy",
             icon: <CopyOutlined />,
             label: t("common.copy"),
@@ -1490,9 +1485,19 @@ function SidebarProjectPanel({
             ]
             : []),
           {
-            key: "copy-absolute-path",
+            key: "copy-path",
             icon: <CopyOutlined />,
-            label: copyAbsolutePathText,
+            label: t("common.copyPath"),
+            children: [
+              {
+                key: "copy-relative-path",
+                label: copyRelativePathText,
+              },
+              {
+                key: "copy-absolute-path",
+                label: copyAbsolutePathText,
+              },
+            ],
           },
           { type: "divider" },
           {
