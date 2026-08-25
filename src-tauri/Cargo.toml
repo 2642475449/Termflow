@@ -1,0 +1,66 @@
+[package]
+name = "termflow"
+version = "1.8.21"
+edition = "2021"
+license = "MIT"
+
+[lib]
+name = "termflow_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+toml = "0.8"
+chrono = { version = "0.4", features = ["clock", "std"] }
+tauri = { version = "2", features = [] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-store = "2"
+portable-pty = "0.8"
+parking_lot = "0.12"
+dirs-next = "2"
+tiny_http = "0.12"
+trash = "5"
+git2 = "0.19"
+globset = "0.4"
+grep-regex = "0.1"
+grep-searcher = "0.1"
+ignore = "0.4"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "multipart", "rustls-tls"] }
+rand = "0.9"
+tauri-plugin-fs = "2"
+tauri-plugin-global-shortcut = "2.3.2"
+log = "0.4"
+sha2 = "0.10"
+rusqlite = { version = "0.31", features = ["bundled"] }
+notify = "7"
+notify-debouncer-mini = "0.5"
+regex = "1"
+tauri-plugin-updater = "2.10.0"
+
+[dev-dependencies]
+tempfile = "3"
+
+[target.'cfg(windows)'.dependencies]
+tauri-winrt-notification = "0.7.2"
+windows-registry = "0.6"
+windows = { version = "0.58", features = [
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_Security_Credentials",
+] }

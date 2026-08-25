@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicegui/make-dialog/refs/heads/main/tauri/tauri.conf.json",
   "productName": "Termflow",
-  "version": "1.8.20",
+  "version": "1.8.21",
   "identifier": "com.termflow.desktop",
   "build": {
     "frontendDist": "../dist",
