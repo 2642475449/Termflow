@@ -73,29 +73,11 @@ function SplitRightIcon({ size, className }: TabMenuIconProps) {
   );
 }
 
-function SplitRightMoveIcon({ size, className }: TabMenuIconProps) {
-  return (
-    <TabMenuSvg size={size} className={className}>
-      <path d="M3.25 8H12.25" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-      <path d="M8.7 4.45L12.25 8L8.7 11.55" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-    </TabMenuSvg>
-  );
-}
-
 function SplitDownIcon({ size, className }: TabMenuIconProps) {
   return (
     <TabMenuSvg size={size} className={className}>
       <rect x="2.25" y="2.75" width="11.5" height="10.5" rx="2" stroke="currentColor" strokeWidth="1.6" />
       <path d="M3.6 8.5H12.4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    </TabMenuSvg>
-  );
-}
-
-function SplitDownMoveIcon({ size, className }: TabMenuIconProps) {
-  return (
-    <TabMenuSvg size={size} className={className}>
-      <path d="M8 3.25V12.25" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-      <path d="M4.45 8.7L8 12.25L11.55 8.7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
     </TabMenuSvg>
   );
 }
@@ -375,25 +357,15 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
       },
       { type: "divider" },
       {
-        key: "split-right-copy",
-        label: t("tabBar.splitRight"),
-        icon: <SplitRightIcon />,
-      },
-      {
         key: "split-right-move",
         label: t("tabBar.splitMoveRight"),
-        icon: <SplitRightMoveIcon />,
+        icon: <SplitRightIcon />,
         disabled: openTabs.length <= 1,
-      },
-      {
-        key: "split-down-copy",
-        label: t("tabBar.splitDown"),
-        icon: <SplitDownIcon />,
       },
       {
         key: "split-down-move",
         label: t("tabBar.splitMoveDown"),
-        icon: <SplitDownMoveIcon />,
+        icon: <SplitDownIcon />,
         disabled: openTabs.length <= 1,
       },
     ];

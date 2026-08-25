@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la ~/.qoderwork/skills/ 2>/dev/null || echo \"~/.qoderwork/skills/ not found\"; ls -la .agent/ 2>/dev/null || echo \".agent/ not found in project root\")",
+      "Read(//c/Users/26424/.qoderwork/skills/**)",
+      "WebFetch(*)"
+    ]
+  }
+}

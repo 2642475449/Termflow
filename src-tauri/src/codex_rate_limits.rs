@@ -335,7 +335,7 @@ fn fetch_via_rpc(executable: &str, identity: CodexIdentity) -> CodexRateLimits {
 }
 
 fn spawn_codex_app_server(executable: &str) -> Result<Child, String> {
-    let args = ["-s", "read-only", "-a", "untrusted", "app-server"];
+    let args = ["-s", "read-only", "-a", "never", "app-server"];
     let lower = executable.to_ascii_lowercase();
 
     #[cfg(target_os = "windows")]

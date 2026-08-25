@@ -1,0 +1,3 @@
+interface:
+  display_name: "Termflow 组件实现文档"
+  short_description: "从源码和官方资料生成带截图的组件实现说明"

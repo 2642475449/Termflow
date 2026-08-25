@@ -14,6 +14,12 @@ export function shouldLoadClaudeRateLimits(
   return activeSession?.active === true && activeSession.agentId === "claude";
 }
 
+export function shouldLoadQoderUsage(
+  activeSession: CodexUsageSession | null,
+): boolean {
+  return activeSession?.active === true && activeSession.agentId === "qoder";
+}
+
 export function shouldShowClaudeRateLimits(
   limits: ClaudeRateLimits | null,
 ): boolean {

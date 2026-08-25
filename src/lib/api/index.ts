@@ -7,6 +7,7 @@ import type {
   AgentUsageOverview,
   AgentUsageStorageStatus,
   CodexRateLimits,
+  QoderUsage,
   ClaudeRateLimits,
   ClaudeCliInfo,
   AgentCliInfo,
@@ -296,6 +297,7 @@ export async function rebuildAgentUsageHistory(
 }
 
 const CODEX_RATE_LIMITS_CACHE_TTL_MS = 60 * 1000;
+const QODER_USAGE_CACHE_TTL_MS = 60 * 1000;
 
 let codexRateLimitsCache:
   | { value: CodexRateLimits; updatedAt: number }
@@ -343,6 +345,34 @@ export async function getCodexRateLimits(options?: {
     });
 
   return await codexRateLimitsRequest;
+}
+
+let qoderUsageCache: { value: QoderUsage; updatedAt: number } | null = null;
+let qoderUsageRequest: Promise<QoderUsage> | null = null;
+
+export async function getQoderUsage(options?: {
+  forceRefresh?: boolean;
+  maxAgeMs?: number;
+}): Promise<QoderUsage> {
+  const maxAgeMs = options?.maxAgeMs ?? QODER_USAGE_CACHE_TTL_MS;
+  if (!options?.forceRefresh && qoderUsageCache
+    && Date.now() - qoderUsageCache.updatedAt <= maxAgeMs) {
+    return qoderUsageCache.value;
+  }
+  if (!options?.forceRefresh && qoderUsageRequest) {
+    return qoderUsageRequest;
+  }
+
+  qoderUsageRequest = invoke<QoderUsage>("get_qoder_usage")
+    .then((value) => {
+      qoderUsageCache = { value, updatedAt: Date.now() };
+      return value;
+    })
+    .finally(() => {
+      qoderUsageRequest = null;
+    });
+
+  return await qoderUsageRequest;
 }
 
 export async function getClaudeRateLimits(sessionId: string): Promise<ClaudeRateLimits> {

@@ -362,6 +362,33 @@ export interface CodexRateLimits {
   accountId: string | null;
 }
 
+export interface QoderQuotaBucket {
+  total: number | null;
+  cap: number | null;
+  used: number | null;
+  remaining: number | null;
+  percentage: number | null;
+  available: boolean | null;
+  unit: string | null;
+}
+
+export type QoderUsageStatus = "ok" | "error" | "unavailable";
+
+export interface QoderUsage {
+  userType: string | null;
+  totalUsagePercentage: number | null;
+  expiresAt: number | null;
+  userQuota: QoderQuotaBucket | null;
+  addOnQuota: QoderQuotaBucket | null;
+  orgResourcePackage: QoderQuotaBucket | null;
+  isQuotaExceeded: boolean | null;
+  sessionCredits: number | null;
+  updatedAt: number;
+  error: string | null;
+  status: QoderUsageStatus;
+  accountLabel: string | null;
+}
+
 export type ClaudeRateLimitStatus = "ok" | "unavailable";
 
 export interface ClaudeRateLimits {

@@ -9,6 +9,7 @@ import {
   DeleteOutlined,
   FolderOpenFilled,
   MessageOutlined,
+  CloseOutlined,
 } from "@ant-design/icons";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
@@ -159,6 +160,12 @@ interface TerminalImagePreview {
   y: number;
 }
 
+interface TerminalPastedImagePreview {
+  src: string;
+  alt: string;
+  insertedText: string;
+}
+
 const IMAGE_REFERENCE_PATTERN = /\.(?:png|jpe?g|gif|webp|bmp|svg|avif)(?:$|[?#])/i;
 
 function isImageReference(value: string): boolean {
@@ -210,6 +217,8 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
   const [sideQuestionText, setSideQuestionText] = useState("");
   const [pendingTerminalLink, setPendingTerminalLink] = useState<PendingTerminalLink | null>(null);
   const [imagePreview, setImagePreview] = useState<TerminalImagePreview | null>(null);
+  const [pastedImagePreview, setPastedImagePreview] = useState<TerminalPastedImagePreview | null>(null);
+  const [pastedImageDialogOpen, setPastedImageDialogOpen] = useState(false);
   const [openingTerminalLink, setOpeningTerminalLink] = useState(false);
   const openingTerminalLinkRef = useRef(false);
   const captureInputForAutoTitleRef = useRef<((data: string) => void) | undefined>(undefined);
@@ -243,6 +252,27 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
   hideCursorWhileRunningRef.current = hideCursorWhileRunning;
   const termTheme = getTerminalTheme(activeTheme);
   const currentSessionPath = currentSession?.path ?? "";
+
+  const pasteIntoTerminal = useCallback(async (term: XTerm | null) => {
+    const pastedImage = await pasteClipboardIntoTerminal(sessionId, term, t);
+    if (!pastedImage) return;
+
+    const submissionCapture = consumeTerminalSubmissionInput(
+      pendingSubmissionInputRef.current,
+      pastedImage.insertedText,
+      pendingSubmissionEscapeSequenceRef.current,
+    );
+    pendingSubmissionInputRef.current = submissionCapture.nextValue;
+    pendingSubmissionEscapeSequenceRef.current = submissionCapture.pendingSequence;
+    captureInputForAutoTitleRef.current?.(pastedImage.insertedText);
+    setPastedImagePreview(pastedImage);
+    setPastedImageDialogOpen(false);
+  }, [sessionId, t]);
+
+  useEffect(() => {
+    setPastedImagePreview(null);
+    setPastedImageDialogOpen(false);
+  }, [sessionId]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -413,7 +443,7 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
           }
           break;
         case "paste":
-          await pasteClipboardIntoTerminal(sessionId, term, t);
+          await pasteIntoTerminal(term);
           break;
         case "select-all":
           term?.selectAll();
@@ -430,7 +460,7 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
           break;
       }
     },
-    [contextMenuSelection, currentSession, installedAgents, sessionId, t]
+    [contextMenuSelection, currentSession, installedAgents, pasteIntoTerminal, sessionId, t]
   );
 
   const closeSideQuestionComposer = useCallback(() => {
@@ -958,6 +988,8 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
       pendingSubmissionEscapeSequenceRef.current = submissionCapture.pendingSequence;
 
       if (data === "\r" || data === "\n") {
+        setPastedImagePreview(null);
+        setPastedImageDialogOpen(false);
         captureInputForAutoTitleRef.current?.(data);
         if (!hasTerminalPromptText(submissionCapture.submittedText)) {
           if (queuedInputOperations > 0) {
@@ -1032,7 +1064,7 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
           return false;
         }
         lastPasteTriggerAtRef.current = now;
-        pasteClipboardIntoTerminal(sessionId, term, t).catch(() => {
+        pasteIntoTerminal(term).catch(() => {
           message.error(t("terminal.clipboardReadFailed"));
         });
         return false; // don't send raw \x16 to PTY
@@ -1253,6 +1285,7 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
     showExternalImagePreview,
     showLocalImagePreview,
     scheduleImagePreviewDismissal,
+    pasteIntoTerminal,
   ]);
 
   useEffect(() => {
@@ -1367,6 +1400,46 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
               />
             </div>
           ) : null}
+          {pastedImagePreview ? (
+            <div
+              className="absolute bottom-4 right-4 z-20 h-[92px] w-[116px] overflow-visible rounded-[10px] border p-1.5 shadow-xl"
+              style={{
+                borderColor: "var(--cs-border)",
+                background: "var(--cs-bg-card-solid, rgba(255,255,255,0.98))",
+              }}
+            >
+              <button
+                type="button"
+                className="block h-full w-full overflow-hidden rounded-[6px] border-0 p-0"
+                style={{ background: "color-mix(in srgb, var(--cs-bg-sidebar) 88%, transparent)" }}
+                title={t("terminal.openPastedImagePreview")}
+                onClick={() => setPastedImageDialogOpen(true)}
+              >
+                <img
+                  src={pastedImagePreview.src}
+                  alt={pastedImagePreview.alt}
+                  className="block h-full w-full object-contain"
+                />
+              </button>
+              <button
+                type="button"
+                className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border shadow-md"
+                style={{
+                  borderColor: "var(--cs-border)",
+                  background: "var(--cs-bg-card-solid, #fff)",
+                  color: "var(--cs-text-secondary)",
+                }}
+                title={t("terminal.closePastedImagePreview")}
+                aria-label={t("terminal.closePastedImagePreview")}
+                onClick={() => {
+                  setPastedImageDialogOpen(false);
+                  setPastedImagePreview(null);
+                }}
+              >
+                <CloseOutlined style={{ fontSize: 11 }} />
+              </button>
+            </div>
+          ) : null}
         </div>
       </Dropdown>
       <SideQuestionComposer
@@ -1380,6 +1453,25 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
         onCancel={closeSideQuestionComposer}
         onSubmit={handleSideQuestionSubmit}
       />
+      <Modal
+        open={pastedImageDialogOpen && Boolean(pastedImagePreview)}
+        title={t("terminal.pastedImagePreviewTitle")}
+        footer={null}
+        width="min(880px, calc(100vw - 48px))"
+        centered
+        onCancel={() => setPastedImageDialogOpen(false)}
+        destroyOnHidden={false}
+      >
+        {pastedImagePreview ? (
+          <div className="flex max-h-[72vh] items-center justify-center overflow-auto rounded border p-2" style={{ borderColor: "var(--cs-border)" }}>
+            <img
+              src={pastedImagePreview.src}
+              alt={pastedImagePreview.alt}
+              className="block max-h-[68vh] max-w-full object-contain"
+            />
+          </div>
+        ) : null}
+      </Modal>
       <Modal
         open={Boolean(pendingTerminalLink)}
         title={t("terminal.openLinkConfirmTitle")}
@@ -1406,28 +1498,34 @@ async function pasteClipboardIntoTerminal(
   sessionId: string,
   term: XTerm | null,
   t: (key: string, options?: Record<string, unknown>) => string
-) {
+): Promise<TerminalPastedImagePreview | null> {
   const text = await navigator.clipboard.readText().catch(() => "");
   if (text) {
     // Let xterm normalize line endings and emit bracketed paste when the app enabled it.
     if (term) {
       term.paste(text);
-      return;
+      return null;
     }
 
     await ptyInput(sessionId, text);
-    return;
+    return null;
   }
 
   const clipboardImage = await readClipboardImage();
   if (clipboardImage) {
     const dataBase64 = await blobToBase64(clipboardImage.blob);
     const saved = await saveClipboardImage(dataBase64, clipboardImage.mimeType);
-    await ptyInput(sessionId, quotePathForShell(saved.path));
-    return;
+    const insertedText = quotePathForShell(saved.path);
+    await ptyInput(sessionId, insertedText);
+    return {
+      src: `data:${clipboardImage.mimeType};base64,${dataBase64}`,
+      alt: saved.fileName,
+      insertedText,
+    };
   }
 
   message.warning(t("terminal.clipboardEmpty"));
+  return null;
 }
 
 async function readClipboardImage(): Promise<{ blob: Blob; mimeType: string } | null> {

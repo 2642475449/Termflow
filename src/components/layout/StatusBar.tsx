@@ -5,17 +5,18 @@ import type { TFunction } from "i18next";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AgentIcon } from "@/components/AgentIcon";
-import { getClaudeRateLimits, getCodexRateLimits, getSearchIndexStatus, gitCancelCloneTask, inspectAgentClis } from "@/lib/api";
+import { getClaudeRateLimits, getCodexRateLimits, getQoderUsage, getSearchIndexStatus, gitCancelCloneTask, inspectAgentClis } from "@/lib/api";
 import { summarizeBackgroundTasks } from "@/lib/backgroundTasks";
 import {
   shouldLoadClaudeRateLimits,
   shouldLoadCodexRateLimits,
+  shouldLoadQoderUsage,
   shouldShowClaudeRateLimits,
 } from "@/lib/codexUsage";
 import { formatAgentVersion, getAgentDisplayName, isAiAgentId } from "@/lib/agents";
 import { useProjectLauncher } from "@/hooks/useProjectLauncher";
 import { useAppStore } from "@/store";
-import type { AiAgentId, ClaudeRateLimits, ClaudeRateLimitsUpdatePayload, CodexRateLimits, CodexRateLimitWindow, GitCloneEventPayload, GitCloneTask, ProjectSearchIndexStatus } from "@/types";
+import type { AiAgentId, ClaudeRateLimits, ClaudeRateLimitsUpdatePayload, CodexRateLimits, CodexRateLimitWindow, GitCloneEventPayload, GitCloneTask, ProjectSearchIndexStatus, QoderQuotaBucket, QoderUsage } from "@/types";
 const GIT_CLONE_EVENT = "git-clone-task-event";
 const SEARCH_INDEX_EVENT = "search-index-status";
 
@@ -41,6 +42,9 @@ function StatusBar() {
   const [claudeRateLimits, setClaudeRateLimits] = useState<ClaudeRateLimits | null>(null);
   const [claudeUsageLoading, setClaudeUsageLoading] = useState(false);
   const [claudeUsageError, setClaudeUsageError] = useState<string | null>(null);
+  const [qoderUsage, setQoderUsage] = useState<QoderUsage | null>(null);
+  const [qoderUsageLoading, setQoderUsageLoading] = useState(false);
+  const [qoderUsageError, setQoderUsageError] = useState<string | null>(null);
   const [cancellingTaskIds, setCancellingTaskIds] = useState<string[]>([]);
   const [searchIndexStatus, setSearchIndexStatus] = useState<ProjectSearchIndexStatus | null>(null);
   const [searchIndexStatusProjectPath, setSearchIndexStatusProjectPath] = useState<string | null>(null);
@@ -61,6 +65,7 @@ function StatusBar() {
   const showCodexUsage = shouldLoadCodexRateLimits(activeSession);
   const loadClaudeUsage = shouldLoadClaudeRateLimits(activeSession);
   const showClaudeUsage = loadClaudeUsage && shouldShowClaudeRateLimits(claudeRateLimits);
+  const showQoderUsage = shouldLoadQoderUsage(activeSession);
   const effectiveAgentId = useMemo<AiAgentId | null>(() => {
     if (isAiAgentId(activeSession?.agentId)) {
       return activeSession.agentId;
@@ -148,6 +153,41 @@ function StatusBar() {
   }, [showCodexUsage]);
 
   useEffect(() => {
+    if (!showQoderUsage) {
+      setQoderUsage(null);
+      setQoderUsageError(null);
+      setQoderUsageLoading(false);
+      return;
+    }
+
+    let disposed = false;
+    const loadQoderUsage = async (forceRefresh = false) => {
+      setQoderUsageLoading(true);
+      try {
+        const usage = await getQoderUsage({ forceRefresh });
+        if (disposed) return;
+        setQoderUsage(usage);
+        setQoderUsageError(null);
+      } catch (error) {
+        if (disposed) return;
+        setQoderUsageError(error instanceof Error ? error.message : String(error));
+      } finally {
+        if (!disposed) setQoderUsageLoading(false);
+      }
+    };
+
+    void loadQoderUsage(false);
+    const interval = window.setInterval(() => {
+      void loadQoderUsage(true);
+    }, 3 * 60 * 1000);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(interval);
+    };
+  }, [showQoderUsage]);
+
+  useEffect(() => {
     const sessionId = loadClaudeUsage ? activeSession?.id : null;
     if (!sessionId) {
       setClaudeRateLimits(null);
@@ -218,6 +258,19 @@ function StatusBar() {
         setClaudeUsageError(error instanceof Error ? error.message : String(error));
       })
       .finally(() => setClaudeUsageLoading(false));
+  };
+
+  const handleRefreshQoderUsage = () => {
+    setQoderUsageLoading(true);
+    getQoderUsage({ forceRefresh: true })
+      .then((usage) => {
+        setQoderUsage(usage);
+        setQoderUsageError(null);
+      })
+      .catch((error) => {
+        setQoderUsageError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => setQoderUsageLoading(false));
   };
 
   useEffect(() => {
@@ -640,6 +693,13 @@ function StatusBar() {
             error={codexUsageError}
             onRefresh={handleRefreshCodexUsage}
           />
+        ) : showQoderUsage ? (
+          <QoderUsageStatus
+            usage={qoderUsage}
+            isLoading={qoderUsageLoading}
+            error={qoderUsageError}
+            onRefresh={handleRefreshQoderUsage}
+          />
         ) : showClaudeUsage ? (
           <RateLimitUsageStatus
             agentId="claude"
@@ -755,6 +815,193 @@ function StatusBar() {
       </div>
     </div>
   );
+}
+
+function QoderUsageStatus({
+  usage,
+  isLoading,
+  error,
+  onRefresh,
+}: {
+  usage: QoderUsage | null;
+  isLoading: boolean;
+  error: string | null;
+  onRefresh: () => void;
+}) {
+  const { t, i18n } = useTranslation();
+  const hasData = usage?.status === "ok" && Boolean(
+    usage.userQuota || usage.addOnQuota || usage.orgResourcePackage,
+  );
+  const statusError = error ?? usage?.error
+    ?? (usage?.status === "unavailable" ? t("statusBar.qoderUsage.unavailable") : null);
+  const usedPercent = qoderUsedPercentage(usage);
+  const remaining = usedPercent == null ? null : Math.max(0, Math.min(100, Math.round(100 - usedPercent)));
+  const summary = hasData && remaining != null
+    ? t("statusBar.qoderUsage.summary", { value: remaining })
+    : isLoading
+      ? t("statusBar.qoderUsage.loading")
+      : t("statusBar.qoderUsage.unavailableShort");
+  const barColor = remaining == null ? "var(--cs-text-tertiary)" : codexUsageBarColor(remaining);
+
+  const popoverContent = (
+    <div
+      className="w-[300px] overflow-hidden rounded-[8px] border"
+      style={{
+        background: "var(--cs-bg-elevated, var(--cs-bg-sidebar))",
+        borderColor: "var(--cs-border-sidebar)",
+        boxShadow: "0 18px 44px rgba(0, 0, 0, 0.30)",
+      }}
+    >
+      <div
+        className="flex items-center justify-between gap-3 px-3 py-2"
+        style={{ borderBottom: "1px solid color-mix(in srgb, var(--cs-border-sidebar) 82%, transparent)" }}
+      >
+        <div className="flex min-w-0 items-center gap-2">
+          <AgentIcon agentId="qoder" size={15} />
+          <div className="min-w-0">
+            <div className="truncate text-[12px] font-medium" style={{ color: "var(--cs-text-primary)" }}>
+              {t("statusBar.qoderUsage.title")}
+            </div>
+            <div className="text-[10px]" style={{ color: "var(--cs-text-tertiary)" }}>
+              {usage?.updatedAt ? formatUpdatedAt(usage.updatedAt, t) : t("statusBar.qoderUsage.pending")}
+            </div>
+          </div>
+        </div>
+        <button
+          type="button"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[5px] transition-colors"
+          style={{ color: "var(--cs-text-tertiary)", background: "transparent", border: 0 }}
+          disabled={isLoading}
+          title={t("common.refresh")}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onRefresh();
+          }}
+        >
+          {isLoading ? <LoadingOutlined style={{ fontSize: 12 }} /> : <ReloadOutlined style={{ fontSize: 12 }} />}
+        </button>
+      </div>
+
+      <div className="space-y-3 px-3 py-3">
+        {hasData ? (
+          <>
+            {usage?.userQuota ? (
+              <QoderQuotaRow label={t("statusBar.qoderUsage.planCredits")} quota={usage.userQuota} />
+            ) : null}
+            {usage?.addOnQuota ? (
+              <QoderQuotaRow label={t("statusBar.qoderUsage.addOnCredits")} quota={usage.addOnQuota} />
+            ) : null}
+            {usage?.orgResourcePackage ? (
+              <QoderQuotaRow label={t("statusBar.qoderUsage.orgCredits")} quota={usage.orgResourcePackage} />
+            ) : null}
+          </>
+        ) : (
+          <div className="flex items-start gap-2 text-[12px]" style={{ color: "var(--cs-text-tertiary)" }}>
+            {isLoading ? <LoadingOutlined style={{ fontSize: 12, marginTop: 2 }} /> : <WarningOutlined style={{ fontSize: 12, marginTop: 2 }} />}
+            <span>{statusError || t("statusBar.qoderUsage.unavailable")}</span>
+          </div>
+        )}
+
+        <div
+          className="space-y-1 border-t pt-2 text-[11px]"
+          style={{ borderColor: "color-mix(in srgb, var(--cs-border-sidebar) 76%, transparent)" }}
+        >
+          <QoderMetaRow label={t("statusBar.qoderUsage.plan")} value={usage?.userType ?? "—"} />
+          <QoderMetaRow label={t("statusBar.qoderUsage.account")} value={usage?.accountLabel ?? "—"} />
+          {usage?.expiresAt ? (
+            <QoderMetaRow
+              label={t("statusBar.qoderUsage.expiresAt")}
+              value={new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium" }).format(usage.expiresAt)}
+            />
+          ) : null}
+          {statusError && hasData ? (
+            <div className="flex items-start gap-1.5" style={{ color: "var(--cs-text-tertiary)" }}>
+              <WarningOutlined style={{ fontSize: 11, marginTop: 2 }} />
+              <span className="min-w-0 break-words">{statusError}</span>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <Popover
+      trigger={["click"]}
+      placement="topLeft"
+      content={popoverContent}
+      arrow={false}
+      overlayInnerStyle={{ padding: 0, background: "transparent", boxShadow: "none" }}
+      styles={{ body: { padding: 0 } }}
+      getPopupContainer={() => document.body}
+    >
+      <button
+        type="button"
+        className="flex h-7 min-w-[154px] shrink-0 items-center justify-start gap-2 rounded-[5px] px-2 text-left text-[13px] font-medium leading-none transition-colors"
+        style={{ background: "transparent", border: 0, color: hasData ? "var(--cs-text-secondary)" : "var(--cs-text-tertiary)" }}
+        title={summary}
+      >
+        <AgentIcon agentId="qoder" size={15} />
+        <div
+          aria-hidden="true"
+          className="h-[6px] w-14 shrink-0 overflow-hidden rounded-full"
+          style={{ background: "color-mix(in srgb, var(--cs-text-tertiary) 24%, transparent)", opacity: remaining == null ? 0.55 : 1 }}
+        >
+          <div
+            className="h-full rounded-full transition-[width] duration-200"
+            style={{ width: `${remaining ?? 0}%`, background: barColor }}
+          />
+        </div>
+        <span className="truncate tabular-nums">{summary}</span>
+        {isLoading ? <LoadingOutlined style={{ fontSize: 12 }} /> : statusError ? <WarningOutlined style={{ fontSize: 12 }} /> : null}
+      </button>
+    </Popover>
+  );
+}
+
+function QoderQuotaRow({ label, quota }: { label: string; quota: QoderQuotaBucket }) {
+  const { t } = useTranslation();
+  const total = quota.total ?? quota.cap;
+  const percentage = quota.percentage ?? (total && quota.used != null ? quota.used / total * 100 : null);
+  const remaining = percentage == null ? null : Math.max(0, Math.min(100, Math.round(100 - percentage)));
+  const barColor = remaining == null ? "var(--cs-text-tertiary)" : codexUsageBarColor(remaining);
+  const detail = quota.used != null && total != null
+    ? t("statusBar.qoderUsage.usedTotal", { used: formatCreditValue(quota.used), total: formatCreditValue(total) })
+    : quota.remaining != null
+      ? t("statusBar.qoderUsage.remainingCredits", { value: formatCreditValue(quota.remaining) })
+      : "—";
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between gap-3 text-[12px]">
+        <span className="font-medium" style={{ color: "var(--cs-text-primary)" }}>{label}</span>
+        <span className="tabular-nums" style={{ color: "var(--cs-text-secondary)" }}>{detail}</span>
+      </div>
+      <div className="h-[6px] overflow-hidden rounded-full" style={{ background: "color-mix(in srgb, var(--cs-text-tertiary) 24%, transparent)" }}>
+        <div className="h-full rounded-full" style={{ width: `${remaining ?? 0}%`, background: barColor }} />
+      </div>
+    </div>
+  );
+}
+
+function QoderMetaRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span style={{ color: "var(--cs-text-tertiary)" }}>{label}</span>
+      <span className="min-w-0 truncate text-right" style={{ color: "var(--cs-text-secondary)" }} title={value}>{value}</span>
+    </div>
+  );
+}
+
+function qoderUsedPercentage(usage: QoderUsage | null): number | null {
+  return usage?.totalUsagePercentage
+    ?? usage?.userQuota?.percentage
+    ?? null;
+}
+
+function formatCreditValue(value: number): string {
+  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value);
 }
 
 function RateLimitUsageStatus({

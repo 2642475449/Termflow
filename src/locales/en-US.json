@@ -162,6 +162,22 @@
       "unavailable": "Pro/Max plan usage appears after the first response; API-key accounts have no plan limit",
       "unavailableShort": "Usage unavailable"
     },
+    "qoderUsage": {
+      "title": "Qoder Usage",
+      "loading": "Qoder usage…",
+      "pending": "Pending",
+      "unavailable": "Qoder account usage is unavailable. Update Qoder CLI CN and sign in, then try again.",
+      "unavailableShort": "Usage unavailable",
+      "summary": "{{value}}% remaining",
+      "planCredits": "Plan Credits",
+      "addOnCredits": "Add-on Credits",
+      "orgCredits": "Organization Credits",
+      "usedTotal": "{{used}} / {{total}} used",
+      "remainingCredits": "{{value}} remaining",
+      "plan": "Plan",
+      "account": "Qoder account",
+      "expiresAt": "Plan expires"
+    },
     "effort": {
       "title": "Claude Effort",
       "auto": "Default (let CLI decide)",
@@ -652,10 +668,8 @@
   },
   "tabBar": {
     "moveToSplit": "Split Tab",
-    "splitRight": "Split Right",
     "splitMoveRight": "Split and Move Right",
     "splitLeft": "Left",
-    "splitDown": "Split Down",
     "splitMoveDown": "Split and Move Down",
     "splitUp": "Up",
     "emptyPane": "Empty pane",
@@ -826,6 +840,9 @@
     "clipboardReadFailed": "Failed to read clipboard contents",
     "dropImageFailed": "Failed to process the dropped image",
     "imageInserted": "Image path inserted into the input area",
+    "openPastedImagePreview": "View pasted image",
+    "closePastedImagePreview": "Close image preview",
+    "pastedImagePreviewTitle": "Pasted image preview",
     "clipboardEmpty": "There is no text or image in the clipboard that can be pasted",
     "dragImageUnsupported": "Only PNG / JPG / WEBP / GIF images can be dropped here",
     "dragImageInserted": "Inserted {{count}} image path(s)",

@@ -9,6 +9,7 @@ mod opencode_control;
 mod path_utils;
 mod pty;
 mod qoder_config;
+mod qoder_usage;
 
 use claude_rate_limits::ClaudeRateLimitStore;
 use commands::content_search::ContentSearchState;
@@ -295,6 +296,7 @@ pub fn run() {
             commands::agent_usage::clear_agent_usage_history,
             commands::agent_usage::rebuild_agent_usage_history,
             codex_rate_limits::get_codex_rate_limits,
+            qoder_usage::get_qoder_usage,
             claude_rate_limits::get_claude_rate_limits,
             commands::claude_config::get_claude_md_detail,
             commands::claude_config::save_claude_md,

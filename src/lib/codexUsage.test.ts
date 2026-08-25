@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   shouldLoadClaudeRateLimits,
   shouldLoadCodexRateLimits,
+  shouldLoadQoderUsage,
   shouldShowClaudeRateLimits,
 } from "./codexUsage";
 
@@ -20,6 +21,14 @@ describe("shouldLoadCodexRateLimits", () => {
 
   it("does not load usage for another active agent", () => {
     expect(shouldLoadCodexRateLimits({ active: true, agentId: "claude" })).toBe(false);
+  });
+});
+
+describe("shouldLoadQoderUsage", () => {
+  it("loads usage only for an active Qoder session", () => {
+    expect(shouldLoadQoderUsage({ active: true, agentId: "qoder" })).toBe(true);
+    expect(shouldLoadQoderUsage({ active: false, agentId: "qoder" })).toBe(false);
+    expect(shouldLoadQoderUsage({ active: true, agentId: "codex" })).toBe(false);
   });
 });
 

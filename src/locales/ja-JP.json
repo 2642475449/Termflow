@@ -162,6 +162,22 @@
       "unavailable": "Pro/Max プランの使用量は最初の応答後に表示されます。API キーのアカウントにはプラン上限がありません",
       "unavailableShort": "使用量を取得できません"
     },
+    "qoderUsage": {
+      "title": "Qoder 使用量",
+      "loading": "Qoder 使用量…",
+      "pending": "待機中",
+      "unavailable": "Qoder アカウントの使用量を取得できません。Qoder CLI CN を更新してログイン後、再試行してください。",
+      "unavailableShort": "使用量を取得できません",
+      "summary": "残り {{value}}%",
+      "planCredits": "プラン Credits",
+      "addOnCredits": "追加 Credits",
+      "orgCredits": "組織 Credits",
+      "usedTotal": "{{used}} / {{total}} 使用済み",
+      "remainingCredits": "残り {{value}}",
+      "plan": "プラン",
+      "account": "Qoder アカウント",
+      "expiresAt": "プラン有効期限"
+    },
     "effort": {
       "title": "Claude 思考強度",
       "auto": "デフォルト (CLI に任せる)",
@@ -652,10 +668,8 @@
   },
   "tabBar": {
     "moveToSplit": "タブを分割",
-    "splitRight": "右に分割",
     "splitMoveRight": "分割して右へ移動",
     "splitLeft": "左",
-    "splitDown": "下に分割",
     "splitMoveDown": "分割して下へ移動",
     "splitUp": "上",
     "emptyPane": "空のペイン",
@@ -826,6 +840,9 @@
     "clipboardReadFailed": "クリップボードの内容を読み取れませんでした",
     "dropImageFailed": "ドロップされた画像を処理できませんでした",
     "imageInserted": "画像パスを入力欄に挿入しました",
+    "openPastedImagePreview": "貼り付けた画像を表示",
+    "closePastedImagePreview": "画像プレビューを閉じる",
+    "pastedImagePreviewTitle": "貼り付けた画像のプレビュー",
     "clipboardEmpty": "貼り付け可能なテキストまたは画像がクリップボードにありません",
     "dragImageUnsupported": "ここにドロップできる画像は PNG / JPG / WEBP / GIF のみです",
     "dragImageInserted": "{{count}} 件の画像パスを挿入しました",

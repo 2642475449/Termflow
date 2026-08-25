@@ -162,6 +162,22 @@
       "unavailable": "首次回應後可讀取 Pro/Max 方案用量；API Key 帳戶沒有方案限額",
       "unavailableShort": "用量不可用"
     },
+    "qoderUsage": {
+      "title": "Qoder 用量",
+      "loading": "Qoder 用量…",
+      "pending": "等待中",
+      "unavailable": "暫時無法讀取 Qoder 帳戶用量，請升級並登入 Qoder CLI CN 後重試",
+      "unavailableShort": "用量不可用",
+      "summary": "剩餘 {{value}}%",
+      "planCredits": "方案 Credits",
+      "addOnCredits": "加購 Credits",
+      "orgCredits": "組織 Credits",
+      "usedTotal": "已用 {{used}} / {{total}}",
+      "remainingCredits": "剩餘 {{value}}",
+      "plan": "方案",
+      "account": "Qoder 帳戶",
+      "expiresAt": "方案到期"
+    },
     "effort": {
       "title": "Claude 思考強度",
       "auto": "預設（讓 CLI 自定）",
@@ -652,10 +668,8 @@
   },
   "tabBar": {
     "moveToSplit": "分割標籤頁",
-    "splitRight": "向右分割",
     "splitMoveRight": "分割並右移",
     "splitLeft": "左",
-    "splitDown": "向下分割",
     "splitMoveDown": "分割並下移",
     "splitUp": "上",
     "emptyPane": "空白分欄",
@@ -826,6 +840,9 @@
     "clipboardReadFailed": "無法讀取剪貼簿內容",
     "dropImageFailed": "無法處理拖入的圖片",
     "imageInserted": "圖片已插入輸入區",
+    "openPastedImagePreview": "查看貼上圖片",
+    "closePastedImagePreview": "關閉圖片預覽",
+    "pastedImagePreviewTitle": "貼上圖片預覽",
     "clipboardEmpty": "剪貼簿中沒有可貼上的文字或圖片",
     "dragImageUnsupported": "僅支援拖入 PNG / JPG / WEBP / GIF 圖片",
     "dragImageInserted": "已插入 {{count}} 張圖片路徑",
