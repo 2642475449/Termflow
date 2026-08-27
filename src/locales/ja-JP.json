@@ -891,6 +891,7 @@
     "agents": {
       "title": "エージェント",
       "subtitle": "主要な AI コーディングエージェントがこのシステムにインストールされているか確認します",
+      "subtitleWithQuota": "ローカル AI コーディングエージェントのインストール状態と利用可能枠を確認します",
       "refresh": "再チェック",
       "refreshSuccess": "インストール状況を更新しました",
       "refreshFailed": "エージェントのインストール状況を確認できません",
@@ -959,6 +960,11 @@
         "unsupported": "非対応",
         "unknown": "不明"
       },
+      "quota": {
+        "loading": "利用枠を読み込み中…", "installFirst": "インストールしてログインすると利用枠を表示します", "unsupported": "利用枠の読み取りには未対応です", "unavailable": "利用枠を一時的に取得できません", "startSession": "セッションを開始すると利用枠を表示します",
+        "healthy": "利用枠は十分です", "low": "利用枠が少なくなっています", "exhausted": "利用枠がまもなくなくなります", "session": "5 時間 {{value}}%", "weekly": "週間 {{value}}%", "remainingPercent": "残り {{value}}%", "remainingCredits": "残り {{value}}"
+      },
+      "detailHint": "エージェントの行を選択すると、バージョンと実行ファイルのパスを確認できます。",
       "pathHint": "検出には Termflow から利用できる現在のシステム PATH を使用します。新しくインストールまたは更新したエージェントが検出されない場合は、コンピューターを再起動して再試行してください。"
     },
     "theme": {

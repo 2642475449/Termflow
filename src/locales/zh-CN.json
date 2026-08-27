@@ -891,6 +891,7 @@
     "agents": {
       "title": "智能体",
       "subtitle": "检查本机常用 AI 编程智能体的安装状态",
+      "subtitleWithQuota": "检查本机常用 AI 编程智能体的安装状态和可用额度",
       "refresh": "重新检查",
       "refreshSuccess": "安装状态已更新",
       "refreshFailed": "无法检查智能体安装状态",
@@ -959,6 +960,11 @@
         "unsupported": "不支持",
         "unknown": "未知"
       },
+      "quota": {
+        "loading": "正在读取额度…", "installFirst": "安装并登录后显示额度", "unsupported": "暂不支持读取额度", "unavailable": "暂时无法读取额度", "startSession": "启动一次会话后显示额度",
+        "healthy": "额度充足", "low": "额度较低", "exhausted": "额度即将耗尽", "session": "5 小时 {{value}}%", "weekly": "每周 {{value}}%", "remainingPercent": "剩余 {{value}}%", "remainingCredits": "剩余 {{value}}"
+      },
+      "detailHint": "点击智能体行可查看版本和可执行文件路径。",
       "pathHint": "检测结果以 Termflow 当前读取到的系统 PATH 为准。安装或更新智能体后，如果仍未检测到，请重启电脑再试。"
     },
     "theme": {

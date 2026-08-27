@@ -891,6 +891,7 @@
     "agents": {
       "title": "智慧體",
       "subtitle": "檢查本機常用 AI 程式設計智慧體的安裝狀態",
+      "subtitleWithQuota": "檢查本機常用 AI 程式設計智慧體的安裝狀態和可用額度",
       "refresh": "重新檢查",
       "refreshSuccess": "安裝狀態已更新",
       "refreshFailed": "無法檢查智慧體安裝狀態",
@@ -959,6 +960,11 @@
         "unsupported": "不支援",
         "unknown": "未知"
       },
+      "quota": {
+        "loading": "正在讀取額度…", "installFirst": "安裝並登入後顯示額度", "unsupported": "暫不支援讀取額度", "unavailable": "暫時無法讀取額度", "startSession": "啟動一次工作階段後顯示額度",
+        "healthy": "額度充足", "low": "額度較低", "exhausted": "額度即將用盡", "session": "5 小時 {{value}}%", "weekly": "每週 {{value}}%", "remainingPercent": "剩餘 {{value}}%", "remainingCredits": "剩餘 {{value}}"
+      },
+      "detailHint": "點擊智慧體列可查看版本和可執行檔路徑。",
       "pathHint": "偵測結果以 Termflow 目前讀取到的系統 PATH 為準。安裝或更新智慧體後，如果仍未偵測到，請重新啟動電腦再試。"
     },
     "theme": {

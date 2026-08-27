@@ -8,6 +8,7 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{
     Emitter, Manager, PhysicalPosition, PhysicalSize, Position, Size, State, WebviewUrl,
     WebviewWindow, WebviewWindowBuilder,
@@ -21,6 +22,7 @@ const VOICE_WORKER_ROUTE: &str = "index.html?worker=voice";
 const VOICE_OVERLAY_WIDTH: u32 = 520;
 const VOICE_OVERLAY_HEIGHT: u32 = 88;
 const VOICE_OVERLAY_BOTTOM_MARGIN: i32 = 104;
+const RECENT_PROJECT_OPENED_EVENT: &str = "termflow:recent-project-opened";
 
 #[derive(Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -43,6 +45,14 @@ pub struct WindowProjectContext {
 pub struct FocusSessionRequest {
     pub session_id: String,
     pub project_path: String,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct RecentProjectOpened {
+    path: String,
+    name: String,
+    last_opened_at: u64,
 }
 
 pub struct WindowRegistry {
@@ -267,7 +277,9 @@ pub fn open_project_from_external_request(
     if let Some(existing_label) = registry.get_label_by_project(&project_path) {
         if let Some(existing_window) = app.get_webview_window(&existing_label) {
             focus_window(&existing_window);
-            return Ok(registry.get_context(&existing_label));
+            let context = registry.get_context(&existing_label);
+            broadcast_recent_project_opened(app, &context);
+            return Ok(context);
         }
         registry.release_window(&existing_label);
     }
@@ -278,6 +290,7 @@ pub fn open_project_from_external_request(
             let _ = launcher_window.set_title(&window_title(&context));
             let _ = app.emit_to(launcher_window.label(), "window-context-updated", &context);
             focus_window(&launcher_window);
+            broadcast_recent_project_opened(app, &context);
             return Ok(context);
         }
         registry.release_window(&launcher_label);
@@ -307,7 +320,35 @@ pub fn open_project_from_external_request(
         };
     let _ = app.emit_to(project_window.label(), "window-context-updated", &context);
     focus_window(&project_window);
+    broadcast_recent_project_opened(app, &context);
     Ok(context)
+}
+
+fn recent_project_opened_payload(
+    context: &WindowProjectContext,
+    last_opened_at: u64,
+) -> Option<RecentProjectOpened> {
+    Some(RecentProjectOpened {
+        path: context.project_path.clone()?,
+        name: context.project_name.clone()?,
+        last_opened_at,
+    })
+}
+
+fn broadcast_recent_project_opened(app: &tauri::AppHandle, context: &WindowProjectContext) {
+    let last_opened_at = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .try_into()
+        .unwrap_or(u64::MAX);
+    let Some(payload) = recent_project_opened_payload(context, last_opened_at) else {
+        return;
+    };
+
+    if let Err(error) = app.emit(RECENT_PROJECT_OPENED_EVENT, payload) {
+        eprintln!("Failed to broadcast recent project opened event: {error}");
+    }
 }
 
 fn focus_window(window: &WebviewWindow) {
@@ -847,6 +888,31 @@ mod tests {
     fn project_name_from_path_uses_last_segment() {
         assert_eq!(project_name_from_path(r"D:\3.project\termflow"), "termflow");
         assert_eq!(project_name_from_path("/Users/test/MyPlan"), "MyPlan");
+    }
+
+    #[test]
+    fn recent_project_event_uses_frontend_payload_shape() {
+        let context = WindowProjectContext {
+            window_label: "project-demo".to_string(),
+            mode: WindowMode::Project,
+            project_path: Some(r"D:\workspace\demo".to_string()),
+            project_name: Some("demo".to_string()),
+        };
+
+        let payload = recent_project_opened_payload(&context, 1234).unwrap();
+        assert_eq!(
+            serde_json::to_value(payload).unwrap(),
+            serde_json::json!({
+                "path": r"D:\workspace\demo",
+                "name": "demo",
+                "lastOpenedAt": 1234,
+            })
+        );
+    }
+
+    #[test]
+    fn recent_project_event_ignores_launcher_contexts() {
+        assert!(recent_project_opened_payload(&launcher_context("main"), 1234).is_none());
     }
 
     #[test]

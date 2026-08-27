@@ -891,6 +891,7 @@
     "agents": {
       "title": "Agents",
       "subtitle": "Check whether popular AI coding agents are installed on this system",
+      "subtitleWithQuota": "Check installation status and available quota for local AI coding agents",
       "refresh": "Check again",
       "refreshSuccess": "Installation status updated",
       "refreshFailed": "Unable to inspect agent installations",
@@ -959,6 +960,11 @@
         "unsupported": "Unsupported",
         "unknown": "Unknown"
       },
+      "quota": {
+        "loading": "Loading quota…", "installFirst": "Install and sign in to view quota", "unsupported": "Quota reading is not supported", "unavailable": "Quota is temporarily unavailable", "startSession": "Start a session to view quota",
+        "healthy": "Quota available", "low": "Quota running low", "exhausted": "Quota nearly exhausted", "session": "5-hour {{value}}%", "weekly": "Weekly {{value}}%", "remainingPercent": "{{value}}% remaining", "remainingCredits": "{{value}} remaining"
+      },
+      "detailHint": "Select an agent row to view its version and executable path.",
       "pathHint": "Detection uses the system PATH currently available to Termflow. If a newly installed or updated agent is not detected, restart your computer and try again."
     },
     "theme": {
