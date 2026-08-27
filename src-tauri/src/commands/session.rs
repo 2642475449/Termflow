@@ -1,4 +1,5 @@
 use super::git::checkpoint::{self, AgentTurnStartResult};
+use crate::hook_ingest::HookStatusRuntime;
 use crate::path_utils::normalize_input_path;
 use crate::pty::ActiveAgentTurn;
 use crate::pty::{
@@ -184,6 +185,18 @@ pub fn pty_input(
     manager: State<'_, Arc<PtyManager>>,
 ) -> Result<(), String> {
     manager.write_input(&session_id, &data)
+}
+
+/// Clear a permission/input wait only when the renderer's baseline still
+/// matches the backend guard. A newer provider event always wins the race.
+#[tauri::command]
+pub fn infer_agent_user_response(
+    session_id: String,
+    baseline_revision: u64,
+    expected_event_type: String,
+    runtime: State<'_, Arc<HookStatusRuntime>>,
+) -> Option<u64> {
+    runtime.infer_user_response(&session_id, baseline_revision, expected_event_type.as_str())
 }
 
 /// Atomically capture a provider-independent turn baseline before forwarding Enter to the PTY.

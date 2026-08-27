@@ -3,6 +3,7 @@ import {
   containsTerminalInterrupt,
   consumeTerminalSubmissionInput,
   hasTerminalPromptText,
+  terminalInputContainsInsertedText,
 } from "./terminalSubmission";
 
 describe("terminal submission tracking", () => {
@@ -52,5 +53,13 @@ describe("terminal submission tracking", () => {
     const submission = consumeTerminalSubmissionInput(paste.nextValue, "\r");
 
     expect(submission.submittedText).toBe("hello");
+  });
+
+  it("detects when a pasted image path has been removed from the prompt", () => {
+    const insertedText = '"C:\\tmp\\image.png"';
+
+    expect(terminalInputContainsInsertedText(`explain ${insertedText}`, insertedText)).toBe(true);
+    expect(terminalInputContainsInsertedText("explain ", insertedText)).toBe(false);
+    expect(terminalInputContainsInsertedText('explain "C:\\tmp\\image.pn"', insertedText)).toBe(false);
   });
 });

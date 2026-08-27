@@ -79,6 +79,14 @@ export function hasTerminalPromptText(input: string | null): boolean {
   return Boolean(input?.trim());
 }
 
+/** A pasted-image preview is valid only while its exact inserted path remains. */
+export function terminalInputContainsInsertedText(
+  input: string,
+  insertedText: string,
+): boolean {
+  return insertedText.length > 0 && input.includes(insertedText);
+}
+
 /**
  * Ctrl+C is delivered to a terminal PTY as ETX (SIGINT).  Agent CLIs do not
  * consistently emit a lifecycle hook when that interrupts an in-flight turn,

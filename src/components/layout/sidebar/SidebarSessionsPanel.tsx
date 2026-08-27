@@ -114,7 +114,12 @@ function SidebarSessionsPanel({
     const metaColor = isActive
       ? "color-mix(in srgb, var(--cs-primary) 58%, var(--cs-text-secondary) 42%)"
       : "var(--cs-text-tertiary)";
-    const attentionItem = attentionBySession.get(session.id);
+    const currentAttentionItem = attentionBySession.get(session.id);
+    // Failures remain available to the notification/diagnostics flows, but a
+    // historical execution error should not occupy the persistent session-row
+    // status in the sidebar.
+    const attentionItem =
+      currentAttentionItem?.kind === "failure" ? undefined : currentAttentionItem;
     const tone = attentionItem ? attentionTone(attentionItem.kind) : null;
 
     return (

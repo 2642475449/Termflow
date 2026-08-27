@@ -499,6 +499,18 @@ export async function ptyInput(sessionId: string, data: string): Promise<void> {
   await invoke("pty_input", { sessionId, data });
 }
 
+export async function inferAgentUserResponse(
+  sessionId: string,
+  baselineRevision: number,
+  expectedEventType: "permission_request" | "waiting_input",
+): Promise<number | null> {
+  return await invoke("infer_agent_user_response", {
+    sessionId,
+    baselineRevision,
+    expectedEventType,
+  });
+}
+
 export async function generateSessionTitle(prompt: string, path: string): Promise<string> {
   return await invoke("generate_session_title", { prompt, path });
 }

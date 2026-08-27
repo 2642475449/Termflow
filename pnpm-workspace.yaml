@@ -1,5 +1,6 @@
 packages:
   - "."
+  - "website"
 allowBuilds:
   esbuild: true
   sharp: true

@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="760" viewBox="0 0 1440 760" role="img" aria-labelledby="title desc">
+  <title id="title">Termflow 智能体权限状态机工作流程</title>
+  <desc id="desc">四个 CLI 提供方的不同事件经过独立翻译器，转换成统一状态。权限等待后，提供方事件或通过版本校验的用户输入可恢复运行，子智能体事件保持隔离。</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7f8ff"/>
+      <stop offset="1" stop-color="#eef6ff"/>
+    </linearGradient>
+    <linearGradient id="header" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#5b6cff"/>
+      <stop offset="1" stop-color="#7655d6"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#25325f" flood-opacity="0.12"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8992b5"/>
+    </marker>
+    <style>
+      text { font-family: "Microsoft YaHei", "PingFang SC", Inter, sans-serif; }
+      .label { fill: #6d7592; font-size: 22px; font-weight: 600; }
+      .title { fill: #202642; font-size: 30px; font-weight: 700; }
+      .body { fill: #525b78; font-size: 20px; }
+      .small { fill: #6d7592; font-size: 17px; }
+      .provider { fill: #343b58; font-size: 18px; font-weight: 650; }
+      .state { fill: #ffffff; font-size: 21px; font-weight: 700; }
+    </style>
+  </defs>
+
+  <rect width="1440" height="760" rx="36" fill="url(#background)"/>
+  <rect x="48" y="40" width="1344" height="100" rx="28" fill="url(#header)" filter="url(#shadow)"/>
+  <text x="92" y="88" fill="#ffffff" font-size="30" font-weight="750">不同 CLI 说不同“方言”，Termflow 负责翻译成同一套状态</text>
+  <text x="92" y="120" fill="#e9ebff" font-size="18">统一展示 · 提供方独立判断 · 子智能体隔离 · 用户输入兜底</text>
+
+  <g filter="url(#shadow)">
+    <rect x="64" y="178" width="224" height="72" rx="20" fill="#ffffff"/>
+    <rect x="312" y="178" width="224" height="72" rx="20" fill="#ffffff"/>
+    <rect x="560" y="178" width="224" height="72" rx="20" fill="#ffffff"/>
+    <rect x="808" y="178" width="224" height="72" rx="20" fill="#ffffff"/>
+  </g>
+  <circle cx="98" cy="214" r="12" fill="#d97757"/><text class="provider" x="120" y="221">Claude Code</text>
+  <circle cx="346" cy="214" r="12" fill="#222222"/><text class="provider" x="368" y="221">Codex</text>
+  <circle cx="594" cy="214" r="12" fill="#22a06b"/><text class="provider" x="616" y="221">OpenCode</text>
+  <circle cx="842" cy="214" r="12" fill="#6f5bd3"/><text class="provider" x="864" y="221">Qoder</text>
+
+  <path d="M 1080 214 L 1160 214" stroke="#8992b5" stroke-width="4" marker-end="url(#arrow)"/>
+  <rect x="1176" y="170" width="200" height="88" rx="24" fill="#ffffff" stroke="#cfd5ef" stroke-width="2"/>
+  <text class="title" x="1276" y="208" text-anchor="middle">独立翻译器</text>
+  <text class="small" x="1276" y="236" text-anchor="middle">按提供方识别事件</text>
+
+  <path d="M 1276 270 L 1276 312 L 718 312 L 718 340" fill="none" stroke="#8992b5" stroke-width="4" marker-end="url(#arrow)"/>
+
+  <text class="label" x="64" y="327">一次授权任务的正常旅程</text>
+
+  <g filter="url(#shadow)">
+    <rect x="64" y="362" width="184" height="92" rx="28" fill="#4b7bec"/>
+    <rect x="296" y="362" width="216" height="92" rx="28" fill="#ffffff" stroke="#d7dcf2" stroke-width="2"/>
+    <rect x="560" y="362" width="184" height="92" rx="28" fill="#f59e0b"/>
+    <rect x="792" y="362" width="216" height="92" rx="28" fill="#ffffff" stroke="#d7dcf2" stroke-width="2"/>
+    <rect x="1056" y="362" width="184" height="92" rx="28" fill="#20a36a"/>
+  </g>
+  <text class="state" x="156" y="418" text-anchor="middle">运行中</text>
+  <text class="title" x="404" y="402" text-anchor="middle">请求权限</text>
+  <text class="small" x="404" y="432" text-anchor="middle">例如执行命令或写文件</text>
+  <text class="state" x="652" y="405" text-anchor="middle">等待用户</text>
+  <text x="652" y="433" text-anchor="middle" fill="#fff7df" font-size="17">静态橙色提醒</text>
+  <text class="title" x="900" y="402" text-anchor="middle">允许 / 拒绝</text>
+  <text class="small" x="900" y="432" text-anchor="middle">提供方 Hook 或用户输入</text>
+  <text class="state" x="1148" y="405" text-anchor="middle">继续运行</text>
+  <text x="1148" y="433" text-anchor="middle" fill="#e6fff4" font-size="17">呼吸灯恢复</text>
+
+  <path d="M 248 408 L 282 408" stroke="#8992b5" stroke-width="4" marker-end="url(#arrow)"/>
+  <path d="M 512 408 L 546 408" stroke="#8992b5" stroke-width="4" marker-end="url(#arrow)"/>
+  <path d="M 744 408 L 778 408" stroke="#8992b5" stroke-width="4" marker-end="url(#arrow)"/>
+  <path d="M 1008 408 L 1042 408" stroke="#8992b5" stroke-width="4" marker-end="url(#arrow)"/>
+  <path d="M 1240 408 L 1276 408 L 1276 474" fill="none" stroke="#8992b5" stroke-width="4" marker-end="url(#arrow)"/>
+  <rect x="1176" y="486" width="200" height="50" rx="20" fill="#e8ebf4"/>
+  <text x="1276" y="518" text-anchor="middle" fill="#58617e" font-size="19" font-weight="700">已完成 · 静止</text>
+
+  <g filter="url(#shadow)">
+    <rect x="64" y="548" width="408" height="152" rx="26" fill="#ffffff" stroke="#d7dcf2" stroke-width="2"/>
+    <rect x="516" y="548" width="408" height="152" rx="26" fill="#ffffff" stroke="#d7dcf2" stroke-width="2"/>
+    <rect x="968" y="548" width="408" height="152" rx="26" fill="#ffffff" stroke="#d7dcf2" stroke-width="2"/>
+  </g>
+
+  <circle cx="108" cy="592" r="22" fill="#eef0ff"/><text x="108" y="600" text-anchor="middle" fill="#5b6cff" font-size="23" font-weight="800">1</text>
+  <text class="title" x="146" y="600">版本门卫</text>
+  <text class="body" x="104" y="638">只接受当前等待对应的输入，</text>
+  <text class="body" x="104" y="670">迟到事件不能覆盖更新状态。</text>
+
+  <circle cx="560" cy="592" r="22" fill="#fff4de"/><text x="560" y="600" text-anchor="middle" fill="#e28b00" font-size="23" font-weight="800">2</text>
+  <text class="title" x="598" y="600">子智能体隔离</text>
+  <text class="body" x="556" y="638">“实习生”完成自己的工作，</text>
+  <text class="body" x="556" y="670">不能替“负责人”解除等待。</text>
+
+  <circle cx="1012" cy="592" r="22" fill="#e7f8f1"/><text x="1012" y="600" text-anchor="middle" fill="#168459" font-size="23" font-weight="800">3</text>
+  <text class="title" x="1050" y="600">双通道恢复</text>
+  <text class="body" x="1008" y="638">优先相信 CLI 生命周期事件，</text>
+  <text class="body" x="1008" y="670">缺失时再用用户输入兜底。</text>
+</svg>

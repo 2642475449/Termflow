@@ -18,7 +18,7 @@ use commands::search_index::SearchIndexState;
 use commands::voice_shortcut::VoiceShortcutState;
 use commands::window::{VoiceOverlayState, WindowMode, WindowRegistry};
 use database::Database;
-use hook_ingest::{create_ingest_config, start_ingest_server};
+use hook_ingest::{create_ingest_config, start_ingest_server, HookStatusRuntime};
 use pty::PtyManager;
 use std::sync::Arc;
 use tauri::{Manager, WindowEvent};
@@ -45,6 +45,7 @@ pub fn run() {
         create_ingest_config().expect("无法初始化 hook ingest 服务");
     let ingest_config = Arc::new(ingest_config_value);
     let claude_rate_limits = Arc::new(ClaudeRateLimitStore::default());
+    let hook_status_runtime = Arc::new(HookStatusRuntime::default());
     let pty_manager = PtyManager::new(ingest_config.clone());
     let window_registry = WindowRegistry::new();
     let voice_overlay_state = VoiceOverlayState::new();
@@ -140,6 +141,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(pty_manager.clone())
         .manage(ingest_config.clone())
+        .manage(hook_status_runtime.clone())
         .manage(claude_rate_limits.clone())
         .manage(window_registry.clone())
         .manage(voice_overlay_state.clone())
@@ -218,6 +220,7 @@ pub fn run() {
                 ingest_listener,
                 pty_manager.clone(),
                 claude_rate_limits.clone(),
+                hook_status_runtime.clone(),
             );
             commands::window::create_voice_overlay_window(&app.handle())?;
             commands::window::create_voice_worker_window(&app.handle())?;
@@ -229,6 +232,7 @@ pub fn run() {
             commands::session::get_claude_cli_info,
             commands::session::spawn_pty,
             commands::session::pty_input,
+            commands::session::infer_agent_user_response,
             commands::session::submit_agent_turn_input,
             commands::session::complete_agent_turn,
             commands::session::generate_session_title,

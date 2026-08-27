@@ -1829,6 +1829,30 @@ html, body, #root {
   animation: agent-logo-breathe 1.2s ease-in-out infinite;
 }
 
+.agent-activity-icon[data-state="waiting"]::before {
+  opacity: 0.26;
+  transform: scale(0.96);
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--cs-warning, #faad14) 54%, transparent) 0%,
+    transparent 70%
+  );
+}
+
+.agent-activity-icon[data-state="waiting"]::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  right: -3px;
+  bottom: -2px;
+  width: 6px;
+  height: 6px;
+  border: 1px solid var(--cs-bg-container, #fff);
+  border-radius: 999px;
+  background: var(--cs-warning, #faad14);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--cs-warning, #faad14) 65%, transparent);
+}
+
 .agent-activity-icon[data-state="error"]::before {
   opacity: 0.34;
   transform: scale(0.96);

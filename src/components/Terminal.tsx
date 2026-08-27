@@ -18,6 +18,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import {
+  inferAgentUserResponse,
   ptyInput,
   ptyResize,
   openInFileManager,
@@ -50,6 +51,7 @@ import {
   containsTerminalInterrupt,
   consumeTerminalSubmissionInput,
   hasTerminalPromptText,
+  terminalInputContainsInsertedText,
 } from "@/lib/terminalSubmission";
 import { AgentIcon } from "@/components/AgentIcon";
 import {
@@ -61,7 +63,12 @@ import { SideQuestionComposer } from "@/components/SideQuestionComposer";
 import { getAgentDisplayName, getAgentTerminalBehavior, isAiAgentId } from "@/lib/agents";
 import { isSessionTurnRunning } from "@/lib/sessions";
 import { getTerminalTheme } from "@/lib/terminalTheme";
+import {
+  getAgentUserResponseBaseline,
+  isAgentUserResponseBaselineCurrent,
+} from "@/lib/agentUserResponse";
 import { createPtyResizeGate } from "@/lib/terminalResize";
+import { createTerminalImeOutputGate } from "@/lib/terminalImeOutput";
 import type { AgentCliInfo } from "@/types";
 import { useTranslation } from "react-i18next";
 import "@xterm/xterm/css/xterm.css";
@@ -278,6 +285,20 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
   const pastedImageDialogPreview = pastedImagePreviews.find(
     (preview) => preview.id === pastedImageDialogId,
   ) ?? null;
+
+  const removeStalePastedImagePreviews = useCallback((terminalInput: string) => {
+    setPastedImagePreviews((current) => {
+      const next = current.filter((preview) =>
+        terminalInputContainsInsertedText(terminalInput, preview.insertedText),
+      );
+      if (next.length !== current.length) {
+        setPastedImageDialogId((dialogId) =>
+          dialogId && next.some((preview) => preview.id === dialogId) ? dialogId : null,
+        );
+      }
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -992,10 +1013,40 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
       pendingSubmissionInputRef.current = submissionCapture.nextValue;
       pendingSubmissionEscapeSequenceRef.current = submissionCapture.pendingSequence;
 
+      if (submissionCapture.submittedText === null) {
+        removeStalePastedImagePreviews(submissionCapture.nextValue);
+      }
+
       if (data === "\r" || data === "\n") {
         setPastedImagePreviews([]);
         setPastedImageDialogId(null);
         captureInputForAutoTitleRef.current?.(data);
+        const waitingSession = useAppStore.getState().sessions.find(
+          (item) => item.id === sessionId,
+        );
+        const responseBaseline = getAgentUserResponseBaseline(waitingSession);
+        if (responseBaseline !== null) {
+          const sendInput = async () => {
+            await ptyInput(sessionId, data);
+            const inferredRevision = await inferAgentUserResponse(
+              sessionId,
+              responseBaseline.revision,
+              responseBaseline.eventType,
+            );
+            if (inferredRevision === null) return;
+            const latest = useAppStore.getState().sessions.find((item) => item.id === sessionId);
+            if (isAgentUserResponseBaselineCurrent(latest, responseBaseline)) {
+              updateSession(sessionId, {
+                status: "running",
+                statusRevision: inferredRevision,
+                statusUpdatedAt: Date.now(),
+                lastEventType: "user_response",
+              });
+            }
+          };
+          enqueueInput(sendInput);
+          return;
+        }
         if (!hasTerminalPromptText(submissionCapture.submittedText)) {
           if (queuedInputOperations > 0) {
             enqueueInput(() => ptyInput(sessionId, data));
@@ -1144,21 +1195,18 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
     };
     window.addEventListener(TERMINAL_LAYOUT_SYNC_EVENT, handleLayoutSync as EventListener);
 
-    // --- IME composition 缓冲：组合期间暂停 PTY 输出写入，避免光标漂移 ---
-    let isComposing = false;
-    let pendingOutput = "";
-
+    // During IME composition xterm owns the textarea.  Its final input is
+    // delivered on the next task after compositionend, so defer PTY output
+    // through that boundary to keep the cursor and committed text aligned.
+    const imeOutputGate = createTerminalImeOutputGate((data) => {
+      term.write(keepRunningCursorHidden(data, hideCursorWhileRunningRef.current));
+    });
     const textarea = containerRef.current.querySelector("textarea");
     const onCompositionStart = () => {
-      isComposing = true;
-      pendingOutput = "";
+      imeOutputGate.compositionStart();
     };
     const onCompositionEnd = () => {
-      isComposing = false;
-      if (pendingOutput) {
-        term.write(keepRunningCursorHidden(pendingOutput, hideCursorWhileRunningRef.current));
-        pendingOutput = "";
-      }
+      imeOutputGate.compositionEnd();
     };
     if (textarea) {
       textarea.addEventListener("compositionstart", onCompositionStart);
@@ -1171,13 +1219,7 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
       (event) => {
         if (event.payload.session_id === sessionId) {
           overviewOutputSource.append(event.payload.data);
-          if (isComposing) {
-            pendingOutput += event.payload.data;
-          } else {
-            term.write(
-              keepRunningCursorHidden(event.payload.data, hideCursorWhileRunningRef.current),
-            );
-          }
+          imeOutputGate.write(event.payload.data);
         }
       }
     );
@@ -1260,6 +1302,7 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
         textarea.removeEventListener("compositionstart", onCompositionStart);
         textarea.removeEventListener("compositionend", onCompositionEnd);
       }
+      imeOutputGate.dispose();
       filePathDisposable.dispose();
       unregisterOverviewNavigator();
       overviewOutputSource.dispose();
@@ -1291,6 +1334,7 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
     showLocalImagePreview,
     scheduleImagePreviewDismissal,
     pasteIntoTerminal,
+    removeStalePastedImagePreviews,
   ]);
 
   useEffect(() => {

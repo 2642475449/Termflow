@@ -3,7 +3,7 @@ import type { AgentId, Session } from "@/types";
 import { AgentIcon } from "@/components/AgentIcon";
 import { getAgentDefinition, isAiAgentId } from "@/lib/agents";
 
-type ActivityState = "idle" | "starting" | "running" | "error";
+type ActivityState = "idle" | "starting" | "running" | "waiting" | "error";
 
 interface AgentActivityIconProps {
   agentId: AgentId;
@@ -26,6 +26,7 @@ function getActivityState(
   if (!active) return status === "error" ? "error" : "idle";
   if (status === "starting") return "starting";
   if (status === "running") return "running";
+  if (status === "waiting") return "waiting";
   if (status === "error") return "error";
   return "idle";
 }

@@ -106,6 +106,47 @@ struct SessionStatusGuard {
 
 type StatusGuards = Arc<Mutex<HashMap<String, SessionStatusGuard>>>;
 
+#[derive(Default)]
+pub struct HookStatusRuntime {
+    guards: StatusGuards,
+}
+
+impl HookStatusRuntime {
+    pub fn infer_user_response(
+        &self,
+        session_id: &str,
+        baseline_revision: u64,
+        expected_event_type: &str,
+    ) -> Option<u64> {
+        let Ok(mut guards) = self.guards.lock() else {
+            return None;
+        };
+        let Some(guard) = guards.get_mut(session_id) else {
+            return None;
+        };
+        if guard.revision != baseline_revision
+            || guard.last_state.as_deref() != Some("waiting")
+            || guard.last_event_type.as_deref() != Some(expected_event_type)
+            || !matches!(expected_event_type, "permission_request" | "waiting_input")
+        {
+            return None;
+        }
+
+        // The PTY write is the user-owned acknowledgement signal. Advance the
+        // same canonical revision as provider hooks so the renderer can resolve
+        // the waiting attention item without racing the provider's next event.
+        guard.pending_permission = None;
+        guard.permission_pending = false;
+        guard.last_pre_tool = None;
+        guard.revision = guard.revision.saturating_add(1);
+        guard.last_state = Some("running".to_string());
+        guard.last_event_type = Some("user_response".to_string());
+        guard.last_created_at = now_ms();
+        guard.last_event_id = Some(format!("user-response:{}:{}", session_id, guard.revision));
+        Some(guard.revision)
+    }
+}
+
 const COMPLETION_QUIET_MS: u64 = 1_500;
 const MAX_STATUS_GUARDS: usize = 2_048;
 
@@ -132,6 +173,7 @@ pub fn start_ingest_server(
     listener: TcpListener,
     manager: Arc<PtyManager>,
     claude_rate_limits: Arc<ClaudeRateLimitStore>,
+    status_runtime: Arc<HookStatusRuntime>,
 ) {
     thread::spawn(move || {
         let server = match tiny_http::Server::from_listener(listener, None) {
@@ -144,7 +186,7 @@ pub fn start_ingest_server(
             }
         };
         info!("hook ingest server listening on 127.0.0.1:{}", config.port);
-        let guards: StatusGuards = Arc::new(Mutex::new(HashMap::new()));
+        let guards = status_runtime.guards.clone();
 
         for mut request in server.incoming_requests() {
             let request_path = request.url().to_string();
@@ -281,22 +323,14 @@ fn handle_agent_status(
             return;
         }
 
-        if supports_correlated_permissions(&agent) {
-            if let Some(hook_event) = permission_lifecycle_event {
-                if !prepare_permission_lifecycle_event(
-                    guard,
-                    hook_event,
-                    tool_permission_correlation,
-                ) {
-                    return;
-                }
-            } else if should_suppress_uncorrelated_running(guard, state) {
-                // Generic busy/working events are not proof that the permission
-                // which produced the visible attention item was answered. This
-                // matters for concurrent subagents and for OpenCode, whose
-                // session can remain globally busy while one tool is blocked.
-                return;
-            }
+        if !reduce_provider_permission_state(
+            guard,
+            &agent,
+            permission_lifecycle_event,
+            tool_permission_correlation,
+            state,
+        ) {
+            return;
         }
         let previous_state = guard.last_state.clone();
         let Some(result) =
@@ -660,6 +694,120 @@ fn supports_correlated_permissions(agent: &str) -> bool {
     matches!(agent, "claude" | "codex" | "opencode" | "qoder")
 }
 
+fn reduce_provider_permission_state(
+    guard: &mut SessionStatusGuard,
+    agent: &str,
+    event: Option<PermissionLifecycleEvent>,
+    correlation: Option<ToolPermissionCorrelation>,
+    state: &str,
+) -> bool {
+    match agent {
+        "claude" => reduce_claude_permission_state(guard, event, correlation, state),
+        "codex" => reduce_codex_permission_state(guard, event, correlation, state),
+        "opencode" => reduce_opencode_permission_state(guard, event, correlation, state),
+        "qoder" => reduce_qoder_permission_state(guard, event, correlation, state),
+        _ => true,
+    }
+}
+
+fn reduce_claude_permission_state(
+    guard: &mut SessionStatusGuard,
+    event: Option<PermissionLifecycleEvent>,
+    correlation: Option<ToolPermissionCorrelation>,
+    state: &str,
+) -> bool {
+    reduce_correlated_permission_state(guard, event, correlation, state)
+}
+
+fn reduce_codex_permission_state(
+    guard: &mut SessionStatusGuard,
+    event: Option<PermissionLifecycleEvent>,
+    correlation: Option<ToolPermissionCorrelation>,
+    state: &str,
+) -> bool {
+    if resume_unattributed_main_tool_event(guard, event, correlation.as_ref()) {
+        return true;
+    }
+    reduce_correlated_permission_state(guard, event, correlation, state)
+}
+
+fn reduce_qoder_permission_state(
+    guard: &mut SessionStatusGuard,
+    event: Option<PermissionLifecycleEvent>,
+    correlation: Option<ToolPermissionCorrelation>,
+    state: &str,
+) -> bool {
+    if resume_unattributed_main_tool_event(guard, event, correlation.as_ref()) {
+        return true;
+    }
+    reduce_correlated_permission_state(guard, event, correlation, state)
+}
+
+fn resume_unattributed_main_tool_event(
+    guard: &mut SessionStatusGuard,
+    event: Option<PermissionLifecycleEvent>,
+    correlation: Option<&ToolPermissionCorrelation>,
+) -> bool {
+    let waiting_for_permission = guard.last_state.as_deref() == Some("waiting")
+        && guard.last_event_type.as_deref() == Some("permission_request")
+        && guard.permission_pending;
+    let is_tool_resume = matches!(
+        event,
+        Some(
+            PermissionLifecycleEvent::PreToolUse
+                | PermissionLifecycleEvent::PostToolUse
+                | PermissionLifecycleEvent::PostToolUseFailure
+        )
+    );
+    if !waiting_for_permission
+        || !is_tool_resume
+        || !correlation.is_some_and(|value| !value.has_explicit_actor)
+    {
+        return false;
+    }
+
+    // Codex and Qoder identify subagents explicitly. A correlatable but
+    // unattributed tool lifecycle belongs to the lead turn, so it is
+    // authoritative even when tool input changes between hook phases. A
+    // completely uncorrelatable event is left to the user-input fallback.
+    guard.pending_permission = None;
+    guard.permission_pending = false;
+    guard.last_pre_tool = None;
+    true
+}
+
+fn reduce_opencode_permission_state(
+    guard: &mut SessionStatusGuard,
+    event: Option<PermissionLifecycleEvent>,
+    correlation: Option<ToolPermissionCorrelation>,
+    state: &str,
+) -> bool {
+    if let Some(event) = event {
+        return prepare_permission_lifecycle_event(guard, event, correlation);
+    }
+    if should_suppress_uncorrelated_running(guard, state) {
+        // OpenCode's session.status=busy event is session-authoritative. It is
+        // emitted after a permission reply even when the reply event omitted a
+        // stable permission id.
+        guard.pending_permission = None;
+        guard.permission_pending = false;
+        guard.last_pre_tool = None;
+    }
+    true
+}
+
+fn reduce_correlated_permission_state(
+    guard: &mut SessionStatusGuard,
+    event: Option<PermissionLifecycleEvent>,
+    correlation: Option<ToolPermissionCorrelation>,
+    state: &str,
+) -> bool {
+    if let Some(event) = event {
+        return prepare_permission_lifecycle_event(guard, event, correlation);
+    }
+    !should_suppress_uncorrelated_running(guard, state)
+}
+
 fn normalize_permission_lifecycle_event(
     agent: &str,
     event_type: Option<&str>,
@@ -763,9 +911,14 @@ fn correlations_match_permission(
         .as_ref()
         .zip(candidate.tool_fingerprint.as_ref())
         .is_some_and(|(pending, candidate)| pending == candidate)
-        && pending.has_explicit_actor
-        && candidate.has_explicit_actor
-        && pending.actor_fingerprint == candidate.actor_fingerprint
+        && match (pending.has_explicit_actor, candidate.has_explicit_actor) {
+            (true, true) => pending.actor_fingerprint == candidate.actor_fingerprint,
+            // Provider main-turn events omit agent_id/agent_type. Matching an
+            // exact keyed tool fingerprint is sufficient only when both sides
+            // are unattributed; an attributed child can never clear a lead wait.
+            (false, false) => true,
+            _ => false,
+        }
 }
 
 fn prepare_permission_lifecycle_event(
@@ -1031,10 +1184,11 @@ mod tests {
         normalize_claude_task_lifecycle_event, normalize_event_type,
         normalize_permission_lifecycle_event, normalize_provider_session_id, normalize_state,
         parse_actor_fingerprint, parse_tool_permission_correlation,
-        prepare_permission_lifecycle_event, sanitized_metadata, should_begin_task_generation,
-        should_emit_attention_event, should_suppress_uncorrelated_running, task_duration_ms,
-        update_subagent_lifecycle, ClaudeTaskLifecycleEvent, PermissionLifecycleEvent,
-        SessionStatusGuard, StatusGuards, TaskCompletionCoordinator, ToolPermissionCorrelation,
+        prepare_permission_lifecycle_event, reduce_provider_permission_state, sanitized_metadata,
+        should_begin_task_generation, should_emit_attention_event,
+        should_suppress_uncorrelated_running, task_duration_ms, update_subagent_lifecycle,
+        ClaudeTaskLifecycleEvent, HookStatusRuntime, PermissionLifecycleEvent, SessionStatusGuard,
+        StatusGuards, TaskCompletionCoordinator, ToolPermissionCorrelation,
     };
     use serde_json::json;
 
@@ -1402,7 +1556,7 @@ mod tests {
     }
 
     #[test]
-    fn claude_permission_stays_visible_without_tool_or_actor_proof() {
+    fn claude_main_turn_resumes_for_the_same_unattributed_tool() {
         let mut guard = SessionStatusGuard {
             last_state: Some("waiting".to_string()),
             last_event_type: Some("permission_request".to_string()),
@@ -1426,13 +1580,169 @@ mod tests {
             110,
         );
 
-        assert!(!prepare_permission_lifecycle_event(
+        assert!(prepare_permission_lifecycle_event(
             &mut guard,
             PermissionLifecycleEvent::PostToolUse,
             Some(ambiguous)
         ));
-        assert!(guard.pending_permission.is_some());
+        assert!(guard.pending_permission.is_none());
+        assert!(!guard.permission_pending);
+    }
+
+    #[test]
+    fn attributed_child_cannot_clear_an_unattributed_lead_permission() {
+        for agent in ["claude", "codex", "qoder"] {
+            let mut guard = SessionStatusGuard {
+                last_state: Some("waiting".to_string()),
+                last_event_type: Some("permission_request".to_string()),
+                pending_permission: Some(tool_correlation(
+                    None,
+                    Some("same"),
+                    None,
+                    "main",
+                    false,
+                    100,
+                )),
+                permission_pending: true,
+                ..SessionStatusGuard::default()
+            };
+            let child =
+                tool_correlation(Some("toolu-child"), Some("same"), None, "child", true, 110);
+
+            assert!(!reduce_provider_permission_state(
+                &mut guard,
+                agent,
+                Some(PermissionLifecycleEvent::PreToolUse),
+                Some(child),
+                "running",
+            ));
+            assert!(guard.permission_pending);
+        }
+    }
+
+    #[test]
+    fn codex_and_qoder_trust_unattributed_lead_tool_lifecycle() {
+        for agent in ["codex", "qoder"] {
+            let mut guard = SessionStatusGuard {
+                last_state: Some("waiting".to_string()),
+                last_event_type: Some("permission_request".to_string()),
+                pending_permission: Some(tool_correlation(
+                    None,
+                    Some("permission-tool"),
+                    None,
+                    "main",
+                    false,
+                    100,
+                )),
+                permission_pending: true,
+                ..SessionStatusGuard::default()
+            };
+            let resumed = tool_correlation(
+                None,
+                Some("provider-changed-tool-shape"),
+                None,
+                "main",
+                false,
+                110,
+            );
+
+            assert!(reduce_provider_permission_state(
+                &mut guard,
+                agent,
+                Some(PermissionLifecycleEvent::PreToolUse),
+                Some(resumed),
+                "running",
+            ));
+            assert!(!guard.permission_pending);
+        }
+    }
+
+    #[test]
+    fn claude_keeps_a_different_unattributed_tool_isolated() {
+        let mut guard = SessionStatusGuard {
+            last_state: Some("waiting".to_string()),
+            last_event_type: Some("permission_request".to_string()),
+            pending_permission: Some(tool_correlation(
+                None,
+                Some("permission-tool"),
+                None,
+                "main",
+                false,
+                100,
+            )),
+            permission_pending: true,
+            ..SessionStatusGuard::default()
+        };
+        let other = tool_correlation(None, Some("parallel-tool"), None, "main", false, 110);
+
+        assert!(!reduce_provider_permission_state(
+            &mut guard,
+            "claude",
+            Some(PermissionLifecycleEvent::PreToolUse),
+            Some(other),
+            "running",
+        ));
         assert!(guard.permission_pending);
+    }
+
+    #[test]
+    fn opencode_busy_is_authoritative_after_a_permission_wait() {
+        let mut guard = SessionStatusGuard {
+            last_state: Some("waiting".to_string()),
+            last_event_type: Some("permission_request".to_string()),
+            permission_pending: true,
+            ..SessionStatusGuard::default()
+        };
+
+        assert!(reduce_provider_permission_state(
+            &mut guard, "opencode", None, None, "running",
+        ));
+        assert!(!guard.permission_pending);
+    }
+
+    #[test]
+    fn generic_running_stays_blocked_for_non_opencode_permissions() {
+        for agent in ["claude", "codex", "qoder"] {
+            let mut guard = SessionStatusGuard {
+                last_state: Some("waiting".to_string()),
+                last_event_type: Some("permission_request".to_string()),
+                permission_pending: true,
+                ..SessionStatusGuard::default()
+            };
+            assert!(!reduce_provider_permission_state(
+                &mut guard, agent, None, None, "running",
+            ));
+        }
+    }
+
+    #[test]
+    fn user_response_inference_requires_the_exact_waiting_revision() {
+        let runtime = HookStatusRuntime::default();
+        runtime.guards.lock().unwrap().insert(
+            "session-a".to_string(),
+            SessionStatusGuard {
+                revision: 7,
+                last_state: Some("waiting".to_string()),
+                last_event_type: Some("permission_request".to_string()),
+                permission_pending: true,
+                ..SessionStatusGuard::default()
+            },
+        );
+
+        assert_eq!(
+            runtime.infer_user_response("session-a", 6, "permission_request"),
+            None
+        );
+        assert_eq!(
+            runtime.infer_user_response("session-a", 7, "permission_request"),
+            Some(8)
+        );
+        let guards = runtime.guards.lock().unwrap();
+        let guard = &guards["session-a"];
+        assert!(!guard.permission_pending);
+        assert_eq!(guard.revision, 8);
+        assert_eq!(guard.last_state.as_deref(), Some("running"));
+        assert_eq!(guard.last_event_type.as_deref(), Some("user_response"));
     }
 
     #[test]
