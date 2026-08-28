@@ -18,7 +18,7 @@
   <img src="https://img.shields.io/badge/Rust-000000?style=flat-square&logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
   <img src="https://img.shields.io/badge/Windows-0078D6?style=flat-square&logo=windows&logoColor=white" alt="Windows">
-  <img src="https://img.shields.io/badge/v1.8.20-blue?style=flat-square" alt="バージョン">
+  <img src="https://img.shields.io/badge/v1.8.22-blue?style=flat-square" alt="バージョン">
 </p>
 
 ![Termflow の概要](.github/assets/termflow-overview.png)
@@ -62,13 +62,13 @@ Termflow は、日常的に使いたいワークフローに合わせて作り�
 
 | 機能 | 内容 |
 | :--- | :--- |
-| **プロジェクトとセッションのワークスペース** | プロジェクトディレクトリごとに各エージェントのセッションを自動整理し、タスクを素早く作成・切替しながら、各セッションの稼働状態をリアルタイムで確認できます。<br><br>![Termflow プロジェクトとセッションのワークスペースデモ](.github/assets/demos/multi-session-management.gif) |
+| **プロジェクトとセッションのワークスペース** | プロジェクトディレクトリごとに各エージェントのセッションを自動整理し、タスクを素早く作成・切替しながら、各セッションの稼働状態をリアルタイムで確認できます。<br><br><img src=".github/assets/demos/multi-session-management.gif" alt="Termflow プロジェクトとセッションのワークスペースデモ" width="480"> |
 | **サイドタスクと補助ワークスペース** | ターミナルのエラーやファイルの問題が発生したとき、選択したターミナル出力からサイド質問を開始し、メインセッションを離れずに右側で関連ファイルの確認や独立したタスクの実行ができます。 |
-| **ファイルとコンテキストの連携** | プロジェクトファイルの閲覧・検索・編集、Markdown のプレビュー、CLI 入力欄へのファイルのドラッグ＆ドロップにより、エージェントへ素早くコンテキストを渡せます。<br><br>![Termflow ファイルとコンテキストの連携デモ](.github/assets/demos/file-context-collaboration.gif) |
+| **ファイルとコンテキストの連携** | プロジェクトファイルの閲覧・検索・編集、Markdown のプレビュー、CLI 入力欄へのファイルのドラッグ＆ドロップにより、エージェントへ素早くコンテキストを渡せます。<br><br><img src=".github/assets/demos/file-context-collaboration.gif" alt="Termflow ファイルとコンテキストの連携デモ" width="480"> |
 | **Git 変更ワークフロー** | 変更確認、ステージング、ブランチ管理、コミット、プッシュ、プル、同期を一か所で行い、AI によるコミットメッセージ生成も利用できます。 |
 | **チェックポイントと差分レビュー** | エージェントターンのチェックポイントを自動記録し、ファイル概要と変更差分を確認して、任意のチェックポイントへ戻れます。 |
 | **クイックコマンドと音声入力** | 検索可能でパラメータ化されたクイックコマンドから定型操作を実行できます。MiMo と DashScope ASR、グローバルショートカット、録音状態オーバーレイにも対応します。 |
-| **作業状況の概要** | セッション活動、Token 使用量、作業ペースを集約し、アテンションセンターとスマート通知で対応が必要なタスクを示します。<br><br>![Termflow 作業状況の概要デモ](.github/assets/demos/work-status-overview.gif) |
+| **作業状況の概要** | セッション活動、Token 使用量、作業ペースを集約し、アテンションセンターとスマート通知で対応が必要なタスクを示します。<br><br><img src=".github/assets/demos/work-status-overview.gif" alt="Termflow 作業状況の概要デモ" width="480"> |
 
 そのほか、セッションの永続化、カスタムタイトルバーとフレームレスウィンドウ操作、明暗・システム連動テーマ、簡体字中国語・繁体字中国語・英語・日本語の UI を提供します。
 

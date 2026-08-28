@@ -18,7 +18,7 @@
   <img src="https://img.shields.io/badge/Rust-000000?style=flat-square&logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
   <img src="https://img.shields.io/badge/Windows-0078D6?style=flat-square&logo=windows&logoColor=white" alt="Windows">
-  <img src="https://img.shields.io/badge/v1.8.20-blue?style=flat-square" alt="版本">
+  <img src="https://img.shields.io/badge/v1.8.22-blue?style=flat-square" alt="版本">
 </p>
 
 ![Termflow 介面總覽](.github/assets/termflow-overview.png)
@@ -62,13 +62,13 @@ Termflow 最初是為了打造符合自己日常習慣的應用程式。隨著�
 
 | 功能 | 說明 |
 | :--- | :--- |
-| **專案與工作階段工作區** | 依專案目錄自動整理不同智慧代理的工作階段，快速建立和切換任務，並即時掌握每個工作階段的執行狀態。<br><br>![Termflow 專案與工作階段工作區示範](.github/assets/demos/multi-session-management.gif) |
+| **專案與工作階段工作區** | 依專案目錄自動整理不同智慧代理的工作階段，快速建立和切換任務，並即時掌握每個工作階段的執行狀態。<br><br><img src=".github/assets/demos/multi-session-management.gif" alt="Termflow 專案與工作階段工作區示範" width="480"> |
 | **旁路任務與輔助工作區** | 遇到終端機錯誤或檔案問題時，可從選取的終端機輸出發起側邊提問，並在不離開主要工作階段的情況下，於右側檢視相關檔案或執行獨立任務。 |
-| **檔案與上下文協作** | 瀏覽、搜尋和編輯專案檔案，預覽 Markdown，並將檔案從專案樹拖放到目前 CLI 輸入欄，快速為智慧代理補充上下文。<br><br>![Termflow 檔案與上下文協作示範](.github/assets/demos/file-context-collaboration.gif) |
+| **檔案與上下文協作** | 瀏覽、搜尋和編輯專案檔案，預覽 Markdown，並將檔案從專案樹拖放到目前 CLI 輸入欄，快速為智慧代理補充上下文。<br><br><img src=".github/assets/demos/file-context-collaboration.gif" alt="Termflow 檔案與上下文協作示範" width="480"> |
 | **Git 變更工作流程** | 集中完成變更檢視、暫存、分支管理、提交、推送、拉取和同步，並可使用 AI 產生提交訊息。 |
 | **檢查點與差異審閱** | 自動記錄智慧代理回合檢查點，集中檢視檔案摘要和變更差異，並可回到任何檢查點。 |
 | **快速命令與語音輸入** | 透過可搜尋、可參數化的快速命令執行常用操作；支援 MiMo 與 DashScope ASR、全域快速鍵和錄音狀態懸浮視窗。 |
-| **工作狀態總覽** | 彙整工作階段活動、Token 使用量和工作節奏，透過注意力中心與智慧通知提示需要處理的任務。<br><br>![Termflow 工作狀態總覽示範](.github/assets/demos/work-status-overview.gif) |
+| **工作狀態總覽** | 彙整工作階段活動、Token 使用量和工作節奏，透過注意力中心與智慧通知提示需要處理的任務。<br><br><img src=".github/assets/demos/work-status-overview.gif" alt="Termflow 工作狀態總覽示範" width="480"> |
 
 其他基礎能力包含工作階段持久化、自訂標題列與無框視窗控制、明暗與跟隨系統主題，以及簡體中文、繁體中文、英文與日文介面。
 
