@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Session } from "@/types";
 import {
   getAgentUserResponseBaseline,
+  getCheckpointedAgentUserResponseBaseline,
   isAgentUserResponseBaselineCurrent,
 } from "./agentUserResponse";
 
@@ -33,6 +34,20 @@ describe("agent user response baseline", () => {
 
   it("does not infer from an ordinary idle wait", () => {
     expect(getAgentUserResponseBaseline(session({ lastEventType: "session_started" }))).toBeNull();
+  });
+
+  it("routes a waiting input as an Agent response only while a checkpoint turn is active", () => {
+    expect(getCheckpointedAgentUserResponseBaseline(session({
+      checkpointActiveTurnId: "turn-a",
+      lastEventType: "waiting_input",
+    }))).toEqual({
+      revision: 4,
+      eventType: "waiting_input",
+    });
+    expect(getCheckpointedAgentUserResponseBaseline(session({
+      checkpointActiveTurnId: null,
+      lastEventType: "waiting_input",
+    }))).toBeNull();
   });
 
   it("rejects a baseline after a provider transition wins the race", () => {

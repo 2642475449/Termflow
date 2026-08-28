@@ -64,7 +64,7 @@ import { getAgentDisplayName, getAgentTerminalBehavior, isAiAgentId } from "@/li
 import { isSessionTurnRunning } from "@/lib/sessions";
 import { getTerminalTheme } from "@/lib/terminalTheme";
 import {
-  getAgentUserResponseBaseline,
+  getCheckpointedAgentUserResponseBaseline,
   isAgentUserResponseBaselineCurrent,
 } from "@/lib/agentUserResponse";
 import { createPtyResizeGate } from "@/lib/terminalResize";
@@ -1024,7 +1024,7 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
         const waitingSession = useAppStore.getState().sessions.find(
           (item) => item.id === sessionId,
         );
-        const responseBaseline = getAgentUserResponseBaseline(waitingSession);
+        const responseBaseline = getCheckpointedAgentUserResponseBaseline(waitingSession);
         if (responseBaseline !== null) {
           const sendInput = async () => {
             await ptyInput(sessionId, data);
