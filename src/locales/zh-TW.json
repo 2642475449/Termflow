@@ -967,7 +967,7 @@
         "unknown": "未知"
       },
       "quota": {
-        "loading": "正在讀取額度…", "installFirst": "安裝並登入後顯示額度", "unsupported": "暫不支援讀取額度", "unavailable": "暫時無法讀取額度", "startSession": "啟動一次工作階段後顯示額度",
+        "loading": "正在讀取額度…", "installFirst": "安裝並登入後顯示額度", "unsupported": "暫不支援讀取額度", "unavailable": "暫時無法讀取額度", "startSession": "啟動一次工作階段後顯示額度", "refreshFailed": "額度更新失敗，目前顯示上次成功查詢的結果",
         "healthy": "額度充足", "low": "額度較低", "exhausted": "額度即將用盡", "session": "5 小時 {{value}}%", "weekly": "每週 {{value}}%", "remainingPercent": "剩餘 {{value}}%", "remainingCredits": "剩餘 {{value}}"
       },
       "detailHint": "點擊智慧體列可查看版本和可執行檔路徑。",

@@ -967,7 +967,7 @@
         "unknown": "未知"
       },
       "quota": {
-        "loading": "正在读取额度…", "installFirst": "安装并登录后显示额度", "unsupported": "暂不支持读取额度", "unavailable": "暂时无法读取额度", "startSession": "启动一次会话后显示额度",
+        "loading": "正在读取额度…", "installFirst": "安装并登录后显示额度", "unsupported": "暂不支持读取额度", "unavailable": "暂时无法读取额度", "startSession": "启动一次会话后显示额度", "refreshFailed": "额度更新失败，当前显示上次成功查询的结果",
         "healthy": "额度充足", "low": "额度较低", "exhausted": "额度即将耗尽", "session": "5 小时 {{value}}%", "weekly": "每周 {{value}}%", "remainingPercent": "剩余 {{value}}%", "remainingCredits": "剩余 {{value}}"
       },
       "detailHint": "点击智能体行可查看版本和可执行文件路径。",

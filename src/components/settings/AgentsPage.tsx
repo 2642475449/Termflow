@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircleFilled, CloseCircleFilled, CopyOutlined, DownOutlined, ReloadOutlined } from "@ant-design/icons";
 import { Button, Drawer, Dropdown, Spin, Tag, message } from "antd";
 import { useTranslation } from "react-i18next";
@@ -11,6 +11,8 @@ import { useAppStore } from "@/store";
 
 type Quotas = { claude: ClaudeRateLimits | null; codex: CodexRateLimits | null; qoder: QoderUsage | null };
 const EMPTY_QUOTAS: Quotas = { claude: null, codex: null, qoder: null };
+const QUOTA_REFRESH_INTERVAL_MS = 3 * 60 * 1000;
+const QUOTA_RESUME_MAX_AGE_MS = 60 * 1000;
 
 export function AgentsPage() {
   const { t, i18n } = useTranslation();
@@ -21,8 +23,11 @@ export function AgentsPage() {
   const [agents, setAgents] = useState<AgentCliInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [quotaLoading, setQuotaLoading] = useState(false);
+  const [quotaRefreshFailed, setQuotaRefreshFailed] = useState(false);
   const [quotas, setQuotas] = useState<Quotas>(EMPTY_QUOTAS);
   const [selectedAgentId, setSelectedAgentId] = useState<AiAgentId | null>(null);
+  const quotaRequestRef = useRef<Promise<void> | null>(null);
+  const lastQuotaRefreshAtRef = useRef(0);
 
   const claudeSessionId = useMemo(() => {
     const active = sessions.find((session) => session.id === activeSessionId);
@@ -30,23 +35,32 @@ export function AgentsPage() {
     return sessions.find((session) => session.agentId === "claude")?.id ?? null;
   }, [activeSessionId, sessions]);
 
-  const loadQuotas = useCallback(async (detected: AgentCliInfo[], forceRefresh = false) => {
+  const loadQuotas = useCallback((detected: AgentCliInfo[], forceRefresh = false): Promise<void> => {
+    if (quotaRequestRef.current) return quotaRequestRef.current;
+
     const installed = new Set(detected.filter((agent) => agent.installed).map((agent) => agent.id));
     setQuotaLoading(true);
-    try {
+    const request = (async () => {
       const [claude, codex, qoder] = await Promise.allSettled([
         installed.has("claude") && claudeSessionId ? getClaudeRateLimits(claudeSessionId) : Promise.resolve(null),
         installed.has("codex") ? getCodexRateLimits({ forceRefresh }) : Promise.resolve(null),
         installed.has("qoder") ? getQoderUsage({ forceRefresh }) : Promise.resolve(null),
       ]);
-      setQuotas({
-        claude: claude.status === "fulfilled" ? claude.value : null,
-        codex: codex.status === "fulfilled" ? codex.value : null,
-        qoder: qoder.status === "fulfilled" ? qoder.value : null,
-      });
-    } finally {
+      setQuotas((current) => ({
+        claude: claude.status === "fulfilled" ? claude.value : current.claude,
+        codex: codex.status === "fulfilled" ? codex.value : current.codex,
+        qoder: qoder.status === "fulfilled" ? qoder.value : current.qoder,
+      }));
+      setQuotaRefreshFailed(
+        claude.status === "rejected" || codex.status === "rejected" || qoder.status === "rejected",
+      );
+    })().finally(() => {
+      lastQuotaRefreshAtRef.current = Date.now();
       setQuotaLoading(false);
-    }
+      quotaRequestRef.current = null;
+    });
+    quotaRequestRef.current = request;
+    return request;
   }, [claudeSessionId]);
 
   const refresh = useCallback(async (showSuccess = false) => {
@@ -56,7 +70,7 @@ export function AgentsPage() {
         (left, right) => AI_AGENT_ORDER.indexOf(left.id) - AI_AGENT_ORDER.indexOf(right.id),
       );
       setAgents(result);
-      void loadQuotas(result, showSuccess);
+      await loadQuotas(result, showSuccess);
       if (showSuccess) message.success(t("settings.agents.refreshSuccess"));
     } catch (error) {
       console.error("Failed to inspect agent CLIs:", error);
@@ -67,6 +81,26 @@ export function AgentsPage() {
   }, [loadQuotas, t]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+
+  useEffect(() => {
+    if (agents.length === 0) return;
+
+    const refreshVisibleQuotas = () => {
+      if (document.visibilityState !== "visible") return;
+      void loadQuotas(agents, true);
+    };
+    const interval = window.setInterval(refreshVisibleQuotas, QUOTA_REFRESH_INTERVAL_MS);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - lastQuotaRefreshAtRef.current < QUOTA_RESUME_MAX_AGE_MS) return;
+      refreshVisibleQuotas();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [agents, loadQuotas]);
 
   const checkedAt = agents[0]?.checkedAt;
   const defaultAgent = agents.find((agent) => agent.id === defaultAgentId) ?? null;
@@ -106,6 +140,7 @@ export function AgentsPage() {
             ? t("settings.agents.defaultCurrent", { name: AGENT_DEFINITIONS[defaultAgent.id].displayName })
             : defaultAgentId ? t("settings.agents.defaultUnavailable") : t("settings.agents.defaultMissing")}
         </div>
+        {quotaRefreshFailed ? <div className="mt-1 text-xs" style={{ color: "var(--cs-warning)" }}>{t("settings.agents.quota.refreshFailed")}</div> : null}
       </div>
 
       {loading && agents.length === 0 ? <div className="flex min-h-64 items-center justify-center"><Spin /></div> : (
