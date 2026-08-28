@@ -13,6 +13,7 @@ import {
 import {
   gitDiffContent,
   gitAddRemoteAndPush,
+  gitInitRepository,
   gitGenerateCommitMessage,
   gitDiscardChanges,
   gitStageFiles,
@@ -195,12 +196,31 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
   const [remoteUrl, setRemoteUrl] = useState("");
   const [remoteBranch, setRemoteBranch] = useState("");
   const [remoteSubmitting, setRemoteSubmitting] = useState(false);
+  const [initializingRepository, setInitializingRepository] = useState(false);
 
   const canGenerateCommitMessage =
     !generatingCommitMessage &&
     !!defaultAgentId &&
     !!currentProject &&
     fileStatuses.length > 0;
+
+  const handleInitializeRepository = useCallback(async () => {
+    if (!currentProject || initializingRepository) return;
+
+    setInitializingRepository(true);
+    try {
+      await gitInitRepository(currentProject.path);
+      message.success(t("sidebar.gitInitSuccess"));
+      await loadGitData();
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      message.error(detail && detail !== "[object Object]"
+        ? `${t("sidebar.gitInitFailed")}: ${detail}`
+        : t("sidebar.gitInitFailed"));
+    } finally {
+      setInitializingRepository(false);
+    }
+  }, [currentProject, initializingRepository, loadGitData, t]);
   const changesMenuItems: MenuProps["items"] = [
     {
       key: "discard-all",
@@ -637,9 +657,27 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
   // Not a git repo
   if (!isRepo && !loading) {
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-2 px-4" style={{ color: "var(--cs-text-tertiary)" }}>
-        <BranchesOutlined className="text-3xl" />
-        <span className="text-sm text-center">{t("sidebar.gitNoRepo")}</span>
+      <div className="flex h-full flex-col px-5 pt-6">
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-[var(--cs-text-primary)]">
+            <BranchesOutlined className="text-base" />
+            <span>{t("sidebar.gitInitTitle")}</span>
+          </div>
+          <p className="m-0 text-sm leading-5 text-[var(--cs-text-secondary)]">
+            {t("sidebar.gitInitDescription")}
+          </p>
+          <Button
+            type="primary"
+            block
+            loading={initializingRepository}
+            onClick={() => void handleInitializeRepository()}
+          >
+            {t("sidebar.gitInitAction")}
+          </Button>
+          <p className="m-0 text-xs leading-5 text-[var(--cs-text-tertiary)]">
+            {t("sidebar.gitInitHint")}
+          </p>
+        </div>
       </div>
     );
   }

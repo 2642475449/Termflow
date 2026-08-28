@@ -1103,7 +1103,9 @@ function RateLimitUsageStatus({
             ) : (
               <WarningOutlined style={{ fontSize: 12, marginTop: 2 }} />
             )}
-            <span>{statusError || t(`${translationRoot}.unavailable`)}</span>
+            <span className="min-w-0 max-h-[96px] flex-1 overflow-y-auto whitespace-pre-wrap break-all">
+              {statusError || t(`${translationRoot}.unavailable`)}
+            </span>
           </div>
         )}
 
@@ -1136,7 +1138,9 @@ function RateLimitUsageStatus({
           {statusError && hasData ? (
             <div className="flex items-start gap-1.5" style={{ color: "var(--cs-text-tertiary)" }}>
               <WarningOutlined style={{ fontSize: 11, marginTop: 2 }} />
-              <span className="min-w-0 break-words">{statusError}</span>
+              <span className="min-w-0 max-h-[96px] flex-1 overflow-y-auto whitespace-pre-wrap break-all">
+                {statusError}
+              </span>
             </div>
           ) : null}
         </div> : null}

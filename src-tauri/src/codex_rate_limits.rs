@@ -12,6 +12,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const RPC_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_DIAGNOSTIC_OUTPUT_LENGTH: usize = 100_000;
+const MAX_DIAGNOSTIC_MESSAGE_LENGTH: usize = 500;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -442,8 +443,31 @@ fn diagnostic_message(message: &str, stderr: &str) -> String {
     if trimmed.is_empty() {
         message.to_string()
     } else {
-        format!("{message}: {}", trimmed.lines().last().unwrap_or(trimmed))
+        let detail = trimmed.lines().last().unwrap_or(trimmed).trim();
+        let detail_lower = detail.to_ascii_lowercase();
+        if detail_lower.contains("<!doctype html")
+            || detail_lower.contains("<html")
+            || detail_lower.contains("<body")
+        {
+            return format!("{message}: Codex service returned an HTML error response");
+        }
+
+        let normalized = detail.split_whitespace().collect::<Vec<_>>().join(" ");
+        let shortened = truncate_diagnostic_detail(&normalized);
+        format!("{message}: {shortened}")
     }
+}
+
+fn truncate_diagnostic_detail(detail: &str) -> String {
+    if detail.chars().count() <= MAX_DIAGNOSTIC_MESSAGE_LENGTH {
+        return detail.to_string();
+    }
+
+    let prefix = detail
+        .chars()
+        .take(MAX_DIAGNOSTIC_MESSAGE_LENGTH)
+        .collect::<String>();
+    format!("{prefix}…")
 }
 
 fn rpc_error_message(message: &Value) -> Option<String> {
@@ -670,5 +694,27 @@ mod tests {
         let window = map_rpc_window(&json!({ "usedPercent": 7 }), 300).expect("window");
 
         assert_eq!(window.window_minutes, 300);
+    }
+
+    #[test]
+    fn replaces_html_diagnostic_with_concise_message() {
+        let message = diagnostic_message(
+            "RPC process exited unexpectedly",
+            "warning\n<!DOCTYPE html><html><body>blocked</body></html>",
+        );
+
+        assert_eq!(
+            message,
+            "RPC process exited unexpectedly: Codex service returned an HTML error response"
+        );
+    }
+
+    #[test]
+    fn truncates_oversized_single_line_diagnostic() {
+        let detail = "x".repeat(MAX_DIAGNOSTIC_MESSAGE_LENGTH + 20);
+        let message = diagnostic_message("RPC timeout", &detail);
+
+        assert_eq!(message.chars().count(), "RPC timeout: ".chars().count() + MAX_DIAGNOSTIC_MESSAGE_LENGTH + 1);
+        assert!(message.ends_with('…'));
     }
 }

@@ -332,6 +332,7 @@ pub fn run() {
             commands::voice_shortcut::configure_voice_global_shortcut,
             commands::voice_shortcut::is_voice_global_shortcut_registered,
             commands::git::git_repo_info,
+            commands::git::git_init_repository,
             commands::git::git_clone_repository,
             commands::git::git_cancel_clone_task,
             commands::git::git_status,

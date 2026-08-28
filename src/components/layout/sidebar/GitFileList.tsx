@@ -1,4 +1,11 @@
-import type { ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { Button, Dropdown, Tooltip } from "antd";
 import type { MenuProps } from "antd";
 import {
@@ -8,6 +15,11 @@ import {
 } from "@ant-design/icons";
 import type { GitFileStatus, GitStatusType } from "@/types";
 import { getFileIconByName } from "@/lib/fileIcon";
+import { getVirtualRange } from "@/lib/virtualList";
+
+const FILE_ROW_HEIGHT = 22;
+const FILE_ROW_OVERSCAN = 8;
+const INITIAL_RENDERED_ROWS = 40;
 
 /** 文件状态徽章配置 */
 const STATUS_BADGE: Record<string, { label: string; color: string; bg: string }> = {
@@ -96,6 +108,53 @@ export function GitFileList({
   buildFileMenu,
   extraActions,
 }: GitFileListProps) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const [renderedRange, setRenderedRange] = useState({
+    start: 0,
+    end: Math.min(files.length, INITIAL_RENDERED_ROWS),
+  });
+
+  const updateRenderedRange = useCallback(() => {
+    const list = listRef.current;
+    const scrollContainer = list?.closest<HTMLElement>(".app-project-tree-scroll");
+    if (!list || !scrollContainer) {
+      setRenderedRange({ start: 0, end: Math.min(files.length, INITIAL_RENDERED_ROWS) });
+      return;
+    }
+
+    const listRect = list.getBoundingClientRect();
+    const scrollRect = scrollContainer.getBoundingClientRect();
+    const nextRange = getVirtualRange(
+      files.length,
+      FILE_ROW_HEIGHT,
+      Math.max(0, scrollRect.top - listRect.top),
+      Math.max(0, scrollRect.bottom - listRect.top),
+      FILE_ROW_OVERSCAN,
+    );
+    setRenderedRange((current) =>
+      current.start === nextRange.start && current.end === nextRange.end ? current : nextRange,
+    );
+  }, [files.length]);
+
+  useLayoutEffect(() => {
+    updateRenderedRange();
+  }, [collapsed, updateRenderedRange]);
+
+  useEffect(() => {
+    const list = listRef.current;
+    const scrollContainer = list?.closest<HTMLElement>(".app-project-tree-scroll");
+    if (!list || !scrollContainer || collapsed) return;
+
+    scrollContainer.addEventListener("scroll", updateRenderedRange, { passive: true });
+    const resizeObserver = new ResizeObserver(updateRenderedRange);
+    resizeObserver.observe(scrollContainer);
+    resizeObserver.observe(list);
+    return () => {
+      scrollContainer.removeEventListener("scroll", updateRenderedRange);
+      resizeObserver.disconnect();
+    };
+  }, [collapsed, updateRenderedRange]);
+
   if (files.length === 0) {
     return null;
   }
@@ -139,23 +198,32 @@ export function GitFileList({
       </div>
 
       {/* 文件列表 */}
-      {!collapsed &&
-        files.map((file) => {
-          const badge = STATUS_BADGE[file.statusType] ?? STATUS_BADGE.modified;
-          const { fileName, parentPath } = splitGitPath(file.path);
-          const fileVisual = getFileIconByName(fileName);
-          const addedText = renderDiffStat(file.insertions, "+");
-          const removedText = renderDiffStat(file.deletions, "-");
-          const fileKey = `${staged ? "staged" : "unstaged"}-${file.path}`;
-          const selected = activeDiffKey === fileKey;
-          const hunkActionsAvailable =
-            file.statusType !== "conflicted" &&
-            file.statusType !== "deleted" &&
-            file.statusType !== "typechange" &&
-            file.statusType !== "untracked";
+      {!collapsed && (
+        <div
+          ref={listRef}
+          className="relative"
+          style={{ height: files.length * FILE_ROW_HEIGHT }}
+        >
+          {files.slice(renderedRange.start, renderedRange.end).map((file, visibleIndex) => {
+            const badge = STATUS_BADGE[file.statusType] ?? STATUS_BADGE.modified;
+            const { fileName, parentPath } = splitGitPath(file.path);
+            const fileVisual = getFileIconByName(fileName);
+            const addedText = renderDiffStat(file.insertions, "+");
+            const removedText = renderDiffStat(file.deletions, "-");
+            const fileKey = `${staged ? "staged" : "unstaged"}-${file.path}`;
+            const selected = activeDiffKey === fileKey;
+            const hunkActionsAvailable =
+              file.statusType !== "conflicted" &&
+              file.statusType !== "deleted" &&
+              file.statusType !== "typechange" &&
+              file.statusType !== "untracked";
 
-          return (
-            <div key={fileKey}>
+            return (
+            <div
+              key={fileKey}
+              className="absolute inset-x-0"
+              style={{ top: (renderedRange.start + visibleIndex) * FILE_ROW_HEIGHT }}
+            >
               <Dropdown trigger={["contextMenu"]} menu={buildFileMenu(file, staged)}>
                 <div
                   className="group flex items-center gap-1.5 px-2 cursor-pointer"
@@ -239,8 +307,10 @@ export function GitFileList({
                 </div>
               </Dropdown>
             </div>
-          );
-        })}
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -116,12 +116,7 @@ fn fetch_via_control_protocol(executable: &str) -> QoderUsage {
     if let Err(error) = write_control_request(
         &mut stdin,
         "termflow-initialize",
-        json!({
-            "type": "initialize",
-            "allowedTools": [],
-            "disallowedTools": [],
-            "permissionMode": "dont_ask"
-        }),
+        initialize_control_request(),
     ) {
         let _ = child.kill();
         return error_result(error, None);
@@ -212,6 +207,16 @@ fn fetch_via_control_protocol(executable: &str) -> QoderUsage {
             }
         }
     }
+}
+
+fn initialize_control_request() -> Value {
+    json!({
+        "type": "initialize",
+        "allowedTools": [],
+        "disallowedTools": [],
+        // SDK 控制协议使用 camelCase；CLI 参数仍使用 `dont_ask`。
+        "permissionMode": "dontAsk"
+    })
 }
 
 fn spawn_qoder_sdk_process(executable: &str) -> Result<Child, String> {
@@ -421,6 +426,13 @@ fn now_ms() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn initializes_with_sdk_permission_mode_format() {
+        let request = initialize_control_request();
+
+        assert_eq!(request["permissionMode"], "dontAsk");
+    }
 
     #[test]
     fn maps_official_usage_info_shape() {

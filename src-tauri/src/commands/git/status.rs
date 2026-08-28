@@ -6,6 +6,22 @@ use std::path::Path;
 use super::types::{GitBranchInfo, GitFileStatus, GitRepoInfo};
 use super::utils::{collect_numstat, open_repo, run_git_blocking};
 
+#[tauri::command]
+pub async fn git_init_repository(project_path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = Path::new(&project_path);
+        if !path.is_dir() {
+            return Err("Project directory does not exist".to_string());
+        }
+
+        Repository::init(path)
+            .map(|_| ())
+            .map_err(|error| format!("Failed to initialize Git repository: {error}"))
+    })
+    .await
+    .map_err(|error| format!("Git initialization task failed: {error}"))?
+}
+
 fn map_index_status(status: git2::Status) -> &'static str {
     if status.contains(git2::Status::INDEX_TYPECHANGE) {
         "typechange"

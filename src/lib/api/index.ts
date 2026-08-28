@@ -1117,6 +1117,10 @@ export async function gitStatus(projectPath: string): Promise<GitFileStatus[]> {
   return await invoke("git_status", { projectPath });
 }
 
+export async function gitInitRepository(projectPath: string): Promise<void> {
+  await invoke("git_init_repository", { projectPath });
+}
+
 export async function gitBranchInfo(projectPath: string): Promise<GitBranchInfo> {
   return await invoke("git_branch_info", { projectPath });
 }
