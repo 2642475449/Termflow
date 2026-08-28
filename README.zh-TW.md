@@ -172,50 +172,6 @@ pnpm tauri build
 
 NSIS 安裝程式會產生在 `src-tauri/target/release/bundle/nsis/`。
 
-### 從檔案總管開啟專案（Windows）
-
-安裝 NSIS 套件後，Termflow 會為**目前 Windows 使用者**註冊「Open with Termflow」選單項目：
-
-- 在專案資料夾上按右鍵；
-- 或在資料夾空白處按右鍵，以開啟目前目錄。
-
-Termflow 會將所選目錄作為專案根目錄開啟；若該專案已在 Termflow 中開啟，則直接聚焦既有視窗，避免重複建立視窗或工作階段。整合只寫入安裝者的使用者登錄，不需要系統管理員權限，也不會影響同一台電腦的其他使用者。解除安裝 Termflow 時，仍指向該安裝位置的選單項目會一併移除。
-
-如需移除此整合，可在「設定 → 一般 → Windows 整合」中關閉「檔案總管右鍵選單」；Termflow 會在之後的安裝更新中保留這項偏好。
-
-在 Windows 11 中，首版整合位於「顯示更多選項」的傳統右鍵選單內。
-
-## 設定說明
-
-### 語音辨識
-
-| 提供者 | 模型 | 說明 |
-| :--- | :--- | :--- |
-| MiMo | `mimo-v2.5-asr` | 預設提供者；使用 MiMo API 或 Token Plan |
-| DashScope | `qwen3-asr-flash` | 阿里雲百煉 DashScope ASR |
-
-- `asrModel`：語音辨識模型；預設為 `mimo-v2.5-asr`
-- 在設定頁切換 MiMo 與 DashScope 提供者；切換時會更新對應模型與驗證方式。
-- `voiceShortcut`：語音輸入快速鍵；預設為 `Ctrl+Shift+V`
-- `voiceInputTarget`：輸入目標：`system` 或 `terminal`
-
-### 快速命令
-
-快速命令可建立、編輯與刪除命令，依專案或用途分類，並可在範本中使用變數替換，再透過快速鍵或按鈕執行。
-
-## 工作原理
-
-以下以 Claude Code 為例說明共用的 PTY 工作階段流程。所有 Agent 都會重用此流程，但由 Agent 介接層產生各自的原生啟動與恢復命令。
-
-```text
-新增工作階段 → 選擇專案目錄 → 建立 UUID 工作階段記錄
-→ 透過 Tauri IPC 呼叫 spawn_pty → Rust 建立 ConPTY
-→ 啟動所選 Agent（例如：claude [--dangerously-skip-permissions] [--effort <level>] --session-id <uuid>）
-→ PTY 輸出傳送至 xterm.js → 使用者輸入再寫回 PTY
-```
-
-重新開啟歷史工作階段時，Termflow 會清理目前工作階段的殘留程序，再由 Agent 介接層產生其原生恢復命令（例如：`claude [--dangerously-skip-permissions] [--effort <level>] --resume <uuid>`）。中括號中的選項僅會在使用者選取時加入。
-
 ## 致謝
 
 Termflow 使用了 [Tauri](https://tauri.app/)、[React](https://react.dev/)、[xterm.js](https://xtermjs.org/)、[Ant Design](https://ant.design/)、[Zustand](https://zustand-demo.pmnd.rs/)、[Vite](https://vitejs.dev/)、[i18next](https://www.i18next.com/)、[Monaco Editor](https://microsoft.github.io/monaco-editor/)、[Mermaid](https://mermaid.js.org/)、[Geist Mono](https://vercel.com/font) 與 [reqwest](https://github.com/seanmonstar/reqwest) 等優秀開源專案。

@@ -172,54 +172,6 @@ pnpm tauri build
 
 The NSIS installer is generated under `src-tauri/target/release/bundle/nsis/`.
 
-### Open a project from Explorer (Windows)
-
-After installing the NSIS package, Termflow registers an **Open with Termflow** entry for the current Windows user:
-
-- right-click a project folder, or
-- right-click an empty area inside a folder to open that directory.
-
-Termflow uses the selected directory as the project root. If that project is already open, it focuses the existing window instead of creating a duplicate window or session. The integration is registered only for the installing user, requires no administrator privileges, and does not affect other users on the same computer. Uninstalling Termflow removes entries that still point to that installation.
-
-You can turn the integration off in **Settings → General → Windows integration**. Termflow preserves that preference across later installer updates.
-
-On Windows 11, this first version is available from the classic **Show more options** menu.
-
-## Configuration
-
-### Speech recognition
-
-Termflow supports multiple speech-recognition providers.
-
-| Provider | Model | Notes |
-| :--- | :--- | :--- |
-| MiMo | `mimo-v2.5-asr` | Default provider; uses the MiMo API or Token Plan |
-| DashScope | `qwen3-asr-flash` | Alibaba Cloud Bailian DashScope ASR |
-
-Relevant settings:
-
-- `asrModel` — speech-recognition model; default: `mimo-v2.5-asr`
-- Switch providers in Settings; this updates the corresponding model and authentication method.
-- `voiceShortcut` — voice-input shortcut; default: `Ctrl+Shift+V`
-- `voiceInputTarget` — target: `system` or `terminal`
-
-### Quick commands
-
-The quick-command system lets you create, edit, and delete commands; group them by project or purpose; use variable substitution in templates; and run them via a shortcut or button.
-
-## How it works
-
-The following is the shared PTY session flow, using Claude Code as an example. Every agent reuses this flow, while the agent adapter generates its own native start and resume commands.
-
-```text
-New session → choose a project directory → create a UUID session record
-→ invoke spawn_pty via Tauri IPC → Rust creates a ConPTY instance
-→ start the selected agent (for example, `claude [--dangerously-skip-permissions] [--effort <level>] --session-id <uuid>`)
-→ PTY output is emitted to xterm.js → user input is written back to the PTY
-```
-
-When a historical session is reopened, Termflow cleans up the current session's residual process, then the agent adapter generates its native resume command (for example, `claude [--dangerously-skip-permissions] [--effort <level>] --resume <uuid>`). Bracketed options are only included when selected.
-
 ## Acknowledgements
 
 Termflow is built with excellent open-source projects including [Tauri](https://tauri.app/), [React](https://react.dev/), [xterm.js](https://xtermjs.org/), [Ant Design](https://ant.design/), [Zustand](https://zustand-demo.pmnd.rs/), [Vite](https://vitejs.dev/), [i18next](https://www.i18next.com/), [Monaco Editor](https://microsoft.github.io/monaco-editor/), [Mermaid](https://mermaid.js.org/), [Geist Mono](https://vercel.com/font), and [reqwest](https://github.com/seanmonstar/reqwest).

@@ -172,50 +172,6 @@ pnpm tauri build
 
 NSIS インストーラーは `src-tauri/target/release/bundle/nsis/` に生成されます。
 
-### エクスプローラーからプロジェクトを開く（Windows）
-
-NSIS パッケージをインストールすると、Termflow は**現在の Windows ユーザー**向けに「Open with Termflow」メニューを登録します。
-
-- プロジェクトフォルダーを右クリックする。
-- またはフォルダー内の空白部分を右クリックして、そのディレクトリを開く。
-
-選択したディレクトリがプロジェクトルートになります。同じプロジェクトがすでに開かれている場合は、重複したウィンドウやセッションを作らず既存のウィンドウにフォーカスします。この統合はインストールしたユーザーのレジストリにのみ登録され、管理者権限は不要で、同じ PC の他のユーザーには影響しません。Termflow をアンインストールすると、当該インストール先を指しているメニュー項目を削除します。
-
-この連携は「設定 → 一般 → Windows 連携」の「エクスプローラーの右クリックメニュー」から無効にでき、以後のインストーラー更新でも設定が維持されます。
-
-Windows 11 では、この初版の統合は従来の「その他のオプションを表示」メニューにあります。
-
-## 設定
-
-### 音声認識
-
-| プロバイダー | モデル | 説明 |
-| :--- | :--- | :--- |
-| MiMo | `mimo-v2.5-asr` | 既定のプロバイダー。MiMo API または Token Plan を使用 |
-| DashScope | `qwen3-asr-flash` | Alibaba Cloud Bailian DashScope ASR |
-
-- `asrModel`：音声認識モデル。既定値は `mimo-v2.5-asr`
-- 設定画面で MiMo と DashScope を切り替えます。切替時に対応するモデルと認証方式が更新されます。
-- `voiceShortcut`：音声入力ショートカット。既定値は `Ctrl+Shift+V`
-- `voiceInputTarget`：入力先。`system` または `terminal`
-
-### クイックコマンド
-
-クイックコマンドでは、コマンドの作成、編集、削除、プロジェクトや用途ごとの分類、テンプレート内の変数置換、ショートカットまたはボタンからの実行ができます。
-
-## 仕組み
-
-以下は Claude Code を例にした共通 PTY セッションフローです。すべての Agent がこのフローを共有し、Agent アダプターが各 Agent 固有の起動・再開コマンドを生成します。
-
-```text
-新規セッション → プロジェクトディレクトリを選択 → UUID のセッション記録を作成
-→ Tauri IPC 経由で spawn_pty を呼び出す → Rust が ConPTY を作成
-→ 選択した Agent を起動（例：claude [--dangerously-skip-permissions] [--effort <level>] --session-id <uuid>）
-→ PTY 出力を xterm.js に送る → ユーザー入力を PTY に書き戻す
-```
-
-履歴セッションを開き直すと、Termflow は現在のセッションに残ったプロセスをクリーンアップし、Agent アダプターが各 Agent 固有の再開コマンドを生成します（例：`claude [--dangerously-skip-permissions] [--effort <level>] --resume <uuid>`）。角括弧内のオプションは、選択された場合にのみ追加されます。
-
 ## 謝辞
 
 Termflow は [Tauri](https://tauri.app/)、[React](https://react.dev/)、[xterm.js](https://xtermjs.org/)、[Ant Design](https://ant.design/)、[Zustand](https://zustand-demo.pmnd.rs/)、[Vite](https://vitejs.dev/)、[i18next](https://www.i18next.com/)、[Monaco Editor](https://microsoft.github.io/monaco-editor/)、[Mermaid](https://mermaid.js.org/)、[Geist Mono](https://vercel.com/font)、[reqwest](https://github.com/seanmonstar/reqwest) などの優れたオープンソースプロジェクトを利用しています。
