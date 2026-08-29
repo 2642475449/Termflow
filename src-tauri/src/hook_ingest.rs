@@ -323,6 +323,10 @@ fn handle_agent_status(
             return;
         }
 
+        if should_ignore_post_completion_event(guard, permission_lifecycle_event, state) {
+            return;
+        }
+
         if !reduce_provider_permission_state(
             guard,
             &agent,
@@ -1042,6 +1046,26 @@ fn should_suppress_uncorrelated_running(guard: &SessionStatusGuard, state: &str)
         && guard.permission_pending
 }
 
+/// Some providers deliver the final tool callback just after their Stop hook.
+/// Stop is the authoritative end of the turn; accepting that trailing callback
+/// would cancel the queued completion and leave the renderer stuck on running.
+/// A new turn still starts normally through UserPromptSubmit or PreToolUse.
+fn should_ignore_post_completion_event(
+    guard: &SessionStatusGuard,
+    event: Option<PermissionLifecycleEvent>,
+    state: &str,
+) -> bool {
+    state == "running"
+        && guard.last_state.as_deref() == Some("completed")
+        && matches!(
+            event,
+            Some(
+                PermissionLifecycleEvent::PostToolUse
+                    | PermissionLifecycleEvent::PostToolUseFailure
+            )
+        )
+}
+
 fn guard_event_is_fresh(guard: &SessionStatusGuard, event_id: &str, created_at: i64) -> bool {
     guard.last_event_id.as_deref() != Some(event_id) && created_at >= guard.last_created_at
 }
@@ -1186,9 +1210,10 @@ mod tests {
         parse_actor_fingerprint, parse_tool_permission_correlation,
         prepare_permission_lifecycle_event, reduce_provider_permission_state, sanitized_metadata,
         should_begin_task_generation, should_emit_attention_event,
-        should_suppress_uncorrelated_running, task_duration_ms, update_subagent_lifecycle,
-        ClaudeTaskLifecycleEvent, HookStatusRuntime, PermissionLifecycleEvent, SessionStatusGuard,
-        StatusGuards, TaskCompletionCoordinator, ToolPermissionCorrelation,
+        should_ignore_post_completion_event, should_suppress_uncorrelated_running,
+        task_duration_ms, update_subagent_lifecycle, ClaudeTaskLifecycleEvent, HookStatusRuntime,
+        PermissionLifecycleEvent, SessionStatusGuard, StatusGuards, TaskCompletionCoordinator,
+        ToolPermissionCorrelation,
     };
     use serde_json::json;
 
@@ -1256,6 +1281,36 @@ mod tests {
 
         assert!(!claim_task_completion(&mut coordinator, candidate));
         assert_eq!(coordinator.generation, 2);
+    }
+
+    #[test]
+    fn ignores_trailing_tool_completion_after_stop_without_blocking_a_new_turn() {
+        let guard = SessionStatusGuard {
+            last_state: Some("completed".to_string()),
+            last_event_type: Some("assistant_complete".to_string()),
+            ..SessionStatusGuard::default()
+        };
+
+        assert!(should_ignore_post_completion_event(
+            &guard,
+            Some(PermissionLifecycleEvent::PostToolUse),
+            "running",
+        ));
+        assert!(should_ignore_post_completion_event(
+            &guard,
+            Some(PermissionLifecycleEvent::PostToolUseFailure),
+            "running",
+        ));
+        assert!(!should_ignore_post_completion_event(
+            &guard,
+            Some(PermissionLifecycleEvent::UserPromptSubmit),
+            "running",
+        ));
+        assert!(!should_ignore_post_completion_event(
+            &guard,
+            Some(PermissionLifecycleEvent::PreToolUse),
+            "running",
+        ));
     }
 
     #[test]

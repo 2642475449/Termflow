@@ -1,9 +1,9 @@
 import { useCallback, useState } from "react";
 import {
+  CheckOutlined,
   DeleteOutlined,
   EditOutlined,
   PlusOutlined,
-  StarFilled,
 } from "@ant-design/icons";
 import { Button, Input, Modal, Switch, Tag, Tooltip, message } from "antd";
 import { useTranslation } from "react-i18next";
@@ -135,7 +135,7 @@ export function GitSettingsPage() {
                 <div className="min-w-0 flex-1">
                   <div className="flex min-w-0 items-center gap-2">
                     <span className="text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>{profile.name}</span>
-                    {isDefault && <Tag icon={<StarFilled />} color="processing" className="!m-0">{t("settings.agents.gitProfiles.default")}</Tag>}
+                    {isDefault && <Tag icon={<CheckOutlined />} color="processing" className="!m-0">{t("settings.agents.gitProfiles.default")}</Tag>}
                   </div>
                   <Tooltip title={profile.instructions} placement="topLeft">
                     <div className="mt-0.5 truncate text-xs leading-4" style={{ color: "var(--cs-text-tertiary)" }}>
@@ -144,7 +144,7 @@ export function GitSettingsPage() {
                   </Tooltip>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
-                  {!isDefault && <Tooltip title={t("settings.agents.gitProfiles.setDefault")}><Button type="text" size="small" icon={<StarFilled />} onClick={() => setDefaultProfile(profile.id)} /></Tooltip>}
+                  {!isDefault && <Tooltip title={t("settings.agents.gitProfiles.setDefault")}><Button type="text" size="small" icon={<CheckOutlined />} onClick={() => setDefaultProfile(profile.id)} /></Tooltip>}
                   <Tooltip title={t("common.edit", { defaultValue: "编辑" })}><Button type="text" size="small" icon={<EditOutlined />} onClick={() => openProfileEditor(profile)} /></Tooltip>
                   <Tooltip title={gitCommitMessageProfiles.length <= 1 ? t("settings.agents.gitProfiles.keepOne") : t("common.delete", { defaultValue: "删除" })}>
                     <Button type="text" danger size="small" icon={<DeleteOutlined />} disabled={gitCommitMessageProfiles.length <= 1} onClick={() => setDeleteProfileId(profile.id)} />
