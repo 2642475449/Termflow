@@ -23,7 +23,22 @@ use pty::PtyManager;
 use std::sync::Arc;
 use tauri::{Manager, WindowEvent};
 
+fn clear_inherited_proxy_environment() {
+    // Termflow、更新器与其启动的 CLI 都不应继承启动器临时注入的本地代理。
+    for key in [
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+    ] {
+        std::env::remove_var(key);
+    }
+}
+
 pub fn run() {
+    clear_inherited_proxy_environment();
     let startup_args = std::env::args().skip(1).collect::<Vec<_>>();
     let startup_cwd = std::env::current_dir()
         .map(|path| path.to_string_lossy().into_owned())

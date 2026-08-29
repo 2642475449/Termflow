@@ -1,6 +1,5 @@
 import { CodeOutlined, FolderOutlined, SettingOutlined, BranchesOutlined } from "@ant-design/icons";
-import { check, type Update } from "@tauri-apps/plugin-updater";
-import { message, Modal, Popover, Tooltip } from "antd";
+import { message, Popover, Tooltip } from "antd";
 import { useCallback, useState } from "react";
 import { getQuickSettingsSubmenuOnPopoverChange, toggleQuickSettingsSubmenu, type QuickSettingsSubmenu } from "@/lib/quickSettingsMenu";
 import { useTranslation } from "react-i18next";
@@ -8,8 +7,9 @@ import { ShortcutHint } from "@/components/ui/ShortcutHint";
 import { getKeysForAction } from "@/constants/shortcuts";
 import { useAppStore, type Language, type SidebarSection, type ThemeCategory } from "@/store";
 import { setClaudeTheme } from "@/lib/api";
+import { checkForApplicationUpdate } from "@/lib/applicationUpdater";
+import { useApplicationUpdateStore } from "@/store/slices/applicationUpdate";
 import i18n, { toI18nLanguage } from "@/i18n";
-import packageJson from "../../../package.json";
 
 interface RailButtonProps {
   active?: boolean;
@@ -306,9 +306,7 @@ function PrimarySidebarRail() {
   const gitBehindCount = useAppStore((s) => s.gitBehindCount);
   const [quickSettingsOpen, setQuickSettingsOpen] = useState(false);
   const [quickSettingsSubmenu, setQuickSettingsSubmenu] = useState<QuickSettingsSubmenu>(null);
-  const [checkingForUpdate, setCheckingForUpdate] = useState(false);
-  const [availableUpdate, setAvailableUpdate] = useState<Update | null>(null);
-  const [installingUpdate, setInstallingUpdate] = useState(false);
+  const checkingForUpdate = useApplicationUpdateStore((state) => state.phase === "checking");
 
   const handleQuickSettingsOpenChange = useCallback((open: boolean) => {
     setQuickSettingsOpen(open);
@@ -335,67 +333,31 @@ function PrimarySidebarRail() {
 
     const messageKey = "termflow-update";
     handleCloseQuickSettings();
-    setCheckingForUpdate(true);
     message.info({
       key: messageKey,
       content: t("settings.quickMenu.checkingForUpdate"),
     });
 
-    try {
-      const update = await check();
-      if (!update) {
-        message.success({
-          key: messageKey,
-          content: t("settings.quickMenu.upToDate", { version: packageJson.version }),
-        });
-        return;
-      }
-
-      message.destroy(messageKey);
-      setAvailableUpdate(update);
-    } catch (error) {
-      console.error("Failed to check for application updates:", error);
+    const result = await checkForApplicationUpdate({ manual: true });
+    if (result.status === "up-to-date") {
+      message.success({
+        key: messageKey,
+        content: t("settings.quickMenu.upToDate", { version: result.currentVersion }),
+      });
+      return;
+    }
+    if (result.status === "error") {
       message.error({
         key: messageKey,
         content: t("settings.quickMenu.updateCheckFailed"),
       });
-    } finally {
-      setCheckingForUpdate(false);
+      return;
     }
-  }, [checkingForUpdate, handleCloseQuickSettings, t]);
-
-  const handleCancelUpdate = useCallback(() => {
-    if (installingUpdate) return;
-    const update = availableUpdate;
-    setAvailableUpdate(null);
-    if (update) {
-      void update.close().catch((error) => {
-        console.error("Failed to close application update resource:", error);
-      });
-    }
-  }, [availableUpdate, installingUpdate]);
-
-  const handleInstallUpdate = useCallback(async () => {
-    if (!availableUpdate || installingUpdate) return;
-
-    const messageKey = "termflow-update";
-    setInstallingUpdate(true);
-    message.info({
+    message.success({
       key: messageKey,
-      content: t("settings.quickMenu.downloadingUpdate"),
+      content: t("settings.quickMenu.updateAvailable", { version: result.version }),
     });
-
-    try {
-      await availableUpdate.downloadAndInstall();
-    } catch (error) {
-      console.error("Failed to download and install application update:", error);
-      message.error({
-        key: messageKey,
-        content: t("settings.quickMenu.updateInstallFailed"),
-      });
-      setInstallingUpdate(false);
-    }
-  }, [availableUpdate, installingUpdate, t]);
+  }, [checkingForUpdate, handleCloseQuickSettings, t]);
 
   const handleActivate = useCallback(
     (section: SidebarSection) => {
@@ -490,38 +452,6 @@ function PrimarySidebarRail() {
           </div>
         </Popover>
       </div>
-      <Modal
-        open={availableUpdate !== null}
-        title={t("settings.quickMenu.updateAvailable", { version: availableUpdate?.version })}
-        okText={t("settings.quickMenu.installUpdate")}
-        cancelText={t("common.cancel")}
-        confirmLoading={installingUpdate}
-        closable={!installingUpdate}
-        maskClosable={!installingUpdate}
-        keyboard={!installingUpdate}
-        onOk={() => void handleInstallUpdate()}
-        onCancel={handleCancelUpdate}
-      >
-        {availableUpdate ? (
-          <div className="space-y-3">
-            <p className="m-0 text-sm text-[var(--cs-text-secondary)]">
-              {t("settings.quickMenu.updateAvailableDescription", {
-                currentVersion: packageJson.version,
-                version: availableUpdate.version,
-              })}
-            </p>
-            <p className="m-0 text-xs text-[var(--cs-text-tertiary)]">
-              {t("settings.quickMenu.installUpdateHint")}
-            </p>
-            <div>
-              <div className="mb-1 text-sm font-medium">{t("settings.quickMenu.releaseNotes")}</div>
-              <div className="max-h-44 overflow-y-auto whitespace-pre-wrap rounded-md bg-[var(--cs-bg-tertiary)] p-3 text-xs leading-5 text-[var(--cs-text-secondary)]">
-                {availableUpdate.body || t("settings.quickMenu.noReleaseNotes")}
-              </div>
-            </div>
-          </div>
-        ) : null}
-      </Modal>
     </aside>
   );
 }

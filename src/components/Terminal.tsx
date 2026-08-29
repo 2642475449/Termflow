@@ -7,7 +7,6 @@ import {
   SnippetsOutlined,
   SelectOutlined,
   DeleteOutlined,
-  FolderOpenFilled,
   MessageOutlined,
   CloseOutlined,
 } from "@ant-design/icons";
@@ -21,7 +20,6 @@ import {
   inferAgentUserResponse,
   ptyInput,
   ptyResize,
-  openInFileManager,
   submitAgentTurnInput,
   saveClipboardImage,
   inspectProjectFile,
@@ -431,11 +429,6 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
       icon: <DeleteOutlined />,
       extra: "Ctrl+L",
     },
-    {
-      key: "open-folder",
-      label: t("common.openInFileManager"),
-      icon: <FolderOpenFilled />,
-    },
   ];
 
   useEffect(() => {
@@ -476,13 +469,6 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
           break;
         case "clear-input":
           ptyInput(sessionId, "\x15").catch(console.error);
-          break;
-        case "open-folder":
-          if (currentSessionPathRef.current) {
-            openInFileManager(currentSessionPathRef.current).catch(() =>
-              message.error(t("terminal.openFolderFailed"))
-            );
-          }
           break;
       }
     },

@@ -77,6 +77,7 @@ import {
   type OpenAuxiliaryQuestionDetail,
 } from "@/lib/auxiliaryDock";
 import { isSessionVisibleInAuxiliaryDock } from "@/store/auxiliaryDock";
+import { ApplicationUpdateController } from "@/components/updater/ApplicationUpdateController";
 
 const { Content } = Layout;
 const SETTINGS_ID = "__settings__";
@@ -1649,6 +1650,7 @@ function AppLayout() {
 
   return (
     <Layout className="app-shell h-screen flex flex-col">
+      <ApplicationUpdateController />
       <TitleBar />
       <Layout className="relative flex-1 min-h-0">
         <PrimarySidebarRail />

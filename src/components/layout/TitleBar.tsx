@@ -16,6 +16,7 @@ import { isAiAgentId } from "@/lib/agents";
 import { isSessionTurnRunning } from "@/lib/sessions";
 import { Tooltip } from "antd";
 import { useTranslation } from "react-i18next";
+import { ApplicationUpdateBadge } from "@/components/updater/ApplicationUpdateBadge";
 
 function AuxiliaryPanelGlyph() {
   return (
@@ -155,6 +156,7 @@ function TitleBar() {
 
       {/* Right: window controls */}
       <div className="flex items-center h-full">
+        <ApplicationUpdateBadge />
         {currentProject && (
           <>
             <div className="h-full shrink-0 flex items-center justify-center pl-2 pr-1">

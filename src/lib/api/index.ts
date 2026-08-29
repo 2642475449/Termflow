@@ -1,5 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow, type CloseRequestedEvent } from "@tauri-apps/api/window";
+import type { UnlistenFn } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import {
+  check as checkForUpdate,
+  type CheckOptions,
+  type DownloadEvent,
+  type DownloadOptions,
+  type Update,
+} from "@tauri-apps/plugin-updater";
 import { AI_AGENT_ORDER, isAiAgentId } from "@/lib/agents";
 import type {
   AiAgentId,
@@ -1014,6 +1023,36 @@ export async function focusProjectWindow(
   sessionId: string
 ): Promise<boolean> {
   return await invoke("focus_project_window", { projectPath, sessionId });
+}
+
+export async function onCurrentWindowCloseRequested(
+  handler: (event: CloseRequestedEvent) => void
+): Promise<UnlistenFn> {
+  return getCurrentWindow().onCloseRequested(handler);
+}
+
+export async function checkApplicationUpdate(options?: CheckOptions): Promise<Update | null> {
+  return await checkForUpdate(options);
+}
+
+export async function downloadApplicationUpdate(
+  update: Update,
+  onEvent: (event: DownloadEvent) => void,
+  options?: DownloadOptions,
+): Promise<void> {
+  await update.download(onEvent, options);
+}
+
+export async function installApplicationUpdate(update: Update): Promise<void> {
+  await update.install();
+}
+
+export async function closeApplicationUpdate(update: Update): Promise<void> {
+  await update.close();
+}
+
+export async function openExternalUrl(url: string): Promise<void> {
+  await openUrl(url);
 }
 
 export async function ensureVoiceOverlayWindow(): Promise<void> {
