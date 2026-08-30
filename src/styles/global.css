@@ -576,6 +576,39 @@ html, body, #root {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cs-primary) 48%, transparent);
 }
 
+.app-terminal-attachment-strip {
+  display: flex;
+  flex: 0 0 auto;
+  width: 136px;
+  flex-direction: column;
+  border-left: 1px solid color-mix(in srgb, var(--cs-border-sidebar) 82%, transparent);
+  background: color-mix(in srgb, var(--cs-bg-sidebar) 62%, transparent);
+}
+
+.app-terminal-attachment-rail {
+  display: flex;
+  flex: 0 0 auto;
+  width: 30px;
+  align-items: center;
+  padding-top: 10px;
+  border: 0;
+  border-left: 1px solid color-mix(in srgb, var(--cs-border-sidebar) 82%, transparent);
+  background: color-mix(in srgb, var(--cs-bg-sidebar) 42%, transparent);
+  color: var(--cs-text-secondary);
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.app-terminal-attachment-rail:hover {
+  background: color-mix(in srgb, var(--cs-bg-hover) 78%, transparent);
+  color: var(--cs-text-primary);
+}
+
+.app-terminal-attachment-rail:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cs-primary) 48%, transparent);
+}
+
 .app-sidebar-resize-handle {
   position: relative;
   flex: 0 0 auto;
