@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useRef, useCallback, useState } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import type { DragEvent as ReactDragEvent } from "react";
 import { Dropdown, Modal, message } from "antd";
 import type { MenuProps } from "antd";
@@ -8,6 +8,7 @@ import {
   SelectOutlined,
   DeleteOutlined,
   MessageOutlined,
+  CloseOutlined,
 } from "@ant-design/icons";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
@@ -25,7 +26,6 @@ import {
   resolveProjectLink,
   inspectAgentClis,
   readImagePreview,
-  readProjectFile,
 } from "@/lib/api";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
@@ -58,12 +58,6 @@ import {
   registerContentOverviewOutputSource,
 } from "@/lib/contentOverview";
 import { SideQuestionComposer } from "@/components/SideQuestionComposer";
-import { TerminalAttachmentStrip } from "@/components/TerminalAttachmentStrip";
-import {
-  quotePathForShell,
-  resolveDroppedImageAttachments,
-  type TerminalImageAttachment,
-} from "@/lib/terminalImageAttachments";
 import { getAgentDisplayName, getAgentTerminalBehavior, isAiAgentId } from "@/lib/agents";
 import { isSessionTurnRunning } from "@/lib/sessions";
 import { getTerminalTheme } from "@/lib/terminalTheme";
@@ -165,36 +159,24 @@ type PendingTerminalLink =
   | { kind: "project"; path: ParsedPath };
 
 interface TerminalImagePreview {
-  kind: "image";
   src: string;
   alt: string;
   x: number;
   y: number;
 }
 
-interface TerminalMarkdownPreview {
-  kind: "markdown";
-  content: string;
-  filePath: string;
-  projectPath: string;
-  x: number;
-  y: number;
+interface TerminalPastedImagePreview {
+  id: string;
+  src: string;
+  alt: string;
+  insertedText: string;
 }
 
-type TerminalHoverPreview = TerminalImagePreview | TerminalMarkdownPreview;
-
 const IMAGE_REFERENCE_PATTERN = /\.(?:png|jpe?g|gif|webp|bmp|svg|avif)(?:$|[?#])/i;
-const MARKDOWN_REFERENCE_PATTERN = /\.(?:md|markdown)(?:$|[?#])/i;
 
 function isImageReference(value: string): boolean {
   return IMAGE_REFERENCE_PATTERN.test(value.trim());
 }
-
-function isMarkdownReference(value: string): boolean {
-  return MARKDOWN_REFERENCE_PATTERN.test(value.trim());
-}
-
-const LazyMarkdownPreview = lazy(() => import("@/components/markdown/MarkdownPreview"));
 
 export function normalizeDecscusrCursorStyle(param: number | undefined): {
   cursorBlink: boolean;
@@ -240,11 +222,9 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
   const [sideQuestionDraft, setSideQuestionDraft] = useState<SideQuestionDraft | null>(null);
   const [sideQuestionText, setSideQuestionText] = useState("");
   const [pendingTerminalLink, setPendingTerminalLink] = useState<PendingTerminalLink | null>(null);
-  const [imagePreview, setImagePreview] = useState<TerminalHoverPreview | null>(null);
-  const [pastedImagePreviews, setPastedImagePreviews] = useState<TerminalImageAttachment[]>([]);
+  const [imagePreview, setImagePreview] = useState<TerminalImagePreview | null>(null);
+  const [pastedImagePreviews, setPastedImagePreviews] = useState<TerminalPastedImagePreview[]>([]);
   const [pastedImageDialogId, setPastedImageDialogId] = useState<string | null>(null);
-  const [imageStripCollapsed, setImageStripCollapsed] = useState(true);
-  const sessionIdRef = useRef(sessionId);
   const [openingTerminalLink, setOpeningTerminalLink] = useState(false);
   const openingTerminalLinkRef = useRef(false);
   const captureInputForAutoTitleRef = useRef<((data: string) => void) | undefined>(undefined);
@@ -276,7 +256,6 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
     Boolean(currentSession && isSessionTurnRunning(currentSession)),
   );
   hideCursorWhileRunningRef.current = hideCursorWhileRunning;
-  sessionIdRef.current = sessionId;
   const termTheme = getTerminalTheme(activeTheme);
   const currentSessionPath = currentSession?.path ?? "";
 
@@ -293,40 +272,12 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
     pendingSubmissionEscapeSequenceRef.current = submissionCapture.pendingSequence;
     captureInputForAutoTitleRef.current?.(pastedImage.insertedText);
     setPastedImagePreviews((current) => [...current, pastedImage]);
-    setImageStripCollapsed(false);
     setPastedImageDialogId(null);
-  }, [sessionId, t]);
-
-  const insertDroppedImagePaths = useCallback(async (paths: string[]) => {
-    const imagePaths = paths.filter(isSupportedImagePath);
-    if (imagePaths.length === 0) {
-      message.warning(t("terminal.dragImageUnsupported"));
-      return;
-    }
-
-    const payload = imagePaths.map((path) => quotePathForShell(path)).join(" ");
-    await ptyInput(sessionId, payload);
-    message.success(t("terminal.dragImageInserted", { count: imagePaths.length }));
-
-    const resolved = await resolveDroppedImageAttachments(imagePaths, readImagePreview);
-    // 会话切换后丢弃迟到的异步结果，避免写入其他会话的附件条
-    if (sessionIdRef.current !== sessionId) return;
-    if (resolved.accepted.length > 0) {
-      setPastedImagePreviews((current) => {
-        const existingIds = new Set(current.map((item) => item.id));
-        return [...current, ...resolved.accepted.filter((item) => !existingIds.has(item.id))];
-      });
-      setImageStripCollapsed(false);
-    }
-    if (resolved.failedCount > 0) {
-      message.warning(t("terminal.dropImagePreviewFailed", { count: resolved.failedCount }));
-    }
   }, [sessionId, t]);
 
   useEffect(() => {
     setPastedImagePreviews([]);
     setPastedImageDialogId(null);
-    setImageStripCollapsed(true);
   }, [sessionId]);
 
   const pastedImageDialogPreview = pastedImagePreviews.find(
@@ -796,47 +747,22 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
     const bounds = containerRef.current?.getBoundingClientRect();
     if (!bounds) return null;
     return {
-      x: Math.max(8, Math.min(event.clientX - bounds.left + 14, bounds.width - 488)),
-      y: Math.max(8, Math.min(event.clientY - bounds.top + 14, bounds.height - 368)),
+      x: Math.max(8, Math.min(event.clientX - bounds.left + 14, bounds.width - 328)),
+      y: Math.max(8, Math.min(event.clientY - bounds.top + 14, bounds.height - 248)),
     };
   }, []);
 
   const showLocalImagePreview = useCallback((path: ParsedPath, event: MouseEvent) => {
-    const isImage = isImageReference(path.filePath);
-    const isMarkdown = isMarkdownReference(path.filePath);
-    if (!isImage && !isMarkdown) return;
+    if (!isImageReference(path.filePath)) return;
     const position = previewPosition(event);
     if (!position) return;
     cancelImagePreviewDismissal();
     const requestId = imagePreviewRequestRef.current + 1;
     imagePreviewRequestRef.current = requestId;
-    const projectPath = currentSessionPathRef.current;
-    const resolvedPath = resolveTerminalFilePath(path.filePath, projectPath);
-
-    if (isImage) {
-      void readImagePreview(resolvedPath)
-        .then(({ dataUrl }) => {
-          if (imagePreviewRequestRef.current === requestId) {
-            setImagePreview({ kind: "image", src: dataUrl, alt: path.filePath, ...position });
-          }
-        })
-        .catch(() => {
-          if (imagePreviewRequestRef.current === requestId) setImagePreview(null);
-        });
-      return;
-    }
-
-    if (!projectPath) return;
-    void readProjectFile(projectPath, resolvedPath)
-      .then((file) => {
+    void readImagePreview(resolveTerminalFilePath(path.filePath, currentSessionPathRef.current))
+      .then(({ dataUrl }) => {
         if (imagePreviewRequestRef.current === requestId) {
-          setImagePreview({
-            kind: "markdown",
-            content: file.content,
-            filePath: resolvedPath,
-            projectPath,
-            ...position,
-          });
+          setImagePreview({ src: dataUrl, alt: path.filePath, ...position });
         }
       })
       .catch(() => {
@@ -850,7 +776,7 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
     if (!position) return;
     cancelImagePreviewDismissal();
     imagePreviewRequestRef.current += 1;
-    setImagePreview({ kind: "image", src: url, alt: url, ...position });
+    setImagePreview({ src: url, alt: url, ...position });
   }, [cancelImagePreviewDismissal, previewPosition]);
 
   useEffect(() => () => cancelImagePreviewDismissal(), [cancelImagePreviewDismissal]);
@@ -1335,7 +1261,7 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
           return;
         }
 
-        insertDroppedImagePaths(event.payload.paths).catch((error) => {
+        insertDroppedImagePaths(sessionId, event.payload.paths, t).catch((error) => {
           const errorMessage =
             error instanceof Error ? error.message : t("terminal.dropImageFailed");
           message.error(errorMessage);
@@ -1395,7 +1321,6 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
     scheduleImagePreviewDismissal,
     pasteIntoTerminal,
     removeStalePastedImagePreviews,
-    insertDroppedImagePaths,
   ]);
 
   useEffect(() => {
@@ -1447,7 +1372,6 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
 
   return (
     <>
-      <div className="flex h-full w-full min-w-0">
       <Dropdown
         menu={{
           items: contextMenuItems,
@@ -1458,7 +1382,7 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
       >
         <div
           ref={containerRef}
-          className="app-terminal-surface h-full min-w-0 flex-1 p-1"
+          className="app-terminal-surface w-full h-full p-1"
           style={{
             background: termTheme.cssBackground,
             outline: isImageDragOver || isAgentFileDragOver ? "2px dashed var(--cs-accent)" : "none",
@@ -1495,60 +1419,71 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
               style={{
                 left: imagePreview.x,
                 top: imagePreview.y,
-                maxWidth: 480,
-                maxHeight: 360,
+                maxWidth: 320,
+                maxHeight: 240,
                 borderColor: "var(--cs-border)",
                 background: "var(--cs-bg-card-solid, rgba(255,255,255,0.98))",
               }}
               onMouseEnter={cancelImagePreviewDismissal}
               onMouseLeave={scheduleImagePreviewDismissal}
             >
-              {imagePreview.kind === "image" ? (
-                <img
-                  src={imagePreview.src}
-                  alt={imagePreview.alt}
-                  className="block max-h-[350px] max-w-[470px] object-contain"
-                  onError={hideImagePreview}
-                />
-              ) : (
+              <img
+                src={imagePreview.src}
+                alt={imagePreview.alt}
+                className="block max-h-[230px] max-w-[310px] object-contain"
+                onError={hideImagePreview}
+              />
+            </div>
+          ) : null}
+          {pastedImagePreviews.length > 0 ? (
+            <div
+              className="absolute bottom-4 right-24 z-20 flex max-w-[calc(100%_-_120px)] items-end justify-end gap-3 overflow-x-auto px-2 pt-2"
+            >
+              {pastedImagePreviews.map((preview) => (
                 <div
-                  className="h-[350px] w-[470px] overflow-y-auto p-2"
-                  onWheel={(event) => event.stopPropagation()}
+                  key={preview.id}
+                  className="relative h-[92px] w-[116px] shrink-0 overflow-visible rounded-[10px] border p-1.5 shadow-xl"
+                  style={{
+                    borderColor: "var(--cs-border)",
+                    background: "var(--cs-bg-card-solid, rgba(255,255,255,0.98))",
+                  }}
                 >
-                  <Suspense
-                    fallback={
-                      <div className="p-3 text-xs" style={{ color: "var(--cs-text-secondary)" }}>
-                        {t("terminal.markdownPreviewLoading")}
-                      </div>
-                    }
+                  <button
+                    type="button"
+                    className="block h-full w-full overflow-hidden rounded-[6px] border-0 p-0"
+                    style={{ background: "color-mix(in srgb, var(--cs-bg-sidebar) 88%, transparent)" }}
+                    title={t("terminal.openPastedImagePreview")}
+                    onClick={() => setPastedImageDialogId(preview.id)}
                   >
-                    <LazyMarkdownPreview
-                      content={imagePreview.content}
-                      emptyText={t("terminal.markdownPreviewEmpty")}
-                      filePath={imagePreview.filePath}
-                      projectPath={imagePreview.projectPath}
-                      enableImagePreview={false}
+                    <img
+                      src={preview.src}
+                      alt={preview.alt}
+                      className="block h-full w-full object-contain"
                     />
-                  </Suspense>
+                  </button>
+                  <button
+                    type="button"
+                    className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border shadow-md"
+                    style={{
+                      borderColor: "var(--cs-border)",
+                      background: "var(--cs-bg-card-solid, #fff)",
+                      color: "var(--cs-text-secondary)",
+                    }}
+                    title={t("terminal.closePastedImagePreview")}
+                    aria-label={t("terminal.closePastedImagePreview")}
+                    onClick={() => {
+                      setPastedImageDialogId((current) => current === preview.id ? null : current);
+                      setPastedImagePreviews((current) => current.filter((item) => item.id !== preview.id));
+                    }}
+                  >
+                    <CloseOutlined style={{ fontSize: 11 }} />
+                  </button>
                 </div>
-              )}
+              ))}
             </div>
           ) : null}
         </div>
       </Dropdown>
-      {pastedImagePreviews.length > 0 ? (
-        <TerminalAttachmentStrip
-          previews={pastedImagePreviews}
-          collapsed={imageStripCollapsed}
-          onToggleCollapsed={() => setImageStripCollapsed((current) => !current)}
-          onOpenPreview={(id) => setPastedImageDialogId(id)}
-          onRemove={(id) => {
-            setPastedImageDialogId((current) => (current === id ? null : current));
-            setPastedImagePreviews((current) => current.filter((item) => item.id !== id));
-          }}
-        />
-      ) : null}
-      </div>
       <SideQuestionComposer
         open={Boolean(sideQuestionDraft)}
         agent={sideQuestionDraft?.agent ?? null}
@@ -1605,7 +1540,7 @@ async function pasteClipboardIntoTerminal(
   sessionId: string,
   term: XTerm | null,
   t: (key: string, options?: Record<string, unknown>) => string
-): Promise<TerminalImageAttachment | null> {
+): Promise<TerminalPastedImagePreview | null> {
   const text = await navigator.clipboard.readText().catch(() => "");
   if (text) {
     // Let xterm normalize line endings and emit bracketed paste when the app enabled it.
@@ -1673,6 +1608,27 @@ function blobToBase64(blob: Blob): Promise<string> {
     };
     reader.readAsDataURL(blob);
   });
+}
+
+function quotePathForShell(path: string): string {
+  const escaped = path.replace(/"/g, '\\"');
+  return `"${escaped}"`;
+}
+
+async function insertDroppedImagePaths(
+  sessionId: string,
+  paths: string[],
+  t: (key: string, options?: Record<string, unknown>) => string
+) {
+  const imagePaths = paths.filter(isSupportedImagePath);
+  if (imagePaths.length === 0) {
+    message.warning(t("terminal.dragImageUnsupported"));
+    return;
+  }
+
+  const payload = imagePaths.map((path) => quotePathForShell(path)).join(" ");
+  await ptyInput(sessionId, payload);
+  message.success(t("terminal.dragImageInserted", { count: imagePaths.length }));
 }
 
 function isSupportedImagePath(path: string): boolean {
