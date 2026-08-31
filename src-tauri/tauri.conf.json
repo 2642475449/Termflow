@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicegui/make-dialog/refs/heads/main/tauri/tauri.conf.json",
   "productName": "Termflow",
-  "version": "1.8.22",
+  "version": "1.8.23",
   "identifier": "com.termflow.desktop",
   "build": {
     "frontendDist": "../dist",
@@ -54,6 +54,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEExQTNCNDFCM0MzQTAwNUEKUldSYUFEbzhHN1Nqb2ZmNkROS2NLNXhxNzVaSjM2VGtyR1NrMTNWRVB2WkFtcVdKbUtHSmlqVkQK",
       "endpoints": [
+        "https://termflow.jianglan.online/latest.json",
         "https://github.com/2642475449/Termflow/releases/latest/download/latest.json"
       ],
       "windows": {

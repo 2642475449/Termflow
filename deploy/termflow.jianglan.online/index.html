@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Termflow 是集成智能体、终端与 Git 工作流的本地桌面工作台。" />
+    <title>Termflow · 本地智能体工作台</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --page-bg: #0b1020;
+        --surface: #151d33;
+        --line: #2a385b;
+        --text: #edf3ff;
+        --muted: #a9b7d5;
+        --accent: #74a7ff;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        align-items: center;
+        background: radial-gradient(circle at top, #203968 0, var(--page-bg) 48rem);
+        color: var(--text);
+        display: flex;
+        font-family: Inter, "Microsoft YaHei", system-ui, sans-serif;
+        margin: 0;
+        min-height: 100vh;
+      }
+
+      main { margin: 0 auto; max-width: 66rem; padding: 4rem 1.5rem; width: 100%; }
+      .eyebrow { color: var(--accent); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+      h1 { font-size: clamp(2.75rem, 9vw, 5.5rem); letter-spacing: -.06em; line-height: 1; margin: .6rem 0 1.25rem; }
+      .lead { color: var(--muted); font-size: 1.2rem; line-height: 1.8; max-width: 44rem; }
+      .grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); margin-top: 3rem; }
+      article { background: color-mix(in srgb, var(--surface) 92%, transparent); border: 1px solid var(--line); border-radius: 1rem; padding: 1.4rem; }
+      h2 { font-size: 1.05rem; margin: 0 0 .6rem; }
+      article p, footer { color: var(--muted); line-height: 1.65; margin: 0; }
+      .update { align-items: center; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 1rem; justify-content: space-between; margin-top: 3rem; padding-top: 1.4rem; }
+      code { color: #c9dcff; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+      footer { font-size: .9rem; margin-top: 3rem; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="eyebrow">Termflow</div>
+      <h1>让智能体工作流<br />留在你的桌面。</h1>
+      <p class="lead">Termflow 是一个本地桌面工作台，将 CLI 智能体、终端、代码编辑与 Git 工作流整合到同一个项目上下文中。</p>
+      <section class="grid" aria-label="产品能力">
+        <article><h2>多智能体协作</h2><p>在同一项目中管理多个 CLI 智能体会话，专注推进真实工作。</p></article>
+        <article><h2>终端与代码</h2><p>终端、文件编辑、Markdown 与 PDF 预览并排协作，无需频繁切换工具。</p></article>
+        <article><h2>Git 工作流</h2><p>查看状态、提交、分支、历史与差异，把变更留在清晰可控的项目上下文中。</p></article>
+      </section>
+      <section class="update" aria-label="更新服务">
+        <div><strong>更新服务已启用</strong><br /><code>/latest.json</code> 提供经签名验证的更新清单。</div>
+        <div><code>termflow.jianglan.online</code></div>
+      </section>
+      <footer>Termflow · Local AI workspace</footer>
+    </main>
+  </body>
+</html>

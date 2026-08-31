@@ -52,15 +52,47 @@ jobs:
           uploadUpdaterJson: true
           updaterJsonPreferNsis: true
 
-      - name: Generate GitHub Release updater manifest
+      - name: Generate updater manifest
         shell: pwsh
-        run: corepack pnpm update:manifest --notes "Termflow ${{ github.ref_name }}"
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^v', ''
+          corepack pnpm update:manifest `
+            --notes "Termflow ${{ github.ref_name }}" `
+            --url "https://termflow.jianglan.online/releases/Termflow_${version}_x64-setup.exe"
 
       - name: Replace release updater manifest
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${{ github.ref_name }}" output/updates/latest.json --clobber
+
+      - name: Configure update-server SSH access
+        shell: pwsh
+        env:
+          UPDATE_DEPLOY_SSH_KEY: ${{ secrets.UPDATE_DEPLOY_SSH_KEY }}
+        run: |
+          $sshDirectory = Join-Path $env:USERPROFILE ".ssh"
+          $keyPath = Join-Path $sshDirectory "termflow-update-deploy"
+          $knownHostsPath = Join-Path $sshDirectory "known_hosts"
+          New-Item -ItemType Directory -Force -Path $sshDirectory | Out-Null
+          [System.IO.File]::WriteAllText($keyPath, $env:UPDATE_DEPLOY_SSH_KEY.Trim() + "`n", [System.Text.UTF8Encoding]::new($false))
+          icacls $keyPath /inheritance:r /grant:r "${env:USERNAME}:R" | Out-Null
+          ssh-keyscan -H 119.29.73.208 | Out-File -FilePath $knownHostsPath -Encoding ascii -Append
+
+      - name: Publish signed update to termflow.jianglan.online
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^v', ''
+          $artifactName = "Termflow_${version}_x64-setup.exe"
+          $artifactPath = "src-tauri/target/release/bundle/nsis/${artifactName}"
+          $keyPath = Join-Path $env:USERPROFILE ".ssh/termflow-update-deploy"
+          $destination = "ubuntu@119.29.73.208"
+          $stagingDirectory = "/home/ubuntu/termflow-update-staging"
+          $sshOptions = @("-i", $keyPath, "-o", "StrictHostKeyChecking=yes")
+
+          ssh @sshOptions $destination "rm -rf $stagingDirectory && mkdir -p $stagingDirectory"
+          scp @sshOptions $artifactPath "${artifactPath}.sig" output/updates/latest.json "${destination}:${stagingDirectory}/"
+          ssh @sshOptions $destination "sudo /usr/local/sbin/deploy-termflow-update"
 
       - name: Publish release
         shell: pwsh
