@@ -73,11 +73,12 @@ jobs:
         run: |
           $sshDirectory = Join-Path $env:USERPROFILE ".ssh"
           $keyPath = Join-Path $sshDirectory "termflow-update-deploy"
-          $knownHostsPath = Join-Path $sshDirectory "known_hosts"
           New-Item -ItemType Directory -Force -Path $sshDirectory | Out-Null
+          if ([string]::IsNullOrWhiteSpace($env:UPDATE_DEPLOY_SSH_KEY)) {
+            throw "The UPDATE_DEPLOY_SSH_KEY repository secret is not configured."
+          }
           [System.IO.File]::WriteAllText($keyPath, $env:UPDATE_DEPLOY_SSH_KEY.Trim() + "`n", [System.Text.UTF8Encoding]::new($false))
           icacls $keyPath /inheritance:r /grant:r "${env:USERNAME}:R" | Out-Null
-          ssh-keyscan -H 119.29.73.208 | Out-File -FilePath $knownHostsPath -Encoding ascii -Append
 
       - name: Publish signed update to termflow.jianglan.online
         shell: pwsh
@@ -86,9 +87,14 @@ jobs:
           $artifactName = "Termflow_${version}_x64-setup.exe"
           $artifactPath = "src-tauri/target/release/bundle/nsis/${artifactName}"
           $keyPath = Join-Path $env:USERPROFILE ".ssh/termflow-update-deploy"
+          $knownHostsPath = Join-Path $env:RUNNER_TEMP "termflow-update-known-hosts"
           $destination = "ubuntu@119.29.73.208"
           $stagingDirectory = "/home/ubuntu/termflow-update-staging"
-          $sshOptions = @("-i", $keyPath, "-o", "StrictHostKeyChecking=yes")
+          $sshOptions = @(
+            "-i", $keyPath,
+            "-o", "StrictHostKeyChecking=accept-new",
+            "-o", "UserKnownHostsFile=$knownHostsPath"
+          )
 
           ssh @sshOptions $destination "rm -rf $stagingDirectory && mkdir -p $stagingDirectory"
           scp @sshOptions $artifactPath "${artifactPath}.sig" output/updates/latest.json "${destination}:${stagingDirectory}/"
