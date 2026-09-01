@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Button, message, Tooltip } from "antd";
@@ -30,14 +30,12 @@ import {
   shouldReloadGitGraphOnExpand,
 } from "@/lib/gitGraphEvents";
 import { GitGraphRenderer } from "./GitGraphRenderer";
+import { getGitGraphHoverCardLayout } from "./gitGraphHoverCard";
 import { splitWorktreeReferences } from "./gitGraphReferences";
 import { linearizeFileHistoryCommits } from "@/lib/gitFileHistory";
 
-const GRAPH_HOVER_CARD_WIDTH = 460;
-const GRAPH_HOVER_CARD_OFFSET = 8;
-const GRAPH_HOVER_CARD_MIN_TOP = 12;
-const GRAPH_HOVER_CARD_ESTIMATED_HEIGHT = 340;
 const GRAPH_PAGE_SIZE = 100;
+const GRAPH_HOVER_CARD_CLOSE_DELAY = 220;
 
 function formatGraphCommitTime(timestampMs: number, locale = "zh-CN") {
   try {
@@ -156,6 +154,11 @@ export function GitGraphSection({
   const [graphHover, setGraphHover] = useState<{ commit: GitGraphCommit; rect: DOMRect } | null>(null);
   const [graphHoverDetail, setGraphHoverDetail] = useState<GitGraphCommitDetail | null>(null);
   const [graphHoverLoading, setGraphHoverLoading] = useState(false);
+  const [graphHoverCardHeight, setGraphHoverCardHeight] = useState(0);
+  const [graphHoverViewport, setGraphHoverViewport] = useState(() => ({
+    width: typeof window === "undefined" ? 0 : window.innerWidth,
+    height: typeof window === "undefined" ? 0 : window.innerHeight,
+  }));
   const [selectedCommit, setSelectedCommit] = useState<GitGraphCommit | null>(null);
   const [selectedCommitDetail, setSelectedCommitDetail] = useState<GitGraphCommitDetail | null>(null);
   const [selectedCommitLoading, setSelectedCommitLoading] = useState(false);
@@ -166,6 +169,7 @@ export function GitGraphSection({
   const graphHoverDetailCacheRef = useRef<Map<string, GitGraphCommitDetail>>(new Map());
   const graphHoverCloseTimerRef = useRef<number | null>(null);
   const graphHoverCardActiveRef = useRef(false);
+  const graphHoverCardRef = useRef<HTMLDivElement>(null);
   const graphContainerRef = useRef<HTMLDivElement>(null);
   const graphLoadMoreSentinelRef = useRef<HTMLDivElement>(null);
   const graphLoadingRef = useRef(false);
@@ -370,7 +374,7 @@ export function GitGraphSection({
         setGraphHoverDetail(null);
         setGraphHoverLoading(false);
       }
-    }, 120);
+    }, GRAPH_HOVER_CARD_CLOSE_DELAY);
   }, [clearGraphHoverCloseTimer]);
 
   const handleGraphCommitHover = useCallback(
@@ -519,13 +523,41 @@ export function GitGraphSection({
     };
 
     window.addEventListener("scroll", handleViewportChange, true);
-    window.addEventListener("resize", handleViewportChange);
 
     return () => {
       window.removeEventListener("scroll", handleViewportChange, true);
-      window.removeEventListener("resize", handleViewportChange);
     };
   }, [graphHover]);
+
+  useEffect(() => {
+    const updateViewport = () => {
+      setGraphHoverViewport({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    };
+
+    window.addEventListener("resize", updateViewport);
+    return () => window.removeEventListener("resize", updateViewport);
+  }, []);
+
+  useLayoutEffect(() => {
+    const card = graphHoverCardRef.current;
+    if (!graphHover || !card) {
+      setGraphHoverCardHeight(0);
+      return;
+    }
+
+    const updateCardHeight = () => {
+      const nextHeight = Math.ceil(card.getBoundingClientRect().height);
+      setGraphHoverCardHeight((current) => current === nextHeight ? current : nextHeight);
+    };
+
+    updateCardHeight();
+    const observer = new ResizeObserver(updateCardHeight);
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, [graphHover, graphHoverDetail, graphHoverLoading, graphHoverViewport]);
 
 
   const handleGraphFileSelect = useCallback(
@@ -590,30 +622,25 @@ export function GitGraphSection({
     void handleGraphFileSelect(selectedCommit, file);
   }, [fileHistoryPath, handleGraphFileSelect, selectedCommit, selectedCommitDetail]);
   const graphHoverCardStyle = useMemo(() => {
-    if (!graphHover || typeof window === "undefined") {
+    if (!graphHover) {
       return null;
     }
 
-    const left = Math.max(
-      GRAPH_HOVER_CARD_MIN_TOP,
-      Math.min(
-        graphHover.rect.right + GRAPH_HOVER_CARD_OFFSET,
-        window.innerWidth - GRAPH_HOVER_CARD_WIDTH - GRAPH_HOVER_CARD_MIN_TOP
-      )
-    );
-    const top = Math.min(
-      Math.max(graphHover.rect.top - 6, GRAPH_HOVER_CARD_MIN_TOP),
-      window.innerHeight - GRAPH_HOVER_CARD_ESTIMATED_HEIGHT - GRAPH_HOVER_CARD_MIN_TOP
+    const layout = getGitGraphHoverCardLayout(
+      graphHover.rect,
+      graphHoverViewport,
+      graphHoverCardHeight || undefined,
     );
 
     return {
       position: "fixed" as const,
-      left,
-      top,
-      width: GRAPH_HOVER_CARD_WIDTH,
+      left: layout.left,
+      top: layout.top,
+      width: layout.width,
+      maxHeight: layout.maxHeight,
       zIndex: 1500,
     };
-  }, [graphHover]);
+  }, [graphHover, graphHoverCardHeight, graphHoverViewport]);
 
   const renderedGraphCommits = useMemo(
     () => fileHistoryPath
@@ -739,8 +766,9 @@ export function GitGraphSection({
       {graphHover && graphHoverCardStyle && typeof document !== "undefined"
         ? createPortal(
             <div
+              ref={graphHoverCardRef}
               role="tooltip"
-              className="app-git-graph-hover-card pointer-events-auto"
+              className="app-git-graph-hover-card pointer-events-auto flex min-h-0 flex-col overflow-hidden"
               style={graphHoverCardStyle}
               onMouseEnter={() => {
                 graphHoverCardActiveRef.current = true;
@@ -751,7 +779,7 @@ export function GitGraphSection({
                 scheduleGraphHoverClose();
               }}
             >
-              <div className="flex min-w-0 flex-col text-[12px] leading-[18px]">
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col text-[12px] leading-[18px]">
                 <div
                   className="flex min-w-0 items-center gap-1.5"
                   style={{ color: "var(--cs-text-secondary)" }}
@@ -778,7 +806,10 @@ export function GitGraphSection({
 
                 <div className="app-git-graph-hover-separator" />
 
-                <div className="max-h-64 overflow-y-auto whitespace-pre-wrap break-words app-project-tree-scroll">
+                <div
+                  key={graphHover.commit.oid}
+                  className="min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap break-words pr-1 app-project-tree-scroll"
+                >
                   <div className="font-medium" style={{ color: "var(--cs-text-primary)" }}>
                     {graphHover.commit.summary}
                   </div>
@@ -798,7 +829,7 @@ export function GitGraphSection({
                   <>
                     <div className="app-git-graph-hover-separator" />
                     {regular.length > 0 ? (
-                      <div className="flex flex-wrap items-center gap-1">
+                      <div className="flex max-h-20 flex-wrap items-center gap-1 overflow-y-auto pr-1 app-project-tree-scroll">
                       {regular.map((ref) => {
                         const badge = getGraphRefBadgeStyles(ref.kind);
                         return (

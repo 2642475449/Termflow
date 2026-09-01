@@ -4,6 +4,7 @@ import {
   gitCommit,
   gitCommitAmend,
   gitPull,
+  gitPullWithStash,
   gitPullRebase,
   gitPush,
 } from "@/lib/api";
@@ -25,6 +26,8 @@ function formatGitRemoteError(rawMessage: string, t: TFunction): string {
       return t("sidebar.gitRemoteRepositoryNotFound");
     case "timeout":
       return t("sidebar.gitRemoteTimeout");
+    case "localChangesWouldBeOverwritten":
+      return t("sidebar.gitPullLocalChangesBlocked");
     default:
       return summary.detail;
   }
@@ -55,6 +58,7 @@ interface UseGitCommitReturn {
   commitAndPush: (message: string) => Promise<void>;
   commitAndSync: (message: string) => Promise<void>;
   pull: () => Promise<void>;
+  pullWithStash: () => Promise<void>;
   push: () => Promise<void>;
   sync: () => Promise<void>;
 }
@@ -158,6 +162,40 @@ export function useGitCommit({
         await refreshGitStateAndGraph(projectPath, refresh);
       } else {
         message.error(`${t("sidebar.gitPullFailed")}: ${formatGitRemoteError(pullResult.message, t)}`);
+      }
+    });
+  }, [projectPath, refresh, runGitOperation, t]);
+
+  const pullWithStash = useCallback(async () => {
+    if (!projectPath) return;
+
+    await runGitOperation(async () => {
+      try {
+        const result = await gitPullWithStash(projectPath);
+        await refreshGitStateAndGraph(projectPath, refresh);
+
+        if (!result.success) {
+          message.error(`${t("sidebar.gitPullFailed")}: ${formatGitRemoteError(result.message, t)}`);
+          return;
+        }
+
+        if (result.restoreStatus === "conflicts") {
+          message.warning(t("sidebar.gitPullRestoreConflicts"));
+          return;
+        }
+        if (result.restoreStatus === "failed") {
+          message.warning(t("sidebar.gitPullRestoreFailed"));
+          return;
+        }
+        if (result.stashOid) {
+          message.warning(t("sidebar.gitPullSuccessStashRetained"));
+          return;
+        }
+
+        message.success(t("sidebar.gitPullWithStashSuccess"));
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        message.error(`${t("sidebar.gitPullFailed")}: ${detail}`);
       }
     });
   }, [projectPath, refresh, runGitOperation, t]);
@@ -272,6 +310,7 @@ export function useGitCommit({
     commitAndPush,
     commitAndSync,
     pull,
+    pullWithStash,
     push,
     sync,
   };

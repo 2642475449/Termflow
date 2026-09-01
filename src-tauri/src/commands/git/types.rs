@@ -64,6 +64,15 @@ pub struct GitRemoteResult {
 
 #[derive(Serialize, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct GitPullWithStashResult {
+    pub success: bool,
+    pub message: String,
+    pub restore_status: String,
+    pub stash_oid: Option<String>,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct GitGraphRef {
     pub name: String,
     pub kind: String,

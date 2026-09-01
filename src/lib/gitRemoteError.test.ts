@@ -26,6 +26,15 @@ describe("summarizeGitRemoteError", () => {
     );
   });
 
+  it("recognizes local changes that block a pull", () => {
+    const result = summarizeGitRemoteError(
+      "error: Your local changes to the following files would be overwritten by merge:\n" +
+        "  src/locales/zh-CN.json\nPlease commit your changes or stash them before you merge.",
+    );
+
+    expect(result.kind).toBe("localChangesWouldBeOverwritten");
+  });
+
   it("keeps only a capped key line for unknown failures", () => {
     const result = summarizeGitRemoteError(`Receiving objects: 20%\nfatal: ${"x".repeat(300)}`, 80);
     expect(result.kind).toBe("generic");

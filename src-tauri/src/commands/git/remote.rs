@@ -1,4 +1,4 @@
-use super::types::GitRemoteResult;
+use super::types::{GitPullWithStashResult, GitRemoteResult};
 use super::utils::{git_command, open_repo, run_git_blocking};
 use std::io::Read;
 use std::process::{Child, Output, Stdio};
@@ -248,6 +248,224 @@ pub async fn git_pull(project_path: String) -> Result<GitRemoteResult, String> {
     .await
 }
 
+fn read_optional_stash_oid(project_path: &str) -> Result<Option<String>, String> {
+    let path = crate::path_utils::normalize_input_path(project_path);
+    let output = git_command()
+        .args(["rev-parse", "--verify", "refs/stash"])
+        .current_dir(path)
+        .output()
+        .map_err(|error| format!("读取 Git stash 失败: {}", error))?;
+
+    if !output.status.success() {
+        return Ok(None);
+    }
+
+    let oid = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    Ok((!oid.is_empty()).then_some(oid))
+}
+
+fn drop_stash_by_oid(project_path: &str, stash_oid: &str) -> Result<bool, String> {
+    let list_result = run_remote_command(
+        project_path,
+        &["stash", "list", "--format=%H"],
+        "",
+        "读取 Git stash 列表失败",
+    )?;
+    if !list_result.success {
+        return Err(list_result.message);
+    }
+
+    let Some(index) = list_result
+        .message
+        .lines()
+        .position(|candidate| candidate.trim() == stash_oid)
+    else {
+        return Ok(false);
+    };
+    let reference = format!("stash@{{{}}}", index);
+    let drop_result = run_remote_command(
+        project_path,
+        &["stash", "drop", &reference],
+        "安全备份已删除",
+        "删除 Git stash 失败",
+    )?;
+    Ok(drop_result.success)
+}
+
+fn has_unmerged_paths(project_path: &str) -> Result<bool, String> {
+    let path = crate::path_utils::normalize_input_path(project_path);
+    let output = git_command()
+        .args(["diff", "--name-only", "--diff-filter=U"])
+        .current_dir(path)
+        .output()
+        .map_err(|error| format!("检查 Git 冲突失败: {}", error))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if stderr.is_empty() {
+            "检查 Git 冲突失败".to_string()
+        } else {
+            stderr
+        });
+    }
+    Ok(!String::from_utf8_lossy(&output.stdout).trim().is_empty())
+}
+
+fn pull_with_stash_sync(project_path: &str) -> Result<GitPullWithStashResult, String> {
+    if has_unmerged_paths(project_path)? {
+        return Ok(GitPullWithStashResult {
+            success: false,
+            message: "当前存在未解决的 Git 冲突，请先完成冲突处理后再拉取".to_string(),
+            restore_status: "notNeeded".to_string(),
+            stash_oid: None,
+        });
+    }
+
+    let previous_stash_oid = read_optional_stash_oid(project_path)?;
+    let stash_result = match run_remote_command(
+        project_path,
+        &[
+            "stash",
+            "push",
+            "--include-untracked",
+            "--message",
+            "Termflow safe pull",
+        ],
+        "本地修改已安全保存",
+        "保存本地修改失败",
+    ) {
+        Ok(result) => result,
+        Err(message) => {
+            let created_stash_oid = read_optional_stash_oid(project_path)?
+                .filter(|oid| Some(oid) != previous_stash_oid.as_ref());
+            let Some(stash_oid) = created_stash_oid else {
+                return Ok(GitPullWithStashResult {
+                    success: false,
+                    message,
+                    restore_status: "notNeeded".to_string(),
+                    stash_oid: None,
+                });
+            };
+            let restore_result = run_remote_command(
+                project_path,
+                &["stash", "apply", "--index", &stash_oid],
+                "本地修改已恢复",
+                "恢复本地修改失败",
+            );
+            let restored = restore_result
+                .as_ref()
+                .map(|result| result.success)
+                .unwrap_or(false);
+            let dropped = restored && drop_stash_by_oid(project_path, &stash_oid).unwrap_or(false);
+            let message = if restored && dropped {
+                format!("{}；本地修改已恢复", message)
+            } else if restored {
+                format!("{}；本地修改已恢复，安全 stash 已保留", message)
+            } else {
+                format!("{}；安全 stash 已保留", message)
+            };
+            return Ok(GitPullWithStashResult {
+                success: false,
+                message,
+                restore_status: if restored { "restored" } else { "failed" }.to_string(),
+                stash_oid: (!dropped).then_some(stash_oid),
+            });
+        }
+    };
+    if !stash_result.success {
+        return Ok(GitPullWithStashResult {
+            success: false,
+            message: stash_result.message,
+            restore_status: "notNeeded".to_string(),
+            stash_oid: None,
+        });
+    }
+
+    let created_stash_oid = read_optional_stash_oid(project_path)?;
+    let stash_oid = created_stash_oid.filter(|oid| Some(oid) != previous_stash_oid.as_ref());
+
+    // Git may report a dirty entry because only file metadata or line endings changed,
+    // while `stash push` correctly determines that there is no content to save.
+    let Some(stash_oid) = stash_oid else {
+        let pull_result =
+            run_remote_command(project_path, &["pull", "--ff-only"], "拉取成功", "拉取失败")?;
+        return Ok(GitPullWithStashResult {
+            success: pull_result.success,
+            message: pull_result.message,
+            restore_status: "notNeeded".to_string(),
+            stash_oid: None,
+        });
+    };
+
+    let pull_result =
+        run_remote_command(project_path, &["pull", "--ff-only"], "拉取成功", "拉取失败")
+            .unwrap_or_else(|message| GitRemoteResult {
+                success: false,
+                message,
+            });
+
+    let apply_result = run_remote_command(
+        project_path,
+        &["stash", "apply", "--index", &stash_oid],
+        "本地修改已恢复",
+        "恢复本地修改失败",
+    )
+    .unwrap_or_else(|message| GitRemoteResult {
+        success: false,
+        message,
+    });
+
+    if apply_result.success {
+        let dropped = drop_stash_by_oid(project_path, &stash_oid).unwrap_or(false);
+        let retained_oid = (!dropped).then_some(stash_oid);
+        let message = if pull_result.success {
+            if dropped {
+                "拉取成功，本地修改已恢复".to_string()
+            } else {
+                "拉取成功，本地修改已恢复，但安全 stash 未能自动删除".to_string()
+            }
+        } else if dropped {
+            format!("{}；本地修改已恢复", pull_result.message)
+        } else {
+            format!("{}；本地修改已恢复，安全 stash 已保留", pull_result.message)
+        };
+        return Ok(GitPullWithStashResult {
+            success: pull_result.success,
+            message,
+            restore_status: "restored".to_string(),
+            stash_oid: retained_oid,
+        });
+    }
+
+    let restore_status = if has_unmerged_paths(project_path)? {
+        "conflicts"
+    } else {
+        "failed"
+    };
+    let message = if pull_result.success {
+        format!("{}；安全 stash 已保留", apply_result.message)
+    } else {
+        format!(
+            "{}；恢复本地修改时出错：{}；安全 stash 已保留",
+            pull_result.message, apply_result.message
+        )
+    };
+
+    Ok(GitPullWithStashResult {
+        success: pull_result.success,
+        message,
+        restore_status: restore_status.to_string(),
+        stash_oid: Some(stash_oid),
+    })
+}
+
+#[tauri::command]
+pub async fn git_pull_with_stash(project_path: String) -> Result<GitPullWithStashResult, String> {
+    run_git_blocking("安全拉取 Git 更新", move || {
+        pull_with_stash_sync(&project_path)
+    })
+    .await
+}
+
 #[tauri::command]
 pub async fn git_pull_rebase(project_path: String) -> Result<GitRemoteResult, String> {
     run_git_blocking("变基拉取 Git 更新", move || {
@@ -264,7 +482,83 @@ pub async fn git_pull_rebase(project_path: String) -> Result<GitRemoteResult, St
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::path::{Path, PathBuf};
     use std::process::Command;
+    use tempfile::TempDir;
+
+    fn run_git(path: &Path, args: &[&str]) -> String {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(path)
+            .output()
+            .expect("git command should start");
+        assert!(
+            output.status.success(),
+            "git {:?} failed: {}{}",
+            args,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
+    }
+
+    fn configure_identity(path: &Path) {
+        run_git(path, &["config", "user.name", "Termflow Test"]);
+        run_git(path, &["config", "user.email", "termflow@example.com"]);
+    }
+
+    fn create_remote_clones() -> (TempDir, PathBuf, PathBuf) {
+        let temp_dir = TempDir::new().expect("temp directory should be created");
+        let remote_path = temp_dir.path().join("remote.git");
+        let seed_path = temp_dir.path().join("seed");
+        let local_path = temp_dir.path().join("local");
+        let peer_path = temp_dir.path().join("peer");
+
+        fs::create_dir_all(&remote_path).unwrap();
+        run_git(&remote_path, &["init", "--bare"]);
+        fs::create_dir_all(&seed_path).unwrap();
+        run_git(&seed_path, &["init"]);
+        configure_identity(&seed_path);
+        fs::write(seed_path.join("base.txt"), "base\n").unwrap();
+        fs::write(seed_path.join("working.txt"), "working base\n").unwrap();
+        run_git(&seed_path, &["add", "--all"]);
+        run_git(&seed_path, &["commit", "-m", "initial"]);
+        run_git(&seed_path, &["branch", "-M", "main"]);
+        run_git(
+            &seed_path,
+            &["remote", "add", "origin", remote_path.to_str().unwrap()],
+        );
+        run_git(&seed_path, &["push", "-u", "origin", "main"]);
+        run_git(&remote_path, &["symbolic-ref", "HEAD", "refs/heads/main"]);
+        run_git(
+            temp_dir.path(),
+            &[
+                "clone",
+                remote_path.to_str().unwrap(),
+                local_path.to_str().unwrap(),
+            ],
+        );
+        run_git(
+            temp_dir.path(),
+            &[
+                "clone",
+                remote_path.to_str().unwrap(),
+                peer_path.to_str().unwrap(),
+            ],
+        );
+        configure_identity(&local_path);
+        configure_identity(&peer_path);
+
+        (temp_dir, local_path, peer_path)
+    }
+
+    fn commit_and_push(path: &Path, file_name: &str, content: &str, message: &str) {
+        fs::write(path.join(file_name), content).unwrap();
+        run_git(path, &["add", "--all"]);
+        run_git(path, &["commit", "-m", message]);
+        run_git(path, &["push"]);
+    }
 
     fn piped_child(command: &mut Command) -> Child {
         command
@@ -339,5 +633,104 @@ mod tests {
             "feature/remote"
         );
         assert!(validate_branch_name("--all").is_err());
+    }
+
+    #[test]
+    fn safe_pull_restores_staged_unstaged_and_untracked_changes() {
+        let (_temp_dir, local_path, peer_path) = create_remote_clones();
+        commit_and_push(&peer_path, "upstream.txt", "upstream\n", "upstream change");
+
+        fs::write(local_path.join("base.txt"), "staged local\n").unwrap();
+        run_git(&local_path, &["add", "base.txt"]);
+        fs::write(local_path.join("working.txt"), "unstaged local\n").unwrap();
+        fs::write(local_path.join("untracked.txt"), "untracked local\n").unwrap();
+
+        let result = pull_with_stash_sync(local_path.to_str().unwrap()).unwrap();
+
+        assert!(result.success, "{}", result.message);
+        assert_eq!(result.restore_status, "restored");
+        assert_eq!(result.stash_oid, None);
+        assert_eq!(
+            fs::read_to_string(local_path.join("upstream.txt"))
+                .unwrap()
+                .replace("\r\n", "\n"),
+            "upstream\n"
+        );
+        assert_eq!(
+            fs::read_to_string(local_path.join("untracked.txt"))
+                .unwrap()
+                .replace("\r\n", "\n"),
+            "untracked local\n"
+        );
+        assert_eq!(
+            run_git(&local_path, &["diff", "--cached", "--name-only"]),
+            "base.txt"
+        );
+        assert_eq!(
+            run_git(&local_path, &["diff", "--name-only"]),
+            "working.txt"
+        );
+        assert_eq!(
+            read_optional_stash_oid(local_path.to_str().unwrap()).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn safe_pull_retains_stash_when_restoring_changes_conflicts() {
+        let (_temp_dir, local_path, peer_path) = create_remote_clones();
+        fs::write(local_path.join("base.txt"), "local\n").unwrap();
+        commit_and_push(
+            &peer_path,
+            "base.txt",
+            "upstream\n",
+            "conflicting upstream change",
+        );
+
+        let result = pull_with_stash_sync(local_path.to_str().unwrap()).unwrap();
+
+        assert!(
+            result.success,
+            "the fast-forward pull itself should succeed"
+        );
+        assert_eq!(result.restore_status, "conflicts");
+        assert!(result.stash_oid.is_some());
+        assert!(has_unmerged_paths(local_path.to_str().unwrap()).unwrap());
+        assert_eq!(
+            read_optional_stash_oid(local_path.to_str().unwrap()).unwrap(),
+            result.stash_oid
+        );
+    }
+
+    #[test]
+    fn safe_pull_restores_changes_when_fast_forward_is_rejected() {
+        let (_temp_dir, local_path, peer_path) = create_remote_clones();
+        fs::write(local_path.join("local-commit.txt"), "local commit\n").unwrap();
+        run_git(&local_path, &["add", "--all"]);
+        run_git(&local_path, &["commit", "-m", "local commit"]);
+        commit_and_push(&peer_path, "upstream.txt", "upstream\n", "upstream commit");
+        fs::write(local_path.join("working.txt"), "preserve me\n").unwrap();
+        fs::write(local_path.join("untracked.txt"), "preserve me too\n").unwrap();
+
+        let result = pull_with_stash_sync(local_path.to_str().unwrap()).unwrap();
+
+        assert!(!result.success);
+        assert_eq!(result.restore_status, "restored");
+        assert_eq!(
+            fs::read_to_string(local_path.join("working.txt"))
+                .unwrap()
+                .replace("\r\n", "\n"),
+            "preserve me\n"
+        );
+        assert_eq!(
+            fs::read_to_string(local_path.join("untracked.txt"))
+                .unwrap()
+                .replace("\r\n", "\n"),
+            "preserve me too\n"
+        );
+        assert_eq!(
+            read_optional_stash_oid(local_path.to_str().unwrap()).unwrap(),
+            None
+        );
     }
 }

@@ -30,6 +30,7 @@ interface GitCommitComposerProps {
   onCommitAndPush: (message: string) => Promise<void>;
   onCommitAndSync: (message: string) => Promise<void>;
   onPull: () => Promise<void>;
+  onPullWithStash: () => Promise<void>;
   onSyncChanges: () => Promise<void>;
   onGenerateCommitMessage: (profileId?: string) => Promise<string | null>;
 }
@@ -57,6 +58,7 @@ export function GitCommitComposer({
   onCommitAndPush,
   onCommitAndSync,
   onPull,
+  onPullWithStash,
   onSyncChanges,
   onGenerateCommitMessage,
 }: GitCommitComposerProps) {
@@ -64,6 +66,8 @@ export function GitCommitComposer({
   const [commitMessage, setCommitMessage] = useState("");
   const [pendingStageAllAction, setPendingStageAllAction] =
     useState<PendingCommitAction | null>(null);
+  const [commitMenuOpen, setCommitMenuOpen] = useState(false);
+  const [pullConfirmOpen, setPullConfirmOpen] = useState(false);
 
   const trimmedMessage = commitMessage.trim();
   const hasStagedChanges = stagedChangeCount > 0;
@@ -192,6 +196,22 @@ export function GitCommitComposer({
     [onCommitAndSync, runCommitAction]
   );
 
+  const requestPull = useCallback(() => {
+    setCommitMenuOpen(false);
+    if (!hasLocalChanges) {
+      void onPull();
+      return;
+    }
+
+    // Give the Dropdown one render boundary to close before opening the Modal.
+    window.setTimeout(() => setPullConfirmOpen(true), 0);
+  }, [hasLocalChanges, onPull]);
+
+  const handleConfirmPullWithStash = useCallback(async () => {
+    await onPullWithStash();
+    setPullConfirmOpen(false);
+  }, [onPullWithStash]);
+
   const commitMenuItems: MenuProps["items"] = [
     {
       key: "commit",
@@ -243,7 +263,7 @@ export function GitCommitComposer({
           void handleCommitAndSync();
           break;
         case "pull":
-          void onPull();
+          requestPull();
           break;
         case "sync-changes":
           void onSyncChanges();
@@ -252,7 +272,7 @@ export function GitCommitComposer({
           break;
       }
     },
-    [handleCommit, handleCommitAmend, handleCommitAndPush, handleCommitAndSync, onPull, onSyncChanges]
+    [handleCommit, handleCommitAmend, handleCommitAndPush, handleCommitAndSync, onSyncChanges, requestPull]
   );
 
   const handleGenerateCommitMessage = useCallback(async (profileId?: string) => {
@@ -301,7 +321,7 @@ export function GitCommitComposer({
           <Input.TextArea
             value={commitMessage}
             onChange={(e) => setCommitMessage(e.target.value)}
-            placeholder={`${t("sidebar.gitCommitPlaceholder", { branch: branchName })} · Ctrl+Enter`}
+            placeholder={t("sidebar.gitCommitPlaceholder", { branch: branchName })}
             autoSize={{ minRows: 2, maxRows: 8 }}
             bordered={false}
             onKeyDown={(e) => {
@@ -457,6 +477,8 @@ export function GitCommitComposer({
           <Dropdown
             trigger={["click"]}
             menu={{ items: commitMenuItems, onClick: handleCommitMenuClick }}
+            open={commitMenuOpen}
+            onOpenChange={setCommitMenuOpen}
           >
             <Tooltip title={canOpenCommitMenu ? t("sidebar.moreActions", { defaultValue: "更多提交操作" }) : commitMenuDisabledReason} mouseEnterDelay={0.4}>
               <span>
@@ -522,6 +544,26 @@ export function GitCommitComposer({
           {t("sidebar.gitStageAllCommitConfirmContent", {
             count: unstagedChangeCount,
             defaultValue: "当前没有已暂存文件，将先暂存全部未暂存更改，再执行提交。",
+          })}
+        </p>
+      </Modal>
+      <Modal
+        title={t("sidebar.gitPullWithStashTitle")}
+        open={pullConfirmOpen}
+        okText={t("sidebar.gitPullWithStashAction")}
+        cancelText={t("common.cancel")}
+        confirmLoading={committing}
+        cancelButtonProps={{ disabled: committing }}
+        closable={!committing}
+        maskClosable={!committing}
+        onOk={() => void handleConfirmPullWithStash()}
+        onCancel={() => setPullConfirmOpen(false)}
+      >
+        <p>{t("sidebar.gitPullWithStashDescription")}</p>
+        <p className="mt-2 text-xs text-[color:var(--cs-text-secondary)]">
+          {t("sidebar.gitPullWithStashSummary", {
+            staged: stagedChangeCount,
+            unstaged: unstagedChangeCount,
           })}
         </p>
       </Modal>

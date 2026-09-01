@@ -170,6 +170,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
     commitAndPush,
     commitAndSync,
     pull,
+    pullWithStash,
     sync: syncChanges,
   } = useGitCommit({
     projectPath: currentProject?.path ?? null,
@@ -824,6 +825,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
                   onCommitAndPush={commitAndPush}
                   onCommitAndSync={commitAndSync}
                   onPull={pull}
+                  onPullWithStash={pullWithStash}
                   onSyncChanges={syncChanges}
                   onGenerateCommitMessage={handleGenerateCommitMessage}
                 />

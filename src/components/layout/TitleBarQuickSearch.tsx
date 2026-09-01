@@ -1,9 +1,10 @@
-import { FileOutlined, FolderOutlined, HistoryOutlined, SearchOutlined } from "@ant-design/icons";
+import { FolderOutlined, SearchOutlined } from "@ant-design/icons";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Empty, Input, Modal, Spin } from "antd";
 import type { InputRef } from "antd";
 import { searchProjectEntries } from "@/lib/api";
 import { revealExplorerPath } from "@/lib/explorer";
+import { getFileIconByName } from "@/lib/fileIcon";
 import { shouldIgnoreShortcut } from "@/hooks/useKeyboardShortcuts";
 import { useAppStore } from "@/store";
 import { useTranslation } from "react-i18next";
@@ -417,23 +418,27 @@ function TitleBarQuickSearch() {
                       onMouseEnter={() => setActiveIndex(index)}
                       onClick={() => handleOpenItem(item)}
                     >
-                      <div
-                        className="flex h-5 w-5 shrink-0 items-center justify-center text-[14px]"
-                        style={{
-                          color:
-                            item.kind === "directory" || item.section === "recent"
-                              ? "var(--cs-text-secondary)"
-                              : "var(--cs-primary)",
-                        }}
-                      >
-                        {item.kind === "directory" ? (
-                          <FolderOutlined />
-                        ) : item.section === "recent" ? (
-                          <HistoryOutlined />
-                        ) : (
-                          <FileOutlined />
-                        )}
-                      </div>
+                      {(() => {
+                        if (item.kind === "directory") {
+                          return (
+                            <div
+                              className="flex h-5 w-5 shrink-0 items-center justify-center text-[14px]"
+                              style={{ color: "var(--cs-text-secondary)" }}
+                            >
+                              <FolderOutlined />
+                            </div>
+                          );
+                        }
+                        const fileVisual = getFileIconByName(item.name);
+                        return (
+                          <div
+                            className="flex h-5 w-5 shrink-0 items-center justify-center"
+                            style={{ color: fileVisual.color }}
+                          >
+                            {fileVisual.icon}
+                          </div>
+                        );
+                      })()}
                       <div className="flex min-w-0 flex-1 items-baseline gap-2">
                         <span
                           className="min-w-0 shrink truncate text-[13px] font-medium"

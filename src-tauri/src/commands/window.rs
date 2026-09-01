@@ -8,13 +8,11 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{
     Emitter, Manager, PhysicalPosition, PhysicalSize, Position, Size, State, WebviewUrl,
     WebviewWindow, WebviewWindowBuilder,
 };
 
-const LAUNCHER_LABEL: &str = "launcher";
 const VOICE_OVERLAY_LABEL: &str = "voice-overlay";
 const VOICE_OVERLAY_ROUTE: &str = "index.html?overlay=voice";
 const VOICE_WORKER_LABEL: &str = "voice-worker";
@@ -22,7 +20,6 @@ const VOICE_WORKER_ROUTE: &str = "index.html?worker=voice";
 const VOICE_OVERLAY_WIDTH: u32 = 520;
 const VOICE_OVERLAY_HEIGHT: u32 = 88;
 const VOICE_OVERLAY_BOTTOM_MARGIN: i32 = 104;
-const RECENT_PROJECT_OPENED_EVENT: &str = "termflow:recent-project-opened";
 
 #[derive(Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -45,14 +42,6 @@ pub struct WindowProjectContext {
 pub struct FocusSessionRequest {
     pub session_id: String,
     pub project_path: String,
-}
-
-#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-struct RecentProjectOpened {
-    path: String,
-    name: String,
-    last_opened_at: u64,
 }
 
 pub struct WindowRegistry {
@@ -111,20 +100,8 @@ impl WindowRegistry {
         self.project_to_label.lock().get(project_path).cloned()
     }
 
-    pub fn get_launcher_label(&self) -> Option<String> {
-        self.contexts_by_label
-            .lock()
-            .values()
-            .find(|context| context.mode == WindowMode::Launcher)
-            .map(|context| context.window_label.clone())
-    }
-
     pub fn is_launcher(&self, window_label: &str) -> bool {
         self.get_context(window_label).mode == WindowMode::Launcher
-    }
-
-    pub fn has_project_windows(&self) -> bool {
-        !self.project_to_label.lock().is_empty()
     }
 
     pub fn set_launcher(&self, window_label: &str) -> WindowProjectContext {
@@ -183,55 +160,6 @@ pub fn cleanup_window_project_sessions(
     }
 }
 
-pub fn show_or_create_launcher_window(
-    app: &tauri::AppHandle,
-    registry: &WindowRegistry,
-    database: &Database,
-) -> Result<(), String> {
-    if let Some(existing_label) = registry.get_launcher_label() {
-        if let Some(existing_window) = app.get_webview_window(&existing_label) {
-            focus_window(&existing_window);
-            return Ok(());
-        }
-        registry.release_window(&existing_label);
-    }
-
-    if let Some(existing_window) = app.get_webview_window(LAUNCHER_LABEL) {
-        registry.set_launcher(LAUNCHER_LABEL);
-        focus_window(&existing_window);
-        return Ok(());
-    }
-
-    // Closing the last visible project can leave hidden voice windows alive.
-    // Restore the last project when this helper opens another visible window in
-    // that process. When a project window is still open, keep launcher behavior.
-    let context = if registry.has_project_windows() {
-        registry.set_launcher(LAUNCHER_LABEL)
-    } else {
-        restored_window_context(registry, LAUNCHER_LABEL, database)
-    };
-    let launcher_window =
-        match WebviewWindowBuilder::new(app, LAUNCHER_LABEL, WebviewUrl::App("index.html".into()))
-            .title(window_title(&context))
-            .inner_size(1024.0, 700.0)
-            .min_inner_size(800.0, 600.0)
-            .center()
-            .resizable(true)
-            .decorations(false)
-            .build()
-        {
-            Ok(window) => window,
-            Err(error) => {
-                registry.release_window(LAUNCHER_LABEL);
-                return Err(format!("创建启动页窗口失败: {error}"));
-            }
-        };
-
-    let _ = app.emit_to(launcher_window.label(), "window-context-updated", &context);
-    focus_window(&launcher_window);
-    Ok(())
-}
-
 /// Resolves the single directory argument accepted by the desktop executable.
 ///
 /// Explorer passes an absolute path for the context-menu verbs, while a direct
@@ -258,95 +186,6 @@ pub fn resolve_project_path_from_launch_arguments(
     };
 
     ensure_existing_project_directory(&project_path.to_string_lossy()).map(Some)
-}
-
-/// Opens a project requested outside the application, such as an Explorer
-/// context-menu invocation. Existing project windows are focused; an available
-/// launcher window is reused; otherwise the request opens in a new project
-/// window so an active project is never replaced without an in-app decision.
-pub fn open_project_from_external_request(
-    app: &tauri::AppHandle,
-    registry: &WindowRegistry,
-    path: &str,
-) -> Result<WindowProjectContext, String> {
-    let project_path = ensure_existing_project_directory(path)?;
-    let project_name = project_name_from_path(&project_path);
-
-    if let Some(existing_label) = registry.get_label_by_project(&project_path) {
-        if let Some(existing_window) = app.get_webview_window(&existing_label) {
-            focus_window(&existing_window);
-            let context = registry.get_context(&existing_label);
-            broadcast_recent_project_opened(app, &context);
-            return Ok(context);
-        }
-        registry.release_window(&existing_label);
-    }
-
-    if let Some(launcher_label) = registry.get_launcher_label() {
-        if let Some(launcher_window) = app.get_webview_window(&launcher_label) {
-            let context = registry.bind_project(&launcher_label, project_path, project_name);
-            let _ = launcher_window.set_title(&window_title(&context));
-            let _ = app.emit_to(launcher_window.label(), "window-context-updated", &context);
-            focus_window(&launcher_window);
-            broadcast_recent_project_opened(app, &context);
-            return Ok(context);
-        }
-        registry.release_window(&launcher_label);
-    }
-
-    let label = if registry.has_project_windows() || app.get_webview_window("main").is_some() {
-        project_window_label(&project_path)
-    } else {
-        "main".to_string()
-    };
-    let context = registry.bind_project(&label, project_path, project_name);
-    let project_window =
-        match WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
-            .title(window_title(&context))
-            .inner_size(1024.0, 700.0)
-            .min_inner_size(800.0, 600.0)
-            .center()
-            .resizable(true)
-            .decorations(false)
-            .build()
-        {
-            Ok(window) => window,
-            Err(error) => {
-                registry.release_window(&label);
-                return Err(format!("创建项目窗口失败: {error}"));
-            }
-        };
-    let _ = app.emit_to(project_window.label(), "window-context-updated", &context);
-    focus_window(&project_window);
-    broadcast_recent_project_opened(app, &context);
-    Ok(context)
-}
-
-fn recent_project_opened_payload(
-    context: &WindowProjectContext,
-    last_opened_at: u64,
-) -> Option<RecentProjectOpened> {
-    Some(RecentProjectOpened {
-        path: context.project_path.clone()?,
-        name: context.project_name.clone()?,
-        last_opened_at,
-    })
-}
-
-fn broadcast_recent_project_opened(app: &tauri::AppHandle, context: &WindowProjectContext) {
-    let last_opened_at = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis()
-        .try_into()
-        .unwrap_or(u64::MAX);
-    let Some(payload) = recent_project_opened_payload(context, last_opened_at) else {
-        return;
-    };
-
-    if let Err(error) = app.emit(RECENT_PROJECT_OPENED_EVENT, payload) {
-        eprintln!("Failed to broadcast recent project opened event: {error}");
-    }
 }
 
 fn focus_window(window: &WebviewWindow) {
@@ -889,31 +728,6 @@ mod tests {
     }
 
     #[test]
-    fn recent_project_event_uses_frontend_payload_shape() {
-        let context = WindowProjectContext {
-            window_label: "project-demo".to_string(),
-            mode: WindowMode::Project,
-            project_path: Some(r"D:\workspace\demo".to_string()),
-            project_name: Some("demo".to_string()),
-        };
-
-        let payload = recent_project_opened_payload(&context, 1234).unwrap();
-        assert_eq!(
-            serde_json::to_value(payload).unwrap(),
-            serde_json::json!({
-                "path": r"D:\workspace\demo",
-                "name": "demo",
-                "lastOpenedAt": 1234,
-            })
-        );
-    }
-
-    #[test]
-    fn recent_project_event_ignores_launcher_contexts() {
-        assert!(recent_project_opened_payload(&launcher_context("main"), 1234).is_none());
-    }
-
-    #[test]
     fn project_name_from_path_ignores_trailing_separator() {
         assert_eq!(
             project_name_from_path(r"D:\3.project\termflow\"),
@@ -965,28 +779,9 @@ mod tests {
     }
 
     #[test]
-    fn launcher_registry_tracks_at_most_one_launcher_context() {
-        let registry = WindowRegistry::new();
-        assert_eq!(registry.get_launcher_label().as_deref(), Some("main"));
-
-        registry.bind_project(
-            "main",
-            "/workspace/renmin".to_string(),
-            "renmin".to_string(),
-        );
-        assert!(registry.get_launcher_label().is_none());
-
-        registry.set_launcher(LAUNCHER_LABEL);
-        assert_eq!(
-            registry.get_launcher_label().as_deref(),
-            Some(LAUNCHER_LABEL)
-        );
-    }
-
-    #[test]
     fn auto_disposition_only_reuses_the_main_launcher() {
         assert!(should_reuse_launcher_window("main", true));
-        assert!(!should_reuse_launcher_window(LAUNCHER_LABEL, true));
+        assert!(!should_reuse_launcher_window("launcher", true));
         assert!(!should_reuse_launcher_window("main", false));
     }
 
@@ -1029,17 +824,14 @@ mod tests {
         database.save_persistent_settings(&settings).unwrap();
 
         let registry = WindowRegistry::new();
-        registry.bind_project(
-            "main",
-            project.to_string_lossy().into_owned(),
-            "renmin".to_string(),
-        );
-        assert!(registry.has_project_windows());
+        let project_path = project.to_string_lossy().into_owned();
+        registry.bind_project("main", project_path.clone(), "renmin".to_string());
+        assert!(registry.get_label_by_project(&project_path).is_some());
 
         registry.release_window("main");
-        assert!(!registry.has_project_windows());
+        assert!(registry.get_label_by_project(&project_path).is_none());
 
-        let context = restored_window_context(&registry, LAUNCHER_LABEL, &database);
+        let context = restored_window_context(&registry, "launcher", &database);
         assert!(context.mode == WindowMode::Project);
         assert_eq!(
             context.project_name.as_deref(),

@@ -310,6 +310,7 @@ pub fn run() {
             commands::git::git_push,
             commands::git::git_add_remote_and_push,
             commands::git::git_pull,
+            commands::git::git_pull_with_stash,
             commands::git::git_pull_rebase,
             commands::git::git_list_branches,
             commands::git::git_create_branch,

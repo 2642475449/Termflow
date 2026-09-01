@@ -764,6 +764,19 @@ export interface GitRemoteResult {
   message: string;
 }
 
+export type GitPullRestoreStatus =
+  | "notNeeded"
+  | "restored"
+  | "conflicts"
+  | "failed";
+
+export interface GitPullWithStashResult {
+  success: boolean;
+  message: string;
+  restoreStatus: GitPullRestoreStatus;
+  stashOid: string | null;
+}
+
 export interface GitCloneResult {
   projectPath: string;
 }

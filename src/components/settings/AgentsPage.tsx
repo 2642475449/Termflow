@@ -219,7 +219,7 @@ function AgentRow({ agent, quota, quotaLoading, isDefault, isLast, onOpen, onSet
 
 function AgentQuota({ agent, quota, loading }: { agent: AgentCliInfo; quota: ClaudeRateLimits | CodexRateLimits | QoderUsage | null; loading: boolean }) {
   const { t } = useTranslation();
-  if (agent.id === "pi") return null;
+  if (agent.id === "pi") return <div className="h-[38px]" aria-hidden="true" />;
   if (!agent.installed) return <Muted>{t("settings.agents.quota.installFirst")}</Muted>;
   if (agent.id === "antigravity" || agent.id === "opencode") return <Muted>{t("settings.agents.quota.unsupported")}</Muted>;
   if (loading && !quota) return <Muted>{t("settings.agents.quota.loading")}</Muted>;

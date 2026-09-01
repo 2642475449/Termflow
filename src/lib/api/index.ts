@@ -67,6 +67,7 @@ import type {
   GitDiffHunkResult,
   GitDiffResult,
   GitFileStatus,
+  GitPullWithStashResult,
   GitRemoteResult,
   GitCloneStartResult,
   GitGraphCommit,
@@ -1269,6 +1270,12 @@ export async function gitFetch(projectPath: string): Promise<GitRemoteResult> {
 
 export async function gitPull(projectPath: string): Promise<GitRemoteResult> {
   return await invoke("git_pull", { projectPath });
+}
+
+export async function gitPullWithStash(
+  projectPath: string
+): Promise<GitPullWithStashResult> {
+  return await invoke("git_pull_with_stash", { projectPath });
 }
 
 export async function gitPullRebase(

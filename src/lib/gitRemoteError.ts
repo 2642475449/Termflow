@@ -5,6 +5,7 @@ export type GitRemoteErrorKind =
   | "authenticationFailed"
   | "repositoryNotFound"
   | "timeout"
+  | "localChangesWouldBeOverwritten"
   | "generic";
 
 export interface GitRemoteErrorSummary {
@@ -27,6 +28,10 @@ export function summarizeGitRemoteError(
 
   let kind: GitRemoteErrorKind = "generic";
   if (
+    /local changes to the following files would be overwritten by (?:merge|checkout)|please commit your changes or stash them/i.test(normalized)
+  ) {
+    kind = "localChangesWouldBeOverwritten";
+  } else if (
     /authentication failed|could not read username|permission denied \(publickey\)|http (?:401|403)/i.test(normalized)
   ) {
     kind = "authenticationFailed";
