@@ -685,8 +685,8 @@
     "newSessionTooltip": "新規セッション (Ctrl+N)"
   },
   "contentOverview": {
-    "title": "内容の概要",
-    "tooltip": "内容の概要",
+    "title": "タスク監視",
+    "tooltip": "タスク監視",
     "tooShort": "現在の内容は短すぎます",
     "summary": "要約",
     "keyPoints": "要点",

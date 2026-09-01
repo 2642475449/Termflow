@@ -685,8 +685,8 @@
     "newSessionTooltip": "New Session (Ctrl+N)"
   },
   "contentOverview": {
-    "title": "Content overview",
-    "tooltip": "Content overview",
+    "title": "Task Monitor",
+    "tooltip": "Task Monitor",
     "tooShort": "The current content is too short",
     "summary": "Summary",
     "keyPoints": "Key points",

@@ -74,7 +74,6 @@ import "@xterm/xterm/css/xterm.css";
 const TERMINAL_LAYOUT_SYNC_EVENT = "terminal:layout-sync";
 const AGENT_FILE_DRAG_MIME = "application/x-termflow-agent-files";
 const TERMINAL_FOCUS_RETRY_DELAYS_MS = [0, 50, 150, 300];
-const TERMINAL_SCROLLBAR_INTERACTION_WIDTH = 8;
 const TERMINAL_SCROLLBAR_HIDE_DELAY_MS = 700;
 const HIDE_CURSOR_SEQUENCE = "\x1b[?25l";
 const SHOW_CURSOR_SEQUENCE = "\x1b[?25h";
@@ -792,7 +791,6 @@ function Terminal({ sessionId, overviewNavigationId, onExit, onClose }: Terminal
       minimumContrastRatio: termTheme.minimumContrastRatio,
       cursorBlink: forceStableCursor ? false : cursorBlink,
       scrollback: terminalScrollback,
-      overviewRuler: { width: TERMINAL_SCROLLBAR_INTERACTION_WIDTH },
       convertEol: true,
       disableStdin: !currentSession?.active || currentSession?.status === "starting",
     });

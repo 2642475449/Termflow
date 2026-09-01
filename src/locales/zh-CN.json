@@ -685,8 +685,8 @@
     "newSessionTooltip": "新建会话 (Ctrl+N)"
   },
   "contentOverview": {
-    "title": "内容概览",
-    "tooltip": "内容概览",
+    "title": "任务监控",
+    "tooltip": "任务监控",
     "tooShort": "当前内容较短",
     "summary": "一句话总结",
     "keyPoints": "关键要点",

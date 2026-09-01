@@ -685,8 +685,8 @@
     "newSessionTooltip": "新建工作階段 (Ctrl+N)"
   },
   "contentOverview": {
-    "title": "內容概覽",
-    "tooltip": "內容概覽",
+    "title": "任務監控",
+    "tooltip": "任務監控",
     "tooShort": "目前內容較短",
     "summary": "一句話總結",
     "keyPoints": "關鍵要點",

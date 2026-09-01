@@ -38,6 +38,12 @@ if (normalizedCi == null) {
 const tauriArgs = process.argv.slice(2);
 const signingPrivateKey = env.TAURI_SIGNING_PRIVATE_KEY?.trim();
 
+if (tauriArgs[0] === "dev") {
+  // 开发版使用独立应用标识，避免与已安装的正式版争用单实例锁，
+  // 同时隔离 WebView 与 Tauri 应用数据目录。
+  tauriArgs.splice(1, 0, "--config", "src-tauri/tauri.dev.conf.json");
+}
+
 if (
   tauriArgs[0] === "build" &&
   !signingPrivateKey &&

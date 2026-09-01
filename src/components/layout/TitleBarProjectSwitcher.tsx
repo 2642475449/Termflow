@@ -177,8 +177,7 @@ function TitleBarProjectSwitcher() {
       style={{
         background: "var(--cs-bg-card, var(--cs-bg-sidebar))",
         borderColor: "var(--cs-border-card, var(--cs-border-sidebar))",
-        boxShadow:
-          "0 14px 32px color-mix(in srgb, var(--cs-text-primary) 14%, transparent)",
+        boxShadow: "0 14px 32px var(--cs-shadow-overlay)",
       }}
     >
       <div className="p-1.5">

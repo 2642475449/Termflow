@@ -1,0 +1,4 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicegui/make-dialog/refs/heads/main/tauri/tauri.conf.json",
+  "identifier": "com.termflow.desktop.dev"
+}

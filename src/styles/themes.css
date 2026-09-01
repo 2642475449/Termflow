@@ -23,6 +23,7 @@
   --cs-border-card: #dde7f2;
   --cs-border-sidebar: #dde6f1;
   --cs-border-secondary: var(--cs-border-card);
+  --cs-shadow-overlay: rgba(31, 42, 68, 0.18);
   --cs-primary: #4f6cf7;
   --cs-primary-light: rgba(79,108,247,0.08);
   --cs-accent: #5b8def;
@@ -81,6 +82,7 @@
   --cs-border-card: #f0e9df;
   --cs-border-sidebar: #e8e0d5;
   --cs-border-secondary: var(--cs-border-card);
+  --cs-shadow-overlay: rgba(61, 50, 40, 0.18);
   --cs-primary: #c2713a;
   --cs-primary-light: rgba(194,113,58,0.08);
   --cs-accent: #6b8e5e;
@@ -135,6 +137,7 @@
   --cs-border-card: rgba(92,123,163,0.15);
   --cs-border-sidebar: rgba(92,123,163,0.1);
   --cs-border-secondary: var(--cs-border-card);
+  --cs-shadow-overlay: rgba(0, 0, 0, 0.28);
   --cs-primary: #5c7ba3;
   --cs-primary-light: rgba(92,123,163,0.1);
   --cs-accent: #6b92c5;
@@ -189,6 +192,7 @@
   --cs-border-card: #3b3b52;
   --cs-border-sidebar: #313244;
   --cs-border-secondary: var(--cs-border-card);
+  --cs-shadow-overlay: rgba(0, 0, 0, 0.28);
   --cs-primary: #f5bd69;
   --cs-primary-light: rgba(245,189,105,0.1);
   --cs-accent: #cba6f7;

@@ -90,14 +90,18 @@
 
 /*
  * Keep xterm's scrollbar easy to target without giving it the visual weight
- * of its 14px default. The transparent 8px interaction rail overlaps the
- * terminal padding so its 4px slider sits flush against the panel edge.
+ * of its 14px default. The transparent interaction rail overlaps the terminal
+ * padding so its 4px slider sits flush against the panel edge. Do not enable
+ * xterm's overview ruler here: its border remains visible even when the
+ * scrollbar itself is hidden.
  */
 .app-terminal-surface .xterm .xterm-scrollable-element > .scrollbar.vertical {
   right: -4px !important;
   opacity: 0 !important;
   pointer-events: auto !important;
   background: transparent !important;
+  border: 0 !important;
+  outline: 0 !important;
   transition: opacity 160ms ease !important;
 }
 
@@ -109,8 +113,7 @@
 }
 
 .app-terminal-surface[data-scrollbar-active="true"] .xterm .xterm-scrollable-element > .scrollbar.vertical,
-.app-terminal-surface .xterm .xterm-scrollable-element > .scrollbar.vertical:hover,
-.app-terminal-surface .xterm .xterm-scrollable-element > .scrollbar.vertical:has(> .slider.active) {
+.app-terminal-surface .xterm .xterm-scrollable-element > .scrollbar.vertical:hover {
   opacity: 1 !important;
 }
 

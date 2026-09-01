@@ -27,6 +27,7 @@ export function ContentOverviewPopover({
 }: ContentOverviewPopoverProps) {
   const { t, i18n } = useTranslation();
   const [open, setOpen] = useState(false);
+  const [tooltipOpen, setTooltipOpen] = useState(false);
   const subscribe = useCallback(
     (listener: () => void) => subscribeContentOverview(sessionId, listener),
     [sessionId],
@@ -46,6 +47,9 @@ export function ContentOverviewPopover({
   }, [isRunning, sessionId, snapshot.canGenerate, snapshot.overview]);
 
   const handleOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) {
+      setTooltipOpen(false);
+    }
     if (
       nextOpen &&
       snapshot.canGenerate &&
@@ -177,7 +181,12 @@ export function ContentOverviewPopover({
         content={content}
         overlayClassName="content-overview-popover"
       >
-        <Tooltip title={tooltip} mouseEnterDelay={0.4}>
+        <Tooltip
+          title={tooltip}
+          mouseEnterDelay={0.4}
+          open={!open && tooltipOpen}
+          onOpenChange={setTooltipOpen}
+        >
           <span>
             <button
               type="button"

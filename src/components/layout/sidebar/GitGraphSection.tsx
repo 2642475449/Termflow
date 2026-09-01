@@ -33,10 +33,10 @@ import { GitGraphRenderer } from "./GitGraphRenderer";
 import { splitWorktreeReferences } from "./gitGraphReferences";
 import { linearizeFileHistoryCommits } from "@/lib/gitFileHistory";
 
-const GRAPH_HOVER_CARD_WIDTH = 360;
+const GRAPH_HOVER_CARD_WIDTH = 460;
 const GRAPH_HOVER_CARD_OFFSET = 8;
 const GRAPH_HOVER_CARD_MIN_TOP = 12;
-const GRAPH_HOVER_CARD_ESTIMATED_HEIGHT = 260;
+const GRAPH_HOVER_CARD_ESTIMATED_HEIGHT = 340;
 const GRAPH_PAGE_SIZE = 100;
 
 function formatGraphCommitTime(timestampMs: number, locale = "zh-CN") {
@@ -778,7 +778,7 @@ export function GitGraphSection({
 
                 <div className="app-git-graph-hover-separator" />
 
-                <div className="max-h-36 overflow-y-auto whitespace-pre-wrap break-words app-project-tree-scroll">
+                <div className="max-h-64 overflow-y-auto whitespace-pre-wrap break-words app-project-tree-scroll">
                   <div className="font-medium" style={{ color: "var(--cs-text-primary)" }}>
                     {graphHover.commit.summary}
                   </div>
