@@ -1,10 +1,146 @@
 use crate::path_utils::normalize_input_path;
 use git2::{Repository, RepositoryState};
+use parking_lot::{Mutex, RwLock};
 use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command as StdCommand;
+use std::sync::{Arc, OnceLock};
 
 use super::types::GitGraphRef;
+
+/// Git 操作的访问类型。
+///
+/// 读取操作可以并行执行；会变更索引、引用、工作树或远程跟踪引用的操作必须独占。
+#[derive(Clone, Copy)]
+pub enum GitRepositoryAccess {
+    Read,
+    Write,
+}
+
+/// 以真实 Git 目录为键的仓库协调器。
+///
+/// 不能只用项目路径作为键：同一个仓库可能从不同的绝对路径进入，而 linked worktree
+/// 也会拥有自己的实际 Git 目录。使用 `Repository::path()` 后再规范化，才能让同一
+/// 个工作树的并发请求进入同一把读写锁。
+#[derive(Default)]
+struct GitOperationCoordinator {
+    locks: Mutex<HashMap<PathBuf, Arc<RwLock<()>>>>,
+}
+
+impl GitOperationCoordinator {
+    fn lock_for(&self, project_path: &str) -> Arc<RwLock<()>> {
+        let lock_key = git_repository_lock_key(project_path);
+        let mut locks = self.locks.lock();
+        locks
+            .entry(lock_key)
+            .or_insert_with(|| Arc::new(RwLock::new(())))
+            .clone()
+    }
+
+    fn run<T, F>(
+        &self,
+        project_path: &str,
+        access: GitRepositoryAccess,
+        task: F,
+    ) -> Result<T, String>
+    where
+        F: FnOnce() -> Result<T, String>,
+    {
+        let lock = self.lock_for(project_path);
+        match access {
+            GitRepositoryAccess::Read => {
+                let _guard = lock.read();
+                task()
+            }
+            GitRepositoryAccess::Write => {
+                let _guard = lock.write();
+                task()
+            }
+        }
+    }
+}
+
+static GIT_OPERATION_COORDINATOR: OnceLock<GitOperationCoordinator> = OnceLock::new();
+
+fn git_operation_coordinator() -> &'static GitOperationCoordinator {
+    GIT_OPERATION_COORDINATOR.get_or_init(GitOperationCoordinator::default)
+}
+
+/// 返回用于串行化同一工作树操作的稳定键。
+///
+/// 非仓库路径仍需有一个锁键，以避免初始化过程和紧随其后的探测相互打断；因此该场景
+/// 回退为规范化后的项目目录，而不是将错误暴露给调用方。
+fn git_repository_lock_key(project_path: &str) -> PathBuf {
+    let normalized_path = normalize_input_path(project_path);
+    let fallback = normalized_path
+        .canonicalize()
+        .unwrap_or_else(|_| normalized_path.clone());
+
+    Repository::discover(&normalized_path)
+        .ok()
+        .and_then(|repo| {
+            repo.path()
+                .canonicalize()
+                .ok()
+                .or_else(|| Some(repo.path().to_path_buf()))
+        })
+        .unwrap_or(fallback)
+}
+
+/// 在后台线程中执行共享读取 Git 操作。
+pub async fn run_git_read<T, F>(
+    project_path: String,
+    operation: &'static str,
+    task: F,
+) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    run_git_with_access(project_path, GitRepositoryAccess::Read, operation, task).await
+}
+
+/// 在后台线程中串行执行会修改 Git 仓库的操作。
+pub async fn run_git_write<T, F>(
+    project_path: String,
+    operation: &'static str,
+    task: F,
+) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    run_git_with_access(project_path, GitRepositoryAccess::Write, operation, task).await
+}
+
+async fn run_git_with_access<T, F>(
+    project_path: String,
+    access: GitRepositoryAccess,
+    operation: &'static str,
+    task: F,
+) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(move || {
+        git_operation_coordinator().run(&project_path, access, task)
+    })
+    .await
+    .map_err(|error| format!("{}后台任务失败: {}", operation, error))?
+}
+
+/// 对同步 Tauri 命令使用同一套仓库协调机制。
+pub fn with_git_repository_access<T, F>(
+    project_path: &str,
+    access: GitRepositoryAccess,
+    task: F,
+) -> Result<T, String>
+where
+    F: FnOnce() -> Result<T, String>,
+{
+    git_operation_coordinator().run(project_path, access, task)
+}
 
 pub async fn run_git_blocking<T, F>(operation: &'static str, task: F) -> Result<T, String>
 where
@@ -318,11 +454,17 @@ pub fn decode_text_content(bytes: Vec<u8>) -> Result<String, ()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        ensure_repository_allows_normal_commit, is_symbolic_remote_head,
+        ensure_repository_allows_normal_commit, git_repository_lock_key, is_symbolic_remote_head,
         repository_operation_state, resolve_worktree_file_path, trash_worktree_path,
+        GitOperationCoordinator, GitRepositoryAccess,
     };
     use git2::{Repository, RepositoryState};
     use std::fs;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc, Barrier,
+    };
+    use std::thread;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
@@ -386,5 +528,64 @@ mod tests {
         assert_eq!(repository_operation_state(&repo), "merge");
         assert_eq!(repo.state(), RepositoryState::Merge);
         assert!(ensure_repository_allows_normal_commit(&repo).is_err());
+    }
+
+    #[test]
+    fn uses_the_real_git_directory_as_the_lock_key() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let root = temp_dir.path().join("project");
+        let nested = root.join("nested");
+        fs::create_dir_all(&nested).unwrap();
+        let repo = Repository::init(&root).unwrap();
+
+        assert_eq!(
+            git_repository_lock_key(root.to_string_lossy().as_ref()),
+            repo.path().canonicalize().unwrap()
+        );
+        assert_eq!(
+            git_repository_lock_key(nested.to_string_lossy().as_ref()),
+            repo.path().canonicalize().unwrap()
+        );
+    }
+
+    #[test]
+    fn serializes_concurrent_writes_for_one_repository() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let root = temp_dir.path().join("project");
+        fs::create_dir_all(&root).unwrap();
+        Repository::init(&root).unwrap();
+
+        let coordinator = Arc::new(GitOperationCoordinator::default());
+        let barrier = Arc::new(Barrier::new(3));
+        let active_writers = Arc::new(AtomicUsize::new(0));
+        let peak_writers = Arc::new(AtomicUsize::new(0));
+        let mut handles = Vec::new();
+
+        for _ in 0..2 {
+            let coordinator = coordinator.clone();
+            let barrier = barrier.clone();
+            let active_writers = active_writers.clone();
+            let peak_writers = peak_writers.clone();
+            let project_path = root.to_string_lossy().into_owned();
+            handles.push(thread::spawn(move || {
+                barrier.wait();
+                coordinator
+                    .run(&project_path, GitRepositoryAccess::Write, || {
+                        let current = active_writers.fetch_add(1, Ordering::SeqCst) + 1;
+                        peak_writers.fetch_max(current, Ordering::SeqCst);
+                        thread::sleep(std::time::Duration::from_millis(40));
+                        active_writers.fetch_sub(1, Ordering::SeqCst);
+                        Ok(())
+                    })
+                    .unwrap();
+            }));
+        }
+
+        barrier.wait();
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        assert_eq!(peak_writers.load(Ordering::SeqCst), 1);
     }
 }

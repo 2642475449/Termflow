@@ -1,6 +1,6 @@
 use super::types::GitCommitResult;
 use super::utils::{
-    ensure_repository_allows_normal_commit, git_command, open_repo, run_git_blocking, stage_paths,
+    ensure_repository_allows_normal_commit, git_command, open_repo, run_git_write, stage_paths,
 };
 
 /// Create a commit.
@@ -10,7 +10,8 @@ pub async fn git_commit(
     message: String,
     files: Vec<String>,
 ) -> Result<GitCommitResult, String> {
-    run_git_blocking("创建 Git 提交", move || {
+    let lock_path = project_path.clone();
+    run_git_write(lock_path, "创建 Git 提交", move || {
         git_commit_sync(project_path, message, files)
     })
     .await
@@ -37,7 +38,8 @@ fn git_commit_sync(
 /// Stage files.
 #[tauri::command]
 pub async fn git_stage_files(project_path: String, files: Vec<String>) -> Result<(), String> {
-    run_git_blocking("暂存 Git 文件", move || {
+    let lock_path = project_path.clone();
+    run_git_write(lock_path, "暂存 Git 文件", move || {
         git_stage_files_sync(project_path, files)
     })
     .await
@@ -53,7 +55,8 @@ fn git_stage_files_sync(project_path: String, files: Vec<String>) -> Result<(), 
 /// Unstage files.
 #[tauri::command]
 pub async fn git_unstage_files(project_path: String, files: Vec<String>) -> Result<(), String> {
-    run_git_blocking("取消暂存 Git 文件", move || {
+    let lock_path = project_path.clone();
+    run_git_write(lock_path, "取消暂存 Git 文件", move || {
         git_unstage_files_sync(project_path, files)
     })
     .await
@@ -92,7 +95,8 @@ fn git_unstage_files_sync(project_path: String, files: Vec<String>) -> Result<()
 /// Discard changes.
 #[tauri::command]
 pub async fn git_discard_changes(project_path: String, files: Vec<String>) -> Result<(), String> {
-    run_git_blocking("丢弃 Git 更改", move || {
+    let lock_path = project_path.clone();
+    run_git_write(lock_path, "丢弃 Git 更改", move || {
         git_discard_changes_sync(project_path, files)
     })
     .await
@@ -209,7 +213,8 @@ pub async fn git_commit_amend(
     message: String,
     files: Vec<String>,
 ) -> Result<GitCommitResult, String> {
-    run_git_blocking("修改 Git 提交", move || {
+    let lock_path = project_path.clone();
+    run_git_write(lock_path, "修改 Git 提交", move || {
         git_commit_amend_sync(project_path, message, files)
     })
     .await

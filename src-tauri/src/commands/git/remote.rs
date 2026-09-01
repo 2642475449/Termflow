@@ -1,7 +1,5 @@
 use super::types::{GitPullWithStashResult, GitRemoteResult};
-use super::utils::{
-    ensure_repository_allows_normal_commit, git_command, open_repo, run_git_blocking,
-};
+use super::utils::{ensure_repository_allows_normal_commit, git_command, open_repo, run_git_write};
 use std::io::Read;
 use std::process::{Child, Output, Stdio};
 use std::thread::{self, JoinHandle};
@@ -168,7 +166,8 @@ fn run_remote_command(
 
 #[tauri::command]
 pub async fn git_fetch(project_path: String) -> Result<GitRemoteResult, String> {
-    run_git_blocking("获取 Git 远程更新", move || {
+    let lock_path = project_path.clone();
+    run_git_write(lock_path, "获取 Git 远程更新", move || {
         run_remote_command(
             &project_path,
             &["fetch", "--all", "--prune"],
@@ -181,7 +180,8 @@ pub async fn git_fetch(project_path: String) -> Result<GitRemoteResult, String> 
 
 #[tauri::command]
 pub async fn git_push(project_path: String) -> Result<GitRemoteResult, String> {
-    run_git_blocking("推送 Git 提交", move || {
+    let lock_path = project_path.clone();
+    run_git_write(lock_path, "推送 Git 提交", move || {
         run_remote_command(&project_path, &["push"], "推送成功", "推送失败")
     })
     .await
@@ -199,7 +199,8 @@ pub async fn git_add_remote_and_push(
     let remote_url = validate_remote_url(&remote_url)?.to_string();
     let branch_name = validate_branch_name(&branch_name)?.to_string();
 
-    run_git_blocking("连接 Git 远程仓库", move || {
+    let lock_path = project_path.clone();
+    run_git_write(lock_path, "连接 Git 远程仓库", move || {
         match find_existing_remote_url(&project_path, &remote_name)? {
             Some(existing_url) if existing_url != remote_url => {
                 return Err(format!(
@@ -242,7 +243,8 @@ pub async fn git_add_remote_and_push(
 
 #[tauri::command]
 pub async fn git_pull(project_path: String) -> Result<GitRemoteResult, String> {
-    run_git_blocking("拉取 Git 更新", move || {
+    let lock_path = project_path.clone();
+    run_git_write(lock_path, "拉取 Git 更新", move || {
         run_remote_command(
             &project_path,
             &["pull", "--ff-only"],
@@ -465,7 +467,8 @@ fn pull_with_stash_sync(project_path: &str) -> Result<GitPullWithStashResult, St
 
 #[tauri::command]
 pub async fn git_pull_with_stash(project_path: String) -> Result<GitPullWithStashResult, String> {
-    run_git_blocking("安全拉取 Git 更新", move || {
+    let lock_path = project_path.clone();
+    run_git_write(lock_path, "安全拉取 Git 更新", move || {
         pull_with_stash_sync(&project_path)
     })
     .await
@@ -473,7 +476,8 @@ pub async fn git_pull_with_stash(project_path: String) -> Result<GitPullWithStas
 
 #[tauri::command]
 pub async fn git_pull_rebase(project_path: String) -> Result<GitRemoteResult, String> {
-    run_git_blocking("变基拉取 Git 更新", move || {
+    let lock_path = project_path.clone();
+    run_git_write(lock_path, "变基拉取 Git 更新", move || {
         run_remote_command(
             &project_path,
             &["pull", "--rebase"],

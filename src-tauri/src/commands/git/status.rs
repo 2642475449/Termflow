@@ -4,11 +4,14 @@ use std::io::Read;
 use std::path::Path;
 
 use super::types::{GitBranchInfo, GitFileStatus, GitRepoInfo};
-use super::utils::{collect_numstat, open_repo, repository_operation_state, run_git_blocking};
+use super::utils::{
+    collect_numstat, open_repo, repository_operation_state, run_git_read, run_git_write,
+};
 
 #[tauri::command]
 pub async fn git_init_repository(project_path: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    let lock_path = project_path.clone();
+    run_git_write(lock_path, "初始化 Git 仓库", move || {
         let path = Path::new(&project_path);
         if !path.is_dir() {
             return Err("Project directory does not exist".to_string());
@@ -19,7 +22,6 @@ pub async fn git_init_repository(project_path: String) -> Result<(), String> {
             .map_err(|error| format!("Failed to initialize Git repository: {error}"))
     })
     .await
-    .map_err(|error| format!("Git initialization task failed: {error}"))?
 }
 
 fn map_index_status(status: git2::Status) -> &'static str {
@@ -216,7 +218,8 @@ pub fn resolve_branch_info(repo: &Repository) -> Result<GitBranchInfo, String> {
 /// Get repository info.
 #[tauri::command]
 pub async fn git_repo_info(project_path: String) -> Result<GitRepoInfo, String> {
-    run_git_blocking("读取 Git 仓库信息", move || {
+    let lock_path = project_path.clone();
+    run_git_read(lock_path, "读取 Git 仓库信息", move || {
         git_repo_info_sync(project_path)
     })
     .await
@@ -242,7 +245,11 @@ fn git_repo_info_sync(project_path: String) -> Result<GitRepoInfo, String> {
 /// Get file statuses.
 #[tauri::command]
 pub async fn git_status(project_path: String) -> Result<Vec<GitFileStatus>, String> {
-    run_git_blocking("读取 Git 状态", move || git_status_sync(project_path)).await
+    let lock_path = project_path.clone();
+    run_git_read(lock_path, "读取 Git 状态", move || {
+        git_status_sync(project_path)
+    })
+    .await
 }
 
 fn git_status_sync(project_path: String) -> Result<Vec<GitFileStatus>, String> {
@@ -520,7 +527,8 @@ mod tests {
 /// Get branch info.
 #[tauri::command]
 pub async fn git_branch_info(project_path: String) -> Result<GitBranchInfo, String> {
-    run_git_blocking("读取 Git 分支信息", move || {
+    let lock_path = project_path.clone();
+    run_git_read(lock_path, "读取 Git 分支信息", move || {
         git_branch_info_sync(project_path)
     })
     .await

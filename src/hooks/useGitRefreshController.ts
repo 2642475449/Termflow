@@ -20,10 +20,10 @@ interface GitRefreshControllerReturn {
   requestRefresh: () => void;
   /** 立即刷新（跳过防抖，用于手动刷新按钮） */
   refreshNow: () => void;
-  /** 标记 git 操作开始 */
-  markOperationStart: () => void;
-  /** 标记 git 操作结束 */
-  markOperationEnd: () => void;
+  /** 标记 git 操作开始，并返回此次操作的唯一标识 */
+  markOperationStart: () => string;
+  /** 标记指定 git 操作结束；其他仍在执行的操作不会受影响 */
+  markOperationEnd: (operationId: string) => void;
   /** 是否有操作正在执行 */
   isOperating: boolean;
 }
@@ -51,7 +51,8 @@ export function useGitRefreshController(
   const cooldownTimerRef = useRef<number | null>(null);
   const pollingTimerRef = useRef<number | null>(null);
   const isCoolingDownRef = useRef(false);
-  const isOperatingRef = useRef(false);
+  const activeOperationIdsRef = useRef(new Set<string>());
+  const operationSequenceRef = useRef(0);
   const pendingRefreshRef = useRef(false);
   const isMountedRef = useRef(true);
   const executeRefreshRef = useRef<() => Promise<void>>(async () => undefined);
@@ -82,7 +83,11 @@ export function useGitRefreshController(
   // 执行刷新（带冷却保护）
   const executeRefresh = useCallback(async () => {
     // 守卫条件：冷却中、有操作在执行、组件已卸载
-    if (isCoolingDownRef.current || isOperatingRef.current || !isMountedRef.current) {
+    if (
+      isCoolingDownRef.current ||
+      activeOperationIdsRef.current.size > 0 ||
+      !isMountedRef.current
+    ) {
       if (isMountedRef.current) pendingRefreshRef.current = true;
       return;
     }
@@ -100,7 +105,11 @@ export function useGitRefreshController(
     cooldownTimerRef.current = window.setTimeout(() => {
       isCoolingDownRef.current = false;
       cooldownTimerRef.current = null;
-      if (pendingRefreshRef.current && !isOperatingRef.current && isMountedRef.current) {
+      if (
+        pendingRefreshRef.current &&
+        activeOperationIdsRef.current.size === 0 &&
+        isMountedRef.current
+      ) {
         void executeRefreshRef.current();
       }
     }, cooldownDelay);
@@ -124,18 +133,22 @@ export function useGitRefreshController(
 
   // 标记 git 操作开始
   const markOperationStart = useCallback(() => {
-    isOperatingRef.current = true;
+    const operationId = `git-operation-${Date.now()}-${++operationSequenceRef.current}`;
+    activeOperationIdsRef.current.add(operationId);
     setIsOperating(true);
     // 操作期间取消待执行的刷新
     clearDebounceTimer();
+    return operationId;
   }, [clearDebounceTimer]);
 
   // 标记 git 操作结束
-  const markOperationEnd = useCallback(() => {
-    isOperatingRef.current = false;
-    setIsOperating(false);
-    // 操作结束后请求一次刷新
-    requestRefresh();
+  const markOperationEnd = useCallback((operationId: string) => {
+    if (!activeOperationIdsRef.current.delete(operationId)) return;
+    const hasActiveOperations = activeOperationIdsRef.current.size > 0;
+    setIsOperating(hasActiveOperations);
+    // 仅在最后一个操作完成后请求一次刷新，避免一个较早结束的操作把仍在运行的
+    // 操作当成空闲状态，从而发布不完整的 Git 快照。
+    if (!hasActiveOperations) requestRefresh();
   }, [requestRefresh]);
 
   // 初始化：挂载时执行一次刷新 + 设置轮询
@@ -153,6 +166,7 @@ export function useGitRefreshController(
     return () => {
       isMountedRef.current = false;
       pendingRefreshRef.current = false;
+      activeOperationIdsRef.current.clear();
       clearDebounceTimer();
       clearCooldownTimer();
       clearPollingTimer();

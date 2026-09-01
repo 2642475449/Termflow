@@ -551,6 +551,7 @@
     "gitAmendFailed": "修改提交失敗",
     "gitPushSuccess": "推送成功",
     "gitPushFailed": "推送失敗",
+    "gitFetchFailed": "取得遠端更新失敗",
     "gitConnectRemote": "連接遠端",
     "gitConnectRemoteTitle": "連接遠端儲存庫",
     "gitConnectRemoteDescription": "新增遠端儲存庫後，將首次推送目前分支並建立追蹤關係。",

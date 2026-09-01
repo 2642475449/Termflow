@@ -5,7 +5,7 @@ use git2::{Commit, Delta, DiffOptions, ErrorCode, Oid, Repository, Tree};
 use super::types::{
     GitDiffContentResult, GitGraphChangedFile, GitGraphCommit, GitGraphCommitDetail,
 };
-use super::utils::{collect_commit_refs, decode_text_content, open_repo, run_git_blocking};
+use super::utils::{collect_commit_refs, decode_text_content, open_repo, run_git_read};
 
 /// 默认分页大小
 const DEFAULT_HISTORY_PAGE_SIZE: usize = 100;
@@ -22,7 +22,8 @@ pub async fn git_graph_history(
     cursor: Option<String>,
     file_path: Option<String>,
 ) -> Result<Vec<GitGraphCommit>, String> {
-    run_git_blocking("读取 Git 提交历史", move || {
+    let lock_path = project_path.clone();
+    run_git_read(lock_path, "读取 Git 提交历史", move || {
         git_graph_history_sync(project_path, limit, cursor, file_path)
     })
     .await
@@ -147,7 +148,8 @@ pub async fn git_graph_commit_detail(
     project_path: String,
     oid: String,
 ) -> Result<GitGraphCommitDetail, String> {
-    run_git_blocking("读取 Git 提交详情", move || {
+    let lock_path = project_path.clone();
+    run_git_read(lock_path, "读取 Git 提交详情", move || {
         git_graph_commit_detail_sync(project_path, oid)
     })
     .await
@@ -267,7 +269,8 @@ pub async fn git_graph_file_diff(
     file_path: String,
     old_file_path: Option<String>,
 ) -> Result<GitDiffContentResult, String> {
-    run_git_blocking("Read Git history file diff", move || {
+    let lock_path = project_path.clone();
+    run_git_read(lock_path, "Read Git history file diff", move || {
         git_graph_file_diff_sync(project_path, oid, file_path, old_file_path)
     })
     .await

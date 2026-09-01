@@ -45,8 +45,8 @@ function getGitRefreshController() {
   return (window as unknown as Record<string, unknown>).__gitRefreshController as {
     requestRefresh: () => void;
     refreshNow: () => void;
-    markOperationStart: () => void;
-    markOperationEnd: () => void;
+    markOperationStart: () => string;
+    markOperationEnd: (operationId: string) => void;
   } | undefined;
 }
 
@@ -182,8 +182,6 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
     projectPath: currentProject?.path ?? null,
     stagedFiles,
     unstagedFiles,
-    ahead: branchInfo?.ahead ?? 0,
-    behind: branchInfo?.behind ?? 0,
     refresh: loadGitData,
   });
 
@@ -338,7 +336,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
         return;
       }
       const controller = getGitRefreshController();
-      controller?.markOperationStart();
+      const operationId = controller?.markOperationStart();
       try {
         await gitStageFiles(currentProject!.path, getGitOperationPaths(file));
         message.success(t("sidebar.gitStageSuccess"));
@@ -348,7 +346,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
         // 失败时回滚：重新加载真实数据
         await loadGitData();
       } finally {
-        controller?.markOperationEnd();
+        if (operationId) controller?.markOperationEnd(operationId);
       }
     },
     [currentProject, gitOperationBlockedReason, gitOperationInProgress, loadGitData, t]
@@ -361,7 +359,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
         return;
       }
       const controller = getGitRefreshController();
-      controller?.markOperationStart();
+      const operationId = controller?.markOperationStart();
       try {
         await gitUnstageFiles(currentProject!.path, getGitOperationPaths(file));
         message.success(t("sidebar.gitUnstageSuccess"));
@@ -371,7 +369,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
         // 失败时回滚：重新加载真实数据
         await loadGitData();
       } finally {
-        controller?.markOperationEnd();
+        if (operationId) controller?.markOperationEnd(operationId);
       }
     },
     [currentProject, gitOperationBlockedReason, gitOperationInProgress, loadGitData, t]
@@ -383,7 +381,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
       return;
     }
     const controller = getGitRefreshController();
-    controller?.markOperationStart();
+    const operationId = controller?.markOperationStart();
     try {
       const files = Array.from(new Set(unstagedFiles.flatMap(getGitOperationPaths)));
       await gitStageFiles(currentProject.path, files);
@@ -394,7 +392,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
       // 失败时回滚
       await loadGitData();
     } finally {
-      controller?.markOperationEnd();
+      if (operationId) controller?.markOperationEnd(operationId);
     }
   }, [currentProject, gitOperationBlockedReason, gitOperationInProgress, unstagedFiles, loadGitData, t]);
 
@@ -414,7 +412,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
       return;
     }
     const controller = getGitRefreshController();
-    controller?.markOperationStart();
+    const operationId = controller?.markOperationStart();
     try {
       const files = Array.from(new Set(stagedFiles.flatMap(getGitOperationPaths)));
       await gitUnstageFiles(currentProject.path, files);
@@ -425,7 +423,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
       // 失败时回滚
       await loadGitData();
     } finally {
-      controller?.markOperationEnd();
+      if (operationId) controller?.markOperationEnd(operationId);
     }
   }, [currentProject, gitOperationBlockedReason, gitOperationInProgress, stagedFiles, loadGitData, t]);
 
@@ -602,7 +600,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
   const handleDiscardConfirm = useCallback(async () => {
     if (!currentProject || discardConfirmFiles.length === 0) return;
     const controller = getGitRefreshController();
-    controller?.markOperationStart();
+    const operationId = controller?.markOperationStart();
     setDiscardSubmitting(true);
     try {
       const files = Array.from(new Set(discardConfirmFiles.flatMap(getGitOperationPaths)));
@@ -622,7 +620,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
       await loadGitData();
     } finally {
       setDiscardSubmitting(false);
-      controller?.markOperationEnd();
+      if (operationId) controller?.markOperationEnd(operationId);
     }
   }, [currentProject, discardConfirmFiles, loadGitData, t]);
 
@@ -650,7 +648,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
     }
 
     const controller = getGitRefreshController();
-    controller?.markOperationStart();
+    const operationId = controller?.markOperationStart();
     setRemoteSubmitting(true);
     try {
       const result = await gitAddRemoteAndPush({
@@ -673,7 +671,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
       message.error(`${t("sidebar.gitConnectRemoteFailed")}: ${detail}`);
     } finally {
       setRemoteSubmitting(false);
-      controller?.markOperationEnd();
+      if (operationId) controller?.markOperationEnd(operationId);
     }
   }, [currentProject, loadGitData, remoteBranch, remoteName, remoteSubmitting, remoteUrl, t]);
 

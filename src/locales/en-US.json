@@ -551,6 +551,7 @@
     "gitAmendFailed": "Failed to amend commit",
     "gitPushSuccess": "Pushed successfully",
     "gitPushFailed": "Push failed",
+    "gitFetchFailed": "Failed to fetch remote updates",
     "gitConnectRemote": "Connect Remote",
     "gitConnectRemoteTitle": "Connect Remote Repository",
     "gitConnectRemoteDescription": "Termflow will add the remote, push the current branch for the first time, and set its upstream tracking branch.",

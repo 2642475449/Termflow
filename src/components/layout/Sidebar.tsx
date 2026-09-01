@@ -104,6 +104,7 @@ function Sidebar({ collapsed, section }: SidebarProps) {
         setGitChangeCount(0);
         setGitSyncCounts(0, 0);
         publishGitStatusSnapshot({
+          generation: requestId,
           projectPath,
           isRepo: false,
           statuses: [],
@@ -120,6 +121,7 @@ function Sidebar({ collapsed, section }: SidebarProps) {
       setGitChangeCount(statuses.length);
       setGitSyncCounts(branch?.ahead ?? 0, branch?.behind ?? 0);
       publishGitStatusSnapshot({
+        generation: requestId,
         projectPath,
         isRepo: true,
         statuses,

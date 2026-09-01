@@ -3,6 +3,8 @@ import { message } from "antd";
 import {
   gitCommit,
   gitCommitAmend,
+  gitBranchInfo,
+  gitFetch,
   gitPull,
   gitPullWithStash,
   gitPullRebase,
@@ -37,8 +39,8 @@ function getGitRefreshController() {
   return (window as unknown as Record<string, unknown>).__gitRefreshController as {
     requestRefresh: () => void;
     refreshNow: () => void;
-    markOperationStart: () => void;
-    markOperationEnd: () => void;
+    markOperationStart: () => string;
+    markOperationEnd: (operationId: string) => void;
   } | undefined;
 }
 
@@ -46,8 +48,6 @@ interface UseGitCommitOptions {
   projectPath: string | null;
   stagedFiles: GitFileStatus[];
   unstagedFiles: GitFileStatus[];
-  ahead: number;
-  behind: number;
   refresh: () => Promise<void>;
 }
 
@@ -82,8 +82,6 @@ export function useGitCommit({
   projectPath,
   stagedFiles,
   unstagedFiles,
-  ahead,
-  behind,
   refresh,
 }: UseGitCommitOptions): UseGitCommitReturn {
   const { t } = useTranslation();
@@ -92,17 +90,31 @@ export function useGitCommit({
   const runGitOperation = useCallback(
     async (operation: () => Promise<void>) => {
       const controller = getGitRefreshController();
-      controller?.markOperationStart();
+      const operationId = controller?.markOperationStart();
       setCommitting(true);
       try {
         await operation();
       } finally {
         setCommitting(false);
-        controller?.markOperationEnd();
+        if (operationId) controller?.markOperationEnd(operationId);
       }
     },
     []
   );
+
+  /**
+   * 推送被拒绝后不能继续沿用旧的 ahead/behind。立即 fetch 并刷新图形与状态，
+   * 让下一次同步根据远端最新引用重新决策。
+   */
+  const refreshAfterPushFailure = useCallback(async () => {
+    if (!projectPath) return;
+    try {
+      await gitFetch(projectPath);
+    } catch {
+      // 保留原始推送错误；fetch 失败不应覆盖用户真正需要处理的原因。
+    }
+    await refreshGitStateAndGraph(projectPath, refresh);
+  }, [projectPath, refresh]);
 
   const commit = useCallback(async (commitMessage: string) => {
     if (!projectPath) return;
@@ -148,9 +160,10 @@ export function useGitCommit({
         await refreshGitStateAndGraph(projectPath, refresh);
       } else {
         message.error(`${t("sidebar.gitPushFailed")}: ${formatGitRemoteError(pushResult.message, t)}`);
+        await refreshAfterPushFailure();
       }
     });
-  }, [projectPath, refresh, runGitOperation, t]);
+  }, [projectPath, refresh, refreshAfterPushFailure, runGitOperation, t]);
 
   const pull = useCallback(async () => {
     if (!projectPath) return;
@@ -200,51 +213,76 @@ export function useGitCommit({
     });
   }, [projectPath, refresh, runGitOperation, t]);
 
-  const sync = useCallback(async () => {
-    if (!projectPath) return;
+  /**
+   * 手动同步的唯一入口：先更新远端跟踪引用，再使用刚刚读取的 ahead/behind 计算动作。
+   */
+  const syncWithLatestRemoteState = useCallback(async (showSuccess: boolean): Promise<boolean> => {
+    if (!projectPath) return false;
 
-    const plan = getGitSyncPlan({ ahead, behind });
-    if (plan.action === "none") return;
+    const fetchResult = await gitFetch(projectPath);
+    if (!fetchResult.success) {
+      message.error(`${t("sidebar.gitFetchFailed")}: ${formatGitRemoteError(fetchResult.message, t)}`);
+      await refreshGitStateAndGraph(projectPath, refresh);
+      return false;
+    }
 
-    await runGitOperation(async () => {
-      if (plan.action === "push") {
-        const pushResult = await gitPush(projectPath);
-        if (!pushResult.success) {
-          message.error(`${t("sidebar.gitPushFailed")}: ${formatGitRemoteError(pushResult.message, t)}`);
-          return;
-        }
+    const freshBranch = await gitBranchInfo(projectPath);
+    const plan = getGitSyncPlan({
+      ahead: freshBranch.ahead,
+      behind: freshBranch.behind,
+    });
 
-        message.success(t("sidebar.gitPushSuccess"));
-        await refreshGitStateAndGraph(projectPath, refresh);
-        return;
-      }
+    if (plan.action === "none") {
+      await refreshGitStateAndGraph(projectPath, refresh);
+      return true;
+    }
 
-      const pullResult =
-        plan.action === "pull-rebase-and-push"
-          ? await gitPullRebase(projectPath)
-          : await gitPull(projectPath);
-      if (!pullResult.success) {
-        message.error(`${t("sidebar.gitPullFailed")}: ${formatGitRemoteError(pullResult.message, t)}`);
-        return;
-      }
-
-      if (plan.action === "pull") {
-        message.success(t("sidebar.gitPullSuccess"));
-        await refreshGitStateAndGraph(projectPath, refresh);
-        return;
-      }
-
+    if (plan.action === "push") {
       const pushResult = await gitPush(projectPath);
       if (!pushResult.success) {
         message.error(`${t("sidebar.gitPushFailed")}: ${formatGitRemoteError(pushResult.message, t)}`);
-        await refreshGitStateAndGraph(projectPath, refresh);
-        return;
+        await refreshAfterPushFailure();
+        return false;
       }
-
-      message.success(t("sidebar.gitPushSuccess"));
+      if (showSuccess) message.success(t("sidebar.gitPushSuccess"));
       await refreshGitStateAndGraph(projectPath, refresh);
+      return true;
+    }
+
+    const pullResult = plan.action === "pull-rebase-and-push"
+      ? await gitPullRebase(projectPath)
+      : await gitPull(projectPath);
+    if (!pullResult.success) {
+      message.error(`${t("sidebar.gitPullFailed")}: ${formatGitRemoteError(pullResult.message, t)}`);
+      await refreshGitStateAndGraph(projectPath, refresh);
+      return false;
+    }
+
+    if (plan.action === "pull") {
+      if (showSuccess) message.success(t("sidebar.gitPullSuccess"));
+      await refreshGitStateAndGraph(projectPath, refresh);
+      return true;
+    }
+
+    const pushResult = await gitPush(projectPath);
+    if (!pushResult.success) {
+      message.error(`${t("sidebar.gitPushFailed")}: ${formatGitRemoteError(pushResult.message, t)}`);
+      await refreshAfterPushFailure();
+      return false;
+    }
+
+    if (showSuccess) message.success(t("sidebar.gitPushSuccess"));
+    await refreshGitStateAndGraph(projectPath, refresh);
+    return true;
+  }, [projectPath, refresh, refreshAfterPushFailure, t]);
+
+  const sync = useCallback(async () => {
+    if (!projectPath) return;
+
+    await runGitOperation(async () => {
+      await syncWithLatestRemoteState(true);
     });
-  }, [ahead, behind, projectPath, refresh, runGitOperation, t]);
+  }, [projectPath, runGitOperation, syncWithLatestRemoteState]);
 
   const commitAndPush = useCallback(async (commitMessage: string) => {
     if (!projectPath) return;
@@ -260,6 +298,8 @@ export function useGitCommit({
           message.success(t("sidebar.gitPushSuccess"));
         } else {
           message.error(`${t("sidebar.gitPushFailed")}: ${formatGitRemoteError(pushResult.message, t)}`);
+          await refreshAfterPushFailure();
+          return;
         }
         await refreshGitStateAndGraph(projectPath, refresh);
       } catch (e) {
@@ -268,7 +308,7 @@ export function useGitCommit({
         throw e;
       }
     });
-  }, [projectPath, refresh, runGitOperation, stagedFiles, t, unstagedFiles]);
+  }, [projectPath, refresh, refreshAfterPushFailure, runGitOperation, stagedFiles, t, unstagedFiles]);
 
   const commitAndSync = useCallback(async (commitMessage: string) => {
     if (!projectPath) return;
@@ -277,31 +317,15 @@ export function useGitCommit({
       try {
         const files = await prepareFiles(projectPath, stagedFiles, unstagedFiles);
         await gitCommit(projectPath, commitMessage, files);
-        await refresh();
-
-        const pullResult = await gitPull(projectPath);
-        if (!pullResult.success) {
-          message.error(`${t("sidebar.gitPullFailed")}: ${formatGitRemoteError(pullResult.message, t)}`);
-          await refreshGitStateAndGraph(projectPath, refresh);
-          return;
-        }
-
-        const pushResult = await gitPush(projectPath);
-        if (!pushResult.success) {
-          message.error(`${t("sidebar.gitPushFailed")}: ${formatGitRemoteError(pushResult.message, t)}`);
-          await refreshGitStateAndGraph(projectPath, refresh);
-          return;
-        }
-
-        message.success(t("sidebar.gitCommitAndSync"));
-        await refreshGitStateAndGraph(projectPath, refresh);
+        const synced = await syncWithLatestRemoteState(false);
+        if (synced) message.success(t("sidebar.gitCommitAndSync"));
       } catch (e) {
         const detail = e instanceof Error ? e.message : String(e);
         message.error(`${t("sidebar.gitCommitFailed")}: ${detail}`);
         throw e;
       }
     });
-  }, [projectPath, refresh, runGitOperation, stagedFiles, t, unstagedFiles]);
+  }, [projectPath, runGitOperation, stagedFiles, syncWithLatestRemoteState, t, unstagedFiles]);
 
   return {
     committing,

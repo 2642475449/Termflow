@@ -8,6 +8,11 @@ interface GitFileChangePayload {
   kind: string;
 }
 
+/** 将后端规范化后的 Windows 路径与前端项目路径稳定地比较。 */
+function normalizeProjectPath(projectPath: string): string {
+  return projectPath.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
 /**
  * Git 文件系统监听 Hook。
  *
@@ -41,7 +46,10 @@ export function useGitFileWatcher(
         const unlistenHandler = await listen<GitFileChangePayload>(
           "git:file-change",
           (event) => {
-            if (event.payload.projectPath === projectPath) {
+            if (
+              normalizeProjectPath(event.payload.projectPath) ===
+              normalizeProjectPath(projectPath)
+            ) {
               onFileChangeRef.current();
             }
           }

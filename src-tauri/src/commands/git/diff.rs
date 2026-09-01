@@ -6,7 +6,7 @@ use super::types::{
 };
 use super::utils::{
     decode_text_content, ensure_repository_allows_normal_commit, git_command, open_repo,
-    resolve_worktree_file_path,
+    resolve_worktree_file_path, with_git_repository_access, GitRepositoryAccess,
 };
 
 const BINARY_CONTENT_ERROR: &str = "__TERMFLOW_BINARY_GIT_CONTENT__";
@@ -88,66 +88,68 @@ fn binary_diff_content(file_path: String, staged: bool) -> GitDiffContentResult 
 /// Get diff for a file.
 #[tauri::command]
 pub fn git_diff(project_path: String, file_path: String) -> Result<GitDiffResult, String> {
-    let repo = open_repo(&project_path)?;
-    resolve_worktree_file_path(&repo, &file_path)?;
+    with_git_repository_access(&project_path, GitRepositoryAccess::Read, || {
+        let repo = open_repo(&project_path)?;
+        resolve_worktree_file_path(&repo, &file_path)?;
 
-    let mut opts = DiffOptions::new();
-    opts.pathspec(&file_path);
+        let mut opts = DiffOptions::new();
+        opts.pathspec(&file_path);
 
-    // Try unstaged diff first (workdir vs index)
-    let diff = repo
-        .diff_index_to_workdir(None, Some(&mut opts))
-        .map_err(|e| format!("生成 diff 失败: {}", e))?;
+        // Try unstaged diff first (workdir vs index)
+        let diff = repo
+            .diff_index_to_workdir(None, Some(&mut opts))
+            .map_err(|e| format!("生成 diff 失败: {}", e))?;
 
-    let mut is_binary = false;
-    for delta in diff.deltas() {
-        if delta.flags().contains(DiffFlags::BINARY) {
-            is_binary = true;
-            break;
-        }
-    }
-
-    let mut diff_bytes = Vec::new();
-    diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
-        diff_bytes.extend_from_slice(line.content());
-        true
-    })
-    .map_err(|e| format!("打印 diff 失败: {}", e))?;
-
-    let mut diff_text = String::from_utf8_lossy(&diff_bytes).to_string();
-
-    // If no unstaged diff, try staged diff (index vs HEAD)
-    if diff_text.is_empty() {
-        let mut opts2 = DiffOptions::new();
-        opts2.pathspec(&file_path);
-
-        let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
-
-        let staged_diff = repo
-            .diff_tree_to_index(head_tree.as_ref(), None, Some(&mut opts2))
-            .map_err(|e| format!("生成 staged diff 失败: {}", e))?;
-
-        for delta in staged_diff.deltas() {
+        let mut is_binary = false;
+        for delta in diff.deltas() {
             if delta.flags().contains(DiffFlags::BINARY) {
                 is_binary = true;
+                break;
             }
         }
 
-        let mut staged_bytes = Vec::new();
-        staged_diff
-            .print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
-                staged_bytes.extend_from_slice(line.content());
-                true
-            })
-            .map_err(|e| format!("打印 staged diff 失败: {}", e))?;
+        let mut diff_bytes = Vec::new();
+        diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
+            diff_bytes.extend_from_slice(line.content());
+            true
+        })
+        .map_err(|e| format!("打印 diff 失败: {}", e))?;
 
-        diff_text = String::from_utf8_lossy(&staged_bytes).to_string();
-    }
+        let mut diff_text = String::from_utf8_lossy(&diff_bytes).to_string();
 
-    Ok(GitDiffResult {
-        file_path,
-        diff_text,
-        is_binary,
+        // If no unstaged diff, try staged diff (index vs HEAD)
+        if diff_text.is_empty() {
+            let mut opts2 = DiffOptions::new();
+            opts2.pathspec(&file_path);
+
+            let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
+
+            let staged_diff = repo
+                .diff_tree_to_index(head_tree.as_ref(), None, Some(&mut opts2))
+                .map_err(|e| format!("生成 staged diff 失败: {}", e))?;
+
+            for delta in staged_diff.deltas() {
+                if delta.flags().contains(DiffFlags::BINARY) {
+                    is_binary = true;
+                }
+            }
+
+            let mut staged_bytes = Vec::new();
+            staged_diff
+                .print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
+                    staged_bytes.extend_from_slice(line.content());
+                    true
+                })
+                .map_err(|e| format!("打印 staged diff 失败: {}", e))?;
+
+            diff_text = String::from_utf8_lossy(&staged_bytes).to_string();
+        }
+
+        Ok(GitDiffResult {
+            file_path,
+            diff_text,
+            is_binary,
+        })
     })
 }
 
@@ -159,52 +161,56 @@ pub fn git_diff_content(
     old_file_path: Option<String>,
     staged: bool,
 ) -> Result<GitDiffContentResult, String> {
-    let repo = open_repo(&project_path)?;
-    resolve_worktree_file_path(&repo, &file_path)?;
-    if let Some(old_path) = old_file_path.as_deref() {
-        resolve_worktree_file_path(&repo, old_path)?;
-    }
-    let original_path = old_file_path.as_deref().unwrap_or(&file_path);
-
-    let content_result = (|| {
-        if staged {
-            Ok((
-                read_head_content(&repo, original_path)?.unwrap_or_default(),
-                read_index_content(&repo, &file_path)?.unwrap_or_default(),
-                "HEAD".to_string(),
-                "索引".to_string(),
-            ))
-        } else {
-            let index_content = read_index_content(&repo, original_path)?;
-            let has_index_content = index_content.is_some();
-            let original_content = match index_content {
-                Some(content) => content,
-                None => read_head_content(&repo, original_path)?.unwrap_or_default(),
-            };
-            Ok((
-                original_content,
-                read_worktree_content(&repo, &file_path)?.unwrap_or_default(),
-                if has_index_content { "索引" } else { "HEAD" }.to_string(),
-                "工作树".to_string(),
-            ))
+    with_git_repository_access(&project_path, GitRepositoryAccess::Read, || {
+        let repo = open_repo(&project_path)?;
+        resolve_worktree_file_path(&repo, &file_path)?;
+        if let Some(old_path) = old_file_path.as_deref() {
+            resolve_worktree_file_path(&repo, old_path)?;
         }
-    })();
+        let original_path = old_file_path.as_deref().unwrap_or(&file_path);
 
-    match content_result {
-        Ok((original_content, modified_content, original_label, modified_label)) => {
-            Ok(GitDiffContentResult {
-                file_path,
-                original_content,
-                modified_content,
-                is_binary: false,
-                content_kind: Some("text".to_string()),
-                original_label,
-                modified_label,
-            })
+        let content_result = (|| {
+            if staged {
+                Ok((
+                    read_head_content(&repo, original_path)?.unwrap_or_default(),
+                    read_index_content(&repo, &file_path)?.unwrap_or_default(),
+                    "HEAD".to_string(),
+                    "索引".to_string(),
+                ))
+            } else {
+                let index_content = read_index_content(&repo, original_path)?;
+                let has_index_content = index_content.is_some();
+                let original_content = match index_content {
+                    Some(content) => content,
+                    None => read_head_content(&repo, original_path)?.unwrap_or_default(),
+                };
+                Ok((
+                    original_content,
+                    read_worktree_content(&repo, &file_path)?.unwrap_or_default(),
+                    if has_index_content { "索引" } else { "HEAD" }.to_string(),
+                    "工作树".to_string(),
+                ))
+            }
+        })();
+
+        match content_result {
+            Ok((original_content, modified_content, original_label, modified_label)) => {
+                Ok(GitDiffContentResult {
+                    file_path,
+                    original_content,
+                    modified_content,
+                    is_binary: false,
+                    content_kind: Some("text".to_string()),
+                    original_label,
+                    modified_label,
+                })
+            }
+            Err(error) if error == BINARY_CONTENT_ERROR => {
+                Ok(binary_diff_content(file_path, staged))
+            }
+            Err(error) => Err(error),
         }
-        Err(error) if error == BINARY_CONTENT_ERROR => Ok(binary_diff_content(file_path, staged)),
-        Err(error) => Err(error),
-    }
+    })
 }
 
 /// Get diff hunks for a file.
@@ -214,32 +220,34 @@ pub fn git_diff_hunks(
     file_path: String,
     staged: bool,
 ) -> Result<GitDiffHunkResult, String> {
-    let repo = open_repo(&project_path)?;
-    resolve_worktree_file_path(&repo, &file_path)?;
-    let mut opts = DiffOptions::new();
-    opts.pathspec(&file_path);
+    with_git_repository_access(&project_path, GitRepositoryAccess::Read, || {
+        let repo = open_repo(&project_path)?;
+        resolve_worktree_file_path(&repo, &file_path)?;
+        let mut opts = DiffOptions::new();
+        opts.pathspec(&file_path);
 
-    let diff = if staged {
-        let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
-        repo.diff_tree_to_index(head_tree.as_ref(), None, Some(&mut opts))
-            .map_err(|e| format!("生成 staged diff 失败: {}", e))?
-    } else {
-        repo.diff_index_to_workdir(None, Some(&mut opts))
-            .map_err(|e| format!("生成 diff 失败: {}", e))?
-    };
+        let diff = if staged {
+            let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
+            repo.diff_tree_to_index(head_tree.as_ref(), None, Some(&mut opts))
+                .map_err(|e| format!("生成 staged diff 失败: {}", e))?
+        } else {
+            repo.diff_index_to_workdir(None, Some(&mut opts))
+                .map_err(|e| format!("生成 diff 失败: {}", e))?
+        };
 
-    // Use print() to collect patch data, then parse hunks from it
-    let mut patch_bytes = Vec::new();
-    diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
-        patch_bytes.extend_from_slice(line.content());
-        true
+        // Use print() to collect patch data, then parse hunks from it
+        let mut patch_bytes = Vec::new();
+        diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
+            patch_bytes.extend_from_slice(line.content());
+            true
+        })
+        .map_err(|e| format!("打印 diff 失败: {}", e))?;
+
+        let patch_text = String::from_utf8_lossy(&patch_bytes);
+        let hunks = parse_patch_hunks(&patch_text);
+
+        Ok(GitDiffHunkResult { file_path, hunks })
     })
-    .map_err(|e| format!("打印 diff 失败: {}", e))?;
-
-    let patch_text = String::from_utf8_lossy(&patch_bytes);
-    let hunks = parse_patch_hunks(&patch_text);
-
-    Ok(GitDiffHunkResult { file_path, hunks })
 }
 
 /// Parse patch text into structured hunks.
@@ -450,7 +458,9 @@ pub fn git_stage_hunk(
     file_path: String,
     hunk_header: String,
 ) -> Result<(), String> {
-    return apply_single_hunk(&project_path, &file_path, &hunk_header, false);
+    return with_git_repository_access(&project_path, GitRepositoryAccess::Write, || {
+        apply_single_hunk(&project_path, &file_path, &hunk_header, false)
+    });
 
     let path = crate::path_utils::normalize_input_path(&project_path);
 
@@ -547,7 +557,9 @@ pub fn git_unstage_hunk(
     file_path: String,
     hunk_header: String,
 ) -> Result<(), String> {
-    return apply_single_hunk(&project_path, &file_path, &hunk_header, true);
+    return with_git_repository_access(&project_path, GitRepositoryAccess::Write, || {
+        apply_single_hunk(&project_path, &file_path, &hunk_header, true)
+    });
 
     let path = crate::path_utils::normalize_input_path(&project_path);
 

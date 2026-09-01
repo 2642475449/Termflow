@@ -34,6 +34,7 @@ export function useGitStatus({
   const [branchInfo, setBranchInfo] = useState<GitBranchInfo | null>(null);
   const [fileStatuses, setFileStatuses] = useState<GitFileStatus[]>([]);
   const requestSequenceRef = useRef(0);
+  const lastSnapshotGenerationRef = useRef(0);
   const activeProjectPathRef = useRef(currentProject?.path ?? null);
   const lastFetchRef = useRef<{ projectPath: string; fetchedAt: number } | null>(null);
   activeProjectPathRef.current = currentProject?.path ?? null;
@@ -112,9 +113,15 @@ export function useGitStatus({
   }, [refresh]);
 
   useEffect(() => {
+    lastSnapshotGenerationRef.current = 0;
+  }, [currentProject?.path]);
+
+  useEffect(() => {
     const handleSnapshot = (event: Event) => {
       const snapshot = (event as CustomEvent<GitStatusSnapshot>).detail;
       if (!snapshot || snapshot.projectPath !== activeProjectPathRef.current) return;
+      if (snapshot.generation <= lastSnapshotGenerationRef.current) return;
+      lastSnapshotGenerationRef.current = snapshot.generation;
       requestSequenceRef.current += 1;
       setLoading(false);
       setIsRepo(snapshot.isRepo);

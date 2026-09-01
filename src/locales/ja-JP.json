@@ -551,6 +551,7 @@
     "gitAmendFailed": "コミット修正に失敗しました",
     "gitPushSuccess": "プッシュしました",
     "gitPushFailed": "プッシュに失敗しました",
+    "gitFetchFailed": "リモート更新の取得に失敗しました",
     "gitConnectRemote": "リモートを接続",
     "gitConnectRemoteTitle": "リモートリポジトリを接続",
     "gitConnectRemoteDescription": "リモートを追加し、現在のブランチを初回プッシュして追跡ブランチを設定します。",
