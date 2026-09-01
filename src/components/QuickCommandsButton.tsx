@@ -151,6 +151,7 @@ export function QuickCommandsButton() {
         titleSource: "manual",
         agentId: isAgentPrompt ? selectedAgent!.id : defaultTerminalShell,
         agentExecutablePath: isAgentPrompt ? selectedAgent!.executablePath : null,
+        agentSessionId: isAgentPrompt && selectedAgent!.id === "pi" ? sessionId : null,
         claudeSkipPermissions: selectedAgent?.id === "claude" ? claudeSkipPermissions : null,
         antigravityDangerouslySkipPermissions:
           selectedAgent?.id === "antigravity" ? antigravityOptions?.dangerouslySkipPermissions ?? false : null,
@@ -170,7 +171,7 @@ export function QuickCommandsButton() {
             ? getAgentStartupCommand(
                 selectedAgent!.id,
                 selectedAgent!.executablePath,
-                null,
+                selectedAgent!.id === "pi" ? sessionId : null,
                 commandText,
                 launchOptions,
               )

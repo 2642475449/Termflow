@@ -1269,18 +1269,26 @@
       "targetAgent": "目标智能体",
       "nativeSource": "{{agent}} 原生",
       "availableTo": "可用于",
-      "nameConflict": "同名冲突",
+      "identicalCopy": "同步副本",
+      "identicalCopyDetail": "存在名称和目录内容完全相同的兼容副本，不会造成运行冲突。",
+      "divergedCopy": "副本有差异",
+      "divergedCopyDetail": "同名副本的目录内容不同，但当前没有启用中的智能体会同时读取它们。",
+      "runtimeConflict": "运行时冲突",
+      "runtimeConflictDetail": "不同内容的同名技能会同时被以下智能体读取：{{agents}}",
+      "relatedCopies": "相关副本",
       "selectAgentForDirectory": "选择一个智能体后可打开对应的原生目录",
       "opencodeCompatibilityHint": "OpenCode 也会兼容读取该目录中的技能。",
       "nativeOnlyHint": "将创建到 {{agent}} 的原生技能目录。",
       "sharedAgentsSource": "Agent Skills 标准（.agents）",
-      "sharedAgentsWorkspaceHint": "Codex 与 Antigravity CLI 共用项目 .agents/skills；OpenCode 也会兼容读取。",
+      "sharedAgentsWorkspaceHint": "Codex、Antigravity CLI 与 Pi 共用项目 .agents/skills；OpenCode 也会兼容读取。",
+      "sharedAgentsUserHint": "Codex 与 Pi 共用全局 ~/.agents/skills；OpenCode 也会兼容读取。",
       "agents": {
         "claude": "Claude Code",
         "codex": "Codex",
         "antigravity": "Antigravity CLI",
         "opencode": "OpenCode",
-        "qoder": "Qoder CLI"
+        "qoder": "Qoder CLI",
+        "pi": "Pi"
       }
     },
     "commands": {
@@ -1391,6 +1399,11 @@
       "templatesDesc": "快速插入常见的项目说明结构，再按你的仓库习惯调整。",
       "snippetsTitle": "常用片段",
       "openProjectFirst": "请先打开项目后查看项目级或本地级 CLAUDE.md",
+      "piSummary": "Pi 原生读取标准 AGENTS.md，并与其他兼容智能体共享项目指令。",
+      "piWorkspaceLabel": "项目",
+      "piWorkspaceNote": "Pi 启动时会从当前目录向上发现并加载 AGENTS.md。",
+      "piUserLabel": "全局",
+      "piUserNote": "Pi 的全局 AGENTS.md；Termflow 暂不在此页面修改用户目录。",
       "fileExists": "文件已存在",
       "fileMissing": "文件尚未创建",
       "scope": {

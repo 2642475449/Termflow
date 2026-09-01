@@ -1269,18 +1269,26 @@
       "targetAgent": "Target agent",
       "nativeSource": "{{agent}} native",
       "availableTo": "Available to",
-      "nameConflict": "Name conflict",
+      "identicalCopy": "Synced copy",
+      "identicalCopyDetail": "A compatibility copy has the same name and identical directory content, so it cannot cause a runtime conflict.",
+      "divergedCopy": "Copies differ",
+      "divergedCopyDetail": "Same-name copies have different directory content, but no enabled agent currently reads both.",
+      "runtimeConflict": "Runtime conflict",
+      "runtimeConflictDetail": "Same-name skills with different content are both read by: {{agents}}",
+      "relatedCopies": "Related copies",
       "selectAgentForDirectory": "Select an agent to open its native skill directory",
       "opencodeCompatibilityHint": "OpenCode can also discover skills from this directory.",
       "nativeOnlyHint": "The skill will be created in {{agent}}'s native directory.",
       "sharedAgentsSource": "Agent Skills standard (.agents)",
-      "sharedAgentsWorkspaceHint": "Codex and Antigravity CLI share the workspace .agents/skills directory; OpenCode also reads it compatibly.",
+      "sharedAgentsWorkspaceHint": "Codex, Antigravity CLI, and Pi share the workspace .agents/skills directory; OpenCode also reads it compatibly.",
+      "sharedAgentsUserHint": "Codex and Pi share the global ~/.agents/skills directory; OpenCode also reads it compatibly.",
       "agents": {
         "claude": "Claude Code",
         "codex": "Codex",
         "antigravity": "Antigravity CLI",
         "opencode": "OpenCode",
-        "qoder": "Qoder CLI"
+        "qoder": "Qoder CLI",
+        "pi": "Pi"
       }
     },
     "commands": {
@@ -1391,6 +1399,11 @@
       "templatesDesc": "Insert a common structure first, then tailor it to your repository.",
       "snippetsTitle": "Common Snippets",
       "openProjectFirst": "Open a project first to view workspace or local CLAUDE.md files",
+      "piSummary": "Pi natively reads the standard AGENTS.md and shares workspace instructions with compatible agents.",
+      "piWorkspaceLabel": "Workspace",
+      "piWorkspaceNote": "Pi discovers and loads AGENTS.md files from the current directory up through its parents.",
+      "piUserLabel": "Global",
+      "piUserNote": "Pi's global AGENTS.md; Termflow does not edit the user directory from this page yet.",
       "fileExists": "File Exists",
       "fileMissing": "File Not Created",
       "scope": {

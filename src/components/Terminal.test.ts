@@ -35,7 +35,7 @@ describe("keepRunningCursorHidden", () => {
 });
 
 describe("shouldHideRunningAgentCursor", () => {
-  it.each(["claude", "codex", "antigravity", "opencode", "qoder"])(
+  it.each(["claude", "codex", "antigravity", "opencode", "qoder", "pi"])(
     "hides the cursor while %s is running",
     (agentId) => {
       expect(shouldHideRunningAgentCursor(agentId, true)).toBe(true);

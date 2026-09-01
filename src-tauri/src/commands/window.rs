@@ -202,11 +202,9 @@ pub fn show_or_create_launcher_window(
         return Ok(());
     }
 
-    // Closing the last visible project leaves the hidden voice windows alive, so
-    // opening Termflow again reaches this single-instance callback instead of a
-    // fresh process startup. Restore the last project in that case. When another
-    // project window is still open, keep the launcher behavior so users can open
-    // an additional project.
+    // Closing the last visible project can leave hidden voice windows alive.
+    // Restore the last project when this helper opens another visible window in
+    // that process. When a project window is still open, keep launcher behavior.
     let context = if registry.has_project_windows() {
         registry.set_launcher(LAUNCHER_LABEL)
     } else {
@@ -1023,7 +1021,7 @@ mod tests {
     }
 
     #[test]
-    fn single_instance_activation_restores_the_last_closed_project() {
+    fn launcher_restores_the_last_closed_project() {
         let project = temporary_project("restore-last-project");
         let database = Database::open_in_memory();
         let mut settings = PersistentSettingsRecord::default();
@@ -1092,14 +1090,14 @@ mod tests {
                 .unwrap();
         assert_eq!(relative, absolute);
 
-        // The single-instance plugin includes the executable as args[0], so
-        // callers must pass the remaining positional arguments to the parser.
-        let secondary_instance_args = vec![
+        // Process argument lists include the executable as args[0], so callers
+        // pass only the remaining positional arguments to the parser.
+        let process_args = vec![
             "Termflow.exe".to_string(),
             project.to_string_lossy().into_owned(),
         ];
         assert_eq!(
-            resolve_project_path_from_launch_arguments(&secondary_instance_args[1..], "").unwrap(),
+            resolve_project_path_from_launch_arguments(&process_args[1..], "").unwrap(),
             absolute
         );
 

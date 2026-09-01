@@ -15,6 +15,7 @@ const SUPPORTED_AGENT_IDS = new Set<AgentId>([
   "antigravity",
   "opencode",
   "qoder",
+  "pi",
   "powershell",
   "cmd",
 ]);

@@ -36,6 +36,7 @@ describe("getDefaultAgentLaunchOptions", () => {
       mode: "inherit",
     });
     expect(getDefaultAgentLaunchOptions("opencode", {})).toBeUndefined();
+    expect(getDefaultAgentLaunchOptions("pi", {})).toBeUndefined();
     expect(getDefaultAgentLaunchOptions("qoder", {})).toEqual({
       permissionMode: "inherit",
     });
@@ -92,6 +93,11 @@ describe("agent capability registry", () => {
     expect(supportsAgentCapability("qoder", "skills")).toBe(true);
     expect(supportsAgentCapability("qoder", "mcpManagement")).toBe(true);
     expect(supportsAgentCapability("qoder", "usageTelemetry")).toBe(true);
+    expect(supportsAgentCapability("pi", "interactiveTerminal")).toBe(true);
+    expect(supportsAgentCapability("pi", "resume")).toBe(true);
+    expect(supportsAgentCapability("pi", "skills")).toBe(true);
+    expect(supportsAgentCapability("pi", "statusEvents")).toBe(false);
+    expect(supportsAgentCapability("pi", "mcpManagement")).toBe(false);
     expect(getAgentIdsWithCapability("mcpManagement")).toEqual([
       "claude",
       "codex",
@@ -135,6 +141,7 @@ describe("getAgentStartupCommand", () => {
     expect(getAgentStartupCommand("antigravity")).toBe("agy");
     expect(getAgentStartupCommand("opencode")).toBe("opencode");
     expect(getAgentStartupCommand("qoder")).toBe("qoderclicn");
+    expect(getAgentStartupCommand("pi")).toBe("pi");
   });
 
   it("passes quick-command prompts without reusing the Termflow session id", () => {
@@ -146,6 +153,8 @@ describe("getAgentStartupCommand", () => {
       .toBe("opencode");
     expect(getAgentStartupCommand("qoder", undefined, null, "/release-publish"))
       .toBe("$__termflow_prompt=$env:TERMFLOW_INITIAL_PROMPT; Remove-Item Env:TERMFLOW_INITIAL_PROMPT; qoderclicn --prompt-interactive $__termflow_prompt");
+    expect(getAgentStartupCommand("pi", undefined, null, "/release-publish"))
+      .toBe("$__termflow_prompt=$env:TERMFLOW_INITIAL_PROMPT; Remove-Item Env:TERMFLOW_INITIAL_PROMPT; pi -- $__termflow_prompt");
   });
 
   it("defers an OpenCode side question to the authenticated session API", () => {
@@ -224,6 +233,32 @@ describe("getAgentStartupCommand", () => {
         { permissionMode: "plan" },
       ),
     ).toBe("qoderclicn --permission-mode plan");
+  });
+
+  it("uses Pi's exact session id and continue fallback", () => {
+    expect(
+      getAgentStartupCommand(
+        "pi",
+        "C:\\Users\\tester\\AppData\\Roaming\\npm\\pi.cmd",
+        "019f1e67-8ab6-7b02-b0c2-275ca68979fa",
+        null,
+        undefined,
+        true,
+      ),
+    ).toBe('pi --session-id "019f1e67-8ab6-7b02-b0c2-275ca68979fa"');
+    expect(
+      getAgentStartupCommand("pi", undefined, null, null, undefined, true),
+    ).toBe("pi --continue");
+    expect(
+      getAgentStartupCommand(
+        "pi",
+        undefined,
+        "019f1e67-8ab6-7b02-b0c2-275ca68979fa",
+        "first\nsecond; echo unsafe",
+      ),
+    ).toBe(
+      '$__termflow_prompt=$env:TERMFLOW_INITIAL_PROMPT; Remove-Item Env:TERMFLOW_INITIAL_PROMPT; pi --session-id "019f1e67-8ab6-7b02-b0c2-275ca68979fa" -- $__termflow_prompt',
+    );
   });
 
   it("maps Antigravity-specific permission, sandbox, and execution mode flags", () => {

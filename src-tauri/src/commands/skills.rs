@@ -1,6 +1,7 @@
 use crate::path_utils::{display_path, normalize_input_path};
 use crate::qoder_config::{qoder_user_config_root, qoder_workspace_config_root};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::env;
 use std::fs;
@@ -22,15 +23,17 @@ pub enum SkillAgent {
     Qoder,
     Antigravity,
     Opencode,
+    Pi,
 }
 
 impl SkillAgent {
-    const ALL: [Self; 5] = [
+    const ALL: [Self; 6] = [
         Self::Claude,
         Self::Codex,
         Self::Qoder,
         Self::Antigravity,
         Self::Opencode,
+        Self::Pi,
     ];
 
     fn key(self) -> &'static str {
@@ -40,16 +43,21 @@ impl SkillAgent {
             Self::Qoder => "qoder",
             Self::Antigravity => "antigravity",
             Self::Opencode => "opencode",
+            Self::Pi => "pi",
         }
     }
 
     fn effective_agents(self, scope: SkillScope) -> Vec<Self> {
         match (self, scope) {
             (Self::Claude, _) => vec![Self::Claude, Self::Opencode],
-            (Self::Codex, SkillScope::Workspace) | (Self::Antigravity, SkillScope::Workspace) => {
-                vec![Self::Codex, Self::Antigravity, Self::Opencode]
+            (Self::Codex, SkillScope::Workspace)
+            | (Self::Antigravity, SkillScope::Workspace)
+            | (Self::Pi, SkillScope::Workspace) => {
+                vec![Self::Codex, Self::Antigravity, Self::Opencode, Self::Pi]
             }
-            (Self::Codex, SkillScope::User) => vec![Self::Codex, Self::Opencode],
+            (Self::Codex, SkillScope::User) | (Self::Pi, SkillScope::User) => {
+                vec![Self::Codex, Self::Opencode, Self::Pi]
+            }
             (Self::Qoder, _) => vec![Self::Qoder],
             (Self::Antigravity, SkillScope::User) => vec![Self::Antigravity],
             (Self::Opencode, _) => vec![Self::Opencode],
@@ -67,11 +75,24 @@ pub struct SkillInfo {
     pub scope: SkillScope,
     pub agent: SkillAgent,
     pub effective_agents: Vec<SkillAgent>,
-    pub has_name_conflict: bool,
+    pub conflict_status: SkillConflictStatus,
+    pub conflict_agents: Vec<SkillAgent>,
+    pub conflicting_paths: Vec<String>,
+    pub content_fingerprint: String,
     pub folder_name: String,
     pub file_path: String,
     pub source_dir: String,
     pub updated_at: Option<i64>,
+}
+
+#[derive(Serialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum SkillConflictStatus {
+    #[default]
+    None,
+    IdenticalCopy,
+    DivergedCopy,
+    RuntimeConflict,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -153,11 +174,14 @@ pub fn list_skills(project_path: Option<String>) -> Result<SkillCatalog, String>
     for agent in SkillAgent::ALL {
         for scope in [SkillScope::Workspace, SkillScope::User] {
             let roots = resolve_skill_roots(agent, scope, project_path.as_deref())?;
-            // Codex and Antigravity both natively consume workspace .agents/skills.
-            // Scan that physical root once and expose both consumers through
+            // Codex, Antigravity, and Pi natively consume workspace .agents/skills.
+            // Scan that physical root once and expose every consumer through
             // effective_agents so the same Skill is never shown as a conflict
             // with itself.
-            if !(agent == SkillAgent::Antigravity && scope == SkillScope::Workspace) {
+            let shares_canonical_agents_root = (agent == SkillAgent::Antigravity
+                && scope == SkillScope::Workspace)
+                || agent == SkillAgent::Pi;
+            if !shares_canonical_agents_root {
                 skills.extend(scan_scope_skills(agent, scope, &roots.enabled_dir, true)?);
                 skills.extend(scan_scope_skills(agent, scope, &roots.disabled_dir, false)?);
             }
@@ -170,7 +194,7 @@ pub fn list_skills(project_path: Option<String>) -> Result<SkillCatalog, String>
         }
     }
 
-    mark_name_conflicts(&mut skills);
+    classify_skill_conflicts(&mut skills);
     skills.sort_by(|a, b| {
         a.scope
             .cmp(&b.scope)
@@ -369,7 +393,10 @@ fn build_skill_info(
         scope,
         agent,
         effective_agents: agent.effective_agents(scope),
-        has_name_conflict: false,
+        conflict_status: SkillConflictStatus::None,
+        conflict_agents: Vec::new(),
+        conflicting_paths: Vec::new(),
+        content_fingerprint: fingerprint_skill_directory(skill_dir)?,
         folder_name,
         file_path: display_path(&skill_dir.join("SKILL.md")),
         source_dir,
@@ -377,19 +404,106 @@ fn build_skill_info(
     })
 }
 
-fn mark_name_conflicts(skills: &mut [SkillInfo]) {
-    let mut counts: HashMap<(SkillScope, String), usize> = HashMap::new();
-    for skill in skills.iter() {
-        *counts
-            .entry((skill.scope, skill.name.to_lowercase()))
-            .or_default() += 1;
+fn fingerprint_skill_directory(skill_dir: &Path) -> Result<String, String> {
+    fn collect_files(directory: &Path, files: &mut Vec<PathBuf>) -> Result<(), String> {
+        for entry in fs::read_dir(directory).map_err(|error| error.to_string())? {
+            let path = entry.map_err(|error| error.to_string())?.path();
+            if path.is_dir() {
+                let ignored = path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| {
+                        matches!(name, ".git" | "node_modules" | "target" | "__pycache__")
+                    });
+                if ignored {
+                    continue;
+                }
+                collect_files(&path, files)?;
+            } else if path.is_file() {
+                if path.file_name().and_then(|name| name.to_str()) == Some(".DS_Store") {
+                    continue;
+                }
+                files.push(path);
+            }
+        }
+        Ok(())
     }
-    for skill in skills.iter_mut() {
-        skill.has_name_conflict = counts
-            .get(&(skill.scope, skill.name.to_lowercase()))
-            .copied()
-            .unwrap_or_default()
-            > 1;
+
+    let mut files = Vec::new();
+    collect_files(skill_dir, &mut files)?;
+    files.sort_by(|left, right| {
+        left.strip_prefix(skill_dir)
+            .unwrap_or(left)
+            .cmp(right.strip_prefix(skill_dir).unwrap_or(right))
+    });
+
+    let mut digest = Sha256::new();
+    for path in files {
+        let relative = path
+            .strip_prefix(skill_dir)
+            .map_err(|error| error.to_string())?;
+        digest.update(relative.to_string_lossy().replace('\\', "/").as_bytes());
+        digest.update([0]);
+        digest.update(fs::read(&path).map_err(|error| error.to_string())?);
+        digest.update([0]);
+    }
+    Ok(format!("{:x}", digest.finalize()))
+}
+
+fn classify_skill_conflicts(skills: &mut [SkillInfo]) {
+    let mut groups: HashMap<(SkillScope, String), Vec<usize>> = HashMap::new();
+    for (index, skill) in skills.iter().enumerate() {
+        groups
+            .entry((skill.scope, skill.name.to_lowercase()))
+            .or_default()
+            .push(index);
+    }
+
+    for indexes in groups.into_values().filter(|indexes| indexes.len() > 1) {
+        let paths = indexes
+            .iter()
+            .map(|index| skills[*index].file_path.clone())
+            .collect::<Vec<_>>();
+        let identical = indexes.iter().skip(1).all(|index| {
+            skills[*index].content_fingerprint == skills[indexes[0]].content_fingerprint
+        });
+        let mut affected_agents = Vec::new();
+        if !identical {
+            for (offset, left_index) in indexes.iter().enumerate() {
+                for right_index in indexes.iter().skip(offset + 1) {
+                    let left = &skills[*left_index];
+                    let right = &skills[*right_index];
+                    if !left.enabled
+                        || !right.enabled
+                        || left.content_fingerprint == right.content_fingerprint
+                    {
+                        continue;
+                    }
+                    for agent in left
+                        .effective_agents
+                        .iter()
+                        .filter(|agent| right.effective_agents.contains(agent))
+                    {
+                        if !affected_agents.contains(agent) {
+                            affected_agents.push(*agent);
+                        }
+                    }
+                }
+            }
+            affected_agents.sort();
+        }
+        let status = if identical {
+            SkillConflictStatus::IdenticalCopy
+        } else if affected_agents.is_empty() {
+            SkillConflictStatus::DivergedCopy
+        } else {
+            SkillConflictStatus::RuntimeConflict
+        };
+        for index in indexes {
+            skills[index].conflict_status = status;
+            skills[index].conflict_agents = affected_agents.clone();
+            skills[index].conflicting_paths = paths.clone();
+        }
     }
 }
 
@@ -428,6 +542,7 @@ fn agent_workspace_directory(agent: SkillAgent) -> &'static str {
         SkillAgent::Qoder => ".qoder",
         SkillAgent::Antigravity => ".agents",
         SkillAgent::Opencode => ".opencode",
+        SkillAgent::Pi => ".agents",
     }
 }
 
@@ -438,6 +553,7 @@ fn agent_user_directory(agent: SkillAgent) -> Result<PathBuf, String> {
         SkillAgent::Codex => home.join(".agents"),
         SkillAgent::Qoder => qoder_user_config_root()?,
         SkillAgent::Antigravity => home.join(".gemini").join("config"),
+        SkillAgent::Pi => home.join(".agents"),
         SkillAgent::Opencode => {
             if let Some(path) = env::var_os("OPENCODE_CONFIG_DIR").filter(|value| !value.is_empty())
             {
@@ -532,8 +648,13 @@ mod tests {
             vec![
                 SkillAgent::Codex,
                 SkillAgent::Antigravity,
-                SkillAgent::Opencode
+                SkillAgent::Opencode,
+                SkillAgent::Pi
             ]
+        );
+        assert_eq!(
+            SkillAgent::Pi.effective_agents(SkillScope::User),
+            vec![SkillAgent::Codex, SkillAgent::Opencode, SkillAgent::Pi]
         );
         assert_eq!(
             SkillAgent::Antigravity.effective_agents(SkillScope::User),
@@ -558,6 +679,7 @@ mod tests {
             (SkillAgent::Qoder, ".qoder"),
             (SkillAgent::Antigravity, ".agents"),
             (SkillAgent::Opencode, ".opencode"),
+            (SkillAgent::Pi, ".agents"),
         ] {
             let roots = resolve_skill_roots(agent, SkillScope::Workspace, Some("project")).unwrap();
             assert_eq!(
@@ -584,28 +706,64 @@ mod tests {
             .is_some_and(|path| path.ends_with(Path::new(".qoder-cn").join("skills-disabled"))));
     }
 
-    #[test]
-    fn duplicate_names_in_the_same_scope_are_marked_as_conflicts() {
-        let make_skill = |agent: SkillAgent| SkillInfo {
+    fn make_conflict_test_skill(agent: SkillAgent, fingerprint: &str, enabled: bool) -> SkillInfo {
+        SkillInfo {
             id: agent.key().to_string(),
             name: "Review".to_string(),
             description: String::new(),
-            enabled: true,
+            enabled,
             scope: SkillScope::Workspace,
             agent,
             effective_agents: agent.effective_agents(SkillScope::Workspace),
-            has_name_conflict: false,
+            conflict_status: SkillConflictStatus::None,
+            conflict_agents: Vec::new(),
+            conflicting_paths: Vec::new(),
+            content_fingerprint: fingerprint.to_string(),
             folder_name: "review".to_string(),
-            file_path: String::new(),
+            file_path: format!("{}/SKILL.md", agent.key()),
             source_dir: String::new(),
             updated_at: None,
-        };
+        }
+    }
+
+    #[test]
+    fn identical_skills_are_classified_as_copies() {
         let mut skills = vec![
-            make_skill(SkillAgent::Claude),
-            make_skill(SkillAgent::Codex),
+            make_conflict_test_skill(SkillAgent::Claude, "same", true),
+            make_conflict_test_skill(SkillAgent::Codex, "same", true),
         ];
-        mark_name_conflicts(&mut skills);
-        assert!(skills.iter().all(|skill| skill.has_name_conflict));
+        classify_skill_conflicts(&mut skills);
+        assert!(skills
+            .iter()
+            .all(|skill| skill.conflict_status == SkillConflictStatus::IdenticalCopy));
+        assert!(skills.iter().all(|skill| skill.conflict_agents.is_empty()));
+    }
+
+    #[test]
+    fn diverged_skills_with_shared_consumers_are_runtime_conflicts() {
+        let mut skills = vec![
+            make_conflict_test_skill(SkillAgent::Claude, "left", true),
+            make_conflict_test_skill(SkillAgent::Codex, "right", true),
+        ];
+        classify_skill_conflicts(&mut skills);
+        assert!(skills
+            .iter()
+            .all(|skill| skill.conflict_status == SkillConflictStatus::RuntimeConflict));
+        assert!(skills
+            .iter()
+            .all(|skill| skill.conflict_agents == vec![SkillAgent::Opencode]));
+    }
+
+    #[test]
+    fn disabled_diverged_skills_do_not_create_runtime_conflicts() {
+        let mut skills = vec![
+            make_conflict_test_skill(SkillAgent::Claude, "left", true),
+            make_conflict_test_skill(SkillAgent::Codex, "right", false),
+        ];
+        classify_skill_conflicts(&mut skills);
+        assert!(skills
+            .iter()
+            .all(|skill| skill.conflict_status == SkillConflictStatus::DivergedCopy));
     }
 
     #[test]

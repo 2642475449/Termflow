@@ -162,6 +162,31 @@ export const AGENT_DEFINITIONS: Record<AiAgentId, AgentDefinition> = {
       usageTelemetry: "partial",
     },
   },
+  pi: {
+    id: "pi",
+    displayName: "Pi",
+    command: "pi",
+    iconPath: "/agents/pi.svg",
+    brandColor: "#71717a",
+    installCommands: [
+      {
+        shell: "PowerShell",
+        command: "npm install -g --ignore-scripts @earendil-works/pi-coding-agent@latest",
+      },
+    ],
+    capabilities: {
+      interactiveTerminal: "full",
+      initialPrompt: "full",
+      headlessText: "full",
+      resume: "full",
+      permissionWaiting: "unsupported",
+      statusEvents: "unsupported",
+      skills: "full",
+      instructions: "full",
+      mcpManagement: "unsupported",
+      usageTelemetry: "unsupported",
+    },
+  },
 };
 
 export const AGENT_CAPABILITY_KEYS: AgentCapabilityKey[] = [
@@ -243,6 +268,7 @@ export function getDefaultAgentLaunchOptions(
         mode: permissionDefaults.antigravity?.mode ?? "inherit",
       };
     case "opencode":
+    case "pi":
       return undefined;
     case "qoder":
       return {
@@ -290,6 +316,7 @@ export function getPermissionDefaultsForLaunch(
       return { qoder: { permissionMode: options?.permissionMode ?? "inherit" } };
     }
     case "opencode":
+    case "pi":
       return {};
   }
 }
@@ -424,6 +451,18 @@ export function getAgentStartupCommand(
       const prompt = initialPrompt?.trim();
       return prompt
         ? withPowerShellInitialPrompt(`${parts.join(" ")} --prompt-interactive`)
+        : parts.join(" ");
+    }
+    case "pi": {
+      const parts = [AGENT_DEFINITIONS.pi.command];
+      if (agentSessionId) {
+        parts.push(`--session-id ${quoteShellArg(agentSessionId)}`);
+      } else if (resumeSession) {
+        parts.push("--continue");
+      }
+      const prompt = initialPrompt?.trim();
+      return prompt
+        ? withPowerShellInitialPrompt(`${parts.join(" ")} --`)
         : parts.join(" ");
     }
     case "claude":

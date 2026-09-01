@@ -25,6 +25,13 @@ const QODER_HOOK_EVENTS: [&str; 11] = [
 ];
 static INSTALL_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
+pub(crate) fn supports_agent_status_hook(agent_id: &str) -> bool {
+    matches!(
+        agent_id,
+        "claude" | "codex" | "qoder" | "antigravity" | "opencode"
+    )
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentHookStatus {
@@ -613,10 +620,17 @@ mod tests {
         definition_contains_owned_command, hook_action_contains_owned_command,
         install_antigravity_hook_group, install_json_hooks, managed_hook_script,
         opencode_plugin_source, remove_legacy_codex_trust, remove_owned_json_hooks,
-        resolve_opencode_config_root, ANTIGRAVITY_HOOK_GROUP, QODER_HOOK_EVENTS,
+        resolve_opencode_config_root, supports_agent_status_hook, ANTIGRAVITY_HOOK_GROUP,
+        QODER_HOOK_EVENTS,
     };
     use serde_json::json;
     use std::path::PathBuf;
+
+    #[test]
+    fn pi_does_not_attempt_an_unsupported_status_hook_install() {
+        assert!(!supports_agent_status_hook("pi"));
+        assert!(supports_agent_status_hook("claude"));
+    }
 
     #[test]
     fn recognizes_only_termflow_owned_definitions() {

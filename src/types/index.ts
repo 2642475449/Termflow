@@ -173,6 +173,7 @@ export const AI_AGENT_IDS = [
   "antigravity",
   "opencode",
   "qoder",
+  "pi",
 ] as const;
 
 export type AiAgentId = (typeof AI_AGENT_IDS)[number];
@@ -564,6 +565,7 @@ export interface SavedImagePayload {
 
 export type SkillScope = "workspace" | "user";
 export type SkillAgent = AiAgentId;
+export type SkillConflictStatus = "none" | "identical-copy" | "diverged-copy" | "runtime-conflict";
 
 export interface SkillInfo {
   id: string;
@@ -573,7 +575,10 @@ export interface SkillInfo {
   scope: SkillScope;
   agent: SkillAgent;
   effectiveAgents: SkillAgent[];
-  hasNameConflict: boolean;
+  conflictStatus: SkillConflictStatus;
+  conflictAgents: SkillAgent[];
+  conflictingPaths: string[];
+  contentFingerprint: string;
   folderName: string;
   filePath: string;
   sourceDir: string;

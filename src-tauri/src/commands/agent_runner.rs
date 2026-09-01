@@ -101,6 +101,20 @@ fn build_agent_command<'a>(
             command.arg("run").arg(prompt);
             None
         }
+        "pi" => {
+            command
+                .arg("-p")
+                .arg("--no-tools")
+                .arg("--no-extensions")
+                .arg("--no-skills")
+                .arg("--no-prompt-templates")
+                .arg("--no-context-files")
+                .arg("--no-session")
+                .arg("--no-approve");
+            // Pi merges piped stdin into the print-mode prompt. Keeping the
+            // prompt out of argv avoids shell limits and argument injection.
+            Some(prompt)
+        }
         _ => return Err(format!("不支持的智能体: {agent_id}")),
     };
 
@@ -281,6 +295,7 @@ mod tests {
         assert_eq!(agent_name("qoder"), "Qoder CLI");
         assert_eq!(agent_name("antigravity"), "Antigravity CLI");
         assert_eq!(agent_name("opencode"), "OpenCode");
+        assert_eq!(agent_name("pi"), "Pi");
         assert_eq!(agent_name("unknown"), "AI 智能体");
     }
 
@@ -358,6 +373,32 @@ mod tests {
                 "--tools",
                 "",
                 "--no-session-persistence",
+            ]
+        );
+    }
+
+    #[test]
+    fn pi_text_command_is_non_interactive_ephemeral_and_tool_free() {
+        let (command, stdin_input) = build_agent_command(
+            "pi",
+            "pi",
+            "prompt with spaces",
+            &AgentTextRunOptions::default(),
+        )
+        .expect("Pi command should be supported");
+
+        assert_eq!(stdin_input, Some("prompt with spaces"));
+        assert_eq!(
+            command_args(&command),
+            vec![
+                "-p",
+                "--no-tools",
+                "--no-extensions",
+                "--no-skills",
+                "--no-prompt-templates",
+                "--no-context-files",
+                "--no-session",
+                "--no-approve",
             ]
         );
     }

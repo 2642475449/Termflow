@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircleFilled, CloseCircleFilled, CopyOutlined, DownOutlined, ReloadOutlined } from "@ant-design/icons";
+import { CheckCircleFilled, CheckOutlined, CloseCircleFilled, CopyOutlined, DownOutlined, ReloadOutlined } from "@ant-design/icons";
 import { Button, Drawer, Dropdown, Spin, Tag, message } from "antd";
 import { useTranslation } from "react-i18next";
 import { getClaudeRateLimits, getCodexRateLimits, getQoderUsage, inspectAgentClis } from "@/lib/api";
@@ -210,7 +210,7 @@ function AgentRow({ agent, quota, quotaLoading, isDefault, isLast, onOpen, onSet
             <Button className="w-[150px]" icon={<CopyOutlined />} onClick={() => { const [install] = definition.installCommands; if (install) onCopyInstall(install.command, install.shell); }}>{t("settings.agents.copyInstallCommand")}</Button>
           )
         ) : (
-          <Button className="w-[150px]" type={isDefault ? "primary" : "default"} disabled={isDefault} onClick={onSetDefault}>{t(isDefault ? "settings.agents.defaultActive" : "settings.agents.setDefault")}</Button>
+          <Button className="w-[150px]" type={isDefault ? "primary" : "default"} disabled={isDefault} icon={isDefault ? <CheckOutlined /> : undefined} onClick={onSetDefault}>{t(isDefault ? "settings.agents.defaultActive" : "settings.agents.setDefault")}</Button>
         )}
       </div>
     </div>
@@ -219,6 +219,7 @@ function AgentRow({ agent, quota, quotaLoading, isDefault, isLast, onOpen, onSet
 
 function AgentQuota({ agent, quota, loading }: { agent: AgentCliInfo; quota: ClaudeRateLimits | CodexRateLimits | QoderUsage | null; loading: boolean }) {
   const { t } = useTranslation();
+  if (agent.id === "pi") return null;
   if (!agent.installed) return <Muted>{t("settings.agents.quota.installFirst")}</Muted>;
   if (agent.id === "antigravity" || agent.id === "opencode") return <Muted>{t("settings.agents.quota.unsupported")}</Muted>;
   if (loading && !quota) return <Muted>{t("settings.agents.quota.loading")}</Muted>;

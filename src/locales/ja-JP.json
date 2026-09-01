@@ -1264,18 +1264,26 @@
       "targetAgent": "対象エージェント",
       "nativeSource": "{{agent}} ネイティブ",
       "availableTo": "利用可能",
-      "nameConflict": "名前が競合しています",
+      "identicalCopy": "同期済みコピー",
+      "identicalCopyDetail": "同じ名前でディレクトリ内容も同一の互換コピーです。実行時の競合は発生しません。",
+      "divergedCopy": "コピーに差異あり",
+      "divergedCopyDetail": "同名コピーの内容は異なりますが、現在両方を読み込む有効なエージェントはありません。",
+      "runtimeConflict": "実行時の競合",
+      "runtimeConflictDetail": "内容が異なる同名スキルを次のエージェントが同時に読み込みます：{{agents}}",
+      "relatedCopies": "関連コピー",
       "selectAgentForDirectory": "ネイティブ Skill ディレクトリを開くエージェントを選択してください",
       "opencodeCompatibilityHint": "OpenCode もこのディレクトリから Skills を検出できます。",
       "nativeOnlyHint": "この Skill は {{agent}} のネイティブディレクトリに作成されます。",
       "sharedAgentsSource": "Agent Skills 標準（.agents）",
-      "sharedAgentsWorkspaceHint": "Codex と Antigravity CLI はワークスペースの .agents/skills を共有し、OpenCode も互換読み込みします。",
+      "sharedAgentsWorkspaceHint": "Codex、Antigravity CLI、Pi はワークスペースの .agents/skills を共有し、OpenCode も互換読み込みします。",
+      "sharedAgentsUserHint": "Codex と Pi はグローバルの ~/.agents/skills を共有し、OpenCode も互換読み込みします。",
       "agents": {
         "claude": "Claude Code",
         "codex": "Codex",
         "antigravity": "Antigravity CLI",
         "opencode": "OpenCode",
-        "qoder": "Qoder CLI"
+        "qoder": "Qoder CLI",
+        "pi": "Pi"
       }
     },
     "commands": {
@@ -1386,6 +1394,11 @@
       "templatesDesc": "よく使う構成を挿入してから、リポジトリに合わせて調整します。",
       "snippetsTitle": "よく使うスニペット",
       "openProjectFirst": "ワークスペースまたはローカルの CLAUDE.md を表示するには、先にプロジェクトを開いてください",
+      "piSummary": "Pi は標準の AGENTS.md をネイティブに読み込み、互換エージェントとワークスペース指示を共有します。",
+      "piWorkspaceLabel": "ワークスペース",
+      "piWorkspaceNote": "Pi は起動時に現在のディレクトリから親ディレクトリへ AGENTS.md を検索して読み込みます。",
+      "piUserLabel": "グローバル",
+      "piUserNote": "Pi のグローバル AGENTS.md です。Termflow はまだこのページからユーザーディレクトリを編集しません。",
       "fileExists": "ファイルあり",
       "fileMissing": "未作成",
       "scope": {

@@ -1176,7 +1176,9 @@ function skillAgentLabel(agent: SkillAgent, t: (key: string) => string) {
 }
 
 function skillSourceLabel(skill: SkillInfo, t: (key: string) => string) {
-  return skill.scope === "workspace" && (skill.agent === "codex" || skill.agent === "antigravity")
+  return skill.agent === "codex"
+    || skill.agent === "pi"
+    || (skill.scope === "workspace" && skill.agent === "antigravity")
     ? t("settings.skills.sharedAgentsSource")
     : skillAgentLabel(skill.agent, t);
 }
@@ -1192,6 +1194,26 @@ function formatSkillUpdatedAt(updatedAt?: number) {
 
 function resolveSkillFolderPath(skill: SkillInfo) {
   return skill.filePath.replace(/[\\/]SKILL\.md$/i, "");
+}
+
+function skillConflictTag(skill: SkillInfo, t: (key: string, options?: Record<string, unknown>) => string) {
+  if (skill.conflictStatus === "none") return null;
+  const affectedAgents = skill.conflictAgents.map((agent) => skillAgentLabel(agent, t)).join(", ");
+  const title = skill.conflictStatus === "runtime-conflict"
+    ? t("settings.skills.runtimeConflictDetail", { agents: affectedAgents })
+    : t(`settings.skills.${skill.conflictStatus === "identical-copy" ? "identicalCopyDetail" : "divergedCopyDetail"}`);
+  const labelKey = skill.conflictStatus === "runtime-conflict"
+    ? "runtimeConflict"
+    : skill.conflictStatus === "identical-copy"
+      ? "identicalCopy"
+      : "divergedCopy";
+  return (
+    <Tooltip title={title}>
+      <Tag className="!m-0" color={skill.conflictStatus === "runtime-conflict" ? "error" : skill.conflictStatus === "diverged-copy" ? "warning" : "processing"}>
+        {t(`settings.skills.${labelKey}`)}
+      </Tag>
+    </Tooltip>
+  );
 }
 
 function scopeLabel(scope: ResourceScope, t: (key: string, options?: Record<string, unknown>) => string) {
@@ -1392,7 +1414,7 @@ function SkillRow({
             {skill.name}
           </span>
           <Tag className="!m-0">{t("settings.skills.nativeSource", { agent: skillSourceLabel(skill, t) })}</Tag>
-          {skill.hasNameConflict && <Tag className="!m-0" color="warning">{t("settings.skills.nameConflict")}</Tag>}
+          {skillConflictTag(skill, t)}
         </div>
         <div className="text-[11px] mt-1 line-clamp-2" style={{ color: "var(--cs-text-tertiary)" }}>
           {skill.description || t("settings.shared.noDescription")}
@@ -1518,7 +1540,7 @@ function SkillDetailPanel({
             <Tag color={detail.skill.enabled ? "green" : "default"}>
               {detail.skill.enabled ? t("common.enabled") : t("common.disabled")}
             </Tag>
-            {detail.skill.hasNameConflict && <Tag color="warning">{t("settings.skills.nameConflict")}</Tag>}
+            {skillConflictTag(detail.skill, t)}
           </div>
           <div className="space-y-1">
             <div className="text-xs" style={{ color: "var(--cs-text-tertiary)" }}>{t("settings.skills.availableTo")}</div>
@@ -1536,6 +1558,16 @@ function SkillDetailPanel({
               {resolveSkillFolderPath(detail.skill)}
             </div>
           </div>
+          {detail.skill.conflictStatus !== "none" && (
+            <div className="space-y-1">
+              <div className="text-xs" style={{ color: "var(--cs-text-tertiary)" }}>{t("settings.skills.relatedCopies")}</div>
+              {detail.skill.conflictingPaths.map((path) => (
+                <div key={path} className="text-xs break-all" style={{ color: "var(--cs-text-secondary)" }}>
+                  {path.replace(/[\\/]SKILL\.md$/i, "")}
+                </div>
+              ))}
+            </div>
+          )}
           <div className="space-y-1">
             <div className="text-xs" style={{ color: "var(--cs-text-tertiary)" }}>{t("settings.shared.file")}</div>
             <div className="text-xs break-all" style={{ color: "var(--cs-text-secondary)" }}>
@@ -1601,9 +1633,11 @@ function SkillsPage() {
     try {
       const next = await listSkills(projectPath);
       setCatalog(next);
+      return next;
     } catch (error) {
       console.error("Failed to load skills:", error);
       message.error(t("settings.skills.loadFailed"));
+      return null;
     } finally {
       if (silent) {
         setRefreshing(false);
@@ -1668,7 +1702,7 @@ function SkillsPage() {
     setDetailLoading(true);
     try {
       const next = await getSkillDetail(skill.agent, skill.scope, skill.folderName, skill.enabled, projectPath);
-      setDetail(next);
+      setDetail({ ...next, skill: { ...next.skill, ...skill } });
     } catch (error) {
       console.error("Failed to load skill details:", error);
       message.error(t("settings.skills.loadDetailFailed"));
@@ -1688,7 +1722,12 @@ function SkillsPage() {
         checked,
         projectPath
       );
-      const mergedUpdated = { ...updated, hasNameConflict: skill.hasNameConflict };
+      const mergedUpdated = {
+        ...updated,
+        conflictStatus: skill.conflictStatus,
+        conflictAgents: skill.conflictAgents,
+        conflictingPaths: skill.conflictingPaths,
+      };
       setCatalog((prev) =>
         prev
           ? {
@@ -1700,6 +1739,12 @@ function SkillsPage() {
       if (selectedSkill?.id === skill.id) {
         setSelectedSkill(mergedUpdated);
         setDetail((prev) => (prev ? { ...prev, skill: mergedUpdated } : prev));
+      }
+      const refreshed = await loadCatalog(true);
+      const refreshedSkill = refreshed?.skills.find((item) => item.id === skill.id);
+      if (refreshedSkill && selectedSkill?.id === skill.id) {
+        setSelectedSkill(refreshedSkill);
+        setDetail((prev) => (prev ? { ...prev, skill: refreshedSkill } : prev));
       }
       message.success(
         checked
@@ -1924,9 +1969,11 @@ function SkillsPage() {
               options={SKILL_AGENTS.map((agent) => ({ value: agent, label: skillAgentLabel(agent, t) }))}
             />
             <div className="text-[11px] mt-1" style={{ color: "var(--cs-text-tertiary)" }}>
-              {createScope === "workspace" && (createAgent === "codex" || createAgent === "antigravity")
-                ? t("settings.skills.sharedAgentsWorkspaceHint")
-                : createAgent === "claude" || createAgent === "codex"
+              {createAgent === "codex" || createAgent === "pi" || (createScope === "workspace" && createAgent === "antigravity")
+                ? t(createScope === "workspace"
+                  ? "settings.skills.sharedAgentsWorkspaceHint"
+                  : "settings.skills.sharedAgentsUserHint")
+                : createAgent === "claude"
                   ? t("settings.skills.opencodeCompatibilityHint")
                   : t("settings.skills.nativeOnlyHint", { agent: skillAgentLabel(createAgent, t) })}
             </div>

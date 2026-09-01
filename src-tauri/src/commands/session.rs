@@ -65,7 +65,7 @@ pub async fn spawn_pty(
     // misleading "Hook unavailable" warning to the user.
     if let Some(agent_id) = agent_id
         .as_deref()
-        .filter(|agent_id| *agent_id != "powershell" && *agent_id != "cmd")
+        .filter(|agent_id| super::agent_hooks::supports_agent_status_hook(agent_id))
     {
         let hook_error =
             match super::agent_hooks::ensure_agent_status_hook(agent_id.to_string()) {

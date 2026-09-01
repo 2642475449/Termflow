@@ -35,6 +35,7 @@ Termflow 原生支持以下 CLI 智能体：
   <code><img src="public/agents/antigravity.svg" width="16" alt="" align="absmiddle"> Antigravity CLI</code>
   <code><img src="public/agents/opencode.svg" width="16" alt="" align="absmiddle"> OpenCode</code>
   <code><img src="public/agents/qoder.svg" width="16" alt="" align="absmiddle"> Qoder CLI</code>
+  <code><img src="public/agents/pi.svg" width="16" alt="" align="absmiddle"> Pi</code>
 </p>
 
 ---

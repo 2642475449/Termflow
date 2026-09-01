@@ -29,6 +29,10 @@ export function useResumeSession() {
       if (session.agentId === "codex") {
         agentSessionId ??= await resolveRecentCodexSessionId(session.path, session.createdAt);
         if (!agentSessionId) throw new CodexSessionRestoreError();
+      } else if (session.agentId === "pi") {
+        // Pi can create or resume an exact UUID with --session-id. Reuse the
+        // stable Termflow session ID so restoration never depends on recency.
+        agentSessionId ??= sessionId;
       }
       const launchOptions: SessionLaunchOptions | undefined = session.agentId === "antigravity"
         ? {

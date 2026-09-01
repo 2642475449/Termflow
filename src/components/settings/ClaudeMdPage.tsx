@@ -113,7 +113,10 @@ function fileName(filePath: string) {
   return filePath.split(/[\\/]/).filter(Boolean).pop() ?? filePath;
 }
 
-function buildInstructionAgents(projectPath: string | null): InstructionAgentConfig[] {
+function buildInstructionAgents(
+  projectPath: string | null,
+  t: (key: string) => string,
+): InstructionAgentConfig[] {
   return [
     {
       id: "claude",
@@ -237,6 +240,29 @@ function buildInstructionAgents(projectPath: string | null): InstructionAgentCon
         },
       ],
     },
+    {
+      id: "pi",
+      name: "Pi",
+      accent: "#71717a",
+      summary: t("settings.claudeMd.piSummary"),
+      targets: [
+        {
+          scope: "workspace",
+          label: t("settings.claudeMd.piWorkspaceLabel"),
+          path: projectFile(projectPath, "AGENTS.md"),
+          relativePath: "AGENTS.md",
+          status: "editable",
+          note: t("settings.claudeMd.piWorkspaceNote"),
+        },
+        {
+          scope: "user",
+          label: t("settings.claudeMd.piUserLabel"),
+          path: "~/.pi/agent/AGENTS.md",
+          status: "planned",
+          note: t("settings.claudeMd.piUserNote"),
+        },
+      ],
+    },
   ];
 }
 
@@ -244,7 +270,7 @@ export function ClaudeMdPage() {
   const { t } = useTranslation();
   const currentProject = useAppStore((s) => s.currentProject);
   const projectPath = currentProject?.path ?? null;
-  const instructionAgents = useMemo(() => buildInstructionAgents(projectPath), [projectPath]);
+  const instructionAgents = useMemo(() => buildInstructionAgents(projectPath, t), [projectPath, t]);
   const [activeAgent, setActiveAgent] = useState<InstructionAgentId>("claude");
   const [activeScope, setActiveScope] = useState<ClaudeMdScope>(projectPath ? "workspace" : "user");
   const [documents, setDocuments] = useState<Record<ClaudeMdScope, ScopeState>>({

@@ -29,7 +29,7 @@ pub(crate) struct AgentDefinition {
 
 const DEFAULT_VERSION_ARGS: &[&str] = &["--version"];
 
-pub(crate) const AGENT_DEFINITIONS: [AgentDefinition; 5] = [
+pub(crate) const AGENT_DEFINITIONS: [AgentDefinition; 6] = [
     AgentDefinition {
         id: "claude",
         name: "Claude Code",
@@ -58,6 +58,12 @@ pub(crate) const AGENT_DEFINITIONS: [AgentDefinition; 5] = [
         id: "qoder",
         name: "Qoder CLI",
         command: "qoderclicn",
+        version_args: DEFAULT_VERSION_ARGS,
+    },
+    AgentDefinition {
+        id: "pi",
+        name: "Pi",
+        command: "pi",
         version_args: DEFAULT_VERSION_ARGS,
     },
 ];
@@ -329,6 +335,14 @@ mod tests {
         let definition = agent_definition("qoder").expect("Qoder CLI should be registered");
         assert_eq!(definition.name, "Qoder CLI");
         assert_eq!(definition.command, "qoderclicn");
+        assert_eq!(definition.version_args, ["--version"]);
+    }
+
+    #[test]
+    fn pi_cli_is_registered_with_its_native_command() {
+        let definition = agent_definition("pi").expect("Pi should be registered");
+        assert_eq!(definition.name, "Pi");
+        assert_eq!(definition.command, "pi");
         assert_eq!(definition.version_args, ["--version"]);
     }
 

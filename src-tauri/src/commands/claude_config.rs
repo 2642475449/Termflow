@@ -2279,6 +2279,11 @@ fn extract_qoder_model(model_info: Option<&str>) -> Option<String> {
         .or_else(|| extract_json_string(record.get("modelKey")))
 }
 
+fn qoder_model_label(model_info: Option<&str>) -> String {
+    let model = extract_qoder_model(model_info).unwrap_or_else(|| "agent".to_string());
+    format!("Qoder / {model}")
+}
+
 fn parse_qoder_usage_row(row: QoderUsageRow) -> Option<ParsedAgentUsageEvent> {
     let token_info = serde_json::from_str::<Value>(&row.token_info).ok()?;
     let prompt_tokens = json_u64(token_info.get("prompt_tokens"));
@@ -2311,8 +2316,9 @@ fn parse_qoder_usage_row(row: QoderUsageRow) -> Option<ParsedAgentUsageEvent> {
             row.session_id
         },
         timestamp,
-        model: extract_qoder_model(row.model_info.as_deref())
-            .unwrap_or_else(|| "qoder-agent".to_string()),
+        // Keep the provider in the label so generic names such as `auto` do
+        // not get merged with models from Codex, Claude, or other agents.
+        model: qoder_model_label(row.model_info.as_deref()),
         total_tokens,
         token_breakdown,
     })
@@ -4377,9 +4383,18 @@ mod tests {
                 .daily_model_tokens
                 .values()
                 .next()
-                .and_then(|models| models.get("qoder-max")),
+                .and_then(|models| models.get("Qoder / qoder-max")),
             Some(&1_400)
         );
+    }
+
+    #[test]
+    fn prefixes_qoder_model_labels_to_avoid_cross_provider_merging() {
+        assert_eq!(
+            qoder_model_label(Some(r#"{"model_key":"auto"}"#)),
+            "Qoder / auto"
+        );
+        assert_eq!(qoder_model_label(None), "Qoder / agent");
     }
 
     #[test]
