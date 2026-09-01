@@ -9,9 +9,9 @@ describe("getGitGraphHoverCardLayout", () => {
       620,
     )).toEqual({
       left: 568,
-      top: 268,
+      top: 288,
       width: 760,
-      maxHeight: 876,
+      maxHeight: 600,
     });
   });
 
@@ -24,7 +24,7 @@ describe("getGitGraphHoverCardLayout", () => {
       left: 578,
       top: 114,
       width: 690,
-      maxHeight: 696,
+      maxHeight: 480,
     });
   });
 
@@ -35,9 +35,9 @@ describe("getGitGraphHoverCardLayout", () => {
       680,
     )).toEqual({
       left: 428,
-      top: 28,
+      top: 228,
       width: 460,
-      maxHeight: 696,
+      maxHeight: 480,
     });
   });
 
@@ -48,9 +48,9 @@ describe("getGitGraphHoverCardLayout", () => {
       500,
     )).toEqual({
       left: 12,
-      top: 12,
+      top: 14,
       width: 396,
-      maxHeight: 276,
+      maxHeight: 200,
     });
   });
 });

@@ -29,6 +29,7 @@ import {
   GIT_GRAPH_REFRESH_EVENT,
   shouldReloadGitGraphOnExpand,
 } from "@/lib/gitGraphEvents";
+import { GitGraphCommitMarkdown } from "./GitGraphCommitMarkdown";
 import { GitGraphRenderer } from "./GitGraphRenderer";
 import { getGitGraphHoverCardLayout } from "./gitGraphHoverCard";
 import { splitWorktreeReferences } from "./gitGraphReferences";
@@ -808,15 +809,19 @@ export function GitGraphSection({
 
                 <div
                   key={graphHover.commit.oid}
-                  className="min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap break-words pr-1 app-project-tree-scroll"
+                  className="min-h-0 flex-1 overflow-y-auto break-words pr-1 app-project-tree-scroll"
                 >
-                  <div className="font-medium" style={{ color: "var(--cs-text-primary)" }}>
+                  <div
+                    className="whitespace-pre-wrap font-medium"
+                    style={{ color: "var(--cs-text-primary)" }}
+                  >
                     {graphHover.commit.summary}
                   </div>
                   {!graphHoverLoading && graphHoverDetail?.body?.trim() ? (
-                    <div className="mt-1" style={{ color: "var(--cs-text-secondary)" }}>
-                      {graphHoverDetail.body.trim()}
-                    </div>
+                    <GitGraphCommitMarkdown
+                      className="mt-1 text-[var(--cs-text-secondary)]"
+                      source={graphHoverDetail.body.trim()}
+                    />
                   ) : null}
                 </div>
 

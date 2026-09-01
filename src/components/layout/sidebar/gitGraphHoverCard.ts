@@ -3,6 +3,7 @@ export const GIT_GRAPH_HOVER_CARD_MAX_WIDTH = 760;
 export const GIT_GRAPH_HOVER_CARD_MIN_WIDTH = 460;
 export const GIT_GRAPH_HOVER_CARD_OFFSET = 8;
 export const GIT_GRAPH_HOVER_CARD_ESTIMATED_HEIGHT = 340;
+export const GIT_GRAPH_HOVER_CARD_MAX_HEIGHT_RATIO = 2 / 3;
 
 interface GitGraphHoverCardAnchor {
   top: number;
@@ -44,7 +45,11 @@ export function getGitGraphHoverCardLayout(
     maximumLeft,
   );
 
-  const maxHeight = Math.max(0, viewport.height - padding * 2);
+  const fullHeight = Math.max(0, viewport.height - padding * 2);
+  const maxHeight = Math.max(
+    0,
+    Math.min(fullHeight, Math.round(viewport.height * GIT_GRAPH_HOVER_CARD_MAX_HEIGHT_RATIO)),
+  );
   const visibleHeight = Math.min(Math.max(0, measuredHeight), maxHeight);
   const maximumTop = Math.max(padding, viewport.height - visibleHeight - padding);
   const top = Math.min(Math.max(anchor.top - 6, padding), maximumTop);
