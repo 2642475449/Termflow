@@ -18,6 +18,8 @@ pub struct GitBranchInfo {
     pub ahead: usize,
     pub behind: usize,
     pub is_detached: bool,
+    /// 当前仓库是否处于合并、变基等未完成的 Git 操作中。
+    pub operation_state: String,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq, Eq)]

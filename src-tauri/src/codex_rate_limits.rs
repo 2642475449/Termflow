@@ -714,7 +714,10 @@ mod tests {
         let detail = "x".repeat(MAX_DIAGNOSTIC_MESSAGE_LENGTH + 20);
         let message = diagnostic_message("RPC timeout", &detail);
 
-        assert_eq!(message.chars().count(), "RPC timeout: ".chars().count() + MAX_DIAGNOSTIC_MESSAGE_LENGTH + 1);
+        assert_eq!(
+            message.chars().count(),
+            "RPC timeout: ".chars().count() + MAX_DIAGNOSTIC_MESSAGE_LENGTH + 1
+        );
         assert!(message.ends_with('…'));
     }
 }

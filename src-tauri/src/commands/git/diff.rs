@@ -4,7 +4,10 @@ use std::path::Path;
 use super::types::{
     GitDiffContentResult, GitDiffHunk, GitDiffHunkResult, GitDiffLine, GitDiffResult,
 };
-use super::utils::{decode_text_content, git_command, open_repo};
+use super::utils::{
+    decode_text_content, ensure_repository_allows_normal_commit, git_command, open_repo,
+    resolve_worktree_file_path,
+};
 
 const BINARY_CONTENT_ERROR: &str = "__TERMFLOW_BINARY_GIT_CONTENT__";
 
@@ -50,8 +53,11 @@ fn read_index_content(repo: &git2::Repository, file_path: &str) -> Result<Option
 }
 
 /// Read file content from worktree.
-fn read_worktree_content(project_path: &str, file_path: &str) -> Result<Option<String>, String> {
-    let absolute_path = crate::path_utils::normalize_input_path(project_path).join(file_path);
+fn read_worktree_content(
+    repo: &git2::Repository,
+    file_path: &str,
+) -> Result<Option<String>, String> {
+    let absolute_path = resolve_worktree_file_path(repo, file_path)?;
     if !absolute_path.exists() {
         return Ok(None);
     }
@@ -83,6 +89,7 @@ fn binary_diff_content(file_path: String, staged: bool) -> GitDiffContentResult 
 #[tauri::command]
 pub fn git_diff(project_path: String, file_path: String) -> Result<GitDiffResult, String> {
     let repo = open_repo(&project_path)?;
+    resolve_worktree_file_path(&repo, &file_path)?;
 
     let mut opts = DiffOptions::new();
     opts.pathspec(&file_path);
@@ -153,6 +160,10 @@ pub fn git_diff_content(
     staged: bool,
 ) -> Result<GitDiffContentResult, String> {
     let repo = open_repo(&project_path)?;
+    resolve_worktree_file_path(&repo, &file_path)?;
+    if let Some(old_path) = old_file_path.as_deref() {
+        resolve_worktree_file_path(&repo, old_path)?;
+    }
     let original_path = old_file_path.as_deref().unwrap_or(&file_path);
 
     let content_result = (|| {
@@ -172,7 +183,7 @@ pub fn git_diff_content(
             };
             Ok((
                 original_content,
-                read_worktree_content(&project_path, &file_path)?.unwrap_or_default(),
+                read_worktree_content(&repo, &file_path)?.unwrap_or_default(),
                 if has_index_content { "索引" } else { "HEAD" }.to_string(),
                 "工作树".to_string(),
             ))
@@ -204,6 +215,7 @@ pub fn git_diff_hunks(
     staged: bool,
 ) -> Result<GitDiffHunkResult, String> {
     let repo = open_repo(&project_path)?;
+    resolve_worktree_file_path(&repo, &file_path)?;
     let mut opts = DiffOptions::new();
     opts.pathspec(&file_path);
 
@@ -421,6 +433,10 @@ fn apply_single_hunk(
     hunk_header: &str,
     staged: bool,
 ) -> Result<(), String> {
+    let repo = open_repo(project_path)?;
+    resolve_worktree_file_path(&repo, file_path)?;
+    ensure_repository_allows_normal_commit(&repo)?;
+    drop(repo);
     let patch_text = git_patch_text(project_path, file_path, staged)?;
     let patch = single_hunk_patch(&patch_text, hunk_header)?;
     apply_hunk_patch(project_path, &patch, staged)
@@ -700,5 +716,33 @@ mod tests {
 
         drop(repo);
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn diff_content_rejects_a_path_outside_the_worktree() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let parent = std::env::temp_dir().join(format!(
+            "termflow-git-diff-path-safety-{}-{suffix}",
+            std::process::id()
+        ));
+        let root = parent.join("project");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(parent.join("outside.txt"), "must not be readable").unwrap();
+        let repo = Repository::init(&root).unwrap();
+
+        let error = git_diff_content(
+            root.to_string_lossy().into_owned(),
+            "../outside.txt".to_string(),
+            None,
+            false,
+        )
+        .unwrap_err();
+
+        assert!(error.contains("工作树之外"));
+        drop(repo);
+        fs::remove_dir_all(parent).unwrap();
     }
 }

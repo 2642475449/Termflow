@@ -18,7 +18,10 @@ output/updates/
 output/release-v*/
 
 # Local documentation
-docs/
+# 注意：必须用 docs/* 而不是 docs/，否则 Git 不会遍历 docs 目录，
+# 下面对 architecture/ 的 ! 取反规则将完全不生效。
+docs/*
+!docs/architecture/
 
 # IDE
 .vscode/

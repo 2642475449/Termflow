@@ -319,6 +319,8 @@ pub fn run() {
             commands::git::git_merge_branch,
             commands::git::git_conflict_detail,
             commands::git::git_resolve_conflict,
+            commands::git::git_abort_operation,
+            commands::git::git_continue_operation,
             commands::git::git_abort_merge,
             commands::mcp_servers::list_mcp_servers,
             commands::mcp_servers::add_mcp_server,

@@ -10,15 +10,29 @@ import { useTranslation } from "react-i18next";
 import {
   gitConflictDetail,
   gitResolveConflict,
-  gitAbortMerge,
+  gitAbortOperation,
+  gitContinueOperation,
 } from "@/lib/api";
-import type { GitConflictDetail, GitFileStatus } from "@/types";
+import type {
+  GitConflictDetail,
+  GitFileStatus,
+  GitRepositoryOperationState,
+} from "@/types";
+import {
+  canAbortGitOperation,
+  canContinueGitOperation,
+  getGitConflictResolutionLabelKeys,
+  getGitOperationLabelKey,
+  isGitOperationInProgress,
+} from "@/lib/gitOperationState";
 
 interface GitConflictPanelProps {
   /** 当前项目路径 */
   projectPath: string;
   /** 冲突文件列表 */
   conflictFiles: GitFileStatus[];
+  /** 冲突所属的 Git 操作状态 */
+  operationState: GitRepositoryOperationState;
   /** 操作完成后的回调 */
   onConflictResolved: () => Promise<void>;
 }
@@ -31,6 +45,7 @@ interface GitConflictPanelProps {
 export function GitConflictPanel({
   projectPath,
   conflictFiles,
+  operationState,
   onConflictResolved,
 }: GitConflictPanelProps) {
   const { t } = useTranslation();
@@ -39,6 +54,13 @@ export function GitConflictPanel({
   const [conflictDetail, setConflictDetail] =
     useState<GitConflictDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const operationLabel = t(getGitOperationLabelKey(operationState));
+  const abortLabel = t("sidebar.gitAbortOperation", { operation: operationLabel });
+  const abortSupported = canAbortGitOperation(operationState);
+  const continueLabel = t("sidebar.gitContinueOperation", { operation: operationLabel });
+  const continueSupported = canContinueGitOperation(operationState);
+  const hasConflicts = conflictFiles.length > 0;
+  const conflictResolutionLabels = getGitConflictResolutionLabelKeys(operationState);
 
   // 加载冲突详情
   const loadConflictDetail = useCallback(
@@ -86,24 +108,40 @@ export function GitConflictPanel({
     [projectPath, onConflictResolved, t]
   );
 
-  // 中止合并
-  const handleAbortMerge = useCallback(async () => {
+  // 根据仓库当前状态中止合并、变基、拣选或还原操作。
+  const handleAbortOperation = useCallback(async () => {
     setOperating("abort");
     try {
-      await gitAbortMerge(projectPath);
-      message.success(t("sidebar.gitAbortMergeSuccess"));
+      await gitAbortOperation(projectPath);
+      message.success(t("sidebar.gitAbortOperationSuccess", { operation: operationLabel }));
       setSelectedFile(null);
       await onConflictResolved();
     } catch (e) {
       message.error(
-        `${t("sidebar.gitAbortMergeFailed")}: ${e instanceof Error ? e.message : String(e)}`
+        `${t("sidebar.gitAbortOperationFailed", { operation: operationLabel })}: ${e instanceof Error ? e.message : String(e)}`
       );
     } finally {
       setOperating(null);
     }
-  }, [projectPath, onConflictResolved, t]);
+  }, [operationLabel, projectPath, onConflictResolved, t]);
 
-  if (conflictFiles.length === 0) {
+  const handleContinueOperation = useCallback(async () => {
+    setOperating("continue");
+    try {
+      await gitContinueOperation(projectPath);
+      message.success(t("sidebar.gitContinueOperationSuccess", { operation: operationLabel }));
+      setSelectedFile(null);
+      await onConflictResolved();
+    } catch (e) {
+      message.error(
+        `${t("sidebar.gitContinueOperationFailed", { operation: operationLabel })}: ${e instanceof Error ? e.message : String(e)}`
+      );
+    } finally {
+      setOperating(null);
+    }
+  }, [operationLabel, projectPath, onConflictResolved, t]);
+
+  if (!hasConflicts && !isGitOperationInProgress(operationState)) {
     return null;
   }
 
@@ -129,35 +167,73 @@ export function GitConflictPanel({
             className="text-[12px] font-semibold"
             style={{ color: "var(--cs-error)" }}
           >
-            {t("sidebar.gitConflictDetected")}
+            {hasConflicts
+              ? t("sidebar.gitConflictDetected")
+              : continueSupported
+                ? t("sidebar.gitOperationReadyToContinue", { operation: operationLabel })
+                : t("sidebar.gitOperationRequiresTerminal")}
           </span>
-          <span
-            className="text-[10px] px-1 rounded"
-            style={{ background: "color-mix(in srgb, var(--cs-error) 15%, transparent)", color: "var(--cs-error)" }}
-          >
-            {conflictFiles.length}
-          </span>
+          {hasConflicts && (
+            <span
+              className="text-[10px] px-1 rounded"
+              style={{ background: "color-mix(in srgb, var(--cs-error) 15%, transparent)", color: "var(--cs-error)" }}
+            >
+              {conflictFiles.length}
+            </span>
+          )}
         </div>
-        <Tooltip title={t("sidebar.gitAbortMerge")} mouseEnterDelay={0.4}>
-          <Button
-            type="text"
-            size="small"
-            loading={operating === "abort"}
-            style={{
-              fontSize: 11,
-              color: "var(--cs-error)",
-              height: 22,
-              padding: "0 6px",
-            }}
-            onClick={() => void handleAbortMerge()}
+        <div className="flex items-center gap-1">
+          <Tooltip
+            title={
+              continueSupported && !hasConflicts
+                ? continueLabel
+                : hasConflicts
+                  ? t("sidebar.gitResolveAllConflictsBeforeContinue")
+                  : t("sidebar.gitOperationRequiresTerminal")
+            }
+            mouseEnterDelay={0.4}
           >
-            {t("sidebar.gitAbortMerge")}
-          </Button>
-        </Tooltip>
+            <Button
+              type="text"
+              size="small"
+              loading={operating === "continue"}
+              disabled={!continueSupported || hasConflicts}
+              style={{
+                fontSize: 11,
+                color: "var(--cs-success)",
+                height: 22,
+                padding: "0 6px",
+              }}
+              onClick={() => void handleContinueOperation()}
+            >
+              {continueLabel}
+            </Button>
+          </Tooltip>
+          <Tooltip
+            title={abortSupported ? abortLabel : t("sidebar.gitOperationRequiresTerminal")}
+            mouseEnterDelay={0.4}
+          >
+            <Button
+              type="text"
+              size="small"
+              loading={operating === "abort"}
+              disabled={!abortSupported}
+              style={{
+                fontSize: 11,
+                color: "var(--cs-error)",
+                height: 22,
+                padding: "0 6px",
+              }}
+              onClick={() => void handleAbortOperation()}
+            >
+              {abortLabel}
+            </Button>
+          </Tooltip>
+        </div>
       </div>
 
       {/* 冲突文件列表 */}
-      <div className="px-1 py-1">
+      {hasConflicts && <div className="px-1 py-1">
         {conflictFiles.map((file) => {
           const isSelected = selectedFile === file.path;
           const isOperating = operating === file.path;
@@ -217,7 +293,7 @@ export function GitConflictPanel({
                           onClick={() => void handleResolve(file.path, "ours")}
                         >
                           <CheckOutlined style={{ fontSize: 10 }} />
-                          {t("sidebar.gitResolveOurs")}
+                          {t(conflictResolutionLabels.ours)}
                         </Button>
                         <Button
                           size="small"
@@ -233,7 +309,7 @@ export function GitConflictPanel({
                           }
                         >
                           <SwapOutlined style={{ fontSize: 10 }} />
-                          {t("sidebar.gitResolveTheirs")}
+                          {t(conflictResolutionLabels.theirs)}
                         </Button>
                       </div>
                       <Button
@@ -280,6 +356,7 @@ export function GitConflictPanel({
           );
         })}
       </div>
+      }
     </div>
   );
 }

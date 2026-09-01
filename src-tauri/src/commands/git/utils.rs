@@ -1,6 +1,7 @@
 use crate::path_utils::normalize_input_path;
-use git2::Repository;
+use git2::{Repository, RepositoryState};
 use std::collections::HashMap;
+use std::path::{Component, Path, PathBuf};
 use std::process::Command as StdCommand;
 
 use super::types::GitGraphRef;
@@ -128,6 +129,82 @@ pub fn stage_paths(project_path: &str, files: &[String]) -> Result<(), String> {
     })
 }
 
+/// 将用户传入的 Git 相对路径约束到仓库工作树内。
+///
+/// Git 命令可以自行处理多数非法 pathspec，但涉及直接文件读取时必须在
+/// Rust 侧先完成边界校验，避免 `../`、绝对路径和符号链接逃逸工作树。
+pub fn resolve_worktree_file_path(repo: &Repository, file_path: &str) -> Result<PathBuf, String> {
+    let relative_path = Path::new(file_path);
+    if relative_path.as_os_str().is_empty()
+        || relative_path.components().any(|component| {
+            matches!(
+                component,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
+        })
+    {
+        return Err(format!("拒绝访问工作树之外的路径: {}", file_path));
+    }
+
+    let worktree_root = repo
+        .workdir()
+        .ok_or_else(|| "当前 Git 仓库没有可访问的工作树".to_string())?
+        .canonicalize()
+        .map_err(|error| format!("解析 Git 工作树失败: {}", error))?;
+    let candidate_path = worktree_root.join(relative_path);
+
+    // 只有真实存在的文件才会被随后读取；这里额外解析符号链接，防止链接指向
+    // 工作树外的任意文件。
+    if candidate_path.exists() {
+        let canonical_path = candidate_path
+            .canonicalize()
+            .map_err(|error| format!("解析工作树路径 {} 失败: {}", file_path, error))?;
+        if !canonical_path.starts_with(&worktree_root) {
+            return Err(format!("拒绝访问工作树之外的路径: {}", file_path));
+        }
+    }
+
+    Ok(candidate_path)
+}
+
+/// 将 libgit2 的仓库状态转换成前端稳定使用的字符串值。
+pub fn repository_operation_state(repo: &Repository) -> &'static str {
+    match repo.state() {
+        RepositoryState::Clean => "clean",
+        RepositoryState::Merge => "merge",
+        RepositoryState::Revert => "revert",
+        RepositoryState::RevertSequence => "revert-sequence",
+        RepositoryState::CherryPick => "cherry-pick",
+        RepositoryState::CherryPickSequence => "cherry-pick-sequence",
+        RepositoryState::Bisect => "bisect",
+        RepositoryState::Rebase => "rebase",
+        RepositoryState::RebaseInteractive => "rebase-interactive",
+        RepositoryState::RebaseMerge => "rebase-merge",
+        RepositoryState::ApplyMailbox => "apply-mailbox",
+        RepositoryState::ApplyMailboxOrRebase => "apply-mailbox-or-rebase",
+    }
+}
+
+/// 普通提交只能发生在干净的 Git 操作状态，且索引中没有未合并条目。
+pub fn ensure_repository_allows_normal_commit(repo: &Repository) -> Result<(), String> {
+    let operation_state = repository_operation_state(repo);
+    if operation_state != "clean" {
+        return Err(format!(
+            "当前 Git 操作（{}）尚未完成；请先在冲突面板完成、继续或中止该操作",
+            operation_state
+        ));
+    }
+
+    let index = repo
+        .index()
+        .map_err(|error| format!("读取 Git 索引失败: {}", error))?;
+    if index.has_conflicts() {
+        return Err("索引中仍有未解决冲突；请先解决冲突后再提交".to_string());
+    }
+
+    Ok(())
+}
+
 /// Move an untracked worktree path to the operating system's recycle bin.
 pub fn trash_worktree_path(project_path: &str, file_path: &str) -> Result<(), String> {
     let root_path = normalize_input_path(project_path)
@@ -240,7 +317,11 @@ pub fn decode_text_content(bytes: Vec<u8>) -> Result<String, ()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_symbolic_remote_head, trash_worktree_path};
+    use super::{
+        ensure_repository_allows_normal_commit, is_symbolic_remote_head,
+        repository_operation_state, resolve_worktree_file_path, trash_worktree_path,
+    };
+    use git2::{Repository, RepositoryState};
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -269,5 +350,41 @@ mod tests {
         assert!(outside.exists());
 
         fs::remove_dir_all(parent).unwrap();
+    }
+
+    #[test]
+    fn worktree_path_resolver_rejects_escape_paths() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let root = temp_dir.path().join("project");
+        let outside = temp_dir.path().join("outside.txt");
+        fs::create_dir_all(root.join("nested")).unwrap();
+        fs::write(root.join("nested/inside.txt"), "inside").unwrap();
+        fs::write(&outside, "outside").unwrap();
+        let repo = Repository::init(&root).unwrap();
+
+        assert_eq!(
+            resolve_worktree_file_path(&repo, "nested/inside.txt")
+                .unwrap()
+                .canonicalize()
+                .unwrap(),
+            root.join("nested/inside.txt").canonicalize().unwrap()
+        );
+        assert!(resolve_worktree_file_path(&repo, "../outside.txt").is_err());
+        assert!(resolve_worktree_file_path(&repo, outside.to_string_lossy().as_ref()).is_err());
+    }
+
+    #[test]
+    fn non_clean_repository_state_blocks_normal_commits() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let repo = Repository::init(temp_dir.path()).unwrap();
+        fs::write(
+            repo.path().join("MERGE_HEAD"),
+            "0000000000000000000000000000000000000000\n",
+        )
+        .unwrap();
+
+        assert_eq!(repository_operation_state(&repo), "merge");
+        assert_eq!(repo.state(), RepositoryState::Merge);
+        assert!(ensure_repository_allows_normal_commit(&repo).is_err());
     }
 }

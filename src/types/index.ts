@@ -726,11 +726,26 @@ export interface GitFileStatus {
   deletions?: number | null;
 }
 
+export type GitRepositoryOperationState =
+  | "clean"
+  | "merge"
+  | "revert"
+  | "revert-sequence"
+  | "cherry-pick"
+  | "cherry-pick-sequence"
+  | "bisect"
+  | "rebase"
+  | "rebase-interactive"
+  | "rebase-merge"
+  | "apply-mailbox"
+  | "apply-mailbox-or-rebase";
+
 export interface GitBranchInfo {
   branchName: string;
   ahead: number;
   behind: number;
   isDetached: boolean;
+  operationState: GitRepositoryOperationState;
 }
 
 export interface GitDiffResult {

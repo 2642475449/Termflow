@@ -1,5 +1,7 @@
 use super::types::{GitPullWithStashResult, GitRemoteResult};
-use super::utils::{git_command, open_repo, run_git_blocking};
+use super::utils::{
+    ensure_repository_allows_normal_commit, git_command, open_repo, run_git_blocking,
+};
 use std::io::Read;
 use std::process::{Child, Output, Stdio};
 use std::thread::{self, JoinHandle};
@@ -129,6 +131,9 @@ fn run_remote_command(
     success_message: &str,
     failure_message: &str,
 ) -> Result<GitRemoteResult, String> {
+    let repo = open_repo(project_path)?;
+    ensure_repository_allows_normal_commit(&repo)?;
+    drop(repo);
     let path = crate::path_utils::normalize_input_path(project_path);
 
     let mut command = git_command();

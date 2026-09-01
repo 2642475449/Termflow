@@ -1,5 +1,7 @@
 use super::types::GitCommitResult;
-use super::utils::{git_command, open_repo, run_git_blocking, stage_paths};
+use super::utils::{
+    ensure_repository_allows_normal_commit, git_command, open_repo, run_git_blocking, stage_paths,
+};
 
 /// Create a commit.
 #[tauri::command]
@@ -19,6 +21,9 @@ fn git_commit_sync(
     message: String,
     files: Vec<String>,
 ) -> Result<GitCommitResult, String> {
+    let repo = open_repo(&project_path)?;
+    ensure_repository_allows_normal_commit(&repo)?;
+    drop(repo);
     stage_paths(&project_path, &files)?;
     run_commit_command(&project_path, &message, false)?;
     let oid = read_head_commit_oid(&project_path)?;
@@ -39,7 +44,9 @@ pub async fn git_stage_files(project_path: String, files: Vec<String>) -> Result
 }
 
 fn git_stage_files_sync(project_path: String, files: Vec<String>) -> Result<(), String> {
-    open_repo(&project_path)?;
+    let repo = open_repo(&project_path)?;
+    ensure_repository_allows_normal_commit(&repo)?;
+    drop(repo);
     stage_paths(&project_path, &files)
 }
 
@@ -54,6 +61,7 @@ pub async fn git_unstage_files(project_path: String, files: Vec<String>) -> Resu
 
 fn git_unstage_files_sync(project_path: String, files: Vec<String>) -> Result<(), String> {
     let repo = open_repo(&project_path)?;
+    ensure_repository_allows_normal_commit(&repo)?;
 
     if let Ok(head) = repo.head() {
         let head_commit = head
@@ -92,6 +100,7 @@ pub async fn git_discard_changes(project_path: String, files: Vec<String>) -> Re
 
 fn git_discard_changes_sync(project_path: String, files: Vec<String>) -> Result<(), String> {
     let repo = open_repo(&project_path)?;
+    ensure_repository_allows_normal_commit(&repo)?;
 
     let mut status_opts = git2::StatusOptions::new();
     status_opts
@@ -211,6 +220,9 @@ fn git_commit_amend_sync(
     message: String,
     files: Vec<String>,
 ) -> Result<GitCommitResult, String> {
+    let repo = open_repo(&project_path)?;
+    ensure_repository_allows_normal_commit(&repo)?;
+    drop(repo);
     stage_paths(&project_path, &files)?;
     run_commit_command(&project_path, &message, true)?;
     let oid = read_head_commit_oid(&project_path)?;
@@ -264,7 +276,7 @@ fn read_head_commit_oid(project_path: &str) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::git_discard_changes_sync;
+    use super::{git_commit_sync, git_discard_changes_sync};
     use git2::{Repository, Signature, Status};
     use std::fs;
     use tempfile::TempDir;
@@ -334,6 +346,35 @@ mod tests {
             repo.status_file(std::path::Path::new("tracked.txt"))
                 .unwrap(),
             Status::INDEX_MODIFIED
+        );
+    }
+
+    #[test]
+    fn commit_does_not_stage_files_while_a_merge_is_unfinished() {
+        let (temp_dir, repo) = committed_repo();
+        fs::write(
+            temp_dir.path().join("new-file.txt"),
+            "must remain unstaged\n",
+        )
+        .unwrap();
+        fs::write(
+            repo.path().join("MERGE_HEAD"),
+            "0000000000000000000000000000000000000000\n",
+        )
+        .unwrap();
+
+        let error = git_commit_sync(
+            temp_dir.path().to_string_lossy().into_owned(),
+            "should not commit".to_string(),
+            vec!["new-file.txt".to_string()],
+        )
+        .unwrap_err();
+
+        assert!(error.contains("尚未完成"));
+        assert_eq!(
+            repo.status_file(std::path::Path::new("new-file.txt"))
+                .unwrap(),
+            Status::WT_NEW
         );
     }
 }

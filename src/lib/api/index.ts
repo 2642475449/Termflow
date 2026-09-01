@@ -1505,6 +1505,14 @@ export async function gitAbortMerge(projectPath: string): Promise<void> {
   await invoke("git_abort_merge", { projectPath });
 }
 
+export async function gitAbortOperation(projectPath: string): Promise<void> {
+  await invoke("git_abort_operation", { projectPath });
+}
+
+export async function gitContinueOperation(projectPath: string): Promise<void> {
+  await invoke("git_continue_operation", { projectPath });
+}
+
 // MCP Server API
 
 export async function listMcpServers(

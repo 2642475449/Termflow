@@ -30,6 +30,7 @@ import { useAppStore } from "@/store";
 import { useGitStatus } from "@/hooks/useGitStatus";
 import { useGitCommit } from "@/hooks/useGitCommit";
 import type { GitFileStatus } from "@/types";
+import { getGitOperationLabelKey, isGitOperationInProgress } from "@/lib/gitOperationState";
 import { useTranslation } from "react-i18next";
 import { GitCommitComposer } from "./GitCommitComposer";
 import { GitFileList } from "./GitFileList";
@@ -161,6 +162,11 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
 
   // 处理 detached HEAD 状态
   const branchName = rawBranchName || t("sidebar.gitDetached");
+  const operationState = branchInfo?.operationState ?? "clean";
+  const gitOperationInProgress = isGitOperationInProgress(operationState);
+  const gitOperationBlockedReason = t("sidebar.gitOperationInProgress", {
+    operation: t(getGitOperationLabelKey(operationState)),
+  });
 
   // 使用 useGitCommit hook 管理提交操作
   const {
@@ -286,11 +292,15 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
 
   const handleDiscard = useCallback(
     (file: GitFileStatus) => {
+      if (gitOperationInProgress) {
+        message.warning(gitOperationBlockedReason);
+        return;
+      }
       setDiscardConfirmFiles([file]);
       setDiscardConfirmTitle(t("sidebar.gitDiscardConfirm", { name: file.path }));
       setDiscardConfirmVisible(true);
     },
-    [t]
+    [gitOperationBlockedReason, gitOperationInProgress, t]
   );
 
   const handleOpenFile = useCallback(
@@ -323,6 +333,10 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
 
   const handleStageFile = useCallback(
     async (file: GitFileStatus) => {
+      if (!currentProject || gitOperationInProgress) {
+        if (gitOperationInProgress) message.warning(gitOperationBlockedReason);
+        return;
+      }
       const controller = getGitRefreshController();
       controller?.markOperationStart();
       try {
@@ -337,11 +351,15 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
         controller?.markOperationEnd();
       }
     },
-    [currentProject, loadGitData, t]
+    [currentProject, gitOperationBlockedReason, gitOperationInProgress, loadGitData, t]
   );
 
   const handleUnstageFile = useCallback(
     async (file: GitFileStatus) => {
+      if (!currentProject || gitOperationInProgress) {
+        if (gitOperationInProgress) message.warning(gitOperationBlockedReason);
+        return;
+      }
       const controller = getGitRefreshController();
       controller?.markOperationStart();
       try {
@@ -356,11 +374,14 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
         controller?.markOperationEnd();
       }
     },
-    [currentProject, loadGitData, t]
+    [currentProject, gitOperationBlockedReason, gitOperationInProgress, loadGitData, t]
   );
 
   const handleStageAll = useCallback(async () => {
-    if (!currentProject || unstagedFiles.length === 0) return;
+    if (!currentProject || unstagedFiles.length === 0 || gitOperationInProgress) {
+      if (gitOperationInProgress) message.warning(gitOperationBlockedReason);
+      return;
+    }
     const controller = getGitRefreshController();
     controller?.markOperationStart();
     try {
@@ -375,16 +396,23 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
     } finally {
       controller?.markOperationEnd();
     }
-  }, [currentProject, unstagedFiles, loadGitData, t]);
+  }, [currentProject, gitOperationBlockedReason, gitOperationInProgress, unstagedFiles, loadGitData, t]);
 
   const handleDiscardAll = useCallback(() => {
+    if (gitOperationInProgress) {
+      message.warning(gitOperationBlockedReason);
+      return;
+    }
     setDiscardConfirmFiles(unstagedFiles);
     setDiscardConfirmTitle(t("sidebar.gitDiscardAllConfirm"));
     setDiscardConfirmVisible(true);
-  }, [unstagedFiles, t]);
+  }, [gitOperationBlockedReason, gitOperationInProgress, unstagedFiles, t]);
 
   const handleUnstageAll = useCallback(async () => {
-    if (!currentProject || stagedFiles.length === 0) return;
+    if (!currentProject || stagedFiles.length === 0 || gitOperationInProgress) {
+      if (gitOperationInProgress) message.warning(gitOperationBlockedReason);
+      return;
+    }
     const controller = getGitRefreshController();
     controller?.markOperationStart();
     try {
@@ -399,7 +427,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
     } finally {
       controller?.markOperationEnd();
     }
-  }, [currentProject, stagedFiles, loadGitData, t]);
+  }, [currentProject, gitOperationBlockedReason, gitOperationInProgress, stagedFiles, loadGitData, t]);
 
   const handleChangesMenuClick = useCallback(
     ({ key }: { key: string }) => {
@@ -429,10 +457,12 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
           ? {
               key: "unstage",
               label: t("sidebar.gitUnstage"),
+              disabled: gitOperationInProgress,
             }
           : {
               key: "stage",
               label: t("sidebar.gitStage"),
+              disabled: gitOperationInProgress,
             },
       ];
 
@@ -441,6 +471,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
           key: "discard",
           label: t("sidebar.gitContextDiscardChanges", { defaultValue: "放弃更改" }),
           danger: true,
+          disabled: gitOperationInProgress,
         });
       }
 
@@ -503,6 +534,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
       handleStageFile,
       handleUnstageFile,
       handleViewDiff,
+      gitOperationInProgress,
       t,
     ]
   );
@@ -753,12 +785,13 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
           const conflictFiles = unstagedFiles.filter(
             (f) => f.statusType === "conflicted"
           );
-          if (conflictFiles.length > 0) {
+          if (conflictFiles.length > 0 || (branchInfo?.operationState ?? "clean") !== "clean") {
             return (
               <div className="mb-2">
                 <GitConflictPanel
                   projectPath={currentProject!.path}
                   conflictFiles={conflictFiles}
+                  operationState={operationState}
                   onConflictResolved={loadGitData}
                 />
               </div>
@@ -810,6 +843,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
                   behindCount={branchInfo?.behind ?? 0}
                   hasSyncChanges={hasSyncChanges}
                   syncChangeCount={syncChangeCount}
+                  operationState={operationState}
                   committing={committing}
                   canGenerateCommitMessage={canGenerateCommitMessage}
                   generateCommitMessageHint={
@@ -844,6 +878,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
                   onToggleFile={handleUnstageFile}
                   onToggleAll={handleUnstageAll}
                   buildFileMenu={buildFileMenu}
+                  actionsDisabled={gitOperationInProgress}
                 />
 
                 {/* Unstaged files */}
@@ -860,6 +895,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
                   onToggleFile={handleStageFile}
                   onToggleAll={handleStageAll}
                   buildFileMenu={buildFileMenu}
+                  actionsDisabled={gitOperationInProgress}
                   extraActions={
                     <Dropdown
                       trigger={["click"]}

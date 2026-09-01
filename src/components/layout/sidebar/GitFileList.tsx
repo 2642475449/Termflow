@@ -84,6 +84,8 @@ interface GitFileListProps {
   onDiscard?: (filePath: string) => void;
   /** 构建右键菜单 */
   buildFileMenu: (file: GitFileStatus, staged: boolean) => MenuProps;
+  /** 当前 Git 操作不允许常规暂存/取消暂存 */
+  actionsDisabled?: boolean;
   /** 额外的操作按钮（如 discard all） */
   extraActions?: ReactNode;
 }
@@ -106,6 +108,7 @@ export function GitFileList({
   onToggleFile,
   onToggleAll,
   buildFileMenu,
+  actionsDisabled = false,
   extraActions,
 }: GitFileListProps) {
   const listRef = useRef<HTMLDivElement>(null);
@@ -188,6 +191,7 @@ export function GitFileList({
                 type="text"
                 size="small"
                 icon={staged ? <MinusOutlined /> : <CheckOutlined />}
+                disabled={actionsDisabled}
                 style={{ width: 20, height: 20, padding: 0, color: "var(--cs-text-secondary)" }}
                 onClick={onToggleAll}
               />
@@ -294,10 +298,12 @@ export function GitFileList({
                           type="text"
                           size="small"
                           icon={staged ? <MinusOutlined /> : <CheckOutlined />}
+                          disabled={actionsDisabled}
                           style={{ width: 20, height: 20, padding: 0, color: "var(--cs-text-secondary)" }}
                           className="git-file-action-button"
                           onClick={(e) => {
                             e.stopPropagation();
+                            if (actionsDisabled) return;
                             onToggleFile(file);
                           }}
                         />

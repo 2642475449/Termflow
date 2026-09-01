@@ -1,10 +1,10 @@
-use git2::{Repository, StatusOptions};
+use git2::{ErrorCode, Repository, StatusOptions};
 use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::path::Path;
 
 use super::types::{GitBranchInfo, GitFileStatus, GitRepoInfo};
-use super::utils::{collect_numstat, open_repo, run_git_blocking};
+use super::utils::{collect_numstat, open_repo, repository_operation_state, run_git_blocking};
 
 #[tauri::command]
 pub async fn git_init_repository(project_path: String) -> Result<(), String> {
@@ -161,7 +161,25 @@ fn is_case_insensitive_phantom_deletion(
 
 /// Resolve branch info from repository.
 pub fn resolve_branch_info(repo: &Repository) -> Result<GitBranchInfo, String> {
-    let head = repo.head().map_err(|e| format!("获取 HEAD 失败: {}", e))?;
+    let head = match repo.head() {
+        Ok(head) => head,
+        // 新初始化仓库还没有首个提交。它仍是有效 Git 仓库，不能把它误判为非仓库。
+        Err(error) if error.code() == ErrorCode::UnbornBranch => {
+            let branch_name = repo
+                .find_reference("HEAD")
+                .ok()
+                .and_then(|head| head.shorthand().map(ToOwned::to_owned))
+                .unwrap_or_else(|| "HEAD".to_string());
+            return Ok(GitBranchInfo {
+                branch_name,
+                ahead: 0,
+                behind: 0,
+                is_detached: false,
+                operation_state: repository_operation_state(repo).to_string(),
+            });
+        }
+        Err(error) => return Err(format!("获取 HEAD 失败: {}", error)),
+    };
 
     let is_detached = head.is_branch();
     let branch_name = head.shorthand().unwrap_or("HEAD").to_string();
@@ -191,6 +209,7 @@ pub fn resolve_branch_info(repo: &Repository) -> Result<GitBranchInfo, String> {
         ahead,
         behind,
         is_detached: !is_detached,
+        operation_state: repository_operation_state(repo).to_string(),
     })
 }
 
@@ -319,6 +338,7 @@ mod tests {
     use super::{
         collect_case_insensitive_index_collisions, count_untracked_lines, git_status_sync,
         is_case_insensitive_phantom_deletion, map_index_status, map_worktree_status, rename_paths,
+        resolve_branch_info,
     };
     use git2::{Repository, Signature, StatusOptions};
     use std::collections::HashSet;
@@ -476,6 +496,21 @@ mod tests {
         assert_eq!(untracked.status_type, "untracked");
         assert_eq!(untracked.insertions, Some(3));
         assert_eq!(untracked.deletions, Some(0));
+
+        drop(repo);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn new_repository_has_branch_info_before_the_first_commit() {
+        let (root, repo) = temp_repo();
+
+        let branch_info = resolve_branch_info(&repo).unwrap();
+
+        assert_eq!(branch_info.ahead, 0);
+        assert_eq!(branch_info.behind, 0);
+        assert!(!branch_info.is_detached);
+        assert_eq!(branch_info.operation_state, "clean");
 
         drop(repo);
         fs::remove_dir_all(root).unwrap();

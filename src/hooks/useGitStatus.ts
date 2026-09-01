@@ -65,15 +65,18 @@ export function useGitStatus({
         return;
       }
 
-      const [statuses, branch] = await Promise.all([
-        gitStatus(projectPath),
-        gitBranchInfo(projectPath),
-      ]);
+      // `git_repo_info` 已同时携带分支与仓库操作状态。不要因为独立的 HEAD
+      // 查询暂时失败而把一个有效的（尤其是新初始化）仓库误判成非 Git 仓库。
+      const statuses = await gitStatus(projectPath);
       if (!isCurrentRequest()) return;
 
       setFileStatuses(statuses);
-      setBranchInfo(branch);
-      onStatusChange?.(statuses.length, branch.ahead ?? 0, branch.behind ?? 0);
+      setBranchInfo(info.branchInfo);
+      onStatusChange?.(
+        statuses.length,
+        info.branchInfo?.ahead ?? 0,
+        info.branchInfo?.behind ?? 0,
+      );
 
       // Keep ahead/behind meaningful without blocking the local change list.
       const now = Date.now();

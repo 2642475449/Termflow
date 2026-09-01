@@ -8,7 +8,8 @@ import {
   ReloadOutlined,
 } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
-import type { GitCommitMessageProfile } from "@/types";
+import type { GitCommitMessageProfile, GitRepositoryOperationState } from "@/types";
+import { getGitOperationLabelKey, isGitOperationInProgress } from "@/lib/gitOperationState";
 
 interface GitCommitComposerProps {
   branchName: string;
@@ -19,6 +20,7 @@ interface GitCommitComposerProps {
   behindCount: number;
   hasSyncChanges: boolean;
   syncChangeCount: number;
+  operationState: GitRepositoryOperationState;
   committing: boolean;
   canGenerateCommitMessage: boolean;
   generateCommitMessageHint?: string;
@@ -47,6 +49,7 @@ export function GitCommitComposer({
   unstagedChangeCount,
   hasSyncChanges,
   syncChangeCount,
+  operationState,
   committing,
   canGenerateCommitMessage,
   generateCommitMessageHint,
@@ -74,11 +77,18 @@ export function GitCommitComposer({
   const hasUnstagedChanges = unstagedChangeCount > 0;
   const willStageAllBeforeCommit = !hasStagedChanges && hasUnstagedChanges;
   const hasMixedChanges = hasStagedChanges && hasUnstagedChanges;
-  const canCommit = !committing && hasLocalChanges && trimmedMessage.length > 0;
+  const operationInProgress = isGitOperationInProgress(operationState);
+  const operationLabel = t(getGitOperationLabelKey(operationState));
+  const operationBlockedReason = t("sidebar.gitOperationInProgress", {
+    operation: operationLabel,
+  });
+  const canCommit =
+    !committing && !operationInProgress && hasLocalChanges && trimmedMessage.length > 0;
   const canSync =
-    !committing && hasSyncChanges;
+    !committing && !operationInProgress && hasSyncChanges;
   const showSyncPrimaryAction = !hasLocalChanges && hasSyncChanges;
-  const canOpenCommitMenu = !committing && (hasLocalChanges || hasSyncChanges);
+  const canOpenCommitMenu =
+    !committing && !operationInProgress && (hasLocalChanges || hasSyncChanges);
   const canPrimaryAction = showSyncPrimaryAction ? canSync : canCommit;
 
   const syncActionText =
@@ -89,7 +99,9 @@ export function GitCommitComposer({
     ? t("sidebar.gitStageAllAndCommit", { defaultValue: "暂存并提交" })
     : t("sidebar.gitCommit");
 
-  const commitDisabledReason = committing
+  const commitDisabledReason = operationInProgress
+    ? operationBlockedReason
+    : committing
     ? "Git 操作进行中，请稍候"
     : !hasLocalChanges
       ? t("sidebar.gitNoChanges")
@@ -97,13 +109,17 @@ export function GitCommitComposer({
         ? t("sidebar.gitCommitEmptyMessage")
         : null;
 
-  const syncDisabledReason = committing
+  const syncDisabledReason = operationInProgress
+    ? operationBlockedReason
+    : committing
     ? "Git 操作进行中，请稍候"
     : !hasSyncChanges
       ? "当前没有可同步的远程变更"
       : null;
 
-  const commitMenuDisabledReason = committing
+  const commitMenuDisabledReason = operationInProgress
+    ? operationBlockedReason
+    : committing
     ? "Git 操作进行中，请稍候"
     : !hasLocalChanges && !hasSyncChanges
       ? "当前没有可用的提交或同步操作"
@@ -150,6 +166,10 @@ export function GitCommitComposer({
         message.warning(t("sidebar.gitCommitEmptyMessage"));
         return;
       }
+      if (operationInProgress) {
+        message.warning(operationBlockedReason);
+        return;
+      }
       if (!hasLocalChanges) {
         message.warning(t("sidebar.gitNoChanges"));
         return;
@@ -165,7 +185,15 @@ export function GitCommitComposer({
 
       await executeCommitAction(action, trimmedMessage);
     },
-    [executeCommitAction, hasLocalChanges, t, trimmedMessage, willStageAllBeforeCommit]
+    [
+      executeCommitAction,
+      hasLocalChanges,
+      operationBlockedReason,
+      operationInProgress,
+      t,
+      trimmedMessage,
+      willStageAllBeforeCommit,
+    ]
   );
 
   const handleConfirmStageAllCommit = useCallback(() => {
@@ -197,6 +225,10 @@ export function GitCommitComposer({
   );
 
   const requestPull = useCallback(() => {
+    if (operationInProgress) {
+      message.warning(operationBlockedReason);
+      return;
+    }
     setCommitMenuOpen(false);
     if (!hasLocalChanges) {
       void onPull();
@@ -205,12 +237,16 @@ export function GitCommitComposer({
 
     // Give the Dropdown one render boundary to close before opening the Modal.
     window.setTimeout(() => setPullConfirmOpen(true), 0);
-  }, [hasLocalChanges, onPull]);
+  }, [hasLocalChanges, onPull, operationBlockedReason, operationInProgress]);
 
   const handleConfirmPullWithStash = useCallback(async () => {
+    if (operationInProgress) {
+      message.warning(operationBlockedReason);
+      return;
+    }
     await onPullWithStash();
     setPullConfirmOpen(false);
-  }, [onPullWithStash]);
+  }, [onPullWithStash, operationBlockedReason, operationInProgress]);
 
   const commitMenuItems: MenuProps["items"] = [
     {
@@ -237,7 +273,8 @@ export function GitCommitComposer({
     {
       key: "pull",
       label: t("sidebar.gitPull"),
-      disabled: committing,
+      disabled: committing || operationInProgress,
+      title: operationInProgress ? operationBlockedReason : undefined,
     },
     {
       key: "sync-changes",

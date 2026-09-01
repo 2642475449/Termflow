@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use super::types::GitConflictDetail;
-use super::utils::{git_command, open_repo};
+use super::utils::{git_command, open_repo, resolve_worktree_file_path};
 
 /// Get conflict details for a file.
 #[tauri::command]
@@ -45,7 +45,7 @@ pub fn git_conflict_detail(
     }
 
     // Read merged content from worktree (contains conflict markers)
-    let worktree_path = crate::path_utils::normalize_input_path(&project_path).join(&file_path);
+    let worktree_path = resolve_worktree_file_path(&repo, &file_path)?;
     let merged_content = if worktree_path.exists() {
         std::fs::read_to_string(&worktree_path).ok()
     } else {
@@ -104,6 +104,9 @@ pub fn git_resolve_conflict(
     file_path: String,
     resolution: String,
 ) -> Result<(), String> {
+    let repo = open_repo(&project_path)?;
+    resolve_worktree_file_path(&repo, &file_path)?;
+    drop(repo);
     let path = crate::path_utils::normalize_input_path(&project_path);
 
     match resolution.as_str() {
@@ -198,16 +201,61 @@ pub fn git_resolve_conflict(
     Ok(())
 }
 
-/// Abort a merge.
-#[tauri::command]
-pub fn git_abort_merge(project_path: String) -> Result<(), String> {
+fn abort_args_for_state(state: git2::RepositoryState) -> Result<[&'static str; 2], String> {
+    match state {
+        git2::RepositoryState::Merge => Ok(["merge", "--abort"]),
+        git2::RepositoryState::Rebase
+        | git2::RepositoryState::RebaseInteractive
+        | git2::RepositoryState::RebaseMerge => Ok(["rebase", "--abort"]),
+        git2::RepositoryState::CherryPick | git2::RepositoryState::CherryPickSequence => {
+            Ok(["cherry-pick", "--abort"])
+        }
+        git2::RepositoryState::Revert | git2::RepositoryState::RevertSequence => {
+            Ok(["revert", "--abort"])
+        }
+        git2::RepositoryState::Clean => Err("当前没有可中止的 Git 操作".to_string()),
+        git2::RepositoryState::Bisect => {
+            Err("当前处于 bisect 状态，请使用 git bisect reset 结束操作".to_string())
+        }
+        git2::RepositoryState::ApplyMailbox | git2::RepositoryState::ApplyMailboxOrRebase => {
+            Err("当前处于邮件补丁应用状态，请在终端完成或中止该操作".to_string())
+        }
+    }
+}
+
+fn continue_args_for_state(state: git2::RepositoryState) -> Result<[&'static str; 2], String> {
+    match state {
+        // `git merge --continue` delegates to `git commit` and can require an
+        // editor. The existing MERGE_MSG is exactly what `--no-edit` commits,
+        // so this is the non-interactive equivalent for the desktop UI.
+        git2::RepositoryState::Merge => Ok(["commit", "--no-edit"]),
+        git2::RepositoryState::Rebase
+        | git2::RepositoryState::RebaseInteractive
+        | git2::RepositoryState::RebaseMerge => Ok(["rebase", "--continue"]),
+        git2::RepositoryState::CherryPick | git2::RepositoryState::CherryPickSequence => {
+            Ok(["cherry-pick", "--continue"])
+        }
+        git2::RepositoryState::Revert | git2::RepositoryState::RevertSequence => {
+            Ok(["revert", "--continue"])
+        }
+        git2::RepositoryState::Clean => Err("当前没有可继续的 Git 操作".to_string()),
+        git2::RepositoryState::Bisect => {
+            Err("当前处于 bisect 状态，请使用 git bisect reset 结束操作".to_string())
+        }
+        git2::RepositoryState::ApplyMailbox | git2::RepositoryState::ApplyMailboxOrRebase => {
+            Err("当前处于邮件补丁应用状态，请在终端完成或中止该操作".to_string())
+        }
+    }
+}
+
+fn run_abort_command(project_path: &str, args: [&str; 2]) -> Result<(), String> {
     let path = crate::path_utils::normalize_input_path(&project_path);
 
     let output = git_command()
-        .args(["merge", "--abort"])
+        .args(args)
         .current_dir(&path)
         .output()
-        .map_err(|e| format!("执行 git merge --abort 失败: {}", e))?;
+        .map_err(|e| format!("执行 git {} --abort 失败: {}", args[0], e))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -217,9 +265,117 @@ pub fn git_abort_merge(project_path: String) -> Result<(), String> {
         } else if !stdout.is_empty() {
             stdout
         } else {
-            "中止合并失败".to_string()
+            format!("中止 {} 操作失败", args[0])
         });
     }
 
     Ok(())
+}
+
+fn run_continue_command(project_path: &str, args: [&str; 2]) -> Result<(), String> {
+    let path = crate::path_utils::normalize_input_path(project_path);
+    let output = git_command()
+        .args(args)
+        .current_dir(&path)
+        .output()
+        .map_err(|error| format!("执行 git {} {} 失败: {}", args[0], args[1], error))?;
+
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    Err(if !stderr.is_empty() {
+        stderr
+    } else if !stdout.is_empty() {
+        stdout
+    } else {
+        format!("继续 {} 操作失败", args[0])
+    })
+}
+
+/// Continue a merge, rebase, cherry-pick or revert after all conflicts are resolved.
+#[tauri::command]
+pub fn git_continue_operation(project_path: String) -> Result<(), String> {
+    let repo = open_repo(&project_path)?;
+    let index = repo
+        .index()
+        .map_err(|error| format!("读取 Git 索引失败: {}", error))?;
+    if index.has_conflicts() {
+        return Err("仍有未解决冲突，请先逐个解决并暂存冲突文件".to_string());
+    }
+    let args = continue_args_for_state(repo.state())?;
+    drop(index);
+    drop(repo);
+    run_continue_command(&project_path, args)
+}
+
+/// Abort the unfinished operation currently reported by the repository.
+#[tauri::command]
+pub fn git_abort_operation(project_path: String) -> Result<(), String> {
+    let repo = open_repo(&project_path)?;
+    let args = abort_args_for_state(repo.state())?;
+    drop(repo);
+    run_abort_command(&project_path, args)
+}
+
+/// Abort a merge.
+///
+/// Kept for compatibility with older front ends. New callers must use
+/// `git_abort_operation`, which selects the correct command for rebase,
+/// cherry-pick and revert as well.
+#[tauri::command]
+pub fn git_abort_merge(project_path: String) -> Result<(), String> {
+    let repo = open_repo(&project_path)?;
+    if repo.state() != git2::RepositoryState::Merge {
+        return Err("当前并非合并状态；请使用通用 Git 操作中止功能".to_string());
+    }
+    drop(repo);
+    run_abort_command(&project_path, ["merge", "--abort"])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{abort_args_for_state, continue_args_for_state};
+
+    #[test]
+    fn selects_the_matching_abort_command_for_each_supported_operation() {
+        assert_eq!(
+            abort_args_for_state(git2::RepositoryState::Merge).unwrap(),
+            ["merge", "--abort"]
+        );
+        assert_eq!(
+            abort_args_for_state(git2::RepositoryState::RebaseMerge).unwrap(),
+            ["rebase", "--abort"]
+        );
+        assert_eq!(
+            abort_args_for_state(git2::RepositoryState::CherryPick).unwrap(),
+            ["cherry-pick", "--abort"]
+        );
+        assert_eq!(
+            abort_args_for_state(git2::RepositoryState::Revert).unwrap(),
+            ["revert", "--abort"]
+        );
+    }
+
+    #[test]
+    fn selects_the_matching_continue_command_for_each_supported_operation() {
+        assert_eq!(
+            continue_args_for_state(git2::RepositoryState::Merge).unwrap(),
+            ["commit", "--no-edit"]
+        );
+        assert_eq!(
+            continue_args_for_state(git2::RepositoryState::RebaseInteractive).unwrap(),
+            ["rebase", "--continue"]
+        );
+        assert_eq!(
+            continue_args_for_state(git2::RepositoryState::CherryPickSequence).unwrap(),
+            ["cherry-pick", "--continue"]
+        );
+        assert_eq!(
+            continue_args_for_state(git2::RepositoryState::RevertSequence).unwrap(),
+            ["revert", "--continue"]
+        );
+    }
 }
