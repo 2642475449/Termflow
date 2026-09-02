@@ -197,7 +197,7 @@ jobs:
           ssh @sshOptions $destination "mv ${stagingDirectory}/server-latest.json ${stagingDirectory}/latest.json && sudo /usr/local/sbin/deploy-termflow-update"
 
   align-updater-public-key:
-    if: "${{ github.ref == 'refs/heads/main' && github.event.head_commit.message == 'fix(updater): align public key with signer' }}"
+    if: "${{ github.ref == 'refs/heads/main' && github.event.head_commit.message == 'fix(updater): support encoded signing key' }}"
     runs-on: windows-latest
 
     steps:
@@ -208,14 +208,28 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
-          $secretText = $env:TAURI_SIGNING_PRIVATE_KEY.Trim()
-          $secretPayload = ($secretText -split "`r?`n" | Where-Object { $_ -match '^[A-Za-z0-9+/]+={0,2}$' } | Select-Object -First 1)
+          function Get-Base64Payload([string]$value) {
+            $lines = $value.Trim() -split "`r?`n" | Where-Object {
+              $_ -notmatch '^untrusted comment:' -and $_ -match '^[A-Za-z0-9+/]+={0,2}$'
+            }
+            return ($lines -join '')
+          }
+
+          $secretPayload = Get-Base64Payload $env:TAURI_SIGNING_PRIVATE_KEY
           if ([string]::IsNullOrWhiteSpace($secretPayload)) {
             throw "The signing key is not a supported minisign secret key."
           }
           $secretBytes = [Convert]::FromBase64String($secretPayload)
+          $decodedText = [Text.Encoding]::UTF8.GetString($secretBytes)
+          if ($decodedText.StartsWith("untrusted comment:")) {
+            $nestedPayload = Get-Base64Payload $decodedText
+            if ([string]::IsNullOrWhiteSpace($nestedPayload)) {
+              throw "The encoded signing key does not contain a minisign payload."
+            }
+            $secretBytes = [Convert]::FromBase64String($nestedPayload)
+          }
           if ($secretBytes.Length -ne 158 -or [Text.Encoding]::ASCII.GetString($secretBytes[0..1]) -ne "Ed") {
-            throw "The signing key is not an unencrypted minisign Ed25519 key."
+            throw "The signing key is not an unencrypted minisign Ed25519 key (length: $($secretBytes.Length))."
           }
           $publicBytes = [byte[]]::new(42)
           [Array]::Copy($secretBytes, 0, $publicBytes, 0, 2)
