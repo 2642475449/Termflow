@@ -52,7 +52,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXkKUldSSnNNWjJ4Myt1WE9HRHFBc2huSUdibDQ5K3hEc2ZXRSs5TUlpcy9BTGpIOUdaaE92bEs5ZUEK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhBRDVFMzZGMTE1RDJBQzAKUldUQUtsMFJiK1BWaXV0QUh3MGhmeC9TVG1RRVFNUHd5b0YxaXN3OGFoUS9GWFlIWWR3NnNXNFMK",
       "endpoints": [
         "https://github.com/2642475449/Termflow/releases/latest/download/latest.json"
       ],
