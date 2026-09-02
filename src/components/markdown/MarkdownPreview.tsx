@@ -535,8 +535,14 @@ function transformRawHtml(html: string, filePath?: string, projectPath?: string)
     const srcMatch = attrs.match(/src\s*=\s*(['"])([^'"]*)\1/i);
     const src = srcMatch ? srcMatch[2] : "";
     const isBadge = isBadgeImage(src);
-    const badgeClass = isBadge ? "app-html-badge-image" : "";
-    return `<img ${cleanedAttrs} class="${badgeClass}" />`;
+    const isInlineAligned = /\salign\s*=\s*(['"])(?:abs)?middle\1/i.test(` ${attrs}`);
+    const imageClasses = [
+      isBadge ? "app-html-badge-image" : "",
+      isInlineAligned ? "app-html-inline-image" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    return `<img ${cleanedAttrs} class="${imageClasses}" />`;
   });
 
   // 处理 src/href 属性
@@ -551,15 +557,7 @@ function transformRawHtml(html: string, filePath?: string, projectPath?: string)
   return result;
 }
 
-function RawHtmlBlock({
-  html,
-  filePath,
-  projectPath,
-}: {
-  html: string;
-  filePath?: string;
-  projectPath?: string;
-}) {
+function useRenderedRawHtml(html: string, filePath?: string, projectPath?: string) {
   const sanitizedHtml = useMemo(() => sanitizeRawHtml(html), [html]);
   const transformedHtml = useMemo(
     () => transformRawHtml(sanitizedHtml, filePath, projectPath),
@@ -606,7 +604,34 @@ function RawHtmlBlock({
     };
   }, [filePath, projectPath, sanitizedHtml, transformedHtml]);
 
+  return renderedHtml;
+}
+
+function RawHtmlBlock({
+  html,
+  filePath,
+  projectPath,
+}: {
+  html: string;
+  filePath?: string;
+  projectPath?: string;
+}) {
+  const renderedHtml = useRenderedRawHtml(html, filePath, projectPath);
+
   return <div className="overflow-auto" dangerouslySetInnerHTML={{ __html: renderedHtml }} />;
+}
+
+function InlineRawHtml({
+  html,
+  filePath,
+  projectPath,
+}: {
+  html: string;
+  filePath?: string;
+  projectPath?: string;
+}) {
+  const renderedHtml = useRenderedRawHtml(html, filePath, projectPath);
+  return <span dangerouslySetInnerHTML={{ __html: renderedHtml }} />;
 }
 
 export function renderInlineMarkdown(
@@ -620,7 +645,7 @@ export function renderInlineMarkdown(
   }
 ) {
   const tokenPattern =
-    /(!\[[^\]]*?\]\([^)\n]+?\)|\[[^\]]+?\]\([^)\n]+?\)|\[\^[^\]]+\]|`[^`]+`|\*\*\*[^*\n]+?\*\*\*|___[^_\n]+?___|\*\*[^*\n]+?\*\*|__[^_\n]+?__|~~[^~]+~~|\*(?!\s)[^*\n]+?\*|_(?!\s)[^_\n]+?_|https?:\/\/[^\s<]+|www\.[^\s<]+)/g;
+    /(<a\b[^>]*>\s*<img\b[^>]*\/?\s*>\s*<\/a\s*>|<img\b[^>]*\/?\s*>|<br\s*\/?>|!\[[^\]]*?\]\([^)\n]+?\)|\[[^\]]+?\]\([^)\n]+?\)|\[\^[^\]]+\]|`[^`]+`|\*\*\*[^*\n]+?\*\*\*|___[^_\n]+?___|\*\*[^*\n]+?\*\*|__[^_\n]+?__|~~[^~]+~~|\*(?!\s)[^*\n]+?\*|_(?!\s)[^_\n]+?_|https?:\/\/[^\s<]+|www\.[^\s<]+)/gi;
   const nodes: ReactNode[] = [];
   let lastIndex = 0;
   let matchIndex = 0;
@@ -635,7 +660,16 @@ export function renderInlineMarkdown(
     const start = match.index ?? 0;
     pushPlainText(text.slice(lastIndex, start));
 
-    if (token.startsWith("`") && token.endsWith("`")) {
+    if (/^<(?:a|img|br)\b/i.test(token)) {
+      nodes.push(
+        <InlineRawHtml
+          key={`${options.keyPrefix}-html-${matchIndex++}`}
+          html={token}
+          filePath={options.filePath}
+          projectPath={options.projectPath}
+        />
+      );
+    } else if (token.startsWith("`") && token.endsWith("`")) {
       const codeValue = token.slice(1, -1);
       const resolved = isLikelyMarkdownPath(codeValue)
         ? resolveMarkdownLink(codeValue, options.filePath, options.projectPath)

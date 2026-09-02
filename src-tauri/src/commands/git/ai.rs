@@ -25,7 +25,19 @@ fn build_commit_prompt(
     let branch_name = resolve_branch_info(repo)
         .map(|info| info.branch_name)
         .unwrap_or_else(|_| "HEAD".to_string());
-    let status_text = run_git_text_command(project_path, &["status", "--short"])?;
+    let staged_files = run_git_text_command(
+        project_path,
+        &["diff", "--cached", "--name-only", "--no-ext-diff"],
+    )?;
+    let has_staged_changes = !staged_files.trim().is_empty();
+    let status_text = if has_staged_changes {
+        run_git_text_command(
+            project_path,
+            &["diff", "--cached", "--name-status", "--no-ext-diff"],
+        )?
+    } else {
+        run_git_text_command(project_path, &["status", "--short"])?
+    };
     let staged_summary = run_git_text_command(
         project_path,
         &[
@@ -36,16 +48,21 @@ fn build_commit_prompt(
             "--summary",
         ],
     )?;
-    let unstaged_summary = run_git_text_command(
-        project_path,
-        &["diff", "--no-ext-diff", "--stat=160,120", "--summary"],
-    )?;
     let staged_diff = run_git_text_command(
         project_path,
         &["diff", "--cached", "--no-ext-diff", "--unified=3"],
     )?;
-    let unstaged_diff =
-        run_git_text_command(project_path, &["diff", "--no-ext-diff", "--unified=3"])?;
+    let (commit_scope, summary, diff) = if has_staged_changes {
+        ("仅已暂存更改", staged_summary, staged_diff)
+    } else {
+        let unstaged_summary = run_git_text_command(
+            project_path,
+            &["diff", "--no-ext-diff", "--stat=160,120", "--summary"],
+        )?;
+        let unstaged_diff =
+            run_git_text_command(project_path, &["diff", "--no-ext-diff", "--unified=3"])?;
+        ("全部未暂存及未跟踪更改", unstaged_summary, unstaged_diff)
+    };
 
     if status_text.trim().is_empty() {
         return Err("当前没有可用于生成提交信息的 Git 变更".to_string());
@@ -78,18 +95,16 @@ fn build_commit_prompt(
         7. 输入的 diff 可能因长度限制而截断；只描述能从输入确认的改动，不要臆测\n\n\
         当前选择的风格规则：\n{profile_instructions}\n\n\
         当前分支：\n{branch_name}\n\n\
-        Git Status:\n{status}\n\n\
-        Staged Summary:\n{staged}\n\n\
-        Unstaged Summary:\n{unstaged}\n\n\
-        Staged Diff:\n{staged_diff}\n\n\
-        Unstaged Diff:\n{unstaged_diff}",
+        本次提交范围：\n{commit_scope}\n\n\
+        Git Status（仅限本次提交范围）：\n{status}\n\n\
+        Change Summary：\n{summary}\n\n\
+        Change Diff：\n{diff}",
         branch_name = branch_name,
+        commit_scope = commit_scope,
         profile_instructions = truncate_block(profile_instructions, 6000),
         status = truncate_block(&status_text, 4000),
-        staged = truncate_block(&staged_summary, 4000),
-        unstaged = truncate_block(&unstaged_summary, 4000),
-        staged_diff = truncate_block(&staged_diff, 12000),
-        unstaged_diff = truncate_block(&unstaged_diff, 12000),
+        summary = truncate_block(&summary, 4000),
+        diff = truncate_block(&diff, 12000),
     ))
 }
 
@@ -171,4 +186,93 @@ pub async fn git_generate_commit_message(
     })
     .await
     .map_err(|e| format!("AI 提交信息后台任务失败: {}", e))?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_commit_prompt;
+    use std::fs;
+    use std::path::Path;
+
+    fn create_repository() -> (tempfile::TempDir, git2::Repository) {
+        let temp_dir = tempfile::tempdir().expect("create temp directory");
+        let repo = git2::Repository::init(temp_dir.path()).expect("initialize repository");
+        fs::write(temp_dir.path().join("staged.txt"), "base staged\n").expect("write staged file");
+        fs::write(temp_dir.path().join("unstaged.txt"), "base unstaged\n")
+            .expect("write unstaged file");
+
+        let mut index = repo.index().expect("open index");
+        index
+            .add_path(Path::new("staged.txt"))
+            .expect("add staged file");
+        index
+            .add_path(Path::new("unstaged.txt"))
+            .expect("add unstaged file");
+        let tree_id = index.write_tree().expect("write tree");
+        index.write().expect("write index");
+        let tree = repo.find_tree(tree_id).expect("find tree");
+        let signature =
+            git2::Signature::now("Termflow", "termflow@example.com").expect("create signature");
+        repo.commit(Some("HEAD"), &signature, &signature, "initial", &tree, &[])
+            .expect("create initial commit");
+        drop(tree);
+
+        (temp_dir, repo)
+    }
+
+    #[test]
+    fn commit_prompt_uses_only_staged_changes_when_index_is_not_empty() {
+        let (temp_dir, repo) = create_repository();
+        fs::write(
+            temp_dir.path().join("staged.txt"),
+            "included staged content\n",
+        )
+        .expect("modify staged file");
+        let mut index = repo.index().expect("open index");
+        index
+            .add_path(Path::new("staged.txt"))
+            .expect("stage modification");
+        index.write().expect("write index");
+        fs::write(
+            temp_dir.path().join("unstaged.txt"),
+            "excluded unstaged content\n",
+        )
+        .expect("modify unstaged file");
+
+        let prompt = build_commit_prompt(
+            temp_dir.path().to_string_lossy().as_ref(),
+            &repo,
+            "生成测试提交信息",
+        )
+        .expect("build prompt");
+
+        assert!(prompt.contains("本次提交范围：\n仅已暂存更改"));
+        assert!(prompt.contains("included staged content"));
+        assert!(!prompt.contains("unstaged.txt"));
+        assert!(!prompt.contains("excluded unstaged content"));
+    }
+
+    #[test]
+    fn commit_prompt_uses_worktree_changes_when_index_is_empty() {
+        let (temp_dir, repo) = create_repository();
+        fs::write(
+            temp_dir.path().join("unstaged.txt"),
+            "included unstaged content\n",
+        )
+        .expect("modify unstaged file");
+
+        let prompt = build_commit_prompt(
+            temp_dir.path().to_string_lossy().as_ref(),
+            &repo,
+            "生成测试提交信息",
+        )
+        .expect("build prompt");
+
+        assert!(
+            prompt.contains("本次提交范围：\n全部未暂存及未跟踪更改"),
+            "unexpected prompt: {prompt}"
+        );
+        assert!(prompt.contains("unstaged.txt"));
+        assert!(prompt.contains("included unstaged content"));
+    }
 }

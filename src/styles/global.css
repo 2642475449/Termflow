@@ -1285,6 +1285,11 @@ html, body, #root {
   padding-bottom: 28px;
 }
 
+/* README 通常包含横幅、功能表格等宽内容，宽屏下应接近代码托管平台的阅读宽度。 */
+.app-markdown-preview-readme {
+  width: min(1280px, 100%);
+}
+
 .app-markdown-editable-preview {
   padding-bottom: 28px;
 }
@@ -1478,6 +1483,20 @@ html, body, #root {
 .app-markdown-preview p[align="center"] img[width] {
   display: block;
   margin: 0 auto 18px;
+}
+
+/* README 的图标标签会显式声明 middle/absmiddle，应与相邻文字保持在同一行。 */
+.app-markdown-preview p[align="center"] img.app-html-inline-image {
+  display: inline-block;
+  margin: 0;
+  vertical-align: middle;
+}
+
+/* Tailwind preflight 会把图片设为 block；标题中的 Logo 需要与标题文字同行。 */
+.app-markdown-preview :is(h1, h2, h3)[align="center"] img {
+  display: inline-block;
+  margin: 0 0.25em 0 0;
+  vertical-align: middle;
 }
 
 .app-markdown-preview p[align="center"] img:not([width]) {

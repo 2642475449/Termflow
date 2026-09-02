@@ -17,14 +17,16 @@ export function takePendingExplorerRevealPath(): ExplorerRevealPathDetail | null
 }
 
 export function revealExplorerPath(path: string, kind?: FileTreeEntryKind) {
-  pendingRevealPath = { path, kind };
+  const detail = { path, kind };
+  pendingRevealPath = detail;
   const state = useAppStore.getState();
   state.setActiveSidebarSection("project");
   state.setSidebarCollapsed(false);
 
   window.setTimeout(() => {
-    const detail = takePendingExplorerRevealPath();
-    if (!detail) return;
+    // Keep the request pending until the explorer confirms receipt. The panel
+    // may not be mounted yet when the sidebar section changes in the same turn.
+    if (pendingRevealPath !== detail) return;
     window.dispatchEvent(
       new CustomEvent<ExplorerRevealPathDetail>(EXPLORER_REVEAL_PATH_EVENT, {
         detail,

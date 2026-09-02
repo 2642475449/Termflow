@@ -455,7 +455,12 @@ function SidebarProjectPanel({
           }));
         } else {
           setRootEntries(listing.entries);
-          setLoadedDirectories({ [listing.directoryPath]: listing.entries });
+          // A reveal request can load descendants while the initial root request
+          // is still in flight. Merge the root result so it cannot erase them.
+          setLoadedDirectories((prev) => ({
+            ...prev,
+            [listing.directoryPath]: listing.entries,
+          }));
           setSelectedPath((prev) => prev ?? listing.rootPath);
         }
       } catch (nextError) {
@@ -612,6 +617,7 @@ function SidebarProjectPanel({
     const handleRevealPath = (event: Event) => {
       const detail = (event as CustomEvent<ExplorerRevealPathDetail>).detail;
       if (!detail?.path) return;
+      takePendingExplorerRevealPath();
       void revealPath(detail.path, detail.kind === "directory");
     };
 

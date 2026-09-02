@@ -138,6 +138,46 @@ describe("Markdown rendering", () => {
     expect(markup).not.toContain("&lt;a href=");
   });
 
+  it("keeps explicitly middle-aligned README icons inline", () => {
+    const markup = renderToStaticMarkup(
+      createElement(MarkdownPreview, {
+        content: [
+          '<p align="center">',
+          '  <code><img src="public/agents/claude.svg" width="16" alt="" align="absmiddle"> Claude Code</code>',
+          '  <code><img src="public/agents/codex.svg" width="16" alt="" align="middle"> Codex</code>',
+          '</p>',
+        ].join("\n"),
+        emptyText: "empty",
+        filePath: "C:/projects/termflow/README.md",
+        projectPath: "C:/projects/termflow",
+      }),
+    );
+
+    expect(markup).toContain('class="app-html-inline-image"');
+    expect(markup.match(/app-html-inline-image/g)).toHaveLength(2);
+  });
+
+  it("renders raw line breaks and linked images inside Markdown tables", () => {
+    const markup = renderToStaticMarkup(
+      createElement(MarkdownPreview, {
+        content: [
+          "| 功能 | 预览 |",
+          "| --- | --- |",
+          '| 文件协作 | 说明<br><br><a href="demo.mp4"><img src="demo.png" alt="演示" width="480"></a> |',
+        ].join("\n"),
+        emptyText: "empty",
+        filePath: "C:/projects/termflow/README.md",
+        projectPath: "C:/projects/termflow",
+      }),
+    );
+
+    expect(markup).toContain("<br>");
+    expect(markup).toContain("<img");
+    expect(markup).toContain("data-markdown-project-path=");
+    expect(markup).not.toContain("&lt;img");
+    expect(markup).not.toContain("&lt;br");
+  });
+
   it("filters executable content from raw HTML blocks", () => {
     const markup = renderToStaticMarkup(
       createElement(MarkdownPreview, {
