@@ -30,6 +30,14 @@ export default defineConfig(async () => ({
     // Monaco bundles its complete offline editor and language-service runtime in one chunk.
     // Keep a guardrail for regressions without warning on that intentional 3.8 MB chunk.
     chunkSizeWarningLimit: 4000,
+    rollupOptions: {
+      output: {
+        // Rollup's default `.[ext]` suffix leaves a trailing dot for extensionless
+        // assets such as third-party LICENSE files. Windows cannot embed such a
+        // path during the Tauri build, so use extname (including its own dot).
+        assetFileNames: "assets/[name]-[hash][extname]",
+      },
+    },
   },
   server: {
     port: 1420,
