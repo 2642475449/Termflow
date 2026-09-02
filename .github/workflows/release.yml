@@ -35,8 +35,9 @@ jobs:
           $tagVersion = "${{ github.ref_name }}" -replace '^v', ''
           $packageVersion = (Get-Content package.json | ConvertFrom-Json).version
           $tauriVersion = (Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json).version
-          if ($tagVersion -ne $packageVersion -or $tagVersion -ne $tauriVersion) {
-            throw "Tag ${{ github.ref_name }} does not match package.json ($packageVersion) and tauri.conf.json ($tauriVersion)."
+          $cargoVersion = (Select-String -Path src-tauri/Cargo.toml -Pattern '^version\\s*=\\s*"([^"]+)"').Matches.Groups[1].Value
+          if ($tagVersion -ne $packageVersion -or $tagVersion -ne $tauriVersion -or $tagVersion -ne $cargoVersion) {
+            throw "Tag ${{ github.ref_name }} does not match package.json ($packageVersion), tauri.conf.json ($tauriVersion), and Cargo.toml ($cargoVersion)."
           }
 
       - uses: tauri-apps/tauri-action@v1
@@ -55,50 +56,14 @@ jobs:
       - name: Generate updater manifest
         shell: pwsh
         run: |
-          $version = "${{ github.ref_name }}" -replace '^v', ''
           corepack pnpm update:manifest `
-            --notes "Termflow ${{ github.ref_name }}" `
-            --url "https://termflow.jianglan.online/releases/Termflow_${version}_x64-setup.exe"
+            --notes "Termflow ${{ github.ref_name }}"
 
       - name: Replace release updater manifest
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${{ github.ref_name }}" output/updates/latest.json --clobber
-
-      - name: Configure update-server SSH access
-        shell: pwsh
-        env:
-          UPDATE_DEPLOY_SSH_KEY: ${{ secrets.UPDATE_DEPLOY_SSH_KEY }}
-        run: |
-          $sshDirectory = Join-Path $env:USERPROFILE ".ssh"
-          $keyPath = Join-Path $sshDirectory "termflow-update-deploy"
-          New-Item -ItemType Directory -Force -Path $sshDirectory | Out-Null
-          if ([string]::IsNullOrWhiteSpace($env:UPDATE_DEPLOY_SSH_KEY)) {
-            throw "The UPDATE_DEPLOY_SSH_KEY repository secret is not configured."
-          }
-          [System.IO.File]::WriteAllText($keyPath, $env:UPDATE_DEPLOY_SSH_KEY.Trim() + "`n", [System.Text.UTF8Encoding]::new($false))
-          icacls $keyPath /inheritance:r /grant:r "${env:USERNAME}:R" | Out-Null
-
-      - name: Publish signed update to termflow.jianglan.online
-        shell: pwsh
-        run: |
-          $version = "${{ github.ref_name }}" -replace '^v', ''
-          $artifactName = "Termflow_${version}_x64-setup.exe"
-          $artifactPath = "src-tauri/target/release/bundle/nsis/${artifactName}"
-          $keyPath = Join-Path $env:USERPROFILE ".ssh/termflow-update-deploy"
-          $knownHostsPath = Join-Path $env:RUNNER_TEMP "termflow-update-known-hosts"
-          $destination = "ubuntu@119.29.73.208"
-          $stagingDirectory = "/home/ubuntu/termflow-update-staging"
-          $sshOptions = @(
-            "-i", $keyPath,
-            "-o", "StrictHostKeyChecking=accept-new",
-            "-o", "UserKnownHostsFile=$knownHostsPath"
-          )
-
-          ssh @sshOptions $destination "rm -rf $stagingDirectory && mkdir -p $stagingDirectory"
-          scp @sshOptions $artifactPath "${artifactPath}.sig" output/updates/latest.json "${destination}:${stagingDirectory}/"
-          ssh @sshOptions $destination "sudo /usr/local/sbin/deploy-termflow-update"
 
       - name: Publish release
         shell: pwsh
