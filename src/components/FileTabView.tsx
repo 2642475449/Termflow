@@ -27,6 +27,7 @@ import MarkdownPreview from "@/components/markdown/MarkdownPreview";
 import { replaceMarkdownSourceBlock } from "@/components/markdown/markdownSourceBlocks";
 import { revealExplorerPath } from "@/lib/explorer";
 import { stripAnsiEscapeSequences } from "@/lib/textContent";
+import { supportsOfficePreview } from "@/lib/officePreview";
 import { useAppStore } from "@/store";
 import { useTranslation } from "react-i18next";
 
@@ -43,6 +44,7 @@ interface FileTabViewProps {
 
 const GIT_REFRESH_EVENT = "termflow:git-refresh";
 const PdfPreview = lazy(() => import("@/components/pdf/PdfPreview"));
+const OfficeFilePreview = lazy(() => import("@/components/documents/OfficeFilePreview"));
 
 interface FileBreadcrumbItem {
   label: string;
@@ -669,6 +671,14 @@ function FileTabView({ tabId, projectPath, path, isActive }: FileTabViewProps) {
   }
 
   if (kind === "binary") {
+    if (supportsOfficePreview(path)) {
+      return (
+        <Suspense fallback={<div className="flex h-full items-center justify-center"><Spin /></div>}>
+          <OfficeFilePreview projectPath={projectPath} path={path} />
+        </Suspense>
+      );
+    }
+
     return (
       <div className="h-full flex items-center justify-center px-6">
         <div className="w-full flex flex-col">

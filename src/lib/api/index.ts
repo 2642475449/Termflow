@@ -607,6 +607,14 @@ export async function readProjectPdf(projectPath: string, path: string): Promise
   return new Uint8Array(response);
 }
 
+export async function readProjectOfficePreview(
+  projectPath: string,
+  path: string
+): Promise<Uint8Array> {
+  const response = await invoke<ArrayBuffer>("read_project_office_preview", { projectPath, path });
+  return new Uint8Array(response);
+}
+
 export async function listProjectDirectory(
   projectPath: string,
   directoryPath?: string | null

@@ -426,7 +426,7 @@ export default function PdfPreview({
     useState<PageSize>(DEFAULT_PAGE_SIZE);
   const [pageNumber, setPageNumber] = useState(1);
   const [scale, setScale] = useState(1);
-  const [zoomMode, setZoomMode] = useState<ZoomMode>("width");
+  const [zoomMode, setZoomMode] = useState<ZoomMode>("page");
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(loadError);
@@ -436,7 +436,7 @@ export default function PdfPreview({
     setFallbackPageSize(DEFAULT_PAGE_SIZE);
     setPageNumber(1);
     setScale(1);
-    setZoomMode("width");
+    setZoomMode("page");
     setError(loadError);
 
     if (!data || loadError) {

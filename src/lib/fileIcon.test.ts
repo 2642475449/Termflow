@@ -61,6 +61,18 @@ describe("fileIcon", () => {
     expect(getFileIconByName("manual.markdown").color).toBe(getFileIconByName("NOTES.md").color);
   });
 
+  it("uses a dedicated PowerPoint logo for presentation files", () => {
+    const element = getFileIconByName("proposal.PPTX").icon as ReactElement<{
+      className: string;
+      dangerouslySetInnerHTML: { __html: string };
+    }>;
+    expect(element.props.className).toContain("app-powerpoint-file-icon");
+    expect(element.props.dangerouslySetInnerHTML.__html).toContain("<svg");
+    expect(element.props.dangerouslySetInnerHTML.__html).not.toBe(getSvg("unknown-file"));
+    expect(getFileIconByName("slides.ppt").color).toBe("#d24726");
+    expect(getFileIconByName("show.ppsx").color).toBe("#d24726");
+  });
+
   it("keeps folders visually consistent and changes the expanded glyph", () => {
     const src = getFileIcon("src", true);
     const nodeModules = getFileIcon("node_modules", true);

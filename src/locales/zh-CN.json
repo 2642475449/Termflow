@@ -794,6 +794,7 @@
     "largeFile": "大文件",
     "largeFileReadOnly": "当前文件较大（{{size}}），已自动切换为只读模式以保护性能。",
     "binaryUnsupported": "当前文件暂不支持内置编辑，可在外部应用中打开",
+    "officePreviewUnavailable": "无法预览此 Office 文件",
     "closeDirtyTitle": "关闭未保存文件",
     "closeDirtyDescription": "文件 {{name}} 尚未保存，确认直接关闭？",
     "closeWithoutSaving": "不保存并关闭",

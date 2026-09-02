@@ -794,6 +794,7 @@
     "largeFile": "大きなファイル",
     "largeFileReadOnly": "このファイルは大きい ({{size}}) ため、パフォーマンス保護のため読み取り専用で開きました。",
     "binaryUnsupported": "このファイルはまだ内蔵エディターでの編集に対応していません。外部アプリで開いてください。",
+    "officePreviewUnavailable": "この Office ファイルをプレビューできません",
     "closeDirtyTitle": "未保存ファイルを閉じる",
     "closeDirtyDescription": "ファイル {{name}} に未保存の変更があります。それでも閉じますか？",
     "closeWithoutSaving": "保存せずに閉じる",

@@ -37,6 +37,14 @@ const xmlIconSvg = `
     <path d="m13 15.2-4 3.3 4 3.3v-2.4l-1.2-.9 1.2-.9v-2.4zm6 0v2.4l1.2.9-1.2.9v2.4l4-3.3-4-3.3zm-2.7-.5-2.4 7.6h1.8l2.4-7.6h-1.8z"/>
   </svg>
 `;
+const powerpointIconSvg = `
+  <svg viewBox="0 0 32 32" focusable="false">
+    <path d="M11 4h14a2 2 0 0 1 2 2v20a2 2 0 0 1-2 2H11V4z" opacity=".72"/>
+    <path d="M16 8a8 8 0 1 1 0 16V8zm2 2.3v5.2h5.2A6 6 0 0 0 18 10.3z" opacity=".45"/>
+    <path d="M4 8.5 18 6v20L4 23.5v-15z"/>
+    <path fill="white" d="M8 12h4.3c2.4 0 3.8 1.2 3.8 3.4 0 2.3-1.5 3.6-4 3.6h-1.5v3H8V12zm2.6 2.1v2.8H12c1 0 1.5-.5 1.5-1.4 0-1-.5-1.4-1.5-1.4h-1.4z"/>
+  </svg>
+`;
 
 export interface FileIconInfo {
   icon: ReactNode;
@@ -75,6 +83,18 @@ export function getFileIconByName(fileName: string): FileIconInfo {
         />
       ),
       color: "#c87532",
+    };
+  }
+  if (["ppt", "pptx", "pps", "ppsx"].includes(extension)) {
+    return {
+      icon: (
+        <span
+          className="app-seti-file-icon app-powerpoint-file-icon"
+          aria-hidden="true"
+          dangerouslySetInnerHTML={{ __html: powerpointIconSvg }}
+        />
+      ),
+      color: "#d24726",
     };
   }
   if (extension === "md" || extension === "mdx" || extension === "markdown") {

@@ -21,6 +21,10 @@
                 },
     "dependencies":  {
                          "@ant-design/icons":  "^5.6.1",
+                         "@file-viewer/react":  "3.0.0",
+                         "@file-viewer/renderer-presentation":  "3.0.0",
+                         "@file-viewer/renderer-spreadsheet":  "3.0.0",
+                         "@file-viewer/renderer-word":  "3.0.0",
                          "@monaco-editor/react":  "^4.7.0",
                          "@tauri-apps/api":  "^2.3.0",
                          "@tauri-apps/plugin-dialog":  "^2.2.2",
@@ -50,6 +54,7 @@
                          "zustand":  "^5.0.5"
                      },
     "devDependencies":  {
+                            "@file-viewer/vite-plugin":  "3.0.0",
                             "@tauri-apps/cli":  "^2.5.0",
                             "@types/hast":  "3.0.5",
                             "@types/react":  "^19.1.2",

@@ -8,6 +8,11 @@ use std::time::UNIX_EPOCH;
 
 const MAX_EDITABLE_TEXT_FILE_BYTES: u64 = 1024 * 1024;
 const MAX_PREVIEWABLE_PDF_FILE_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_PREVIEWABLE_OFFICE_FILE_BYTES: u64 = 64 * 1024 * 1024;
+const PREVIEWABLE_OFFICE_EXTENSIONS: [&str; 16] = [
+    "doc", "docx", "dot", "dotx", "rtf", "odt", "xls", "xlsx", "xlsm", "xlsb", "ods", "csv", "ppt",
+    "pptx", "ppsx", "odp",
+];
 
 #[derive(Serialize, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -385,6 +390,40 @@ pub fn read_project_pdf(
 }
 
 #[tauri::command]
+pub fn read_project_office_preview(
+    project_path: String,
+    path: String,
+) -> Result<tauri::ipc::Response, String> {
+    let root_path = normalize_input_path(&project_path);
+    if !root_path.exists() {
+        return Err("项目目录不存在".to_string());
+    }
+
+    let canonical_root =
+        fs::canonicalize(&root_path).map_err(|e| format!("解析项目目录失败: {}", e))?;
+    let target_path = resolve_entry_path(&root_path, &path)?;
+    let target_path =
+        fs::canonicalize(&target_path).map_err(|e| format!("解析 Office 文件路径失败: {}", e))?;
+    if !target_path.starts_with(&canonical_root) {
+        return Err("不允许通过链接访问项目目录之外的 Office 文件".to_string());
+    }
+    if !target_path.is_file() {
+        return Err("目标路径不是文件".to_string());
+    }
+    if !is_previewable_office_file(&target_path) {
+        return Err("当前文件不是受支持的 Office 预览格式".to_string());
+    }
+
+    let metadata = fs::metadata(&target_path).map_err(|e| format!("读取文件元数据失败: {}", e))?;
+    if metadata.len() > MAX_PREVIEWABLE_OFFICE_FILE_BYTES {
+        return Err("Office 文件超过 64 MB，请使用系统默认应用打开".to_string());
+    }
+
+    let bytes = fs::read(&target_path).map_err(|e| format!("读取 Office 文件失败: {}", e))?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+#[tauri::command]
 pub fn write_project_file(
     project_path: String,
     path: String,
@@ -731,6 +770,13 @@ fn matches_pdf_extension(path: &Path) -> bool {
     path.extension()
         .and_then(|extension| extension.to_str())
         .is_some_and(|extension| extension.eq_ignore_ascii_case("pdf"))
+}
+
+fn is_previewable_office_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .map(|extension| extension.to_ascii_lowercase())
+        .is_some_and(|extension| PREVIEWABLE_OFFICE_EXTENSIONS.contains(&extension.as_str()))
 }
 
 fn matches_pdf_signature(bytes: &[u8]) -> bool {
@@ -1125,6 +1171,34 @@ mod tests {
     fn pdf_signature_rejects_non_pdf_content() {
         assert!(!matches_pdf_signature(b"not a pdf"));
         assert!(!matches_pdf_signature(b"%PD"));
+    }
+
+    #[test]
+    fn office_preview_detection_is_case_insensitive_and_restricted() {
+        assert!(is_previewable_office_file(Path::new("合同.DOCX")));
+        assert!(is_previewable_office_file(Path::new("数据.xlsx")));
+        assert!(is_previewable_office_file(Path::new("汇报.pptx")));
+        assert!(!is_previewable_office_file(Path::new("archive.zip")));
+        assert!(!is_previewable_office_file(Path::new("tool.exe")));
+    }
+
+    #[test]
+    fn read_project_office_preview_returns_raw_bytes() {
+        let directory =
+            std::env::temp_dir().join(format!("termflow-office-read-{}", std::process::id()));
+        fs::create_dir_all(&directory).unwrap();
+        let document_path = directory.join("sample.docx");
+        let expected = b"PK\x03\x04minimal ooxml fixture";
+        fs::write(&document_path, expected).unwrap();
+
+        let response =
+            read_project_office_preview(display_path(&directory), display_path(&document_path))
+                .unwrap();
+        let body = response.body().unwrap();
+        assert!(matches!(body, InvokeResponseBody::Raw(bytes) if bytes == expected));
+
+        fs::remove_file(document_path).unwrap();
+        fs::remove_dir(directory).unwrap();
     }
 
     #[test]

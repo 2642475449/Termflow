@@ -794,6 +794,7 @@
     "largeFile": "Large file",
     "largeFileReadOnly": "This file is large ({{size}}) and has been opened in read-only mode to protect performance.",
     "binaryUnsupported": "This file is not supported for built-in editing yet. Open it in an external app.",
+    "officePreviewUnavailable": "Unable to preview this Office file",
     "closeDirtyTitle": "Close unsaved file",
     "closeDirtyDescription": "The file {{name}} has unsaved changes. Close it anyway?",
     "closeWithoutSaving": "Close without saving",

@@ -200,6 +200,7 @@ pub fn run() {
             commands::file_tree::read_project_file,
             commands::file_tree::read_project_image,
             commands::file_tree::read_project_pdf,
+            commands::file_tree::read_project_office_preview,
             commands::file_tree::write_project_file,
             commands::file_tree::inspect_project_file,
             commands::content_search::search_project_text,

@@ -15,8 +15,10 @@ import {
 import { openAuxiliaryFile } from "@/lib/auxiliaryDock";
 import { replaceMarkdownSourceBlock } from "@/components/markdown/markdownSourceBlocks";
 import { useAppStore } from "@/store";
+import { supportsOfficePreview } from "@/lib/officePreview";
 
 const PdfPreview = lazy(() => import("@/components/pdf/PdfPreview"));
+const OfficeFilePreview = lazy(() => import("@/components/documents/OfficeFilePreview"));
 
 interface AuxiliaryFileViewProps {
   projectPath: string;
@@ -243,9 +245,15 @@ export default function AuxiliaryFileView({
         ) : error ? (
           <div className="p-4"><Alert type="error" showIcon message={error} /></div>
         ) : kind === "binary" ? (
-          <div className="flex h-full items-center justify-center">
-            <Empty description={t("auxiliaryDock.binaryFile")} />
-          </div>
+          supportsOfficePreview(path) ? (
+            <Suspense fallback={<div className="flex h-full items-center justify-center"><Spin /></div>}>
+              <OfficeFilePreview projectPath={projectPath} path={path} />
+            </Suspense>
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <Empty description={t("auxiliaryDock.binaryFile")} />
+            </div>
+          )
         ) : kind === "image" ? (
           <div className="flex h-full items-center justify-center overflow-auto p-4">
             {imageSrc ? <img src={imageSrc} alt={name} className="max-h-full max-w-full object-contain" /> : null}

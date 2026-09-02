@@ -5,6 +5,8 @@ node_modules/
 
 # Build
 dist/
+public/flyfish-viewer-assets.json
+public/vendor/
 src-tauri/target/*
 !src-tauri/target/release/
 src-tauri/target/release/*

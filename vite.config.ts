@@ -1,11 +1,24 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
+import { fileViewerRenderers } from "@file-viewer/vite-plugin";
 
 const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig(async () => ({
-  plugins: [react()],
+  plugins: [
+    react(),
+    fileViewerRenderers({
+      formats: [
+        "doc", "docx", "dot", "dotx", "rtf", "odt",
+        "xls", "xlsx", "xlsm", "xlsb", "ods", "csv",
+        "ppt", "pptx", "ppsx", "odp",
+      ],
+      copyAssets: true,
+      chunkStrategy: "renderer",
+      inject: false,
+    }),
+  ],
   resolve: {
     alias: [
       { find: "@", replacement: path.resolve(__dirname, "./src") },
