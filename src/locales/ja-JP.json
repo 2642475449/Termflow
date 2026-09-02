@@ -39,6 +39,7 @@
     "collapseSidebar": "サイドバーを折りたたむ (Ctrl+B)",
     "settingsTooltip": "設定 (Ctrl+,)",
     "projectSwitcherOpenAction": "プロジェクトを開く",
+    "projectSwitcherCurrentProject": "開いているプロジェクト",
     "projectSwitcherPlaceholder": "プロジェクトを選択",
     "quickSearch": "検索",
     "quickSearchTooltip": "検索",

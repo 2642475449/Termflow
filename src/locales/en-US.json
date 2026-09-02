@@ -39,6 +39,7 @@
     "collapseSidebar": "Collapse Sidebar (Ctrl+B)",
     "settingsTooltip": "Settings (Ctrl+,)",
     "projectSwitcherOpenAction": "Open Project",
+    "projectSwitcherCurrentProject": "Open Project",
     "projectSwitcherPlaceholder": "Choose Project",
     "quickSearch": "Search",
     "quickSearchTooltip": "Search",

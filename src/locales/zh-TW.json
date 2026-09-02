@@ -39,6 +39,7 @@
     "collapseSidebar": "收合側邊欄 (Ctrl+B)",
     "settingsTooltip": "設定 (Ctrl+,)",
     "projectSwitcherOpenAction": "開啟專案",
+    "projectSwitcherCurrentProject": "開啟的專案",
     "projectSwitcherPlaceholder": "選擇專案",
     "quickSearch": "搜尋",
     "quickSearchTooltip": "搜尋",

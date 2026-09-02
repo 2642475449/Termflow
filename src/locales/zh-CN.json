@@ -39,6 +39,7 @@
     "collapseSidebar": "收起侧边栏 (Ctrl+B)",
     "settingsTooltip": "设置 (Ctrl+,)",
     "projectSwitcherOpenAction": "打开项目",
+    "projectSwitcherCurrentProject": "打开项目",
     "projectSwitcherPlaceholder": "选择项目",
     "quickSearch": "搜索",
     "quickSearchTooltip": "搜索",

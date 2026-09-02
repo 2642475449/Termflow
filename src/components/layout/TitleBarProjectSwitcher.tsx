@@ -171,6 +171,92 @@ function TitleBarProjectSwitcher() {
     removeRecentProject(path);
   }
 
+  const otherRecentProjects = recentProjects.filter(
+    (project) => project.path !== currentProject?.path,
+  );
+
+  function renderProjectRow(
+    project: { name: string; path: string },
+    options: { current?: boolean; removable?: boolean } = {},
+  ) {
+    const projectSwatch = getProjectSwatch(project.path || project.name);
+    return (
+      <div
+        key={project.path}
+        className="group flex h-11 w-full shrink-0 items-center gap-2.5 rounded-[7px] px-2.5 text-left transition-colors"
+        style={{
+          color: "var(--cs-text-primary)",
+          background: options.current ? CURRENT_PROJECT_BACKGROUND : "transparent",
+        }}
+        onMouseEnter={(event) => {
+          if (!options.current) event.currentTarget.style.background = "var(--cs-bg-hover)";
+        }}
+        onMouseLeave={(event) => {
+          event.currentTarget.style.background = options.current
+            ? CURRENT_PROJECT_BACKGROUND
+            : "transparent";
+        }}
+      >
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+          onClick={() => {
+            if (!options.current) void handleOpenRecentProject(project.path);
+          }}
+        >
+          <div
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] border text-[11px] font-semibold"
+            style={{
+              background: `color-mix(in srgb, ${projectSwatch} 60%, var(--cs-bg-card, #ffffff))`,
+              borderColor: `color-mix(in srgb, ${projectSwatch} 68%, transparent)`,
+              color: "var(--cs-text-primary)",
+            }}
+          >
+            {getProjectInitial(project.name)}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[12px] font-medium leading-4">{project.name}</div>
+            <div
+              className="truncate text-[10px] leading-[14px]"
+              style={{ color: "var(--cs-text-tertiary)" }}
+            >
+              {project.path}
+            </div>
+          </div>
+        </button>
+        {options.current ? (
+          <CheckOutlined
+            className="mr-2 text-[12px]"
+            style={{ color: "var(--cs-accent-primary)" }}
+          />
+        ) : null}
+        {options.removable ? (
+          <button
+            type="button"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[5px] opacity-0 pointer-events-none transition-[opacity,background-color,color] group-hover:pointer-events-auto group-hover:opacity-100 focus:pointer-events-auto focus:opacity-100"
+            aria-label={t("projectLauncher.removeRecentProject")}
+            title={t("projectLauncher.removeRecentProject")}
+            style={{ color: "var(--cs-text-tertiary)" }}
+            onMouseEnter={(event) => {
+              event.currentTarget.style.background = "var(--cs-bg-hover)";
+              event.currentTarget.style.color = "var(--cs-danger, #ef4444)";
+            }}
+            onMouseLeave={(event) => {
+              event.currentTarget.style.background = "transparent";
+              event.currentTarget.style.color = "var(--cs-text-tertiary)";
+            }}
+            onClick={(event) => {
+              event.stopPropagation();
+              handleRemoveRecentProject(project.path);
+            }}
+          >
+            <DeleteOutlined className="text-[13px]" />
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+
   const content = (
     <div
       className="w-[360px] max-w-[calc(100vw-16px)] overflow-hidden rounded-[12px] border"
@@ -211,6 +297,21 @@ function TitleBarProjectSwitcher() {
         </div>
       </div>
 
+      {currentProject ? (
+        <div
+          className="px-1.5 pb-1.5 pt-1.5"
+          style={{ borderTop: "1px solid var(--cs-border-card, var(--cs-border-sidebar))" }}
+        >
+          <div
+            className="px-2.5 pb-1.5 pt-0.5 text-[11px] font-medium"
+            style={{ color: "var(--cs-text-secondary)" }}
+          >
+            {t("titleBar.projectSwitcherCurrentProject")}
+          </div>
+          {renderProjectRow(currentProject, { current: true })}
+        </div>
+      ) : null}
+
       <div
         className="px-1.5 pb-1.5 pt-1.5"
         style={{
@@ -224,7 +325,7 @@ function TitleBarProjectSwitcher() {
           {t("common.recent")}
         </div>
 
-        {recentProjects.length === 0 ? (
+        {otherRecentProjects.length === 0 ? (
           <div
             className="px-2.5 py-3 text-[11px]"
             style={{ color: "var(--cs-text-tertiary)" }}
@@ -233,85 +334,9 @@ function TitleBarProjectSwitcher() {
           </div>
         ) : (
           <div className="flex max-h-[min(308px,48vh)] flex-col overflow-y-auto pr-0.5">
-            {recentProjects.map((project) => {
-              const isCurrent = currentProject?.path === project.path;
-              const projectSwatch = getProjectSwatch(project.path || project.name);
-              return (
-                <div
-                  key={project.path}
-                  className="group flex h-11 w-full shrink-0 items-center gap-2.5 rounded-[7px] px-2.5 text-left transition-colors"
-                  style={{
-                    color: "var(--cs-text-primary)",
-                    background: isCurrent ? CURRENT_PROJECT_BACKGROUND : "transparent",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isCurrent) {
-                      e.currentTarget.style.background = "var(--cs-bg-hover)";
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = isCurrent
-                      ? CURRENT_PROJECT_BACKGROUND
-                      : "transparent";
-                  }}
-                >
-                  <button
-                    type="button"
-                    className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
-                    onClick={() => void handleOpenRecentProject(project.path)}
-                  >
-                    <div
-                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] border text-[11px] font-semibold"
-                      style={{
-                        background: `color-mix(in srgb, ${projectSwatch} 60%, var(--cs-bg-card, #ffffff))`,
-                        borderColor: `color-mix(in srgb, ${projectSwatch} 68%, transparent)`,
-                        color: "var(--cs-text-primary)",
-                      }}
-                    >
-                      {getProjectInitial(project.name)}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-[12px] font-medium leading-4">{project.name}</div>
-                      <div
-                        className="truncate text-[10px] leading-[14px]"
-                        style={{ color: "var(--cs-text-tertiary)" }}
-                      >
-                        {project.path}
-                      </div>
-                    </div>
-                  </button>
-                  <div className="pl-2">
-                    {isCurrent ? (
-                      <CheckOutlined
-                        className="text-[12px]"
-                        style={{ color: "var(--cs-accent-primary)" }}
-                      />
-                    ) : null}
-                  </div>
-                  <button
-                    type="button"
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[5px] opacity-0 pointer-events-none transition-[opacity,background-color,color] group-hover:pointer-events-auto group-hover:opacity-100 focus:pointer-events-auto focus:opacity-100"
-                    aria-label={t("projectLauncher.removeRecentProject")}
-                    title={t("projectLauncher.removeRecentProject")}
-                    style={{ color: "var(--cs-text-tertiary)" }}
-                    onMouseEnter={(event) => {
-                      event.currentTarget.style.background = "var(--cs-bg-hover)";
-                      event.currentTarget.style.color = "var(--cs-danger, #ef4444)";
-                    }}
-                    onMouseLeave={(event) => {
-                      event.currentTarget.style.background = "transparent";
-                      event.currentTarget.style.color = "var(--cs-text-tertiary)";
-                    }}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      handleRemoveRecentProject(project.path);
-                    }}
-                  >
-                    <DeleteOutlined className="text-[13px]" />
-                  </button>
-                </div>
-              );
-            })}
+            {otherRecentProjects.map((project) =>
+              renderProjectRow(project, { removable: true }),
+            )}
           </div>
         )}
       </div>
