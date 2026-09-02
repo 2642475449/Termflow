@@ -128,7 +128,7 @@ jobs:
         run: gh release edit "${{ github.ref_name }}" --draft=false --latest
 
   sync-update-server:
-    if: github.event_name == 'workflow_dispatch' || (github.ref == 'refs/heads/main' && github.event.head_commit.message == 'chore(release): restore server update sync')
+    if: "${{ github.event_name == 'workflow_dispatch' || (github.ref == 'refs/heads/main' && github.event.head_commit.message == 'fix(release): repair server update sync') }}"
     runs-on: windows-latest
 
     steps:
