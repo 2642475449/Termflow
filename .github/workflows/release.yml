@@ -4,12 +4,21 @@ on:
   push:
     tags:
       - "v*"
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to sync to termflow.jianglan.online (for example, v1.8.26)"
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 jobs:
   release-windows:
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: windows-latest
 
     steps:
@@ -69,8 +78,120 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${{ github.ref_name }}" output/updates/latest.json --clobber
 
+      - name: Create update-server manifest
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^v', ''
+          $manifestPath = "output/updates/latest.json"
+          $manifest = Get-Content -Raw $manifestPath | ConvertFrom-Json
+          $manifest.platforms.'windows-x86_64'.url = "https://termflow.jianglan.online/releases/Termflow_${version}_x64-setup.exe"
+          $manifest | ConvertTo-Json -Depth 8 | Set-Content "output/updates/server-latest.json" -Encoding utf8
+
+      - name: Configure update-server SSH access
+        shell: pwsh
+        env:
+          UPDATE_DEPLOY_SSH_KEY: ${{ secrets.UPDATE_DEPLOY_SSH_KEY }}
+        run: |
+          $sshDirectory = Join-Path $env:USERPROFILE ".ssh"
+          $keyPath = Join-Path $sshDirectory "termflow-update-deploy"
+          New-Item -ItemType Directory -Force -Path $sshDirectory | Out-Null
+          if ([string]::IsNullOrWhiteSpace($env:UPDATE_DEPLOY_SSH_KEY)) {
+            throw "The UPDATE_DEPLOY_SSH_KEY repository secret is not configured."
+          }
+          [System.IO.File]::WriteAllText($keyPath, $env:UPDATE_DEPLOY_SSH_KEY.Trim() + "`n", [System.Text.UTF8Encoding]::new($false))
+          icacls $keyPath /inheritance:r /grant:r "${env:USERNAME}:R" | Out-Null
+
+      - name: Publish signed update to termflow.jianglan.online
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^v', ''
+          $artifactName = "Termflow_${version}_x64-setup.exe"
+          $artifactPath = "src-tauri/target/release/bundle/nsis/${artifactName}"
+          $keyPath = Join-Path $env:USERPROFILE ".ssh/termflow-update-deploy"
+          $knownHostsPath = Join-Path $env:RUNNER_TEMP "termflow-update-known-hosts"
+          $destination = "ubuntu@119.29.73.208"
+          $stagingDirectory = "/home/ubuntu/termflow-update-staging"
+          $sshOptions = @(
+            "-i", $keyPath,
+            "-o", "StrictHostKeyChecking=accept-new",
+            "-o", "UserKnownHostsFile=$knownHostsPath"
+          )
+
+          ssh @sshOptions $destination "rm -rf $stagingDirectory && mkdir -p $stagingDirectory"
+          scp @sshOptions $artifactPath "${artifactPath}.sig" output/updates/server-latest.json "${destination}:${stagingDirectory}/"
+          ssh @sshOptions $destination "mv ${stagingDirectory}/server-latest.json ${stagingDirectory}/latest.json && sudo /usr/local/sbin/deploy-termflow-update"
+
       - name: Publish release
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release edit "${{ github.ref_name }}" --draft=false --latest
+
+  sync-update-server:
+    if: github.event_name == 'workflow_dispatch' || (github.ref == 'refs/heads/main' && github.event.head_commit.message == 'chore(release): restore server update sync')
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download release assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ inputs.tag }}"
+          if ([string]::IsNullOrWhiteSpace($tag)) {
+            $tag = "v1.8.26"
+          }
+          if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
+            throw "Invalid release tag: $tag"
+          }
+          $version = $tag -replace '^v', ''
+          "RELEASE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
+          $assetDirectory = "release-assets"
+          New-Item -ItemType Directory -Force -Path $assetDirectory | Out-Null
+          gh release download $tag --repo "${{ github.repository }}" `
+            --pattern "Termflow_${version}_x64-setup.exe" `
+            --pattern "Termflow_${version}_x64-setup.exe.sig" `
+            --pattern "latest.json" `
+            --dir $assetDirectory
+          $manifestPath = Join-Path $assetDirectory "latest.json"
+          $manifest = Get-Content -Raw $manifestPath | ConvertFrom-Json
+          if ([string]::IsNullOrWhiteSpace($manifest.platforms.'windows-x86_64'.signature)) {
+            throw "The release manifest has no Windows signature."
+          }
+          $manifest.platforms.'windows-x86_64'.url = "https://termflow.jianglan.online/releases/Termflow_${version}_x64-setup.exe"
+          $manifest | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $assetDirectory "server-latest.json") -Encoding utf8
+
+      - name: Configure update-server SSH access
+        shell: pwsh
+        env:
+          UPDATE_DEPLOY_SSH_KEY: ${{ secrets.UPDATE_DEPLOY_SSH_KEY }}
+        run: |
+          $sshDirectory = Join-Path $env:USERPROFILE ".ssh"
+          $keyPath = Join-Path $sshDirectory "termflow-update-deploy"
+          New-Item -ItemType Directory -Force -Path $sshDirectory | Out-Null
+          if ([string]::IsNullOrWhiteSpace($env:UPDATE_DEPLOY_SSH_KEY)) {
+            throw "The UPDATE_DEPLOY_SSH_KEY repository secret is not configured."
+          }
+          [System.IO.File]::WriteAllText($keyPath, $env:UPDATE_DEPLOY_SSH_KEY.Trim() + "`n", [System.Text.UTF8Encoding]::new($false))
+          icacls $keyPath /inheritance:r /grant:r "${env:USERNAME}:R" | Out-Null
+
+      - name: Sync signed update to termflow.jianglan.online
+        shell: pwsh
+        run: |
+          $assetDirectory = "release-assets"
+          $artifactName = "Termflow_${env:RELEASE_VERSION}_x64-setup.exe"
+          $keyPath = Join-Path $env:USERPROFILE ".ssh/termflow-update-deploy"
+          $knownHostsPath = Join-Path $env:RUNNER_TEMP "termflow-update-known-hosts"
+          $destination = "ubuntu@119.29.73.208"
+          $stagingDirectory = "/home/ubuntu/termflow-update-staging"
+          $sshOptions = @(
+            "-i", $keyPath,
+            "-o", "StrictHostKeyChecking=accept-new",
+            "-o", "UserKnownHostsFile=$knownHostsPath"
+          )
+
+          ssh @sshOptions $destination "rm -rf $stagingDirectory && mkdir -p $stagingDirectory"
+          scp @sshOptions "$assetDirectory/$artifactName" "$assetDirectory/${artifactName}.sig" "$assetDirectory/server-latest.json" "${destination}:${stagingDirectory}/"
+          ssh @sshOptions $destination "mv ${stagingDirectory}/server-latest.json ${stagingDirectory}/latest.json && sudo /usr/local/sbin/deploy-termflow-update"
