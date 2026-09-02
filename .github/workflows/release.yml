@@ -35,7 +35,11 @@ jobs:
           $tagVersion = "${{ github.ref_name }}" -replace '^v', ''
           $packageVersion = (Get-Content package.json | ConvertFrom-Json).version
           $tauriVersion = (Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json).version
-          $cargoVersion = (Select-String -Path src-tauri/Cargo.toml -Pattern '^version\\s*=\\s*"([^"]+)"').Matches.Groups[1].Value
+          $cargoVersionMatch = Select-String -Path src-tauri/Cargo.toml -Pattern '^version\s*=\s*"([^"]+)"' | Select-Object -First 1
+          if ($null -eq $cargoVersionMatch) {
+            throw "Unable to read the package version from src-tauri/Cargo.toml."
+          }
+          $cargoVersion = $cargoVersionMatch.Matches[0].Groups[1].Value
           if ($tagVersion -ne $packageVersion -or $tagVersion -ne $tauriVersion -or $tagVersion -ne $cargoVersion) {
             throw "Tag ${{ github.ref_name }} does not match package.json ($packageVersion), tauri.conf.json ($tauriVersion), and Cargo.toml ($cargoVersion)."
           }
