@@ -1,6 +1,6 @@
 [package]
 name = "termflow"
-version = "1.8.28"
+version = "1.8.29"
 edition = "2021"
 license = "MIT"
 
