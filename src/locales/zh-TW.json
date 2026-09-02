@@ -919,6 +919,7 @@
     "checkFailed": "檢查更新失敗",
     "downloadFailed": "下載更新失敗",
     "installFailed": "安裝更新失敗",
+    "githubConnectivityHint": "中國大陸更新來源和 GitHub 均無法連線。請檢查網路、設定系統代理或切換網路後重試；也可以前往 GitHub 發布頁面手動下載安裝。",
     "manualDownload": "前往 GitHub Releases 手動下載",
     "releaseNotes": "更新說明",
     "noReleaseNotes": "此版本暫無更新說明。",

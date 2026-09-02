@@ -919,6 +919,7 @@
     "checkFailed": "更新の確認に失敗しました",
     "downloadFailed": "更新のダウンロードに失敗しました",
     "installFailed": "更新のインストールに失敗しました",
+    "githubConnectivityHint": "中国向け更新元と GitHub の両方に接続できませんでした。ネットワークを確認し、システムプロキシを設定するかネットワークを切り替えて再試行してください。GitHub Releases から手動でダウンロードすることもできます。",
     "manualDownload": "GitHub Releases から手動でダウンロード",
     "releaseNotes": "更新内容",
     "noReleaseNotes": "このバージョンには更新内容がありません。",

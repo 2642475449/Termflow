@@ -84,7 +84,9 @@ jobs:
           $version = "${{ github.ref_name }}" -replace '^v', ''
           $manifestPath = "output/updates/latest.json"
           $manifest = Get-Content -Raw $manifestPath | ConvertFrom-Json
-          $manifest.platforms.'windows-x86_64'.url = "https://termflow.jianglan.online/releases/Termflow_${version}_x64-setup.exe"
+          foreach ($platform in $manifest.platforms.PSObject.Properties) {
+            $platform.Value.url = "https://termflow.jianglan.online/releases/Termflow_${version}_x64-setup.exe"
+          }
           $manifest | ConvertTo-Json -Depth 8 | Set-Content "output/updates/server-latest.json" -Encoding utf8
 
       - name: Configure update-server SSH access
@@ -160,7 +162,9 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($manifest.platforms.'windows-x86_64'.signature)) {
             throw "The release manifest has no Windows signature."
           }
-          $manifest.platforms.'windows-x86_64'.url = "https://termflow.jianglan.online/releases/Termflow_${version}_x64-setup.exe"
+          foreach ($platform in $manifest.platforms.PSObject.Properties) {
+            $platform.Value.url = "https://termflow.jianglan.online/releases/Termflow_${version}_x64-setup.exe"
+          }
           $manifest | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $assetDirectory "server-latest.json") -Encoding utf8
 
       - name: Configure update-server SSH access

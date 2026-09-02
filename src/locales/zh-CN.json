@@ -919,6 +919,7 @@
     "checkFailed": "检查更新失败",
     "downloadFailed": "下载更新失败",
     "installFailed": "安装更新失败",
+    "githubConnectivityHint": "国内更新源和 GitHub 均无法连接。请检查网络、配置系统代理或切换网络后重试；也可以前往 GitHub 发布页手动下载安装。",
     "manualDownload": "前往 GitHub Releases 手动下载",
     "releaseNotes": "更新说明",
     "noReleaseNotes": "此版本暂无更新说明。",

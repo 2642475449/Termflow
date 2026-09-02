@@ -919,6 +919,7 @@
     "checkFailed": "Failed to check for updates",
     "downloadFailed": "Failed to download the update",
     "installFailed": "Failed to install the update",
+    "githubConnectivityHint": "Neither the China update source nor GitHub could be reached. Check your connection, configure a system proxy, or switch networks and retry. You can also download the installer manually from GitHub Releases.",
     "manualDownload": "Download manually from GitHub Releases",
     "releaseNotes": "Release Notes",
     "noReleaseNotes": "No release notes are available for this version.",

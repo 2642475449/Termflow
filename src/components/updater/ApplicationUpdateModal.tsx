@@ -147,11 +147,18 @@ export function ApplicationUpdateModal() {
                 : update.errorStage === "download"
                   ? t("updater.downloadFailed")
                   : t("updater.installFailed")}
-              description={<div className="break-all font-mono text-xs">{update.error}</div>}
+              description={(
+                <div className="space-y-2 text-xs">
+                  {update.errorStage === "check" || update.errorStage === "download" ? (
+                    <div>{t("updater.githubConnectivityHint")}</div>
+                  ) : null}
+                  <div className="break-all font-mono">{update.error}</div>
+                </div>
+              )}
             />
           ) : null}
 
-          {update.errorStage === "download" ? (
+          {update.errorStage === "check" || update.errorStage === "download" ? (
             <Button onClick={() => void openExternalUrl(TERMFLOW_RELEASES_URL)}>
               {t("updater.manualDownload")}
             </Button>

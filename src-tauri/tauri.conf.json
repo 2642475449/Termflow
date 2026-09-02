@@ -54,6 +54,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhBRDVFMzZGMTE1RDJBQzAKUldUQUtsMFJiK1BWaXV0QUh3MGhmeC9TVG1RRVFNUHd5b0YxaXN3OGFoUS9GWFlIWWR3NnNXNFMK",
       "endpoints": [
+        "https://termflow.jianglan.online/latest.json",
         "https://github.com/2642475449/Termflow/releases/latest/download/latest.json"
       ],
       "windows": {
