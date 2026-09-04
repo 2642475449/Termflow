@@ -4893,7 +4893,7 @@ dependencies = [
 
 [[package]]
 name = "termflow"
-version = "1.8.29"
+version = "1.8.30"
 dependencies = [
  "chrono",
  "dirs-next",
