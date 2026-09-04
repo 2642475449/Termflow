@@ -99,7 +99,9 @@ export function NewSessionDialog({
     setClaudeEffort("inherit");
     setClaudeEffortInfo(null);
     setCodexYolo(codexDefaults.yolo);
-    setCodexApprovalMode(codexDefaults.approvalMode);
+    setCodexApprovalMode(
+      codexDefaults.approvalMode === "never" ? "on-request" : codexDefaults.approvalMode,
+    );
     setCodexSandboxMode(codexDefaults.sandboxMode);
     setCodexEffort("inherit");
     setAntigravitySkipPermissions(antigravityDefaults.dangerouslySkipPermissions);
@@ -378,7 +380,6 @@ export function NewSessionDialog({
                 onChange={(value) => setCodexApprovalMode(value)}
                 disabled={codexYolo}
                 options={[
-                  { value: "never", label: "永不询问审批" },
                   { value: "on-request", label: "按需审批" },
                   { value: "untrusted", label: "仅不可信命令询问" },
                 ]}

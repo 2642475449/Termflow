@@ -20,6 +20,7 @@ import type {
   ClaudeRateLimits,
   ClaudeCliInfo,
   AgentCliInfo,
+  AntigravityUsage,
   ClaudeEffortInfo,
   ClaudeMdDetail,
   ClaudeMdScope,
@@ -387,6 +388,19 @@ export async function getQoderUsage(options?: {
     });
 
   return await qoderUsageRequest;
+}
+
+let antigravityUsageCache: { value: AntigravityUsage; updatedAt: number } | null = null;
+let antigravityUsageRequest: Promise<AntigravityUsage> | null = null;
+
+export async function getAntigravityUsage(options?: { forceRefresh?: boolean; maxAgeMs?: number }): Promise<AntigravityUsage> {
+  const maxAgeMs = options?.maxAgeMs ?? QODER_USAGE_CACHE_TTL_MS;
+  if (!options?.forceRefresh && antigravityUsageCache && Date.now() - antigravityUsageCache.updatedAt <= maxAgeMs) return antigravityUsageCache.value;
+  if (!options?.forceRefresh && antigravityUsageRequest) return antigravityUsageRequest;
+  antigravityUsageRequest = invoke<AntigravityUsage>("get_antigravity_usage")
+    .then((value) => { if (value.status === "ok") antigravityUsageCache = { value, updatedAt: Date.now() }; return value; })
+    .finally(() => { antigravityUsageRequest = null; });
+  return await antigravityUsageRequest;
 }
 
 export async function getClaudeRateLimits(sessionId: string): Promise<ClaudeRateLimits> {

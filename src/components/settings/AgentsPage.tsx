@@ -2,15 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircleFilled, CheckOutlined, CloseCircleFilled, CopyOutlined, DownOutlined, ReloadOutlined } from "@ant-design/icons";
 import { Button, Drawer, Dropdown, Spin, Tag, message } from "antd";
 import { useTranslation } from "react-i18next";
-import { getClaudeRateLimits, getCodexRateLimits, getQoderUsage, inspectAgentClis } from "@/lib/api";
+import { getAntigravityUsage, getClaudeRateLimits, getCodexRateLimits, getQoderUsage, inspectAgentClis } from "@/lib/api";
 import { AGENT_DEFINITIONS, AI_AGENT_ORDER, formatAgentVersion } from "@/lib/agents";
-import type { AgentCliInfo, AiAgentId, ClaudeRateLimits, CodexRateLimitWindow, CodexRateLimits, QoderUsage } from "@/types";
+import type { AgentCliInfo, AiAgentId, AntigravityUsage, ClaudeRateLimits, CodexRateLimitWindow, CodexRateLimits, QoderUsage } from "@/types";
 import { AgentIcon } from "@/components/AgentIcon";
 import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
 import { useAppStore } from "@/store";
 
-type Quotas = { claude: ClaudeRateLimits | null; codex: CodexRateLimits | null; qoder: QoderUsage | null };
-const EMPTY_QUOTAS: Quotas = { claude: null, codex: null, qoder: null };
+type Quotas = { claude: ClaudeRateLimits | null; codex: CodexRateLimits | null; antigravity: AntigravityUsage | null; qoder: QoderUsage | null };
+const EMPTY_QUOTAS: Quotas = { claude: null, codex: null, antigravity: null, qoder: null };
 const QUOTA_REFRESH_INTERVAL_MS = 3 * 60 * 1000;
 const QUOTA_RESUME_MAX_AGE_MS = 60 * 1000;
 
@@ -41,18 +41,22 @@ export function AgentsPage() {
     const installed = new Set(detected.filter((agent) => agent.installed).map((agent) => agent.id));
     setQuotaLoading(true);
     const request = (async () => {
-      const [claude, codex, qoder] = await Promise.allSettled([
+      const [claude, codex, antigravity, qoder] = await Promise.allSettled([
         installed.has("claude") && claudeSessionId ? getClaudeRateLimits(claudeSessionId) : Promise.resolve(null),
         installed.has("codex") ? getCodexRateLimits({ forceRefresh }) : Promise.resolve(null),
+        installed.has("antigravity") ? getAntigravityUsage({ forceRefresh }) : Promise.resolve(null),
         installed.has("qoder") ? getQoderUsage({ forceRefresh }) : Promise.resolve(null),
       ]);
       setQuotas((current) => ({
         claude: claude.status === "fulfilled" ? claude.value : current.claude,
         codex: codex.status === "fulfilled" ? codex.value : current.codex,
+        antigravity: antigravity.status === "fulfilled" && antigravity.value?.status === "ok"
+          ? antigravity.value
+          : current.antigravity ?? (antigravity.status === "fulfilled" ? antigravity.value : null),
         qoder: qoder.status === "fulfilled" ? qoder.value : current.qoder,
       }));
       setQuotaRefreshFailed(
-        claude.status === "rejected" || codex.status === "rejected" || qoder.status === "rejected",
+        claude.status === "rejected" || codex.status === "rejected" || antigravity.status === "rejected" || qoder.status === "rejected",
       );
     })().finally(() => {
       lastQuotaRefreshAtRef.current = Date.now();
@@ -149,7 +153,7 @@ export function AgentsPage() {
             <AgentRow
               key={agent.id}
               agent={agent}
-              quota={agent.id === "claude" ? quotas.claude : agent.id === "codex" ? quotas.codex : agent.id === "qoder" ? quotas.qoder : null}
+              quota={agent.id === "claude" ? quotas.claude : agent.id === "codex" ? quotas.codex : agent.id === "antigravity" ? quotas.antigravity : agent.id === "qoder" ? quotas.qoder : null}
               quotaLoading={quotaLoading}
               isDefault={defaultAgentId === agent.id}
               isLast={index === agents.length - 1}
@@ -169,7 +173,7 @@ export function AgentsPage() {
 
 function AgentRow({ agent, quota, quotaLoading, isDefault, isLast, onOpen, onSetDefault, onCopyInstall }: {
   agent: AgentCliInfo;
-  quota: ClaudeRateLimits | CodexRateLimits | QoderUsage | null;
+  quota: ClaudeRateLimits | CodexRateLimits | AntigravityUsage | QoderUsage | null;
   quotaLoading: boolean;
   isDefault: boolean;
   isLast: boolean;
@@ -217,12 +221,31 @@ function AgentRow({ agent, quota, quotaLoading, isDefault, isLast, onOpen, onSet
   );
 }
 
-function AgentQuota({ agent, quota, loading }: { agent: AgentCliInfo; quota: ClaudeRateLimits | CodexRateLimits | QoderUsage | null; loading: boolean }) {
+function AgentQuota({ agent, quota, loading }: { agent: AgentCliInfo; quota: ClaudeRateLimits | CodexRateLimits | AntigravityUsage | QoderUsage | null; loading: boolean }) {
   const { t } = useTranslation();
   if (agent.id === "pi") return <div className="h-[38px]" aria-hidden="true" />;
   if (!agent.installed) return <Muted>{t("settings.agents.quota.installFirst")}</Muted>;
-  if (agent.id === "antigravity" || agent.id === "opencode") return <Muted>{t("settings.agents.quota.unsupported")}</Muted>;
+  if (agent.id === "opencode") return <Muted>{t("settings.agents.quota.unsupported")}</Muted>;
   if (loading && !quota) return <Muted>{t("settings.agents.quota.loading")}</Muted>;
+
+  if (agent.id === "antigravity") {
+    const usage = quota as AntigravityUsage | null;
+    if (usage?.status !== "ok" || usage.windows.length === 0) return <QuotaUnavailable agentId={agent.id} />;
+    const percentages = usage.windows.map((window) => clampPercent(window.remainingPercent));
+    const quotaPair = (scope: string) => {
+      const session = usage.windows.find((window) => window.scope === scope && window.window === "session");
+      const weekly = usage.windows.find((window) => window.scope === scope && window.window === "weekly");
+      const value = (window: typeof session) => window ? clampPercent(window.remainingPercent) : "–";
+      return `${value(session)} / ${value(weekly)}%`;
+    };
+    const detail = [
+      `${t("settings.agents.quota.sessionShort")}/${t("settings.agents.quota.weeklyShort")}`,
+      `${t("settings.agents.quota.gemini")} ${quotaPair("Gemini")}`,
+      `${t("settings.agents.quota.claudeGpt")} ${quotaPair("Claude and GPT")}`,
+    ].join(" · ");
+    const minimum = Math.min(...percentages);
+    return <QuotaSummary headline={quotaHeadline(minimum, t)} detail={detail} percentages={[minimum]} />;
+  }
 
   if (agent.id === "qoder") {
     const usage = quota as QoderUsage | null;
@@ -254,7 +277,7 @@ function Muted({ children }: { children: React.ReactNode }) {
 
 function QuotaUnavailable({ agentId }: { agentId: AiAgentId }) {
   const { t } = useTranslation();
-  return <Muted>{t(agentId === "claude" ? "settings.agents.quota.startSession" : "settings.agents.quota.unavailable")}</Muted>;
+  return <Muted>{t(agentId === "claude" || agentId === "antigravity" ? "settings.agents.quota.startSession" : "settings.agents.quota.unavailable")}</Muted>;
 }
 
 function QuotaSummary({ headline, detail, percentages }: { headline: string; detail?: string; percentages: number[] }) {

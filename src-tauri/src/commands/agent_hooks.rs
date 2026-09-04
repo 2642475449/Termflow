@@ -6,6 +6,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
 const MANAGED_SCRIPT_NAME: &str = "termflow-agent-hook.cjs";
+const ANTIGRAVITY_STATUSLINE_SCRIPT_NAME: &str = "termflow-antigravity-statusline.cjs";
+const ANTIGRAVITY_STATUSLINE_MARKER: &str = "termflow-antigravity-statusline.cjs";
+const ANTIGRAVITY_ORIGINAL_STATUSLINE_NAME: &str = "antigravity-statusline-original.json";
 const OWNED_MARKER: &str = "termflow-agent-hook.cjs";
 const ANTIGRAVITY_HOOK_GROUP: &str = "termflow-agent-status";
 const TRUST_BEGIN: &str = "# BEGIN TERMFLOW AGENT STATUS HOOKS";
@@ -139,6 +142,7 @@ fn install_antigravity_hook() -> Result<AgentHookStatus, String> {
     let mut config = read_json_object(&config_path)?;
     install_antigravity_hook_group(&mut config, &pre_invocation_command, &stop_command)?;
     write_json(&config_path, &config)?;
+    install_antigravity_statusline(&home)?;
     remove_legacy_gemini_hook()?;
     Ok(AgentHookStatus {
         agent: "antigravity".into(),
@@ -149,6 +153,109 @@ fn install_antigravity_hook() -> Result<AgentHookStatus, String> {
                 .into(),
         ),
     })
+}
+
+fn install_antigravity_statusline(home: &Path) -> Result<(), String> {
+    let managed_root = home.join(".termflow").join("agent-hooks");
+    let script_path = managed_root.join(ANTIGRAVITY_STATUSLINE_SCRIPT_NAME);
+    let original_path = managed_root.join(ANTIGRAVITY_ORIGINAL_STATUSLINE_NAME);
+    let settings_path = home
+        .join(".gemini")
+        .join("antigravity-cli")
+        .join("settings.json");
+    write_if_changed(&script_path, antigravity_statusline_script().as_bytes())?;
+    let mut settings = read_json_object(&settings_path)?;
+    let command = node_statusline_command(&script_path);
+    install_antigravity_statusline_config(&mut settings, &command, &original_path)?;
+    write_json(&settings_path, &settings)
+}
+
+fn install_antigravity_statusline_config(
+    settings: &mut Value,
+    command: &str,
+    original_path: &Path,
+) -> Result<(), String> {
+    let root = settings
+        .as_object_mut()
+        .ok_or("Antigravity settings.json 的根节点必须是对象")?;
+    if let Some(existing) = root.get("statusLine") {
+        let is_owned = existing
+            .get("command")
+            .and_then(Value::as_str)
+            .is_some_and(|value| value.contains(ANTIGRAVITY_STATUSLINE_MARKER));
+        if !is_owned {
+            write_json(original_path, existing)?;
+        }
+    }
+    root.insert(
+        "statusLine".into(),
+        json!({
+            "type": "command",
+            "command": command,
+            "enabled": true,
+            "stack_with_default": true,
+        }),
+    );
+    Ok(())
+}
+
+fn node_statusline_command(script: &Path) -> String {
+    // Antigravity 1.1.26 tokenizes this setting itself on Windows and keeps
+    // double quotes as literal filename characters. The managed path normally
+    // has no spaces, so use a slash-normalized, unquoted command.
+    format!("node {}", script.to_string_lossy().replace('\\', "/"))
+}
+
+fn antigravity_statusline_script() -> &'static str {
+    r#"#!/usr/bin/env node
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const childProcess = require('child_process');
+const originalPath = path.join(__dirname, 'antigravity-statusline-original.json');
+const snapshotPath = path.join(__dirname, 'antigravity-usage.json');
+let raw = '';
+try { raw = fs.readFileSync(0, 'utf8'); } catch {}
+let input = {};
+try { input = raw ? JSON.parse(raw) : {}; } catch {}
+const definitions = {
+  'gemini-5h': ['Gemini', 'session'],
+  'gemini-weekly': ['Gemini', 'weekly'],
+  '3p-5h': ['Claude and GPT', 'session'],
+  '3p-weekly': ['Claude and GPT', 'weekly'],
+};
+const windows = [];
+for (const [id, definition] of Object.entries(definitions)) {
+  const value = input.quota && input.quota[id];
+  const fraction = Number(value && value.remaining_fraction);
+  if (!Number.isFinite(fraction) || fraction < 0 || fraction > 1) continue;
+  windows.push({ id, scope: definition[0], window: definition[1], remainingPercent: Math.round(fraction * 10000) / 100, resetDescription: typeof value.reset_time === 'string' ? value.reset_time : null });
+}
+if (input.quota && typeof input.quota === 'object' && snapshotPath) {
+  const snapshot = {
+    version: 1,
+    accountHash: typeof input.email === 'string' ? crypto.createHash('sha256').update(input.email.trim().toLowerCase()).digest('hex') : null,
+    planTier: typeof input.plan_tier === 'string' ? input.plan_tier : null,
+    windows,
+    updatedAt: Date.now(),
+  };
+  try {
+    fs.mkdirSync(path.dirname(snapshotPath), { recursive: true });
+    const temporary = `${snapshotPath}.${process.pid}.tmp`;
+    fs.writeFileSync(temporary, JSON.stringify(snapshot), { mode: 0o600 });
+    fs.renameSync(temporary, snapshotPath);
+  } catch {}
+}
+try {
+  if (originalPath && fs.existsSync(originalPath)) {
+    const original = JSON.parse(fs.readFileSync(originalPath, 'utf8'));
+    if (original && original.type === 'command' && typeof original.command === 'string') {
+      const result = childProcess.spawnSync(original.command, { shell: true, input: raw, encoding: 'utf8' });
+      if (result.stdout) process.stdout.write(result.stdout);
+    }
+  }
+} catch {}
+"#
 }
 
 fn install_antigravity_hook_group(
@@ -617,8 +724,9 @@ export const TermflowStatusPlugin = async () => ({
 #[cfg(test)]
 mod tests {
     use super::{
-        definition_contains_owned_command, hook_action_contains_owned_command,
-        install_antigravity_hook_group, install_json_hooks, managed_hook_script,
+        antigravity_statusline_script, definition_contains_owned_command,
+        hook_action_contains_owned_command, install_antigravity_hook_group,
+        install_antigravity_statusline_config, install_json_hooks, managed_hook_script,
         opencode_plugin_source, remove_legacy_codex_trust, remove_owned_json_hooks,
         resolve_opencode_config_root, supports_agent_status_hook, ANTIGRAVITY_HOOK_GROUP,
         QODER_HOOK_EVENTS,
@@ -679,6 +787,42 @@ mod tests {
             "node termflow-agent-hook.cjs antigravity Stop",
         )
         .is_err());
+    }
+
+    #[test]
+    fn antigravity_statusline_preserves_user_command_and_installs_bridge() {
+        let directory = tempfile::tempdir().unwrap();
+        let original_path = directory.path().join("original.json");
+        let mut settings = json!({
+            "theme": "dark",
+            "statusLine": { "type": "command", "command": "user-statusline" }
+        });
+        install_antigravity_statusline_config(
+            &mut settings,
+            "node termflow-antigravity-statusline.cjs",
+            &original_path,
+        )
+        .unwrap();
+
+        assert_eq!(settings["theme"], "dark");
+        assert_eq!(settings["statusLine"]["stack_with_default"], true);
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(
+                &std::fs::read_to_string(original_path).unwrap()
+            )
+            .unwrap()["command"],
+            "user-statusline"
+        );
+    }
+
+    #[test]
+    fn antigravity_statusline_snapshot_is_sanitized_and_atomic() {
+        let source = antigravity_statusline_script();
+        assert!(source.contains("input.quota"));
+        assert!(source.contains("remaining_fraction"));
+        assert!(source.contains("createHash('sha256')"));
+        assert!(source.contains("fs.renameSync(temporary, snapshotPath)"));
+        assert!(!source.contains("email: input.email"));
     }
 
     #[test]

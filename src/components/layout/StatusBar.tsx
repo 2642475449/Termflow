@@ -5,7 +5,7 @@ import type { TFunction } from "i18next";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AgentIcon } from "@/components/AgentIcon";
-import { getClaudeRateLimits, getCodexRateLimits, getQoderUsage, getSearchIndexStatus, gitCancelCloneTask, inspectAgentClis } from "@/lib/api";
+import { getAntigravityUsage, getClaudeRateLimits, getCodexRateLimits, getQoderUsage, getSearchIndexStatus, gitCancelCloneTask, inspectAgentClis } from "@/lib/api";
 import { summarizeBackgroundTasks } from "@/lib/backgroundTasks";
 import {
   shouldLoadClaudeRateLimits,
@@ -16,7 +16,7 @@ import {
 import { formatAgentVersion, getAgentDisplayName, isAiAgentId } from "@/lib/agents";
 import { useProjectLauncher } from "@/hooks/useProjectLauncher";
 import { useAppStore } from "@/store";
-import type { AiAgentId, ClaudeRateLimits, ClaudeRateLimitsUpdatePayload, CodexRateLimits, CodexRateLimitWindow, GitCloneEventPayload, GitCloneTask, ProjectSearchIndexStatus, QoderQuotaBucket, QoderUsage } from "@/types";
+import type { AiAgentId, AntigravityQuotaWindow, AntigravityUsage, ClaudeRateLimits, ClaudeRateLimitsUpdatePayload, CodexRateLimits, CodexRateLimitWindow, GitCloneEventPayload, GitCloneTask, ProjectSearchIndexStatus, QoderQuotaBucket, QoderUsage } from "@/types";
 const GIT_CLONE_EVENT = "git-clone-task-event";
 const SEARCH_INDEX_EVENT = "search-index-status";
 
@@ -45,6 +45,9 @@ function StatusBar() {
   const [qoderUsage, setQoderUsage] = useState<QoderUsage | null>(null);
   const [qoderUsageLoading, setQoderUsageLoading] = useState(false);
   const [qoderUsageError, setQoderUsageError] = useState<string | null>(null);
+  const [antigravityUsage, setAntigravityUsage] = useState<AntigravityUsage | null>(null);
+  const [antigravityUsageLoading, setAntigravityUsageLoading] = useState(false);
+  const [antigravityUsageError, setAntigravityUsageError] = useState<string | null>(null);
   const [cancellingTaskIds, setCancellingTaskIds] = useState<string[]>([]);
   const [searchIndexStatus, setSearchIndexStatus] = useState<ProjectSearchIndexStatus | null>(null);
   const [searchIndexStatusProjectPath, setSearchIndexStatusProjectPath] = useState<string | null>(null);
@@ -66,6 +69,7 @@ function StatusBar() {
   const loadClaudeUsage = shouldLoadClaudeRateLimits(activeSession);
   const showClaudeUsage = loadClaudeUsage && shouldShowClaudeRateLimits(claudeRateLimits);
   const showQoderUsage = shouldLoadQoderUsage(activeSession);
+  const showAntigravityUsage = activeSession?.agentId === "antigravity";
   const effectiveAgentId = useMemo<AiAgentId | null>(() => {
     if (isAiAgentId(activeSession?.agentId)) {
       return activeSession.agentId;
@@ -151,6 +155,47 @@ function StatusBar() {
       window.clearInterval(interval);
     };
   }, [showCodexUsage]);
+
+  useEffect(() => {
+    if (!showAntigravityUsage) {
+      setAntigravityUsage(null);
+      setAntigravityUsageError(null);
+      setAntigravityUsageLoading(false);
+      return;
+    }
+    let disposed = false;
+    const loadUsage = async (forceRefresh = false) => {
+      setAntigravityUsageLoading(true);
+      try {
+        const usage = await getAntigravityUsage({ forceRefresh });
+        if (!disposed) {
+          setAntigravityUsage(usage);
+          setAntigravityUsageError(null);
+        }
+      } catch (error) {
+        if (!disposed) setAntigravityUsageError(error instanceof Error ? error.message : String(error));
+      } finally {
+        if (!disposed) setAntigravityUsageLoading(false);
+      }
+    };
+    void loadUsage();
+    const interval = window.setInterval(() => void loadUsage(true), 3 * 60 * 1000);
+    return () => {
+      disposed = true;
+      window.clearInterval(interval);
+    };
+  }, [showAntigravityUsage]);
+
+  const handleRefreshAntigravityUsage = () => {
+    setAntigravityUsageLoading(true);
+    getAntigravityUsage({ forceRefresh: true })
+      .then((usage) => {
+        setAntigravityUsage(usage);
+        setAntigravityUsageError(null);
+      })
+      .catch((error) => setAntigravityUsageError(error instanceof Error ? error.message : String(error)))
+      .finally(() => setAntigravityUsageLoading(false));
+  };
 
   useEffect(() => {
     if (!showQoderUsage) {
@@ -693,6 +738,13 @@ function StatusBar() {
             error={codexUsageError}
             onRefresh={handleRefreshCodexUsage}
           />
+        ) : showAntigravityUsage ? (
+          <AntigravityUsageStatus
+            usage={antigravityUsage}
+            isLoading={antigravityUsageLoading}
+            error={antigravityUsageError}
+            onRefresh={handleRefreshAntigravityUsage}
+          />
         ) : showQoderUsage ? (
           <QoderUsageStatus
             usage={qoderUsage}
@@ -1002,6 +1054,141 @@ function qoderUsedPercentage(usage: QoderUsage | null): number | null {
 
 function formatCreditValue(value: number): string {
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value);
+}
+
+function AntigravityUsageStatus({
+  usage,
+  isLoading,
+  error,
+  onRefresh,
+}: {
+  usage: AntigravityUsage | null;
+  isLoading: boolean;
+  error: string | null;
+  onRefresh: () => void;
+}) {
+  const { t } = useTranslation();
+  const hasData = usage?.status === "ok" && usage.windows.length > 0;
+  const minimum = hasData
+    ? Math.min(...usage.windows.map((window) => Math.max(0, Math.min(100, Math.round(window.remainingPercent)))))
+    : null;
+  const color = minimum == null ? "var(--cs-text-tertiary)" : codexUsageBarColor(minimum);
+  const summary = minimum == null
+    ? isLoading
+      ? t("statusBar.antigravityUsage.loading")
+      : t("statusBar.antigravityUsage.unavailableShort")
+    : t("statusBar.codexUsage.remaining", { value: minimum });
+  const statusError = error ?? usage?.error;
+
+  const content = (
+    <div
+      className="w-[300px] overflow-hidden rounded-[8px] border"
+      style={{
+        background: "var(--cs-bg-elevated, var(--cs-bg-sidebar))",
+        borderColor: "var(--cs-border-sidebar)",
+        boxShadow: "0 18px 44px rgba(0, 0, 0, 0.30)",
+      }}
+    >
+      <div
+        className="flex items-center justify-between gap-3 px-3 py-2"
+        style={{ borderBottom: "1px solid color-mix(in srgb, var(--cs-border-sidebar) 82%, transparent)" }}
+      >
+        <div className="flex min-w-0 items-center gap-2">
+          <AgentIcon agentId="antigravity" size={15} />
+          <div className="min-w-0">
+            <div className="truncate text-[12px] font-medium" style={{ color: "var(--cs-text-primary)" }}>
+              {t("statusBar.antigravityUsage.title")}
+            </div>
+            <div className="text-[10px]" style={{ color: "var(--cs-text-tertiary)" }}>
+              {usage?.updatedAt ? formatUpdatedAt(usage.updatedAt, t) : t("statusBar.antigravityUsage.pending")}
+            </div>
+          </div>
+        </div>
+        <button
+          type="button"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[5px]"
+          style={{ color: "var(--cs-text-tertiary)", background: "transparent", border: 0 }}
+          disabled={isLoading}
+          title={t("common.refresh")}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onRefresh();
+          }}
+        >
+          {isLoading ? <LoadingOutlined style={{ fontSize: 12 }} /> : <ReloadOutlined style={{ fontSize: 12 }} />}
+        </button>
+      </div>
+      <div className="space-y-3 px-3 py-3">
+        {hasData ? usage.windows.map((window) => (
+          <AntigravityUsageWindowRow key={window.id} window={window} />
+        )) : (
+          <div className="flex items-start gap-2 text-[12px]" style={{ color: "var(--cs-text-tertiary)" }}>
+            {isLoading ? <LoadingOutlined /> : <WarningOutlined />}
+            <span>{statusError || t("statusBar.antigravityUsage.unavailable")}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <Popover
+      trigger={["click"]}
+      placement="topLeft"
+      content={content}
+      arrow={false}
+      overlayInnerStyle={{ padding: 0, background: "transparent", boxShadow: "none" }}
+      styles={{ body: { padding: 0 } }}
+      getPopupContainer={() => document.body}
+    >
+      <button
+        type="button"
+        className="flex h-7 min-w-[154px] shrink-0 items-center justify-start gap-2 rounded-[5px] px-2 text-left text-[13px] font-medium leading-none"
+        style={{ background: "transparent", border: 0, color: hasData ? "var(--cs-text-secondary)" : "var(--cs-text-tertiary)" }}
+      >
+        <AgentIcon agentId="antigravity" size={15} />
+        <div
+          className="h-[6px] w-14 shrink-0 overflow-hidden rounded-full"
+          style={{ background: "color-mix(in srgb, var(--cs-text-tertiary) 24%, transparent)" }}
+        >
+          <div className="h-full rounded-full" style={{ width: `${minimum ?? 0}%`, background: color }} />
+        </div>
+        <span className="truncate tabular-nums">{summary}</span>
+        {isLoading ? <LoadingOutlined /> : statusError ? <WarningOutlined /> : null}
+      </button>
+    </Popover>
+  );
+}
+
+function AntigravityUsageWindowRow({ window }: { window: AntigravityQuotaWindow }) {
+  const { t } = useTranslation();
+  const remaining = Math.max(0, Math.min(100, Math.round(window.remainingPercent)));
+  const scope = window.scope === "Gemini"
+    ? t("settings.agents.quota.gemini")
+    : t("settings.agents.quota.claudeGpt");
+  const period = window.window === "session"
+    ? t("settings.agents.quota.sessionShort")
+    : t("settings.agents.quota.weeklyShort");
+  const color = codexUsageBarColor(remaining);
+  const reset = window.resetDescription ? new Date(window.resetDescription) : null;
+  const resetLabel = reset && Number.isFinite(reset.getTime())
+    ? t("statusBar.codexUsage.resetsAt", { time: reset.toLocaleString() })
+    : t("statusBar.codexUsage.resetUnknown");
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between gap-3 text-[12px]">
+        <span className="font-medium" style={{ color: "var(--cs-text-primary)" }}>{scope} · {period}</span>
+        <span className="tabular-nums" style={{ color: "var(--cs-text-secondary)" }}>
+          {t("statusBar.codexUsage.remaining", { value: remaining })}
+        </span>
+      </div>
+      <div className="h-[6px] overflow-hidden rounded-full" style={{ background: "color-mix(in srgb, var(--cs-text-tertiary) 24%, transparent)" }}>
+        <div className="h-full rounded-full" style={{ width: `${remaining}%`, background: color }} />
+      </div>
+      <div className="text-[11px]" style={{ color: "var(--cs-text-tertiary)" }}>{resetLabel}</div>
+    </div>
+  );
 }
 
 function RateLimitUsageStatus({

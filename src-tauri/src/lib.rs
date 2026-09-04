@@ -1,3 +1,4 @@
+mod antigravity_usage;
 mod claude_rate_limits;
 mod claude_usage;
 mod codex_rate_limits;
@@ -248,6 +249,7 @@ pub fn run() {
             commands::agent_usage::clear_agent_usage_history,
             commands::agent_usage::rebuild_agent_usage_history,
             codex_rate_limits::get_codex_rate_limits,
+            antigravity_usage::get_antigravity_usage,
             qoder_usage::get_qoder_usage,
             claude_rate_limits::get_claude_rate_limits,
             commands::claude_config::get_claude_md_detail,

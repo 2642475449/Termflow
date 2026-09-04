@@ -432,6 +432,23 @@ export interface QoderUsage {
   accountLabel: string | null;
 }
 
+export interface AntigravityQuotaWindow {
+  id: string;
+  scope: string;
+  window: string;
+  remainingPercent: number;
+  resetDescription: string | null;
+}
+
+export type AntigravityUsageStatus = "ok" | "error" | "unavailable";
+
+export interface AntigravityUsage {
+  windows: AntigravityQuotaWindow[];
+  updatedAt: number;
+  error: string | null;
+  status: AntigravityUsageStatus;
+}
+
 export type ClaudeRateLimitStatus = "ok" | "unavailable";
 
 export interface ClaudeRateLimits {

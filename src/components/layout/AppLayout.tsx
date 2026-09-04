@@ -678,6 +678,21 @@ function AppLayout() {
         : undefined;
       const providerInitialPrompt = prepareAgentInitialPrompt(agent.id, initialPrompt);
 
+      if (STATUS_AGENT_IDS.includes(agent.id)) {
+        try {
+          const hookStatus = await ensureAgentStatusHook(agent.id);
+          useAppStore.getState().setAgentHookDiagnostic({
+            agentId: agent.id,
+            configured: hookStatus.configured,
+            configPath: hookStatus.configPath,
+            detail: hookStatus.detail ?? undefined,
+            checkedAt: Date.now(),
+          });
+        } catch (error) {
+          console.warn(`Failed to configure ${agent.id} status hook before launch:`, error);
+        }
+      }
+
       addSession({
         id: sessionId,
         path: currentProject.path,

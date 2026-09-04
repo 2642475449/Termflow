@@ -171,7 +171,6 @@ html, body, #root {
 .app-shell select,
 .app-shell [contenteditable="true"],
 .app-shell .monaco-editor,
-.app-shell .monaco-editor *,
 .app-shell .xterm,
 .app-shell .xterm * {
   user-select: text;

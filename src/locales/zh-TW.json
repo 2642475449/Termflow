@@ -130,6 +130,13 @@
       "maxWindowUnknown": "未知",
       "modelLabel": "目前模型"
     },
+    "antigravityUsage": {
+      "title": "Antigravity 用量",
+      "loading": "Antigravity 用量…",
+      "pending": "等待首次額度快照",
+      "unavailable": "啟動 Antigravity 工作階段並傳送訊息後顯示額度",
+      "unavailableShort": "用量不可用"
+    },
     "codexUsage": {
       "title": "Codex 用量",
       "loading": "Codex 用量…",
@@ -1039,7 +1046,7 @@
       },
       "quota": {
         "loading": "正在讀取額度…", "installFirst": "安裝並登入後顯示額度", "unsupported": "暫不支援讀取額度", "unavailable": "暫時無法讀取額度", "startSession": "啟動一次工作階段後顯示額度", "refreshFailed": "額度更新失敗，目前顯示上次成功查詢的結果",
-        "healthy": "額度充足", "low": "額度較低", "exhausted": "額度即將用盡", "session": "5 小時 {{value}}%", "weekly": "每週 {{value}}%", "remainingPercent": "剩餘 {{value}}%", "remainingCredits": "剩餘 {{value}}"
+        "healthy": "額度充足", "low": "額度較低", "exhausted": "額度即將用盡", "session": "5 小時 {{value}}%", "weekly": "每週 {{value}}%", "remainingPercent": "剩餘 {{value}}%", "remainingCredits": "剩餘 {{value}}", "signInAntigravity": "請先登入 Antigravity CLI", "timeout": "額度查詢逾時", "gemini": "Gemini", "claudeGpt": "Claude/GPT", "sessionShort": "5小時", "weeklyShort": "每週"
       },
       "detailHint": "點擊智慧體列可查看版本和可執行檔路徑。",
       "pathHint": "偵測結果以 Termflow 目前讀取到的系統 PATH 為準。安裝或更新智慧體後，如果仍未偵測到，請重新啟動電腦再試。"
