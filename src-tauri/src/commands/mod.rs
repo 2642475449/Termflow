@@ -11,6 +11,7 @@ pub mod file_tree;
 pub mod git;
 pub mod image;
 pub mod mcp_servers;
+pub mod network_proxy;
 pub mod notification;
 pub mod remote_notification;
 pub mod search_index;

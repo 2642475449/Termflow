@@ -49,6 +49,7 @@ pub async fn spawn_pty(
     path: String,
     app: AppHandle,
     manager: State<'_, Arc<PtyManager>>,
+    database: State<'_, Arc<crate::database::Database>>,
     resume: Option<bool>,
     skip_permissions: Option<bool>,
     startup_command: Option<String>,
@@ -103,6 +104,7 @@ pub async fn spawn_pty(
             .ok()
         });
     let app_for_checkpoint = app.clone();
+    let network_proxy = super::network_proxy::load_resolved_proxy(&database)?;
     let manager = manager.inner().clone();
     let spawned_session_id = session_id.clone();
     let result = manager.spawn(
@@ -116,6 +118,7 @@ pub async fn spawn_pty(
         shell_type.as_deref().unwrap_or("powershell"),
         claude_effort,
         agent_id,
+        network_proxy,
     );
     let result = match result {
         Ok(Some(control)) => {

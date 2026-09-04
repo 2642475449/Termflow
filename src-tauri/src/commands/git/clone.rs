@@ -6,7 +6,7 @@ use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock};
 use tauri::{AppHandle, Emitter};
 
-use super::utils::{git_command, run_git_blocking};
+use super::utils::run_git_blocking;
 
 const GIT_CLONE_EVENT: &str = "git-clone-task-event";
 static CLONE_TASK_PIDS: OnceLock<Mutex<HashMap<String, u32>>> = OnceLock::new();
@@ -187,12 +187,14 @@ pub fn git_cancel_clone_task(app: AppHandle, task_id: String) -> Result<(), Stri
 #[tauri::command]
 pub async fn git_clone_repository(
     app: AppHandle,
+    database: tauri::State<'_, std::sync::Arc<crate::database::Database>>,
     remote_url: String,
     parent_directory: String,
     directory_name: String,
     branch: Option<String>,
     shallow: bool,
 ) -> Result<GitCloneStartResult, String> {
+    let network_proxy = super::super::network_proxy::load_resolved_proxy(&database)?;
     let remote_url = remote_url.trim().to_string();
     if remote_url.is_empty() || remote_url.starts_with('-') || remote_url.contains(['\r', '\n']) {
         return Err("请输入有效的 Git 仓库地址".to_string());
@@ -260,7 +262,7 @@ pub async fn git_clone_repository(
         let progress_directory_name = directory_name_for_spawn.clone();
         let progress_remote_url = remote_url_for_spawn.clone();
         let clone_result = run_git_blocking("克隆 Git 仓库", move || {
-            let mut command = git_command();
+            let mut command = super::utils::git_command_with_proxy(&network_proxy);
             command.arg("clone").arg("--progress");
             if shallow {
                 command.arg("--depth").arg("1");

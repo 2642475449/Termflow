@@ -1,5 +1,9 @@
 use super::types::{GitPullWithStashResult, GitRemoteResult};
-use super::utils::{ensure_repository_allows_normal_commit, git_command, open_repo, run_git_write};
+use super::utils::{
+    ensure_repository_allows_normal_commit, git_command, git_command_with_proxy, open_repo,
+    run_git_write,
+};
+use crate::network_proxy::ResolvedNetworkProxy;
 use std::io::Read;
 use std::process::{Child, Output, Stdio};
 use std::thread::{self, JoinHandle};
@@ -128,13 +132,14 @@ fn run_remote_command(
     args: &[&str],
     success_message: &str,
     failure_message: &str,
+    proxy: &ResolvedNetworkProxy,
 ) -> Result<GitRemoteResult, String> {
     let repo = open_repo(project_path)?;
     ensure_repository_allows_normal_commit(&repo)?;
     drop(repo);
     let path = crate::path_utils::normalize_input_path(project_path);
 
-    let mut command = git_command();
+    let mut command = git_command_with_proxy(proxy);
     command
         .args(args)
         .current_dir(&path)
@@ -165,7 +170,11 @@ fn run_remote_command(
 }
 
 #[tauri::command]
-pub async fn git_fetch(project_path: String) -> Result<GitRemoteResult, String> {
+pub async fn git_fetch(
+    project_path: String,
+    database: tauri::State<'_, std::sync::Arc<crate::database::Database>>,
+) -> Result<GitRemoteResult, String> {
+    let proxy = super::super::network_proxy::load_resolved_proxy(&database)?;
     let lock_path = project_path.clone();
     run_git_write(lock_path, "获取 Git 远程更新", move || {
         run_remote_command(
@@ -173,16 +182,21 @@ pub async fn git_fetch(project_path: String) -> Result<GitRemoteResult, String> 
             &["fetch", "--all", "--prune"],
             "获取远程更新成功",
             "获取远程更新失败",
+            &proxy,
         )
     })
     .await
 }
 
 #[tauri::command]
-pub async fn git_push(project_path: String) -> Result<GitRemoteResult, String> {
+pub async fn git_push(
+    project_path: String,
+    database: tauri::State<'_, std::sync::Arc<crate::database::Database>>,
+) -> Result<GitRemoteResult, String> {
+    let proxy = super::super::network_proxy::load_resolved_proxy(&database)?;
     let lock_path = project_path.clone();
     run_git_write(lock_path, "推送 Git 提交", move || {
-        run_remote_command(&project_path, &["push"], "推送成功", "推送失败")
+        run_remote_command(&project_path, &["push"], "推送成功", "推送失败", &proxy)
     })
     .await
 }
@@ -194,7 +208,9 @@ pub async fn git_add_remote_and_push(
     remote_name: String,
     remote_url: String,
     branch_name: String,
+    database: tauri::State<'_, std::sync::Arc<crate::database::Database>>,
 ) -> Result<GitRemoteResult, String> {
+    let proxy = super::super::network_proxy::load_resolved_proxy(&database)?;
     let remote_name = validate_remote_name(&remote_name)?.to_string();
     let remote_url = validate_remote_url(&remote_url)?.to_string();
     let branch_name = validate_branch_name(&branch_name)?.to_string();
@@ -215,6 +231,7 @@ pub async fn git_add_remote_and_push(
                     &["remote", "add", &remote_name, &remote_url],
                     "远程仓库已添加",
                     "添加远程仓库失败",
+                    &proxy,
                 )?;
                 if !add_result.success {
                     return Ok(add_result);
@@ -227,6 +244,7 @@ pub async fn git_add_remote_and_push(
             &["push", "--set-upstream", &remote_name, &branch_name],
             "远程仓库已连接并推送成功",
             "远程仓库已配置，但首次推送失败",
+            &proxy,
         )?;
 
         if push_result.success {
@@ -242,7 +260,11 @@ pub async fn git_add_remote_and_push(
 }
 
 #[tauri::command]
-pub async fn git_pull(project_path: String) -> Result<GitRemoteResult, String> {
+pub async fn git_pull(
+    project_path: String,
+    database: tauri::State<'_, std::sync::Arc<crate::database::Database>>,
+) -> Result<GitRemoteResult, String> {
+    let proxy = super::super::network_proxy::load_resolved_proxy(&database)?;
     let lock_path = project_path.clone();
     run_git_write(lock_path, "拉取 Git 更新", move || {
         run_remote_command(
@@ -250,6 +272,7 @@ pub async fn git_pull(project_path: String) -> Result<GitRemoteResult, String> {
             &["pull", "--ff-only"],
             "拉取成功",
             "拉取失败",
+            &proxy,
         )
     })
     .await
@@ -271,12 +294,17 @@ fn read_optional_stash_oid(project_path: &str) -> Result<Option<String>, String>
     Ok((!oid.is_empty()).then_some(oid))
 }
 
-fn drop_stash_by_oid(project_path: &str, stash_oid: &str) -> Result<bool, String> {
+fn drop_stash_by_oid(
+    project_path: &str,
+    stash_oid: &str,
+    proxy: &ResolvedNetworkProxy,
+) -> Result<bool, String> {
     let list_result = run_remote_command(
         project_path,
         &["stash", "list", "--format=%H"],
         "",
         "读取 Git stash 列表失败",
+        proxy,
     )?;
     if !list_result.success {
         return Err(list_result.message);
@@ -295,6 +323,7 @@ fn drop_stash_by_oid(project_path: &str, stash_oid: &str) -> Result<bool, String
         &["stash", "drop", &reference],
         "安全备份已删除",
         "删除 Git stash 失败",
+        proxy,
     )?;
     Ok(drop_result.success)
 }
@@ -317,7 +346,10 @@ fn has_unmerged_paths(project_path: &str) -> Result<bool, String> {
     Ok(!String::from_utf8_lossy(&output.stdout).trim().is_empty())
 }
 
-fn pull_with_stash_sync(project_path: &str) -> Result<GitPullWithStashResult, String> {
+fn pull_with_stash_sync(
+    project_path: &str,
+    proxy: &ResolvedNetworkProxy,
+) -> Result<GitPullWithStashResult, String> {
     if has_unmerged_paths(project_path)? {
         return Ok(GitPullWithStashResult {
             success: false,
@@ -339,6 +371,7 @@ fn pull_with_stash_sync(project_path: &str) -> Result<GitPullWithStashResult, St
         ],
         "本地修改已安全保存",
         "保存本地修改失败",
+        proxy,
     ) {
         Ok(result) => result,
         Err(message) => {
@@ -357,12 +390,14 @@ fn pull_with_stash_sync(project_path: &str) -> Result<GitPullWithStashResult, St
                 &["stash", "apply", "--index", &stash_oid],
                 "本地修改已恢复",
                 "恢复本地修改失败",
+                proxy,
             );
             let restored = restore_result
                 .as_ref()
                 .map(|result| result.success)
                 .unwrap_or(false);
-            let dropped = restored && drop_stash_by_oid(project_path, &stash_oid).unwrap_or(false);
+            let dropped =
+                restored && drop_stash_by_oid(project_path, &stash_oid, proxy).unwrap_or(false);
             let message = if restored && dropped {
                 format!("{}；本地修改已恢复", message)
             } else if restored {
@@ -393,8 +428,13 @@ fn pull_with_stash_sync(project_path: &str) -> Result<GitPullWithStashResult, St
     // Git may report a dirty entry because only file metadata or line endings changed,
     // while `stash push` correctly determines that there is no content to save.
     let Some(stash_oid) = stash_oid else {
-        let pull_result =
-            run_remote_command(project_path, &["pull", "--ff-only"], "拉取成功", "拉取失败")?;
+        let pull_result = run_remote_command(
+            project_path,
+            &["pull", "--ff-only"],
+            "拉取成功",
+            "拉取失败",
+            proxy,
+        )?;
         return Ok(GitPullWithStashResult {
             success: pull_result.success,
             message: pull_result.message,
@@ -403,18 +443,24 @@ fn pull_with_stash_sync(project_path: &str) -> Result<GitPullWithStashResult, St
         });
     };
 
-    let pull_result =
-        run_remote_command(project_path, &["pull", "--ff-only"], "拉取成功", "拉取失败")
-            .unwrap_or_else(|message| GitRemoteResult {
-                success: false,
-                message,
-            });
+    let pull_result = run_remote_command(
+        project_path,
+        &["pull", "--ff-only"],
+        "拉取成功",
+        "拉取失败",
+        proxy,
+    )
+    .unwrap_or_else(|message| GitRemoteResult {
+        success: false,
+        message,
+    });
 
     let apply_result = run_remote_command(
         project_path,
         &["stash", "apply", "--index", &stash_oid],
         "本地修改已恢复",
         "恢复本地修改失败",
+        proxy,
     )
     .unwrap_or_else(|message| GitRemoteResult {
         success: false,
@@ -422,7 +468,7 @@ fn pull_with_stash_sync(project_path: &str) -> Result<GitPullWithStashResult, St
     });
 
     if apply_result.success {
-        let dropped = drop_stash_by_oid(project_path, &stash_oid).unwrap_or(false);
+        let dropped = drop_stash_by_oid(project_path, &stash_oid, proxy).unwrap_or(false);
         let retained_oid = (!dropped).then_some(stash_oid);
         let message = if pull_result.success {
             if dropped {
@@ -466,16 +512,24 @@ fn pull_with_stash_sync(project_path: &str) -> Result<GitPullWithStashResult, St
 }
 
 #[tauri::command]
-pub async fn git_pull_with_stash(project_path: String) -> Result<GitPullWithStashResult, String> {
+pub async fn git_pull_with_stash(
+    project_path: String,
+    database: tauri::State<'_, std::sync::Arc<crate::database::Database>>,
+) -> Result<GitPullWithStashResult, String> {
+    let proxy = super::super::network_proxy::load_resolved_proxy(&database)?;
     let lock_path = project_path.clone();
     run_git_write(lock_path, "安全拉取 Git 更新", move || {
-        pull_with_stash_sync(&project_path)
+        pull_with_stash_sync(&project_path, &proxy)
     })
     .await
 }
 
 #[tauri::command]
-pub async fn git_pull_rebase(project_path: String) -> Result<GitRemoteResult, String> {
+pub async fn git_pull_rebase(
+    project_path: String,
+    database: tauri::State<'_, std::sync::Arc<crate::database::Database>>,
+) -> Result<GitRemoteResult, String> {
+    let proxy = super::super::network_proxy::load_resolved_proxy(&database)?;
     let lock_path = project_path.clone();
     run_git_write(lock_path, "变基拉取 Git 更新", move || {
         run_remote_command(
@@ -483,6 +537,7 @@ pub async fn git_pull_rebase(project_path: String) -> Result<GitRemoteResult, St
             &["pull", "--rebase"],
             "变基拉取成功",
             "变基拉取失败",
+            &proxy,
         )
     })
     .await
@@ -495,6 +550,15 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::process::Command;
     use tempfile::TempDir;
+
+    fn direct_proxy() -> ResolvedNetworkProxy {
+        crate::network_proxy::resolve_network_proxy(&crate::network_proxy::NetworkProxySettings {
+            mode: "disabled".into(),
+            custom_proxy_url: String::new(),
+            no_proxy: crate::network_proxy::DEFAULT_NO_PROXY.into(),
+        })
+        .unwrap()
+    }
 
     fn run_git(path: &Path, args: &[&str]) -> String {
         let output = Command::new("git")
@@ -654,7 +718,7 @@ mod tests {
         fs::write(local_path.join("working.txt"), "unstaged local\n").unwrap();
         fs::write(local_path.join("untracked.txt"), "untracked local\n").unwrap();
 
-        let result = pull_with_stash_sync(local_path.to_str().unwrap()).unwrap();
+        let result = pull_with_stash_sync(local_path.to_str().unwrap(), &direct_proxy()).unwrap();
 
         assert!(result.success, "{}", result.message);
         assert_eq!(result.restore_status, "restored");
@@ -696,7 +760,7 @@ mod tests {
             "conflicting upstream change",
         );
 
-        let result = pull_with_stash_sync(local_path.to_str().unwrap()).unwrap();
+        let result = pull_with_stash_sync(local_path.to_str().unwrap(), &direct_proxy()).unwrap();
 
         assert!(
             result.success,
@@ -721,7 +785,7 @@ mod tests {
         fs::write(local_path.join("working.txt"), "preserve me\n").unwrap();
         fs::write(local_path.join("untracked.txt"), "preserve me too\n").unwrap();
 
-        let result = pull_with_stash_sync(local_path.to_str().unwrap()).unwrap();
+        let result = pull_with_stash_sync(local_path.to_str().unwrap(), &direct_proxy()).unwrap();
 
         assert!(!result.success);
         assert_eq!(result.restore_status, "restored");

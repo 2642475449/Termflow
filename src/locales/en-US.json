@@ -934,6 +934,7 @@
   "settings": {
     "menu": {
       "general": "General",
+      "network": "Network",
       "notifications": "Notifications",
       "agents": "Agents",
       "git": "Git",
@@ -1133,7 +1134,34 @@
         "testCardTitle": "Termflow notification test", "testCardChannel": "Channel", "testCardStatus": "Connection", "testCardSuccess": "Configured correctly",
         "card": { "completed": "Task completed", "error": "Task failed", "waiting": "Task waiting for input", "permission": "Task waiting for permission", "project": "Project", "task": "Task", "agent": "Agent", "duration": "Duration", "occurredAt": "Time" }
       }
-    },    "general": {
+    },
+    "network": {
+      "title": "Network proxy",
+      "description": "Configure one proxy for terminals, agent CLIs, Git, application updates, and Termflow network requests.",
+      "proxyMode": "HTTP proxy",
+      "mode": { "disabled": "Do not use a proxy", "system": "Use system proxy (recommended)", "custom": "Custom proxy" },
+      "customProxyUrl": "Proxy URL",
+      "noProxy": "Addresses that bypass the proxy",
+      "noProxyHint": "Separate entries with commas. localhost, 127.0.0.1, and ::1 are always retained.",
+      "resolving": "Detecting proxy configuration…",
+      "resolvedProxy": "Current proxy: {{proxy}}",
+      "resolvedDirect": "Current connection: direct",
+      "source": "Configuration source: {{source}}",
+      "sources": { "disabled": "Disabled", "custom": "Custom settings", "windows-system": "Windows system proxy", "system-none": "Windows system (no proxy configured)", "environment": "Process environment", "unknown": "Unknown" },
+      "warnings": { "pacUnsupported": "A PAC configuration was detected. PAC is not supported in this version; use a custom proxy.", "pacManualUsed": "A PAC configuration was also detected. Termflow is using the Windows manual proxy address.", "systemReadFailed": "The Windows system proxy could not be read. Direct connection is being used.", "systemServerReadFailed": "The system proxy is enabled, but its server could not be read. Direct connection is being used.", "systemParseFailed": "The Windows system proxy could not be parsed. Direct connection is being used.", "systemUnsupported": "Automatic system proxy detection is not available on this platform. Use a custom proxy." },
+      "newTerminalHint": "Proxy changes apply only to new terminals. Existing terminals are not restarted or modified.",
+      "connectivityTitle": "Connectivity tests",
+      "connectivityHint": "HTTP 401, 403, 404, or 405 still means the service is reachable. Tests never send API keys or business data.",
+      "testAll": "Test all",
+      "test": "Test",
+      "notTested": "Not tested",
+      "reachable": "Reachable",
+      "unreachable": "Unreachable",
+      "customTestPlaceholder": "Custom test URL, for example https://example.com",
+      "route": { "direct": "Direct", "proxy": "Proxy" },
+      "targets": { "googleOAuth": "Google OAuth", "github": "GitHub", "openai": "OpenAI", "claude": "Claude", "gemini": "Gemini", "glm": "GLM", "qwen": "Qwen", "custom": "Custom URL" }
+    },
+    "general": {
       "headerDesc": "Manage app theme, language, and startup behavior.",
       "appearance": {
         "title": "Appearance",

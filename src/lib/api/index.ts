@@ -27,6 +27,10 @@ import type {
   FileTreeEntry,
   FileTreeListing,
   PersistentSettings,
+  NetworkProxySettings,
+  NetworkProxyTestResult,
+  NetworkProxyTestTarget,
+  ResolvedNetworkProxy,
   ProjectOpenDisposition,
   ProjectFileContent,
   ProjectImagePayload,
@@ -605,6 +609,24 @@ export async function readProjectImage(
 export async function readProjectPdf(projectPath: string, path: string): Promise<Uint8Array> {
   const response = await invoke<ArrayBuffer>("read_project_pdf", { projectPath, path });
   return new Uint8Array(response);
+}
+
+export async function resolveNetworkProxySettings(
+  settings: NetworkProxySettings,
+): Promise<ResolvedNetworkProxy> {
+  return await invoke("resolve_network_proxy_settings", { settings });
+}
+
+export async function testNetworkProxy(
+  target: NetworkProxyTestTarget,
+  settings: NetworkProxySettings,
+  customUrl?: string,
+): Promise<NetworkProxyTestResult> {
+  return await invoke("test_network_proxy", {
+    target,
+    settings,
+    customUrl: customUrl ?? null,
+  });
 }
 
 export async function readProjectOfficePreview(

@@ -163,6 +163,12 @@ pub fn git_command() -> StdCommand {
     cmd
 }
 
+pub fn git_command_with_proxy(proxy: &crate::network_proxy::ResolvedNetworkProxy) -> StdCommand {
+    let mut command = git_command();
+    crate::network_proxy::apply_proxy_to_command(&mut command, proxy);
+    command
+}
+
 /// Run a git command and return stdout as string.
 pub fn run_git_text_command(project_path: &str, args: &[&str]) -> Result<String, String> {
     let output = git_command()

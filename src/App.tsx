@@ -14,6 +14,7 @@ import {
   useAppStore,
   type ThemeMode,
 } from "./store";
+import type { NetworkProxyMode } from "./types";
 import {
   initializePersistentSettings,
   savePersistentSettings,
@@ -33,6 +34,7 @@ const THEME_COLORS: Record<ThemeMode, string> = {
 
 const STARTUP_THEME_STORAGE_KEY = "termflow-startup-theme";
 const PERSISTENT_THEME_UPDATED_EVENT = "persistent-theme-updated";
+const PERSISTENT_NETWORK_PROXY_UPDATED_EVENT = "persistent-network-proxy-updated";
 const PERSISTENT_EXPLORER_CONTEXT_MENU_UPDATED_EVENT =
   "persistent-explorer-context-menu-updated";
 const PERSISTENT_SETTINGS_LOAD_ERROR_KEY = "persistent-settings-load-error";
@@ -65,6 +67,26 @@ function isPersistentThemeUpdate(value: unknown): value is PersistentThemeUpdate
   );
 }
 
+interface PersistentNetworkProxyUpdate {
+  networkProxyMode: NetworkProxyMode;
+  networkCustomProxyUrl: string;
+  networkNoProxy: string;
+}
+
+function isPersistentNetworkProxyUpdate(
+  value: unknown
+): value is PersistentNetworkProxyUpdate {
+  if (!value || typeof value !== "object") return false;
+  const update = value as Record<string, unknown>;
+  return (
+    (update.networkProxyMode === "disabled" ||
+      update.networkProxyMode === "system" ||
+      update.networkProxyMode === "custom") &&
+    typeof update.networkCustomProxyUrl === "string" &&
+    typeof update.networkNoProxy === "string"
+  );
+}
+
 interface PersistentExplorerContextMenuUpdate {
   explorerContextMenuEnabled: boolean;
 }
@@ -89,6 +111,9 @@ function App() {
   const startupRestoreLastProject = useAppStore((s) => s.startupRestoreLastProject);
   const projectOpenBehavior = useAppStore((s) => s.projectOpenBehavior);
   const explorerContextMenuEnabled = useAppStore((s) => s.explorerContextMenuEnabled);
+  const networkProxyMode = useAppStore((s) => s.networkProxyMode);
+  const networkCustomProxyUrl = useAppStore((s) => s.networkCustomProxyUrl);
+  const networkNoProxy = useAppStore((s) => s.networkNoProxy);
   const systemPrefersDark = useAppStore((s) => s.systemPrefersDark);
   const setSystemPrefersDark = useAppStore((s) => s.setSystemPrefersDark);
   const editorFontSize = useAppStore((s) => s.editorFontSize);
@@ -145,6 +170,9 @@ function App() {
       startupRestoreLastProject,
       projectOpenBehavior,
       explorerContextMenuEnabled,
+      networkProxyMode,
+      networkCustomProxyUrl,
+      networkNoProxy,
       lastProjectPath: lastProject?.path ?? null,
       editorFontSize,
       terminalFontSize,
@@ -189,6 +217,9 @@ function App() {
       startupRestoreLastProject,
       projectOpenBehavior,
       explorerContextMenuEnabled,
+      networkProxyMode,
+      networkCustomProxyUrl,
+      networkNoProxy,
       terminalCursorBlink,
       terminalFontSize,
       terminalLineHeight,
@@ -344,6 +375,39 @@ function App() {
       })
       .catch((error) => {
         console.error("Failed to listen for persistent theme updates:", error);
+      });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [persistentSettingsReady]);
+
+  useEffect(() => {
+    if (!persistentSettingsReady) {
+      return;
+    }
+
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+
+    listen<unknown>(PERSISTENT_NETWORK_PROXY_UPDATED_EVENT, (event) => {
+      if (!isPersistentNetworkProxyUpdate(event.payload)) {
+        return;
+      }
+
+      useAppStore.setState(event.payload);
+      lastPersistedSnapshotRef.current = JSON.stringify(getPersistentSettingsSnapshot());
+    })
+      .then((nextUnlisten) => {
+        if (disposed) {
+          nextUnlisten();
+          return;
+        }
+        unlisten = nextUnlisten;
+      })
+      .catch((error) => {
+        console.error("Failed to listen for network proxy updates:", error);
       });
 
     return () => {

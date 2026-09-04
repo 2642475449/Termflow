@@ -5,6 +5,7 @@ use tauri::{AppHandle, Emitter, State};
 use crate::database::{Database, PersistentSettingsRecord};
 
 const PERSISTENT_THEME_UPDATED_EVENT: &str = "persistent-theme-updated";
+const PERSISTENT_NETWORK_PROXY_UPDATED_EVENT: &str = "persistent-network-proxy-updated";
 pub const PERSISTENT_EXPLORER_CONTEXT_MENU_UPDATED_EVENT: &str =
     "persistent-explorer-context-menu-updated";
 
@@ -14,6 +15,14 @@ struct PersistentThemeUpdate {
     light_theme: String,
     dark_theme: String,
     theme_category: String,
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PersistentNetworkProxyUpdate {
+    network_proxy_mode: String,
+    network_custom_proxy_url: String,
+    network_no_proxy: String,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -55,6 +64,14 @@ pub fn save_persistent_settings(
             light_theme: settings.light_theme,
             dark_theme: settings.dark_theme,
             theme_category: settings.theme_category,
+        },
+    );
+    let _ = app.emit(
+        PERSISTENT_NETWORK_PROXY_UPDATED_EVENT,
+        PersistentNetworkProxyUpdate {
+            network_proxy_mode: settings.network_proxy_mode,
+            network_custom_proxy_url: settings.network_custom_proxy_url,
+            network_no_proxy: settings.network_no_proxy,
         },
     );
     Ok(())

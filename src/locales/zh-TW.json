@@ -934,6 +934,7 @@
   "settings": {
     "menu": {
       "general": "一般",
+      "network": "網路",
       "notifications": "通知",
       "agents": "智慧體",
       "git": "Git",
@@ -1128,7 +1129,34 @@
         "testCardTitle": "Termflow 通知測試", "testCardChannel": "通知管道", "testCardStatus": "連線狀態", "testCardSuccess": "設定正常",
         "card": { "completed": "任務已完成", "error": "任務執行失敗", "waiting": "任務等待輸入", "permission": "任務等待權限", "project": "專案", "task": "任務", "agent": "智慧體", "duration": "耗時", "occurredAt": "時間" }
       }
-    },    "general": {
+    },
+    "network": {
+      "title": "網路代理",
+      "description": "為終端、Agent CLI、Git、應用程式更新和 Termflow 網路請求設定統一代理。",
+      "proxyMode": "HTTP 代理",
+      "mode": { "disabled": "不使用代理", "system": "使用系統代理（建議）", "custom": "自訂代理" },
+      "customProxyUrl": "代理位址",
+      "noProxy": "不使用代理的位址",
+      "noProxyHint": "以逗號分隔；localhost、127.0.0.1 和 ::1 會始終保留。",
+      "resolving": "正在偵測代理設定…",
+      "resolvedProxy": "目前代理：{{proxy}}",
+      "resolvedDirect": "目前連線方式：直接連線",
+      "source": "設定來源：{{source}}",
+      "sources": { "disabled": "已停用", "custom": "自訂設定", "windows-system": "Windows 系統代理", "system-none": "Windows 系統（未設定代理）", "environment": "處理程序環境變數", "unknown": "未知" },
+      "warnings": { "pacUnsupported": "偵測到 PAC 自動設定；此版本暫不解析 PAC，請改用自訂代理。", "pacManualUsed": "同時偵測到 PAC；Termflow 目前使用 Windows 手動代理位址。", "systemReadFailed": "無法讀取 Windows 系統代理，目前使用直接連線。", "systemServerReadFailed": "系統代理已啟用，但無法讀取代理伺服器，目前使用直接連線。", "systemParseFailed": "無法解析 Windows 系統代理，目前使用直接連線。", "systemUnsupported": "目前平台暫不支援自動讀取系統代理，請使用自訂代理。" },
+      "newTerminalHint": "代理修改只對新終端生效；現有終端不會重新啟動或修改。",
+      "connectivityTitle": "連線測試",
+      "connectivityHint": "HTTP 401、403、404 或 405 同樣代表網路可達；測試不會傳送 API Key 或業務資料。",
+      "testAll": "全部測試",
+      "test": "測試",
+      "notTested": "尚未測試",
+      "reachable": "可達",
+      "unreachable": "不可達",
+      "customTestPlaceholder": "自訂測試位址，例如 https://example.com",
+      "route": { "direct": "直接連線", "proxy": "代理" },
+      "targets": { "googleOAuth": "Google OAuth", "github": "GitHub", "openai": "OpenAI", "claude": "Claude", "gemini": "Gemini", "glm": "GLM", "qwen": "Qwen", "custom": "自訂位址" }
+    },
+    "general": {
       "headerDesc": "統一管理介面主題、語言與啟動行為。",
       "appearance": {
         "title": "外觀",

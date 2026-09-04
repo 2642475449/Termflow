@@ -5,6 +5,7 @@ import {
   closeApplicationUpdate,
   downloadApplicationUpdate,
   installApplicationUpdate,
+  resolveNetworkProxySettings,
   savePersistentSettings,
 } from "@/lib/api";
 import { applyUpdaterDownloadEvent, createUpdateProgress } from "@/lib/updateProgress";
@@ -90,7 +91,14 @@ export async function checkForApplicationUpdate(
 
   checkPromise = (async () => {
     try {
-      const update = await checkApplicationUpdate({ timeout: CHECK_TIMEOUT_MS });
+      const persistentSettings = getPersistentSettingsSnapshot();
+      const resolvedProxy = await resolveNetworkProxySettings({
+        mode: persistentSettings.networkProxyMode,
+        customProxyUrl: persistentSettings.networkCustomProxyUrl,
+        noProxy: persistentSettings.networkNoProxy,
+      });
+      const proxy = resolvedProxy.httpsProxy ?? resolvedProxy.httpProxy ?? undefined;
+      const update = await checkApplicationUpdate({ timeout: CHECK_TIMEOUT_MS, proxy });
       if (!update) {
         useApplicationUpdateStore.getState().reset(version);
         return { status: "up-to-date", currentVersion: version } as const;

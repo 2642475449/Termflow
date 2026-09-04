@@ -83,16 +83,18 @@ pub fn clear_feishu_notification_credentials() -> Result<FeishuCredentialStatus,
     Ok(status_from_credentials(None, cfg!(target_os = "windows")))
 }
 
-#[tauri::command]
 pub async fn send_feishu_notification(
     payload: FeishuNotificationPayload,
+    proxy: crate::network_proxy::ResolvedNetworkProxy,
 ) -> Result<FeishuSendResult, String> {
     validate_notification_payload(&payload)?;
     let credentials =
         load_credentials()?.ok_or_else(|| "Feishu webhook is not configured".to_string())?;
-    tauri::async_runtime::spawn_blocking(move || send_feishu_blocking(&credentials, &payload))
-        .await
-        .map_err(|error| format!("Feishu delivery task failed: {error}"))??;
+    tauri::async_runtime::spawn_blocking(move || {
+        send_feishu_blocking(&credentials, &payload, &proxy)
+    })
+    .await
+    .map_err(|error| format!("Feishu delivery task failed: {error}"))??;
     Ok(FeishuSendResult {
         delivered_at: chrono::Utc::now().timestamp_millis(),
     })
@@ -151,13 +153,17 @@ fn validate_notification_payload(payload: &FeishuNotificationPayload) -> Result<
 fn send_feishu_blocking(
     credentials: &FeishuCredentials,
     payload: &FeishuNotificationPayload,
+    proxy: &crate::network_proxy::ResolvedNetworkProxy,
 ) -> Result<(), String> {
     validate_webhook_url(&credentials.webhook_url)?;
     let request_body = build_request_body(credentials, payload);
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(FEISHU_REQUEST_TIMEOUT_SECS))
-        .build()
-        .map_err(|error| format!("Failed to create Feishu HTTP client: {error}"))?;
+    let client = crate::network_proxy::apply_proxy_to_blocking_client_builder(
+        reqwest::blocking::Client::builder()
+            .timeout(Duration::from_secs(FEISHU_REQUEST_TIMEOUT_SECS)),
+        proxy,
+    )?
+    .build()
+    .map_err(|error| format!("Failed to create Feishu HTTP client: {error}"))?;
 
     for attempt in 0..2 {
         match client

@@ -1273,3 +1273,21 @@ describe("ASR region persistence", () => {
     expect(useAppStore.getState().asrRegion).toBe("beijing");
   });
 });
+it("persistent settings normalize network proxy values", () => {
+  const original = getPersistentSettingsSnapshot();
+  try {
+    applyPersistentSettingsToStore({
+      ...original,
+      networkProxyMode: "custom",
+      networkCustomProxyUrl: "  http://127.0.0.1:7897  ",
+      networkNoProxy: "example.test",
+    });
+    expect(getPersistentSettingsSnapshot()).toMatchObject({
+      networkProxyMode: "custom",
+      networkCustomProxyUrl: "http://127.0.0.1:7897",
+      networkNoProxy: "example.test,localhost,127.0.0.1,::1",
+    });
+  } finally {
+    applyPersistentSettingsToStore(original);
+  }
+});

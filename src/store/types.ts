@@ -1,4 +1,4 @@
-import type { AiAgentId, ClaudeCliInfo, GitCommitMessageProfile, ProjectOpenBehavior, Session, WindowMode, WindowProjectContext } from "@/types";
+import type { AiAgentId, ClaudeCliInfo, GitCommitMessageProfile, NetworkProxyMode, ProjectOpenBehavior, Session, WindowMode, WindowProjectContext } from "@/types";
 
 export type ThemeMode = "light-glass" | "light-warm" | "dark-starry" | "dark-mocha";
 export type ThemeCategory = "light" | "dark" | "system";
@@ -180,6 +180,9 @@ export interface AppState {
   darkTheme: ThemeMode;
   themeCategory: ThemeCategory;
   language: Language;
+  networkProxyMode: NetworkProxyMode;
+  networkCustomProxyUrl: string;
+  networkNoProxy: string;
   systemPrefersDark: boolean;
   // Terminal
   editorFontSize: number;
@@ -243,6 +246,9 @@ export interface AppState {
   setDarkTheme: (theme: ThemeMode) => void;
   setThemeCategory: (category: ThemeCategory) => void;
   setLanguage: (lang: Language) => void;
+  setNetworkProxyMode: (mode: NetworkProxyMode) => void;
+  setNetworkCustomProxyUrl: (url: string) => void;
+  setNetworkNoProxy: (value: string) => void;
   setSystemPrefersDark: (value: boolean) => void;
   setStartupRestoreLastProject: (enabled: boolean) => void;
   setProjectOpenBehavior: (behavior: ProjectOpenBehavior) => void;

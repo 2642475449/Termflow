@@ -17,11 +17,13 @@ pub(crate) fn run_agent_text(
     working_directory: &str,
     timeout: Duration,
     options: AgentTextRunOptions,
+    proxy: &crate::network_proxy::ResolvedNetworkProxy,
 ) -> Result<String, String> {
     let executable_path = find_agent_executable(agent_id)?;
     let (mut command, stdin_input) =
         build_agent_command(agent_id, &executable_path, prompt, &options)?;
     command.current_dir(working_directory);
+    crate::network_proxy::apply_proxy_to_command(&mut command, proxy);
 
     let output = run_command_with_timeout(command, stdin_input, timeout, agent_id)?;
     if !output.status.success() {

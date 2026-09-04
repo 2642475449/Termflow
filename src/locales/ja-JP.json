@@ -934,6 +934,7 @@
   "settings": {
     "menu": {
       "general": "一般",
+      "network": "ネットワーク",
       "notifications": "通知",
       "agents": "エージェント",
       "git": "Git",
@@ -1128,7 +1129,34 @@
         "testCardTitle": "Termflow 通知テスト", "testCardChannel": "通知チャネル", "testCardStatus": "接続状態", "testCardSuccess": "正常に設定されています",
         "card": { "completed": "タスク完了", "error": "タスク失敗", "waiting": "入力待ち", "permission": "権限待ち", "project": "プロジェクト", "task": "タスク", "agent": "エージェント", "duration": "所要時間", "occurredAt": "時刻" }
       }
-    },    "general": {
+    },
+    "network": {
+      "title": "ネットワークプロキシ",
+      "description": "ターミナル、エージェント CLI、Git、アプリ更新、Termflow の通信に共通のプロキシを設定します。",
+      "proxyMode": "HTTP プロキシ",
+      "mode": { "disabled": "プロキシを使用しない", "system": "システムプロキシを使用（推奨）", "custom": "カスタムプロキシ" },
+      "customProxyUrl": "プロキシ URL",
+      "noProxy": "プロキシを使用しないアドレス",
+      "noProxyHint": "カンマ区切り。localhost、127.0.0.1、::1 は常に保持されます。",
+      "resolving": "プロキシ設定を検出中…",
+      "resolvedProxy": "現在のプロキシ：{{proxy}}",
+      "resolvedDirect": "現在の接続：直接接続",
+      "source": "設定元：{{source}}",
+      "sources": { "disabled": "無効", "custom": "カスタム設定", "windows-system": "Windows システムプロキシ", "system-none": "Windows システム（プロキシなし）", "environment": "プロセス環境変数", "unknown": "不明" },
+      "warnings": { "pacUnsupported": "PAC 自動設定が検出されました。このバージョンでは PAC を解析できないため、カスタムプロキシを使用してください。", "pacManualUsed": "PAC も検出されました。Termflow は Windows の手動プロキシを使用しています。", "systemReadFailed": "Windows システムプロキシを読み取れないため、直接接続を使用します。", "systemServerReadFailed": "システムプロキシは有効ですがサーバーを読み取れないため、直接接続を使用します。", "systemParseFailed": "Windows システムプロキシを解析できないため、直接接続を使用します。", "systemUnsupported": "このプラットフォームではシステムプロキシの自動検出を利用できません。カスタムプロキシを使用してください。" },
+      "newTerminalHint": "変更は新しいターミナルだけに適用されます。既存のターミナルは再起動・変更されません。",
+      "connectivityTitle": "接続テスト",
+      "connectivityHint": "HTTP 401、403、404、405 も到達可能を示します。API キーや業務データは送信しません。",
+      "testAll": "すべてテスト",
+      "test": "テスト",
+      "notTested": "未テスト",
+      "reachable": "到達可能",
+      "unreachable": "到達不可",
+      "customTestPlaceholder": "カスタム URL（例：https://example.com）",
+      "route": { "direct": "直接", "proxy": "プロキシ" },
+      "targets": { "googleOAuth": "Google OAuth", "github": "GitHub", "openai": "OpenAI", "claude": "Claude", "gemini": "Gemini", "glm": "GLM", "qwen": "Qwen", "custom": "カスタム URL" }
+    },
+    "general": {
       "headerDesc": "アプリのテーマ、言語、起動動作、通知体験をまとめて管理します。",
       "appearance": {
         "title": "外観",

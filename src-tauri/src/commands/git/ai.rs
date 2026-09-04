@@ -157,6 +157,7 @@ fn git_generate_commit_message_sync(
     project_path: String,
     agent_id: String,
     profile_instructions: String,
+    proxy: crate::network_proxy::ResolvedNetworkProxy,
 ) -> Result<String, String> {
     let repo = open_repo(&project_path)?;
     let prompt = build_commit_prompt(&project_path, &repo, &profile_instructions)?;
@@ -169,6 +170,7 @@ fn git_generate_commit_message_sync(
         AgentTextRunOptions {
             claude_max_turns: Some(AI_COMMIT_CLAUDE_MAX_TURNS),
         },
+        &proxy,
     )?;
     sanitize_generated_commit_message(&stdout)
         .ok_or_else(|| "智能体未返回有效的提交信息".to_string())
@@ -180,9 +182,11 @@ pub async fn git_generate_commit_message(
     project_path: String,
     agent_id: String,
     profile_instructions: String,
+    database: tauri::State<'_, std::sync::Arc<crate::database::Database>>,
 ) -> Result<String, String> {
+    let proxy = super::super::network_proxy::load_resolved_proxy(&database)?;
     tauri::async_runtime::spawn_blocking(move || {
-        git_generate_commit_message_sync(project_path, agent_id, profile_instructions)
+        git_generate_commit_message_sync(project_path, agent_id, profile_instructions, proxy)
     })
     .await
     .map_err(|e| format!("AI 提交信息后台任务失败: {}", e))?

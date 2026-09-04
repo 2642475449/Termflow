@@ -6,6 +6,8 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{collections::BTreeMap, fs, sync::Arc};
 use tauri::{AppHandle, Manager};
 
+use crate::network_proxy::{default_no_proxy, default_proxy_mode, NetworkProxySettings};
+
 const DATABASE_FILE_NAME: &str = "termflow.db";
 const SEARCH_INDEX_PROJECT_PREFERENCES_KEY: &str = "searchIndex.projectPreferences";
 const SEARCH_INDEX_STORAGE_KEY: &str = "searchIndex.storage";
@@ -158,6 +160,12 @@ pub struct PersistentSettingsRecord {
     pub dark_theme: String,
     pub theme_category: String,
     pub language: String,
+    #[serde(default = "default_proxy_mode")]
+    pub network_proxy_mode: String,
+    #[serde(default)]
+    pub network_custom_proxy_url: String,
+    #[serde(default = "default_no_proxy")]
+    pub network_no_proxy: String,
     pub startup_restore_last_project: bool,
     #[serde(default = "default_explorer_context_menu_enabled")]
     pub explorer_context_menu_enabled: bool,
@@ -214,6 +222,9 @@ impl Default for PersistentSettingsRecord {
             dark_theme: "dark-starry".into(),
             theme_category: "dark".into(),
             language: "zh_CN".into(),
+            network_proxy_mode: default_proxy_mode(),
+            network_custom_proxy_url: String::new(),
+            network_no_proxy: default_no_proxy(),
             startup_restore_last_project: true,
             explorer_context_menu_enabled: default_explorer_context_menu_enabled(),
             project_open_behavior: default_project_open_behavior(),
@@ -244,6 +255,16 @@ impl Default for PersistentSettingsRecord {
             default_agent_id: None,
             git_commit_message_profiles: default_git_commit_message_profiles(),
             default_git_commit_message_profile_id: default_git_commit_message_profile_id(),
+        }
+    }
+}
+
+impl PersistentSettingsRecord {
+    pub fn network_proxy_settings(&self) -> NetworkProxySettings {
+        NetworkProxySettings {
+            mode: self.network_proxy_mode.clone(),
+            custom_proxy_url: self.network_custom_proxy_url.clone(),
+            no_proxy: self.network_no_proxy.clone(),
         }
     }
 }
@@ -395,6 +416,12 @@ impl Database {
         settings.theme_category =
             read_setting(&conn, "theme.themeCategory")?.unwrap_or(settings.theme_category);
         settings.language = read_setting(&conn, "general.language")?.unwrap_or(settings.language);
+        settings.network_proxy_mode =
+            read_setting(&conn, "network.proxyMode")?.unwrap_or(settings.network_proxy_mode);
+        settings.network_custom_proxy_url = read_setting(&conn, "network.customProxyUrl")?
+            .unwrap_or(settings.network_custom_proxy_url);
+        settings.network_no_proxy =
+            read_setting(&conn, "network.noProxy")?.unwrap_or(settings.network_no_proxy);
         settings.startup_restore_last_project =
             read_setting(&conn, "general.startupRestoreLastProject")?
                 .unwrap_or(settings.startup_restore_last_project);
@@ -544,6 +571,13 @@ impl Database {
         write_setting(&conn, "theme.darkTheme", &settings.dark_theme)?;
         write_setting(&conn, "theme.themeCategory", &settings.theme_category)?;
         write_setting(&conn, "general.language", &settings.language)?;
+        write_setting(&conn, "network.proxyMode", &settings.network_proxy_mode)?;
+        write_setting(
+            &conn,
+            "network.customProxyUrl",
+            &settings.network_custom_proxy_url,
+        )?;
+        write_setting(&conn, "network.noProxy", &settings.network_no_proxy)?;
         write_setting(
             &conn,
             "general.startupRestoreLastProject",
@@ -958,6 +992,41 @@ mod tests {
     #[test]
     fn persistent_settings_default_to_beijing_asr_region() {
         assert_eq!(PersistentSettingsRecord::default().asr_region, "beijing");
+    }
+
+    #[test]
+    fn persistent_settings_default_to_system_proxy() {
+        let settings = PersistentSettingsRecord::default();
+        assert_eq!(settings.network_proxy_mode, "system");
+        assert_eq!(settings.network_no_proxy, "localhost,127.0.0.1,::1");
+    }
+
+    #[test]
+    fn persistent_settings_without_network_proxy_remain_backward_compatible() {
+        let mut value = serde_json::to_value(PersistentSettingsRecord::default()).unwrap();
+        let object = value.as_object_mut().unwrap();
+        object.remove("networkProxyMode");
+        object.remove("networkCustomProxyUrl");
+        object.remove("networkNoProxy");
+        let restored: PersistentSettingsRecord = serde_json::from_value(value).unwrap();
+        assert_eq!(restored.network_proxy_mode, "system");
+        assert_eq!(restored.network_custom_proxy_url, "");
+        assert_eq!(restored.network_no_proxy, "localhost,127.0.0.1,::1");
+    }
+
+    #[test]
+    fn network_proxy_settings_round_trip_through_the_database() {
+        let database = Database::open_in_memory();
+        let mut settings = PersistentSettingsRecord::default();
+        settings.network_proxy_mode = "custom".into();
+        settings.network_custom_proxy_url = "http://127.0.0.1:7897".into();
+        settings.network_no_proxy = "localhost,example.test".into();
+        database.save_persistent_settings(&settings).unwrap();
+
+        let restored = database.load_persistent_settings().unwrap();
+        assert_eq!(restored.network_proxy_mode, "custom");
+        assert_eq!(restored.network_custom_proxy_url, "http://127.0.0.1:7897");
+        assert_eq!(restored.network_no_proxy, "localhost,example.test");
     }
 
     #[test]

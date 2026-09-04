@@ -109,6 +109,7 @@ import { DataPrivacyPage } from "@/components/settings/DataPrivacyPage";
 import { SearchIndexPage } from "@/components/settings/SearchIndexPage";
 import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
 import { NotificationsPage } from "@/components/settings/NotificationsPage";
+import { NetworkSettingsPage } from "@/components/settings/NetworkSettingsPage";
 import {
   AGENT_DEFINITIONS,
   AI_AGENT_ORDER,
@@ -124,7 +125,7 @@ const ABOUT_LINKS: Record<"website" | "github", string | null> = {
   github: "https://github.com/2642475449/Termflow",
 };
 
-type SettingsPage = "general" | "notifications" | "agents" | "git" | "terminal" | "voiceRecognition" | "shortcuts" | "skills" | "hooks" | "mcpServers" | "commands" | "quickCommands" | "claudeMd" | "searchIndex" | "dataPrivacy" | "archived" | "about";
+type SettingsPage = "general" | "network" | "notifications" | "agents" | "git" | "terminal" | "voiceRecognition" | "shortcuts" | "skills" | "hooks" | "mcpServers" | "commands" | "quickCommands" | "claudeMd" | "searchIndex" | "dataPrivacy" | "archived" | "about";
 
 interface SettingsMenuItem {
   key: SettingsPage;
@@ -144,6 +145,7 @@ const menuGroups: SettingsMenuGroup[] = [
     labelKey: "settings.menu.groups.basic",
     items: [
       { key: "general", icon: <SettingOutlined />, labelKey: "settings.menu.general" },
+      { key: "network", icon: <GlobalOutlined />, labelKey: "settings.menu.network" },
       { key: "notifications", icon: <NotificationOutlined />, labelKey: "settings.menu.notifications" },
       { key: "terminal", icon: <FontSizeOutlined />, labelKey: "settings.menu.terminal" },
       { key: "voiceRecognition", icon: <SoundOutlined />, labelKey: "settings.menu.voiceRecognition" },
@@ -5024,6 +5026,7 @@ function AboutPage() {
 
 const pageComponents: Record<SettingsPage, React.FC> = {
   general: GeneralPage,
+  network: NetworkSettingsPage,
   notifications: NotificationsPage,
   agents: AgentsPage,
   git: GitSettingsPage,

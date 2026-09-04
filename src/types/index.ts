@@ -33,11 +33,53 @@ export interface GitCommitMessageProfile {
   instructions: string;
 }
 
+export type NetworkProxyMode = "disabled" | "system" | "custom";
+
+export interface NetworkProxySettings {
+  mode: NetworkProxyMode;
+  customProxyUrl: string;
+  noProxy: string;
+}
+
+export type NetworkProxyTestTarget =
+  | "googleOAuth"
+  | "github"
+  | "openai"
+  | "claude"
+  | "gemini"
+  | "glm"
+  | "qwen"
+  | "custom";
+
+export interface ResolvedNetworkProxy {
+  mode: NetworkProxyMode;
+  source: string;
+  httpProxy: string | null;
+  httpsProxy: string | null;
+  noProxy: string;
+  warning: string | null;
+}
+
+export interface NetworkProxyTestResult {
+  target: NetworkProxyTestTarget;
+  url: string;
+  success: boolean;
+  statusCode: number | null;
+  latencyMs: number;
+  route: "direct" | "proxy";
+  proxyUrl: string | null;
+  errorKind: string | null;
+  error: string | null;
+}
+
 export interface PersistentSettings {
   lightTheme: string;
   darkTheme: string;
   themeCategory: string;
   language: string;
+  networkProxyMode: NetworkProxyMode;
+  networkCustomProxyUrl: string;
+  networkNoProxy: string;
   startupRestoreLastProject: boolean;
   projectOpenBehavior: ProjectOpenBehavior;
   explorerContextMenuEnabled: boolean;

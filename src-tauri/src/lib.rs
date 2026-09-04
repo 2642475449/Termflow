@@ -5,6 +5,7 @@ mod commands;
 mod database;
 mod events;
 mod hook_ingest;
+mod network_proxy;
 mod opencode_control;
 mod path_utils;
 mod pty;
@@ -257,6 +258,8 @@ pub fn run() {
             commands::settings::initialize_persistent_settings,
             commands::settings::get_persistent_settings,
             commands::settings::save_persistent_settings,
+            commands::network_proxy::resolve_network_proxy_settings,
+            commands::network_proxy::test_network_proxy,
             commands::settings::set_explorer_context_menu_enabled,
             commands::window::open_project_window,
             commands::window::focus_existing_project_window,

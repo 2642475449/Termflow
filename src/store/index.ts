@@ -66,6 +66,14 @@ import {
   type ProjectInfo,
   type RecentProjectEntry,
 } from "./utils/recentProjects";
+import {
+  createNetworkProxySlice,
+  type NetworkProxySlice,
+} from "./slices/networkProxy";
+import {
+  normalizeNetworkProxyMode,
+  normalizeNoProxy,
+} from "@/lib/networkProxy";
 
 export type ThemeMode = "light-glass" | "light-warm" | "dark-starry" | "dark-mocha";
 export type ThemeCategory = "light" | "dark" | "system";
@@ -249,6 +257,9 @@ export function getPersistentSettingsSnapshot(): PersistentSettings {
     darkTheme: state.darkTheme,
     themeCategory: state.themeCategory,
     language: state.language,
+    networkProxyMode: state.networkProxyMode,
+    networkCustomProxyUrl: state.networkCustomProxyUrl,
+    networkNoProxy: state.networkNoProxy,
     startupRestoreLastProject: state.startupRestoreLastProject,
     projectOpenBehavior: state.projectOpenBehavior,
     explorerContextMenuEnabled: state.explorerContextMenuEnabled,
@@ -289,6 +300,9 @@ export function applyPersistentSettingsToStore(settings: PersistentSettings) {
     darkTheme: normalizeDarkThemeModeValue(settings.darkTheme),
     themeCategory: normalizeThemeCategoryValue(settings.themeCategory),
     language: normalizeLanguageValue(settings.language),
+    networkProxyMode: normalizeNetworkProxyMode(settings.networkProxyMode),
+    networkCustomProxyUrl: settings.networkCustomProxyUrl?.trim() ?? "",
+    networkNoProxy: normalizeNoProxy(settings.networkNoProxy),
     startupRestoreLastProject: normalizeStartupRestoreLastProjectValue(
       settings.startupRestoreLastProject
     ),
@@ -567,7 +581,7 @@ interface ProjectWorkspace {
   focusedTabId: string | null;
 }
 
-interface AppState {
+interface AppState extends NetworkProxySlice {
   windowContextReady: boolean;
   windowMode: WindowMode;
   windowLabel: string;
@@ -1468,6 +1482,7 @@ function transitionAttentionById(
 
 const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
   return {
+      ...createNetworkProxySlice((partial) => set(partial)),
       windowContextReady: false,
       currentProject: null,
       windowMode: "launcher",

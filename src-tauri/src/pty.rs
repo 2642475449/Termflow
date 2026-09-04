@@ -160,6 +160,7 @@ impl PtyManager {
         shell_type: &str,
         claude_effort: Option<String>,
         agent_id: Option<String>,
+        network_proxy: crate::network_proxy::ResolvedNetworkProxy,
     ) -> Result<Option<OpenCodePromptControl>, String> {
         // A restored Session reuses its stable Session ID. Invalidate and stop
         // any older PTY before creating the replacement so its delayed reader
@@ -215,6 +216,7 @@ impl PtyManager {
         cmd.env("TERMFLOW_PROJECT_PATH", &path);
         cmd.env("TERMFLOW_INGEST_PORT", self.ingest_config.port.to_string());
         cmd.env("TERMFLOW_INGEST_TOKEN", &self.ingest_config.token);
+        crate::network_proxy::apply_proxy_to_pty_command(&mut cmd, &network_proxy);
         if let Some(control) = opencode_control.as_ref() {
             cmd.env("OPENCODE_SERVER_PASSWORD", control.password());
         } else if let Some(prompt) = initial_prompt

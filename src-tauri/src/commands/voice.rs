@@ -12,6 +12,7 @@ pub async fn transcribe_audio(
     model: String,
     api_key: String,
     auth_mode: Option<String>,
+    database: tauri::State<'_, std::sync::Arc<crate::database::Database>>,
 ) -> Result<String, String> {
     if api_key.trim().is_empty() {
         return Err("请先在设置中配置语音识别 API Key".into());
@@ -48,9 +49,12 @@ pub async fn transcribe_audio(
     });
 
     let auth_mode = normalize_auth_mode(auth_mode.as_deref());
-    let request = reqwest::Client::new()
-        .post(mimo_endpoint(auth_mode))
-        .json(&payload);
+    let proxy = super::network_proxy::load_resolved_proxy(&database)?;
+    let client =
+        crate::network_proxy::apply_proxy_to_client_builder(reqwest::Client::builder(), &proxy)?
+            .build()
+            .map_err(|error| format!("创建语音转写客户端失败: {error}"))?;
+    let request = client.post(mimo_endpoint(auth_mode)).json(&payload);
     let request = if auth_mode == "token-plan" {
         request.bearer_auth(api_key.trim())
     } else {

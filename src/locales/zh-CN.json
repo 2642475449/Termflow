@@ -934,6 +934,7 @@
   "settings": {
     "menu": {
       "general": "通用",
+      "network": "网络",
       "notifications": "通知",
       "agents": "智能体",
       "git": "Git",
@@ -1133,7 +1134,34 @@
         "testCardTitle": "Termflow 通知测试", "testCardChannel": "通知渠道", "testCardStatus": "连接状态", "testCardSuccess": "配置正常",
         "card": { "completed": "任务已完成", "error": "任务执行失败", "waiting": "任务等待输入", "permission": "任务等待权限", "project": "项目", "task": "任务", "agent": "智能体", "duration": "耗时", "occurredAt": "时间" }
       }
-    },    "general": {
+    },
+    "network": {
+      "title": "网络代理",
+      "description": "为终端、智能体 CLI、Git、应用更新和 Termflow 网络请求配置统一代理。",
+      "proxyMode": "HTTP 代理",
+      "mode": { "disabled": "不使用代理", "system": "使用系统代理（推荐）", "custom": "自定义代理" },
+      "customProxyUrl": "代理地址",
+      "noProxy": "不使用代理的地址",
+      "noProxyHint": "使用逗号分隔；localhost、127.0.0.1 和 ::1 始终保留。",
+      "resolving": "正在检测代理配置…",
+      "resolvedProxy": "当前代理：{{proxy}}",
+      "resolvedDirect": "当前连接方式：直连",
+      "source": "配置来源：{{source}}",
+      "sources": { "disabled": "已禁用", "custom": "自定义设置", "windows-system": "Windows 系统代理", "system-none": "Windows 系统（未配置代理）", "environment": "进程环境变量", "unknown": "未知" },
+      "warnings": { "pacUnsupported": "检测到 PAC 自动配置；首版暂不解析 PAC，请改用自定义代理。", "pacManualUsed": "同时检测到 PAC；Termflow 当前使用 Windows 手动代理地址。", "systemReadFailed": "无法读取 Windows 系统代理，当前使用直连。", "systemServerReadFailed": "系统代理已启用，但无法读取代理服务器，当前使用直连。", "systemParseFailed": "无法解析 Windows 系统代理，当前使用直连。", "systemUnsupported": "当前平台暂不支持自动读取系统代理，请使用自定义代理。" },
+      "newTerminalHint": "代理修改仅对新建终端生效；现有终端不会被重启或修改。",
+      "connectivityTitle": "连接测试",
+      "connectivityHint": "HTTP 401、403、404 或 405 同样表示网络可达；测试不会发送 API Key 或业务数据。",
+      "testAll": "全部测试",
+      "test": "测试",
+      "notTested": "尚未测试",
+      "reachable": "可达",
+      "unreachable": "不可达",
+      "customTestPlaceholder": "自定义测试地址，例如 https://example.com",
+      "route": { "direct": "直连", "proxy": "代理" },
+      "targets": { "googleOAuth": "Google OAuth", "github": "GitHub", "openai": "OpenAI", "claude": "Claude", "gemini": "Gemini", "glm": "GLM", "qwen": "Qwen", "custom": "自定义地址" }
+    },
+    "general": {
       "headerDesc": "统一管理界面主题、语言与启动行为。",
       "appearance": {
         "title": "外观",

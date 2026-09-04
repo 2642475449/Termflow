@@ -42,7 +42,9 @@ pub fn clear_remote_notification_credentials(
 pub async fn send_remote_notification(
     provider: String,
     payload: FeishuNotificationPayload,
+    database: tauri::State<'_, std::sync::Arc<crate::database::Database>>,
 ) -> Result<FeishuSendResult, String> {
     require_supported_provider(&provider)?;
-    send_feishu_notification(payload).await
+    let proxy = super::network_proxy::load_resolved_proxy(&database)?;
+    send_feishu_notification(payload, proxy).await
 }

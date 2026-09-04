@@ -6,6 +6,14 @@ vi.mock("@/lib/api", () => ({
   downloadApplicationUpdate: vi.fn(),
   installApplicationUpdate: vi.fn(),
   savePersistentSettings: vi.fn(),
+  resolveNetworkProxySettings: vi.fn(async () => ({
+    mode: "disabled",
+    source: "disabled",
+    httpProxy: null,
+    httpsProxy: null,
+    noProxy: "localhost,127.0.0.1,::1",
+    warning: null,
+  })),
 }));
 
 vi.mock("@/store", () => ({
