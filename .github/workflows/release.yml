@@ -69,8 +69,13 @@ jobs:
       - name: Generate updater manifest
         shell: pwsh
         run: |
+          $releaseNotesPath = "release-notes/${{ github.ref_name }}.md"
+          if (-not (Test-Path $releaseNotesPath)) {
+            throw "Missing curated release notes: $releaseNotesPath"
+          }
+          $releaseNotes = Get-Content -Raw $releaseNotesPath
           corepack pnpm update:manifest `
-            --notes "Termflow ${{ github.ref_name }}"
+            --notes $releaseNotes
 
       - name: Replace release updater manifest
         shell: pwsh
@@ -127,7 +132,7 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release edit "${{ github.ref_name }}" --draft=false --latest
+        run: gh release edit "${{ github.ref_name }}" --notes-file "release-notes/${{ github.ref_name }}.md" --draft=false --latest
 
   sync-update-server:
     if: "${{ github.event_name == 'workflow_dispatch' || (github.ref == 'refs/heads/main' && github.event.head_commit.message == 'fix(release): repair server update sync') }}"
