@@ -73,9 +73,8 @@ jobs:
           if (-not (Test-Path $releaseNotesPath)) {
             throw "Missing curated release notes: $releaseNotesPath"
           }
-          $releaseNotes = Get-Content -Raw $releaseNotesPath
           corepack pnpm update:manifest `
-            --notes $releaseNotes
+            --notes-file $releaseNotesPath
 
       - name: Replace release updater manifest
         shell: pwsh
