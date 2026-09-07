@@ -1,4 +1,20 @@
 {
+  "taskMonitor": {
+    "title": "タスク監視",
+    "noProjects": "開いているプロジェクトはありません",
+    "noTabs": "エージェントタブはありません",
+    "loading": "タブを同期中…",
+    "navigateFailed": "移動できません。プロジェクトウィンドウが閉じられた可能性があります。",
+    "status": {
+      "starting": "起動中",
+      "running": "実行中",
+      "waiting": "入力待ち",
+      "completed": "ターン完了",
+      "error": "エラー",
+      "stopped": "停止",
+      "idle": "待機中"
+    }
+  },
   "common": {
     "file": "エクスプローラー",
     "openFolder": "フォルダーを開く",
@@ -721,23 +737,6 @@
     "closeAllTabs": "すべてのタブを閉じる",
     "newSessionTooltip": "新規セッション (Ctrl+N)"
   },
-  "contentOverview": {
-    "title": "タスク監視",
-    "tooltip": "タスク監視",
-    "tooShort": "現在の内容は短すぎます",
-    "summary": "要約",
-    "keyPoints": "要点",
-    "sections": "構成",
-    "running": "回答の生成中です。概要は不完全な場合があります。",
-    "partial": "現在読み取れる内容から生成しました。",
-    "updated": "内容が更新されました。再生成すると概要を更新できます。",
-    "regenerate": "再生成",
-    "copy": "コピー",
-    "copySuccess": "概要をコピーしました",
-    "copyFailed": "概要をコピーできませんでした",
-    "sectionNotFound": "このセクションはターミナルバッファにありません",
-    "empty": "概要が必要な長い回答はまだありません。"
-  },
   "newSessionMenu": {
     "tooltip": "新しいエージェントまたはターミナル",
     "terminals": "ターミナル",
@@ -973,6 +972,24 @@
       "saveFailedDescription": "ローカル設定を保存できませんでした。ディスクの空き容量またはファイル権限を確認して、もう一度お試しください。保存が回復すると、この通知は自動的に消えます。エラー：{{error}}"
     },
     "agents": {
+      "details": {
+        "installation": "インストールとバージョン",
+        "quota": "利用可能な使用枠",
+        "installCommands": "インストールコマンド",
+        "commandHint": "コピーして指定のシェルで実行し、インストール後に再確認してください。",
+        "copyPath": "実行ファイルのパスをコピー",
+        "pathCopied": "パスをコピーしました",
+        "pathCopyFailed": "パスをコピーできません。手動でコピーしてください"
+      },
+      "updates": {
+        "latestVersion": "最新バージョン",
+        "checking": "最新バージョンを確認中…",
+        "failed": "バージョンの確認に失敗しました。再確認してください",
+        "updateAvailable": "新しいバージョン {{version}} があります",
+        "upToDate": "最新です {{version}}",
+        "ahead": "インストール済みのバージョンは安定版 {{version}} より新しいです",
+        "unknown": "最新バージョン {{version}}"
+      },
       "title": "エージェント",
       "subtitle": "主要な AI コーディングエージェントがこのシステムにインストールされているか確認します",
       "subtitleWithQuota": "ローカル AI コーディングエージェントのインストール状態と利用可能枠を確認します",
@@ -1025,30 +1042,11 @@
         "deleteTitle": "コミットメッセージスタイルを削除しますか？",
         "deleteDescription": "削除後は元に戻せません。デフォルトの場合は、残った最初のスタイルがデフォルトになります。"
       },
-      "capabilityTitle": "連携機能",
-      "capabilities": {
-        "interactiveTerminal": "対話型ターミナル",
-        "initialPrompt": "初期プロンプト",
-        "headlessText": "ヘッドレステキスト",
-        "resume": "セッション再開",
-        "permissionWaiting": "権限待ち",
-        "statusEvents": "ステータスイベント",
-        "skills": "Skills",
-        "instructions": "エージェント指示",
-        "mcpManagement": "MCP 管理",
-        "usageTelemetry": "使用量テレメトリ"
-      },
-      "capabilityLevels": {
-        "full": "完全",
-        "partial": "一部",
-        "unsupported": "非対応",
-        "unknown": "不明"
-      },
       "quota": {
         "loading": "利用枠を読み込み中…", "installFirst": "インストールしてログインすると利用枠を表示します", "unsupported": "利用枠の読み取りには未対応です", "unavailable": "利用枠を一時的に取得できません", "startSession": "セッションを開始すると利用枠を表示します", "refreshFailed": "利用枠の更新に失敗したため、前回取得した結果を表示しています",
         "healthy": "利用枠は十分です", "low": "利用枠が少なくなっています", "exhausted": "利用枠がまもなくなくなります", "session": "5 時間 {{value}}%", "weekly": "週間 {{value}}%", "remainingPercent": "残り {{value}}%", "remainingCredits": "残り {{value}}", "signInAntigravity": "Antigravity CLI にログインしてください", "timeout": "利用枠の照会がタイムアウトしました", "gemini": "Gemini", "claudeGpt": "Claude/GPT", "sessionShort": "5時間", "weeklyShort": "週間"
       },
-      "detailHint": "エージェントの行を選択すると、バージョンと実行ファイルのパスを確認できます。",
+      "detailHint": "エージェントをクリックすると、バージョン、使用枠、インストールコマンドを確認できます。",
       "pathHint": "検出には Termflow から利用できる現在のシステム PATH を使用します。新しくインストールまたは更新したエージェントが検出されない場合は、コンピューターを再起動して再試行してください。"
     },
     "theme": {
@@ -1159,9 +1157,8 @@
       "notTested": "未テスト",
       "reachable": "到達可能",
       "unreachable": "到達不可",
-      "customTestPlaceholder": "カスタム URL（例：https://example.com）",
       "route": { "direct": "直接", "proxy": "プロキシ" },
-      "targets": { "googleOAuth": "Google OAuth", "github": "GitHub", "openai": "OpenAI", "claude": "Claude", "gemini": "Gemini", "glm": "GLM", "qwen": "Qwen", "custom": "カスタム URL" }
+      "targets": { "googleOAuth": "Google OAuth", "github": "GitHub", "openai": "OpenAI", "claude": "Claude", "gemini": "Gemini", "glm": "GLM", "qwen": "Qwen" }
     },
     "general": {
       "headerDesc": "アプリのテーマ、言語、起動動作、通知体験をまとめて管理します。",

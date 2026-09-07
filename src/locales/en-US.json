@@ -1,4 +1,20 @@
 {
+  "taskMonitor": {
+    "title": "Task Monitor",
+    "noProjects": "No open projects",
+    "noTabs": "No open agent tabs",
+    "loading": "Syncing tabs…",
+    "navigateFailed": "Unable to navigate. The project window may have closed.",
+    "status": {
+      "starting": "Starting",
+      "running": "Running",
+      "waiting": "Waiting for input",
+      "completed": "Turn completed",
+      "error": "Error",
+      "stopped": "Stopped",
+      "idle": "Idle"
+    }
+  },
   "common": {
     "file": "Explorer",
     "openFolder": "Open Folder",
@@ -721,23 +737,6 @@
     "closeAllTabs": "Close All Tabs",
     "newSessionTooltip": "New Session (Ctrl+N)"
   },
-  "contentOverview": {
-    "title": "Task Monitor",
-    "tooltip": "Task Monitor",
-    "tooShort": "The current content is too short",
-    "summary": "Summary",
-    "keyPoints": "Key points",
-    "sections": "Structure",
-    "running": "The response is still being generated; this overview may be incomplete.",
-    "partial": "Generated from the currently available content.",
-    "updated": "The content has changed. Regenerate to refresh the overview.",
-    "regenerate": "Regenerate",
-    "copy": "Copy",
-    "copySuccess": "Overview copied",
-    "copyFailed": "Could not copy the overview",
-    "sectionNotFound": "This section is no longer in the terminal buffer",
-    "empty": "There is no long response to summarize yet."
-  },
   "newSessionMenu": {
     "tooltip": "New agent or terminal",
     "terminals": "Terminals",
@@ -973,6 +972,24 @@
       "saveFailedDescription": "Local settings could not be saved. Check available disk space or file permissions and try again. This notice will disappear after saving recovers. Error: {{error}}"
     },
     "agents": {
+      "details": {
+        "installation": "Installation and version",
+        "quota": "Available quota",
+        "installCommands": "Installation commands",
+        "commandHint": "Copy and run in the indicated shell, then check again after installation.",
+        "copyPath": "Copy executable path",
+        "pathCopied": "Path copied",
+        "pathCopyFailed": "Unable to copy path; please copy it manually"
+      },
+      "updates": {
+        "latestVersion": "Latest version",
+        "checking": "Checking latest version…",
+        "failed": "Version check failed; please retry",
+        "updateAvailable": "Update available: {{version}}",
+        "upToDate": "Up to date: {{version}}",
+        "ahead": "Installed version is ahead of stable {{version}}",
+        "unknown": "Latest version: {{version}}"
+      },
       "title": "Agents",
       "subtitle": "Check whether popular AI coding agents are installed on this system",
       "subtitleWithQuota": "Check installation status and available quota for local AI coding agents",
@@ -1025,30 +1042,11 @@
         "deleteTitle": "Delete commit message style?",
         "deleteDescription": "This cannot be undone. If this is the default, the first remaining style will become the default."
       },
-      "capabilityTitle": "Integration capabilities",
-      "capabilities": {
-        "interactiveTerminal": "Interactive terminal",
-        "initialPrompt": "Initial prompt",
-        "headlessText": "Headless text",
-        "resume": "Resume",
-        "permissionWaiting": "Permission waiting",
-        "statusEvents": "Status events",
-        "skills": "Skills",
-        "instructions": "Instructions",
-        "mcpManagement": "MCP management",
-        "usageTelemetry": "Usage telemetry"
-      },
-      "capabilityLevels": {
-        "full": "Full",
-        "partial": "Partial",
-        "unsupported": "Unsupported",
-        "unknown": "Unknown"
-      },
       "quota": {
         "loading": "Loading quota…", "installFirst": "Install and sign in to view quota", "unsupported": "Quota reading is not supported", "unavailable": "Quota is temporarily unavailable", "startSession": "Start a session to view quota", "refreshFailed": "Quota update failed; showing the last successful result",
         "healthy": "Quota available", "low": "Quota running low", "exhausted": "Quota nearly exhausted", "session": "5-hour {{value}}%", "weekly": "Weekly {{value}}%", "remainingPercent": "{{value}}% remaining", "remainingCredits": "{{value}} remaining", "signInAntigravity": "Sign in to Antigravity CLI", "timeout": "Quota query timed out", "gemini": "Gemini", "claudeGpt": "Claude/GPT", "sessionShort": "5h", "weeklyShort": "weekly"
       },
-      "detailHint": "Select an agent row to view its version and executable path.",
+      "detailHint": "Click an agent to view versions, quota, and installation commands.",
       "pathHint": "Detection uses the system PATH currently available to Termflow. If a newly installed or updated agent is not detected, restart your computer and try again."
     },
     "theme": {
@@ -1164,9 +1162,8 @@
       "notTested": "Not tested",
       "reachable": "Reachable",
       "unreachable": "Unreachable",
-      "customTestPlaceholder": "Custom test URL, for example https://example.com",
       "route": { "direct": "Direct", "proxy": "Proxy" },
-      "targets": { "googleOAuth": "Google OAuth", "github": "GitHub", "openai": "OpenAI", "claude": "Claude", "gemini": "Gemini", "glm": "GLM", "qwen": "Qwen", "custom": "Custom URL" }
+      "targets": { "googleOAuth": "Google OAuth", "github": "GitHub", "openai": "OpenAI", "claude": "Claude", "gemini": "Gemini", "glm": "GLM", "qwen": "Qwen" }
     },
     "general": {
       "headerDesc": "Manage app theme, language, and startup behavior.",

@@ -48,8 +48,7 @@ export type NetworkProxyTestTarget =
   | "claude"
   | "gemini"
   | "glm"
-  | "qwen"
-  | "custom";
+  | "qwen";
 
 export interface ResolvedNetworkProxy {
   mode: NetworkProxyMode;

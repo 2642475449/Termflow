@@ -139,6 +139,10 @@ export async function getClaudeCliInfo(): Promise<ClaudeCliInfo> {
 
 const AGENT_CLI_CACHE_KEY = "termflow.agent-cli-inspection.v2";
 
+export async function checkAgentLatestVersion(agentId: AiAgentId): Promise<string> {
+  return invoke<string>("check_agent_latest_version", { agentId });
+}
+
 let agentCliInspectionCache: AgentCliInfo[] | null = null;
 let agentCliInspectionRequest: Promise<AgentCliInfo[]> | null = null;
 
@@ -634,12 +638,10 @@ export async function resolveNetworkProxySettings(
 export async function testNetworkProxy(
   target: NetworkProxyTestTarget,
   settings: NetworkProxySettings,
-  customUrl?: string,
 ): Promise<NetworkProxyTestResult> {
   return await invoke("test_network_proxy", {
     target,
     settings,
-    customUrl: customUrl ?? null,
   });
 }
 
@@ -1053,6 +1055,10 @@ export async function getExistingProjectPaths(paths: string[]): Promise<string[]
 
 export async function getWindowProjectContext(): Promise<WindowProjectContext> {
   return await invoke("get_window_project_context");
+}
+
+export async function listOpenProjectWindows(): Promise<WindowProjectContext[]> {
+  return invoke<WindowProjectContext[]>("list_open_project_windows");
 }
 
 export async function releaseWindowProjectContext(): Promise<void> {

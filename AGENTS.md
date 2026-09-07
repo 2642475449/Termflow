@@ -58,7 +58,7 @@ Termflow 是基于 **Tauri 2** 的本地桌面工作台，在同一项目上下�
 | `SideQuestionComposer.tsx` | 侧边提问输入框 |
 | `AgentActivityIcon.tsx` / `AgentIcon.tsx` | 智能体状态图标 |
 | `GitIcon.tsx` | Git 图标组件 |
-| `ContentOverviewPopover.tsx` | 内容概览气泡卡 |
+| `TaskMonitorPopover.tsx` | 按项目分组的智能体标签与状态监控 |
 | `AuxiliaryFileView.tsx` | 辅助文件视图 |
 | `terminalTitle.ts` | 终端标题格式化工具 |
 
@@ -101,7 +101,7 @@ Termflow 是基于 **Tauri 2** 的本地桌面工作台，在同一项目上下�
 | `globalSearch.ts` / `globalSearchLayout.ts` | 全局搜索逻辑 |
 | `monaco.ts` / `monacoContextMenu.ts` / `monacoContextMenuActions.ts` | Monaco 编辑器配置与右键菜单 |
 | `asrRuntime.ts` / `mimoAsr.ts` / `dashscopeAsr.ts` | ASR 语音识别运行时 |
-| `contentOverview.ts` | 内容概览数据聚合 |
+| `taskMonitor.ts` | 打开的智能体标签筛选与状态映射 |
 | `fileNavigation.ts` / `fileIcon.tsx` | 文件导航与图标 |
 | `explorer.ts` | 文件浏览器事件（路径定位、全选） |
 | `sideQuestion.ts` | 侧边提问预设与上下文管理 |

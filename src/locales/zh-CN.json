@@ -1,4 +1,20 @@
 {
+  "taskMonitor": {
+    "title": "任务监控",
+    "noProjects": "暂无打开的项目",
+    "noTabs": "暂无智能体标签",
+    "loading": "正在同步标签…",
+    "navigateFailed": "无法跳转，项目窗口可能已关闭",
+    "status": {
+      "starting": "正在启动",
+      "running": "运行中",
+      "waiting": "等待输入",
+      "completed": "本轮完成",
+      "error": "异常",
+      "stopped": "已停止",
+      "idle": "空闲"
+    }
+  },
   "common": {
     "file": "资源管理器",
     "openFolder": "打开文件夹",
@@ -721,23 +737,6 @@
     "closeAllTabs": "关闭所有标签",
     "newSessionTooltip": "新建会话 (Ctrl+N)"
   },
-  "contentOverview": {
-    "title": "任务监控",
-    "tooltip": "任务监控",
-    "tooShort": "当前内容较短",
-    "summary": "一句话总结",
-    "keyPoints": "关键要点",
-    "sections": "内容结构",
-    "running": "回答仍在生成，当前概览可能不完整。",
-    "partial": "仅基于当前可读取内容生成。",
-    "updated": "内容已更新，可重新生成概览。",
-    "regenerate": "重新生成",
-    "copy": "复制摘要",
-    "copySuccess": "概览已复制",
-    "copyFailed": "无法复制概览",
-    "sectionNotFound": "终端缓冲区中已找不到该章节",
-    "empty": "当前还没有需要概览的长回答。"
-  },
   "newSessionMenu": {
     "tooltip": "新建智能体或终端",
     "terminals": "终端",
@@ -973,6 +972,24 @@
       "saveFailedDescription": "无法保存本地设置。请检查磁盘空间或文件权限后重试；保存恢复后此提示会自动消失。错误：{{error}}"
     },
     "agents": {
+      "details": {
+        "installation": "安装与版本",
+        "quota": "可用额度",
+        "installCommands": "安装命令",
+        "commandHint": "复制后在对应终端中运行；安装完成后点击“重新检查”。",
+        "copyPath": "复制可执行文件路径",
+        "pathCopied": "路径已复制",
+        "pathCopyFailed": "无法复制路径，请手动复制"
+      },
+      "updates": {
+        "latestVersion": "最新版本",
+        "checking": "正在检查最新版本…",
+        "failed": "版本检查失败，请重新检查",
+        "updateAvailable": "有新版本 {{version}}",
+        "upToDate": "已是最新 {{version}}",
+        "ahead": "本机版本领先于稳定版 {{version}}",
+        "unknown": "最新版本 {{version}}"
+      },
       "title": "智能体",
       "subtitle": "检查本机常用 AI 编程智能体的安装状态",
       "subtitleWithQuota": "检查本机常用 AI 编程智能体的安装状态和可用额度",
@@ -1025,30 +1042,11 @@
         "deleteTitle": "删除提交信息风格？",
         "deleteDescription": "删除后无法恢复；如果它是默认方案，将自动选择列表中的第一个方案。"
       },
-      "capabilityTitle": "集成能力",
-      "capabilities": {
-        "interactiveTerminal": "交互终端",
-        "initialPrompt": "初始提示词",
-        "headlessText": "无头文本调用",
-        "resume": "恢复会话",
-        "permissionWaiting": "权限等待",
-        "statusEvents": "状态事件",
-        "skills": "技能",
-        "instructions": "智能体指令",
-        "mcpManagement": "MCP 管理",
-        "usageTelemetry": "用量遥测"
-      },
-      "capabilityLevels": {
-        "full": "完整",
-        "partial": "部分",
-        "unsupported": "不支持",
-        "unknown": "未知"
-      },
       "quota": {
         "loading": "正在读取额度…", "installFirst": "安装并登录后显示额度", "unsupported": "暂不支持读取额度", "unavailable": "暂时无法读取额度", "startSession": "启动一次会话后显示额度", "refreshFailed": "额度更新失败，当前显示上次成功查询的结果",
         "healthy": "额度充足", "low": "额度较低", "exhausted": "额度即将耗尽", "session": "5 小时 {{value}}%", "weekly": "每周 {{value}}%", "remainingPercent": "剩余 {{value}}%", "remainingCredits": "剩余 {{value}}", "signInAntigravity": "请先登录 Antigravity CLI", "timeout": "额度查询超时", "gemini": "Gemini", "claudeGpt": "Claude/GPT", "sessionShort": "5小时", "weeklyShort": "每周"
       },
-      "detailHint": "点击智能体行可查看版本和可执行文件路径。",
+      "detailHint": "点击智能体行可查看版本、额度和安装命令。",
       "pathHint": "检测结果以 Termflow 当前读取到的系统 PATH 为准。安装或更新智能体后，如果仍未检测到，请重启电脑再试。"
     },
     "theme": {
@@ -1164,9 +1162,8 @@
       "notTested": "尚未测试",
       "reachable": "可达",
       "unreachable": "不可达",
-      "customTestPlaceholder": "自定义测试地址，例如 https://example.com",
       "route": { "direct": "直连", "proxy": "代理" },
-      "targets": { "googleOAuth": "Google OAuth", "github": "GitHub", "openai": "OpenAI", "claude": "Claude", "gemini": "Gemini", "glm": "GLM", "qwen": "Qwen", "custom": "自定义地址" }
+      "targets": { "googleOAuth": "Google OAuth", "github": "GitHub", "openai": "OpenAI", "claude": "Claude", "gemini": "Gemini", "glm": "GLM", "qwen": "Qwen" }
     },
     "general": {
       "headerDesc": "统一管理界面主题、语言与启动行为。",

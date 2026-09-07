@@ -1,4 +1,4 @@
-import { CloudDownloadOutlined, ReloadOutlined, WarningOutlined } from "@ant-design/icons";
+import { CloudDownloadOutlined } from "@ant-design/icons";
 import { Tooltip } from "antd";
 import { useTranslation } from "react-i18next";
 import { useApplicationUpdateStore } from "@/store/slices/applicationUpdate";
@@ -20,12 +20,6 @@ export function ApplicationUpdateBadge() {
       : phase === "error"
         ? t("updater.badgeError")
         : t("updater.badgeAvailable");
-  const icon = phase === "ready"
-    ? <ReloadOutlined />
-    : phase === "error"
-      ? <WarningOutlined />
-      : <CloudDownloadOutlined spin={phase === "downloading"} />;
-
   return (
     <Tooltip title={t("updater.openDetails")}>
       <button
@@ -33,7 +27,7 @@ export function ApplicationUpdateBadge() {
         className="mx-1 flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-[var(--cs-border-subtle)] bg-[var(--cs-bg-tertiary)] px-2 text-xs text-[var(--cs-text-secondary)] transition-colors hover:bg-[var(--cs-bg-hover)] hover:text-[var(--cs-text-primary)]"
         onClick={openModal}
       >
-        {icon}
+        <CloudDownloadOutlined />
         <span>{label}</span>
       </button>
     </Tooltip>

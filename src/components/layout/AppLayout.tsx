@@ -243,7 +243,6 @@ function WorkspacePane({ paneId }: { paneId: string }) {
                     ) : session?.active ? (
                       <Terminal
                         sessionId={tabId}
-                        overviewNavigationId={`${pane.id}:${tabId}`}
                         onExit={() => updateSession(tabId, { active: false })}
                         onClose={() => closeTab(tabId)}
                       />
@@ -1390,6 +1389,14 @@ function AppLayout() {
           kind: targetSession.ephemeral ? "terminal" : "task",
         });
         getCurrentWindow().setFocus().catch(() => {});
+        return;
+      }
+
+      // 已打开的标签直接定位到所属分栏，避免跨窗口跳转时在当前分栏重复打开。
+      const state = useAppStore.getState();
+      const targetPane = Object.values(state.panesById).find((pane) => pane.tabIds.includes(sessionId));
+      if (targetPane) {
+        state.setActiveSession(sessionId, targetPane.id);
         return;
       }
 

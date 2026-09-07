@@ -4,10 +4,12 @@ import { Button, Drawer, Dropdown, Spin, Tag, message } from "antd";
 import { useTranslation } from "react-i18next";
 import { getAntigravityUsage, getClaudeRateLimits, getCodexRateLimits, getQoderUsage, inspectAgentClis } from "@/lib/api";
 import { AGENT_DEFINITIONS, AI_AGENT_ORDER, formatAgentVersion } from "@/lib/agents";
-import type { AgentCliInfo, AiAgentId, AntigravityUsage, ClaudeRateLimits, CodexRateLimitWindow, CodexRateLimits, QoderUsage } from "@/types";
+import type { AgentCliInfo, AiAgentId, AntigravityQuotaWindow, AntigravityUsage, ClaudeRateLimits, CodexRateLimitWindow, CodexRateLimits, QoderUsage } from "@/types";
 import { AgentIcon } from "@/components/AgentIcon";
 import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
 import { useAppStore } from "@/store";
+import { useAgentVersionsStore } from "@/store/slices/agentVersions";
+import { compareAgentVersion } from "@/lib/agentVersions";
 
 type Quotas = { claude: ClaudeRateLimits | null; codex: CodexRateLimits | null; antigravity: AntigravityUsage | null; qoder: QoderUsage | null };
 const EMPTY_QUOTAS: Quotas = { claude: null, codex: null, antigravity: null, qoder: null };
@@ -16,6 +18,8 @@ const QUOTA_RESUME_MAX_AGE_MS = 60 * 1000;
 
 export function AgentsPage() {
   const { t, i18n } = useTranslation();
+  const setVersionChecks = useAgentVersionsStore((state) => state.setVersionChecks);
+  const versionLoading = useAgentVersionsStore((state) => Object.values(state.versions).some((version) => version.status === "checking"));
   const defaultAgentId = useAppStore((state) => state.defaultAgentId);
   const setDefaultAgentId = useAppStore((state) => state.setDefaultAgentId);
   const sessions = useAppStore((state) => state.sessions);
@@ -68,6 +72,7 @@ export function AgentsPage() {
   }, [claudeSessionId]);
 
   const refresh = useCallback(async (showSuccess = false) => {
+    void setVersionChecks(showSuccess);
     setLoading(true);
     try {
       const result = [...await inspectAgentClis({ forceRefresh: showSuccess })].sort(
@@ -82,7 +87,7 @@ export function AgentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [loadQuotas, t]);
+  }, [loadQuotas, setVersionChecks, t]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
@@ -131,7 +136,7 @@ export function AgentsPage() {
       <SettingsPageHeader
         title={t("settings.agents.title")}
         description={t("settings.agents.subtitleWithQuota")}
-        actions={<Button icon={<ReloadOutlined />} loading={loading || quotaLoading} onClick={() => void refresh(true)}>{t("settings.agents.refresh")}</Button>}
+        actions={<Button icon={<ReloadOutlined />} loading={loading || quotaLoading || versionLoading} onClick={() => void refresh(true)}>{t("settings.agents.refresh")}</Button>}
       />
 
       <div className="app-glass-card mb-4 rounded-xl px-4 py-3" style={{ background: "var(--cs-bg-card)", border: "1px solid var(--cs-border-card)" }}>
@@ -166,7 +171,7 @@ export function AgentsPage() {
       )}
 
       <div className="mt-5 text-xs leading-5" style={{ color: "var(--cs-text-tertiary)" }}>{t("settings.agents.detailHint")}</div>
-      <AgentDetailsDrawer agent={selectedAgent} open={selectedAgent !== null} onClose={() => setSelectedAgentId(null)} />
+      <AgentDetailsDrawer agent={selectedAgent} open={selectedAgent !== null} onClose={() => setSelectedAgentId(null)} quotas={quotas} quotaLoading={quotaLoading} refreshing={loading || quotaLoading || versionLoading} onRefresh={() => void refresh(true)} onSetDefault={() => { if (selectedAgent) selectDefault(selectedAgent); }} onCopyInstall={(command, shell) => { if (selectedAgent) void copyInstall(selectedAgent, command, shell); }} />
     </div>
   );
 }
@@ -200,6 +205,7 @@ function AgentRow({ agent, quota, quotaLoading, isDefault, isLast, onOpen, onSet
           <div className="flex min-w-0 items-center gap-1.5 text-xs" style={{ color: "var(--cs-text-tertiary)" }}>
             <code className="truncate">{definition.command}</code>{version ? <><span>·</span><span className="truncate">{version}</span></> : null}
           </div>
+          <div className="mt-1"><AgentVersionStatus agent={agent} /></div>
         </div>
       </div>
       <Tag icon={agent.installed ? <CheckCircleFilled /> : <CloseCircleFilled />} color={agent.installed ? "success" : "default"} className="m-0 w-fit shrink-0">{t(agent.installed ? "settings.agents.installed" : "settings.agents.notInstalled")}</Tag>
@@ -221,7 +227,7 @@ function AgentRow({ agent, quota, quotaLoading, isDefault, isLast, onOpen, onSet
   );
 }
 
-function AgentQuota({ agent, quota, loading }: { agent: AgentCliInfo; quota: ClaudeRateLimits | CodexRateLimits | AntigravityUsage | QoderUsage | null; loading: boolean }) {
+function AgentQuota({ agent, quota, loading, expanded = false }: { agent: AgentCliInfo; quota: ClaudeRateLimits | CodexRateLimits | AntigravityUsage | QoderUsage | null; loading: boolean; expanded?: boolean }) {
   const { t } = useTranslation();
   if (agent.id === "pi") return <div className="h-[38px]" aria-hidden="true" />;
   if (!agent.installed) return <Muted>{t("settings.agents.quota.installFirst")}</Muted>;
@@ -256,7 +262,14 @@ function AgentQuota({ agent, quota, loading }: { agent: AgentCliInfo; quota: Cla
     const headline = credits != null
       ? t("settings.agents.quota.remainingCredits", { value: formatNumber(credits) })
       : percent != null ? t("settings.agents.quota.remainingPercent", { value: percent }) : null;
-    return headline ? <QuotaSummary headline={headline} percentages={percent == null ? [] : [percent]} /> : <QuotaUnavailable agentId={agent.id} />;
+    if (!headline) return <QuotaUnavailable agentId={agent.id} />;
+    if (expanded) return (
+      <div className="space-y-4">
+        <QuotaDetailsHeader headline={headline} updatedAt={usage.updatedAt} />
+        {percent != null && <QuotaWindowDetail label={t("settings.agents.details.quota")} remaining={percent} />}
+      </div>
+    );
+    return <QuotaSummary headline={headline} percentages={percent == null ? [] : [percent]} />;
   }
 
   const limits = quota as ClaudeRateLimits | CodexRateLimits | null;
@@ -264,6 +277,18 @@ function AgentQuota({ agent, quota, loading }: { agent: AgentCliInfo; quota: Cla
   const windows = [limits.session, limits.weekly].filter((window): window is CodexRateLimitWindow => window !== null);
   if (windows.length === 0) return <QuotaUnavailable agentId={agent.id} />;
   const percentages = windows.map((window) => clampPercent(100 - window.usedPercent));
+  if (expanded) return (
+    <div className="space-y-4">
+      <QuotaDetailsHeader headline={quotaHeadline(Math.min(...percentages), t)} updatedAt={limits.updatedAt} />
+      {(["session", "weekly"] as const).map((period) => {
+        const window = limits[period];
+        return window ? <QuotaWindowDetail key={period}
+          label={t(`settings.agents.quota.${period}Short`)}
+          remaining={clampPercent(100 - window.usedPercent)}
+          resetDescription={window.resetDescription ?? (window.resetsAt != null ? new Date(window.resetsAt).toISOString() : null)} /> : null;
+      })}
+    </div>
+  );
   const detail = [
     limits.session ? t("settings.agents.quota.session", { value: clampPercent(100 - limits.session.usedPercent) }) : null,
     limits.weekly ? t("settings.agents.quota.weekly", { value: clampPercent(100 - limits.weekly.usedPercent) }) : null,
@@ -294,18 +319,129 @@ function QuotaSummary({ headline, detail, percentages }: { headline: string; det
   );
 }
 
-function AgentDetailsDrawer({ agent, open, onClose }: { agent: AgentCliInfo | null; open: boolean; onClose: () => void }) {
-  const { t } = useTranslation();
+function AgentDetailsDrawer({ agent, open, onClose, quotas, quotaLoading, refreshing, onRefresh, onSetDefault, onCopyInstall }: {
+  agent: AgentCliInfo | null; open: boolean; onClose: () => void;
+  quotas: Quotas; quotaLoading: boolean; refreshing: boolean;
+  onRefresh: () => void; onSetDefault: () => void;
+  onCopyInstall: (command: string, shell: string) => void;
+}) {
+  const { t, i18n } = useTranslation();
+  const defaultAgentId = useAppStore((state) => state.defaultAgentId);
+  const isDefault = agent?.id === defaultAgentId;
   const definition = agent ? AGENT_DEFINITIONS[agent.id] : null;
+  const quota = agent && agent.id in quotas ? quotas[agent.id as keyof Quotas] : null;
+  const copyPath = async () => {
+    if (!agent?.executablePath) return;
+    try {
+      await navigator.clipboard.writeText(agent.executablePath);
+      message.success(t("settings.agents.details.pathCopied"));
+    } catch {
+      message.error(t("settings.agents.details.pathCopyFailed"));
+    }
+  };
   return (
-    <Drawer open={open} width={420} title={definition?.displayName} onClose={onClose} destroyOnHidden>
-      {agent && definition ? <div className="space-y-5">
+    <Drawer open={open} width={520} title={definition?.displayName} onClose={onClose} destroyOnHidden>
+      {agent && definition ? <div className="app-agent-details space-y-5">
+        <section className="rounded-xl border border-[var(--cs-border-card)] bg-[var(--cs-bg-card)] p-4">
+          <div className="flex items-center gap-3">
+            <AgentIcon agentId={agent.id} size={36} />
+            <div className="min-w-0 flex-1">
+              <div className="text-lg font-semibold text-[var(--cs-text-primary)]">{definition.displayName}</div>
+              <code className="text-xs text-[var(--cs-text-tertiary)]">{definition.command}</code>
+            </div>
+            <Tag color={agent.installed ? "success" : "default"} className="m-0">{t(agent.installed ? "settings.agents.installed" : "settings.agents.notInstalled")}</Tag>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button type={isDefault ? "default" : "primary"} disabled={!agent.installed || isDefault} onClick={onSetDefault}>{t(isDefault ? "settings.agents.defaultActive" : "settings.agents.setDefault")}</Button>
+            <Button icon={<ReloadOutlined />} loading={refreshing} onClick={onRefresh}>{t("settings.agents.refresh")}</Button>
+          </div>
+          {isDefault ? <p className="mb-0 mt-3 text-xs leading-5 text-[var(--cs-text-tertiary)]">{t("settings.agents.defaultCurrent", { name: definition.displayName })}</p> : null}
+        </section>
+        <AgentDetailSection title={t("settings.agents.details.installation")}>
+        <div className="grid grid-cols-2 gap-4">
         <AgentDetail label={t("settings.agents.version")}>{formatAgentVersion(agent.version, definition.displayName) || t("settings.agents.unknown")}</AgentDetail>
-        <AgentDetail label={t("settings.agents.path")}>{agent.executablePath ? <span className="break-all font-mono text-xs">{agent.executablePath}</span> : t("settings.agents.notFoundInPath")}</AgentDetail>
-        {agent.error ? <AgentDetail label={t("settings.agents.versionError")}><span style={{ color: "var(--cs-danger)" }}>{agent.error}</span></AgentDetail> : null}
+        <AgentDetail label={t("settings.agents.updates.latestVersion")}><AgentVersionStatus agent={agent} /></AgentDetail>
+        </div>
+        <AgentDetail label={t("settings.agents.path")}>{agent.executablePath ? <div className="flex items-start gap-2 rounded-lg bg-[var(--cs-bg-hover)] p-3"><code className="min-w-0 flex-1 break-all text-xs leading-5">{agent.executablePath}</code><Button size="small" type="text" icon={<CopyOutlined />} aria-label={t("settings.agents.details.copyPath")} title={t("settings.agents.details.copyPath")} onClick={() => void copyPath()} /></div> : t("settings.agents.notFoundInPath")}</AgentDetail>
+        <p className="m-0 text-xs text-[var(--cs-text-tertiary)]">{t("settings.agents.checkedAt", { time: new Intl.DateTimeFormat(i18n.resolvedLanguage, { dateStyle: "medium", timeStyle: "medium" }).format(agent.checkedAt) })}</p>
+        {agent.error ? <AgentDetail label={t("settings.agents.versionError")}><span className="break-words text-[var(--cs-danger)]">{agent.error}</span></AgentDetail> : null}
+        </AgentDetailSection>
+        <AgentDetailSection title={t("settings.agents.details.quota")}>
+          {agent.id === "pi" ? <Muted>{t("settings.agents.quota.unsupported")}</Muted> : agent.id === "antigravity" ? <AntigravityQuotaDetails usage={quota as AntigravityUsage | null} loading={quotaLoading} /> : <AgentQuota agent={agent} quota={quota} loading={quotaLoading} expanded />}
+        </AgentDetailSection>
+        <AgentDetailSection title={t("settings.agents.details.installCommands")}>
+          {definition.installCommands.map(({ command, shell }) => <div key={shell} className="rounded-lg bg-[var(--cs-bg-hover)] p-3">
+            <div className="mb-2 flex items-center justify-between gap-2"><span className="text-xs font-medium text-[var(--cs-text-tertiary)]">{shell}</span><Button size="small" type="text" icon={<CopyOutlined />} onClick={() => onCopyInstall(command, shell)}>{t("common.copy")}</Button></div>
+            <code className="block break-all text-xs leading-5 text-[var(--cs-text-secondary)]">{command}</code>
+          </div>)}
+          <p className="m-0 text-xs leading-5 text-[var(--cs-text-tertiary)]">{t("settings.agents.details.commandHint")}</p>
+        </AgentDetailSection>
       </div> : null}
     </Drawer>
   );
+}
+
+function AgentDetailSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return <section className="space-y-4 rounded-xl border border-[var(--cs-border-card)] p-4"><h3 className="m-0 text-sm font-semibold text-[var(--cs-text-primary)]">{title}</h3>{children}</section>;
+}
+
+function AntigravityQuotaDetails({ usage, loading }: { usage: AntigravityUsage | null; loading: boolean }) {
+  const { t } = useTranslation();
+  if (loading && (!usage || usage.status !== "ok")) return <Muted>{t("settings.agents.quota.loading")}</Muted>;
+  if (usage?.status !== "ok" || usage.windows.length === 0) return <QuotaUnavailable agentId="antigravity" />;
+
+  const remaining = usage.windows.map((window) => clampPercent(window.remainingPercent));
+  return (
+    <div className="space-y-4">
+      <QuotaDetailsHeader headline={quotaHeadline(Math.min(...remaining), t)} updatedAt={usage.updatedAt} />
+      <div className="space-y-4">
+        {usage.windows.map((window) => <AntigravityQuotaWindowDetail key={window.id} window={window} />)}
+      </div>
+    </div>
+  );
+}
+
+function AntigravityQuotaWindowDetail({ window }: { window: AntigravityQuotaWindow }) {
+  const { t } = useTranslation();
+  const remaining = clampPercent(window.remainingPercent);
+  const scope = window.scope === "Gemini" ? t("settings.agents.quota.gemini") : t("settings.agents.quota.claudeGpt");
+  const period = window.window === "session" ? t("settings.agents.quota.sessionShort") : t("settings.agents.quota.weeklyShort");
+  return <QuotaWindowDetail label={`${scope} · ${period}`} remaining={remaining} resetDescription={window.resetDescription} />;
+}
+
+function QuotaDetailsHeader({ headline, updatedAt }: { headline: string; updatedAt: number }) {
+  const { t } = useTranslation();
+  return <div className="flex flex-wrap items-center justify-between gap-3">
+    <span className="text-sm font-semibold text-[var(--cs-text-primary)]">{headline}</span>
+    <span className="text-xs text-[var(--cs-text-tertiary)]">{formatQuotaUpdatedAt(updatedAt, t)}</span>
+  </div>;
+}
+
+function QuotaWindowDetail({ label, remaining, resetDescription }: { label: string; remaining: number; resetDescription?: string | null }) {
+  const { t } = useTranslation();
+  const color = remaining <= 5 ? "text-[var(--cs-danger)]" : remaining <= 20 ? "text-[var(--cs-warning)]" : "text-[var(--cs-success)]";
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <span className="font-medium text-[var(--cs-text-primary)]">{label}</span>
+        <span className="tabular-nums text-[var(--cs-text-secondary)]">{t("settings.agents.quota.remainingPercent", { value: remaining })}</span>
+      </div>
+      <progress className={`app-agent-quota-progress block h-1.5 w-full overflow-hidden rounded-full ${color}`}
+        value={remaining} max={100} aria-label={label} />
+      {resetDescription !== undefined && <div className="text-xs text-[var(--cs-text-tertiary)]">{formatQuotaReset(resetDescription, t)}</div>}
+    </div>
+  );
+}
+
+function AgentVersionStatus({ agent }: { agent: AgentCliInfo }) {
+  const { t } = useTranslation();
+  const check = useAgentVersionsStore((state) => state.versions[agent.id]);
+  if (!check || check.status === "checking") return <span className="text-xs text-[var(--cs-text-tertiary)]" role="status">{t("settings.agents.updates.checking")}</span>;
+  if (check.status === "error" || !check.latest) return <span className="text-xs text-[var(--cs-warning)]">{t("settings.agents.updates.failed")}</span>;
+  const status = agent.installed ? compareAgentVersion(agent.version, check.latest) : "unknown";
+  return <span className={`text-xs ${status === "updateAvailable" ? "font-medium text-[var(--cs-warning)]" : "text-[var(--cs-text-tertiary)]"}`}>
+    {t(`settings.agents.updates.${status}`, { version: check.latest })}
+  </span>;
 }
 
 function AgentDetail({ label, children }: { label: string; children: React.ReactNode }) {
@@ -314,6 +450,19 @@ function AgentDetail({ label, children }: { label: string; children: React.React
 
 function clampPercent(value: number) { return Math.max(0, Math.min(100, Math.round(value))); }
 function formatNumber(value: number) { return new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value); }
+function formatQuotaReset(resetDescription: string | null, t: ReturnType<typeof useTranslation>["t"]) {
+  const reset = resetDescription ? new Date(resetDescription) : null;
+  return reset && Number.isFinite(reset.getTime())
+    ? t("statusBar.codexUsage.resetsAt", { time: reset.toLocaleString() })
+    : t("statusBar.codexUsage.resetUnknown");
+}
+function formatQuotaUpdatedAt(updatedAt: number, t: ReturnType<typeof useTranslation>["t"]) {
+  if (updatedAt <= 0) return t("statusBar.antigravityUsage.pending");
+  const minutes = Math.floor(Math.max(0, Date.now() - updatedAt) / 60_000);
+  if (minutes < 1) return t("statusBar.codexUsage.updatedNow");
+  if (minutes < 60) return t("statusBar.codexUsage.updatedMinutes", { minutes });
+  return t("statusBar.codexUsage.updatedHours", { hours: Math.floor(minutes / 60) });
+}
 function quotaHeadline(remaining: number, t: ReturnType<typeof useTranslation>["t"]) {
   if (remaining <= 5) return t("settings.agents.quota.exhausted");
   if (remaining <= 20) return t("settings.agents.quota.low");

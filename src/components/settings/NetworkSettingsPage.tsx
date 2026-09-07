@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  CheckCircleOutlined,
-  CloseCircleOutlined,
   GlobalOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
-import { Button, Input, Radio, Tag } from "antd";
+import { Button, Input, Radio } from "antd";
 import { useTranslation } from "react-i18next";
 
 import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
@@ -32,7 +30,6 @@ export function NetworkSettingsPage() {
   const setNetworkCustomProxyUrl = useAppStore((state) => state.setNetworkCustomProxyUrl);
   const setNetworkNoProxy = useAppStore((state) => state.setNetworkNoProxy);
   const [resolution, setResolution] = useState<ResolvedNetworkProxy | null>(null);
-  const [customTestUrl, setCustomTestUrl] = useState("");
   const [results, setResults] = useState<TestResults>({});
   const [runningTargets, setRunningTargets] = useState<Set<NetworkProxyTestTarget>>(new Set());
 
@@ -64,7 +61,6 @@ export function NetworkSettingsPage() {
       const result = await testNetworkProxy(
         target,
         settings,
-        target === "custom" ? customTestUrl : undefined,
       );
       setResults((current) => ({ ...current, [target]: result }));
     } catch (error) {
@@ -72,7 +68,7 @@ export function NetworkSettingsPage() {
         ...current,
         [target]: {
           target,
-          url: target === "custom" ? customTestUrl : "",
+          url: "",
           success: false,
           statusCode: null,
           latencyMs: 0,
@@ -89,7 +85,7 @@ export function NetworkSettingsPage() {
         return next;
       });
     }
-  }, [customTestUrl, resolution, settings]);
+  }, [resolution, settings]);
 
   const runAll = useCallback(async () => {
     let index = 0;
@@ -193,28 +189,6 @@ export function NetworkSettingsPage() {
             />
           ))}
         </div>
-
-        <div className="mt-4 rounded-lg border border-[var(--cs-border-sidebar)] p-3">
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Input
-              value={customTestUrl}
-              placeholder={t("settings.network.customTestPlaceholder")}
-              onChange={(event) => setCustomTestUrl(event.target.value)}
-            />
-            <Button
-              loading={runningTargets.has("custom")}
-              disabled={!customTestUrl.trim()}
-              onClick={() => void runTarget("custom")}
-            >
-              {t("settings.network.test")}
-            </Button>
-          </div>
-          {results.custom && (
-            <div className="mt-2">
-              <ResultSummary result={results.custom} />
-            </div>
-          )}
-        </div>
       </section>
     </div>
   );
@@ -298,8 +272,6 @@ function NetworkTargetLogo({ target }: { target: NetworkProxyTestTarget }) {
       return <div className={containerClassName}><GlmLogo /></div>;
     case "qwen":
       return <div className={containerClassName}><QwenLogo /></div>;
-    case "custom":
-      return null;
   }
 }
 
@@ -351,33 +323,5 @@ function QwenLogo() {
     <svg className="h-6 w-6" viewBox="0 0 233 236" aria-hidden="true">
       <path fill="#082DFF" d="M187.25 36.08h-52.9c0-2.25-.58-4.5-1.75-6.52l-7.08-12.26a13.04 13.04 0 0 0-11.28-6.52h-14.16A13.04 13.04 0 0 0 88.79 17.3L67.11 54.86a13.04 13.04 0 0 0 0 13.02l7.08 12.27a13.04 13.04 0 0 0 11.28 6.51h101.78a13.04 13.04 0 0 0 11.29-6.51l7.08-12.27a13.04 13.04 0 0 0 0-13.02l-7.08-12.27a13.04 13.04 0 0 0-11.29-6.51ZM12.35 99.5l26.45 45.82a13 13 0 0 0-4.77 4.77l-7.08 12.26a13.04 13.04 0 0 0 0 13.03l7.08 12.27a13.04 13.04 0 0 0 11.28 6.51h43.37a13.04 13.04 0 0 0 11.29-6.51l7.08-12.27a13.04 13.04 0 0 0 0-13.03L56.16 74.21a13.04 13.04 0 0 0-11.29-6.52H30.71a13.04 13.04 0 0 0-11.28 6.52l-7.08 12.26a13.04 13.04 0 0 0 0 13.03Zm142.38 119.76 26.45-45.81a13 13 0 0 0 6.51 1.74h14.17a13.04 13.04 0 0 0 11.28-6.51l7.08-12.27a13.04 13.04 0 0 0 0-13.03l-21.68-37.56a13.04 13.04 0 0 0-11.29-6.51h-14.16a13.04 13.04 0 0 0-11.28 6.51l-50.89 88.15a13.04 13.04 0 0 0 0 13.03l7.08 12.26a13.04 13.04 0 0 0 11.28 6.52h14.16a13.04 13.04 0 0 0 11.29-6.52Z" />
     </svg>
-  );
-}
-
-function ResultSummary({
-  result,
-  hideReachability = false,
-}: {
-  result: NetworkProxyTestResult;
-  hideReachability?: boolean;
-}) {
-  const { t } = useTranslation();
-  return (
-    <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--cs-text-tertiary)]">
-      {!hideReachability && (
-        <Tag
-          className="!m-0"
-          color={result.success ? "success" : "error"}
-          icon={result.success ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
-        >
-          {t(result.success ? "settings.network.reachable" : "settings.network.unreachable")}
-        </Tag>
-      )}
-      <span>{t(`settings.network.route.${result.route}`)}</span>
-      {result.proxyUrl && <span>{result.proxyUrl}</span>}
-      <span>{result.latencyMs} ms</span>
-      {result.statusCode && <span>HTTP {result.statusCode}</span>}
-      {result.error && <span className="break-all text-[var(--cs-danger)]">{result.error}</span>}
-    </div>
   );
 }

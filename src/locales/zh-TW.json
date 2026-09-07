@@ -1,4 +1,20 @@
 {
+  "taskMonitor": {
+    "title": "任務監控",
+    "noProjects": "暫無開啟的專案",
+    "noTabs": "暫無智慧體分頁",
+    "loading": "正在同步分頁…",
+    "navigateFailed": "無法跳轉，專案視窗可能已關閉",
+    "status": {
+      "starting": "正在啟動",
+      "running": "執行中",
+      "waiting": "等待輸入",
+      "completed": "本輪完成",
+      "error": "異常",
+      "stopped": "已停止",
+      "idle": "閒置"
+    }
+  },
   "common": {
     "file": "資源管理器",
     "openFolder": "開啟資料夾",
@@ -721,23 +737,6 @@
     "closeAllTabs": "關閉所有標籤",
     "newSessionTooltip": "新建工作階段 (Ctrl+N)"
   },
-  "contentOverview": {
-    "title": "任務監控",
-    "tooltip": "任務監控",
-    "tooShort": "目前內容較短",
-    "summary": "一句話總結",
-    "keyPoints": "關鍵要點",
-    "sections": "內容結構",
-    "running": "回答仍在產生，目前概覽可能不完整。",
-    "partial": "僅依據目前可讀取的內容產生。",
-    "updated": "內容已更新，可重新產生概覽。",
-    "regenerate": "重新產生",
-    "copy": "複製摘要",
-    "copySuccess": "概覽已複製",
-    "copyFailed": "無法複製概覽",
-    "sectionNotFound": "終端機緩衝區中已找不到該章節",
-    "empty": "目前還沒有需要概覽的長回答。"
-  },
   "newSessionMenu": {
     "tooltip": "新建智慧體或終端機",
     "terminals": "終端機",
@@ -973,6 +972,24 @@
       "saveFailedDescription": "無法儲存本機設定。請檢查磁碟空間或檔案權限後再試；儲存恢復後此提示會自動消失。錯誤：{{error}}"
     },
     "agents": {
+      "details": {
+        "installation": "安裝與版本",
+        "quota": "可用額度",
+        "installCommands": "安裝命令",
+        "commandHint": "複製後在對應終端中執行；安裝完成後點擊「重新檢查」。",
+        "copyPath": "複製執行檔路徑",
+        "pathCopied": "路徑已複製",
+        "pathCopyFailed": "無法複製路徑，請手動複製"
+      },
+      "updates": {
+        "latestVersion": "最新版本",
+        "checking": "正在檢查最新版本…",
+        "failed": "版本檢查失敗，請重新檢查",
+        "updateAvailable": "有新版本 {{version}}",
+        "upToDate": "已是最新 {{version}}",
+        "ahead": "本機版本領先於穩定版 {{version}}",
+        "unknown": "最新版本 {{version}}"
+      },
       "title": "智慧體",
       "subtitle": "檢查本機常用 AI 程式設計智慧體的安裝狀態",
       "subtitleWithQuota": "檢查本機常用 AI 程式設計智慧體的安裝狀態和可用額度",
@@ -1025,30 +1042,11 @@
         "deleteTitle": "刪除提交訊息風格？",
         "deleteDescription": "刪除後無法復原；如果它是預設方案，將自動選擇清單中的第一個方案。"
       },
-      "capabilityTitle": "整合能力",
-      "capabilities": {
-        "interactiveTerminal": "互動式終端",
-        "initialPrompt": "初始提示詞",
-        "headlessText": "無介面文字呼叫",
-        "resume": "恢復工作階段",
-        "permissionWaiting": "權限等待",
-        "statusEvents": "狀態事件",
-        "skills": "技能",
-        "instructions": "智慧體指令",
-        "mcpManagement": "MCP 管理",
-        "usageTelemetry": "用量遙測"
-      },
-      "capabilityLevels": {
-        "full": "完整",
-        "partial": "部分",
-        "unsupported": "不支援",
-        "unknown": "未知"
-      },
       "quota": {
         "loading": "正在讀取額度…", "installFirst": "安裝並登入後顯示額度", "unsupported": "暫不支援讀取額度", "unavailable": "暫時無法讀取額度", "startSession": "啟動一次工作階段後顯示額度", "refreshFailed": "額度更新失敗，目前顯示上次成功查詢的結果",
         "healthy": "額度充足", "low": "額度較低", "exhausted": "額度即將用盡", "session": "5 小時 {{value}}%", "weekly": "每週 {{value}}%", "remainingPercent": "剩餘 {{value}}%", "remainingCredits": "剩餘 {{value}}", "signInAntigravity": "請先登入 Antigravity CLI", "timeout": "額度查詢逾時", "gemini": "Gemini", "claudeGpt": "Claude/GPT", "sessionShort": "5小時", "weeklyShort": "每週"
       },
-      "detailHint": "點擊智慧體列可查看版本和可執行檔路徑。",
+      "detailHint": "點擊智慧體列可查看版本、額度與安裝命令。",
       "pathHint": "偵測結果以 Termflow 目前讀取到的系統 PATH 為準。安裝或更新智慧體後，如果仍未偵測到，請重新啟動電腦再試。"
     },
     "theme": {
@@ -1159,9 +1157,8 @@
       "notTested": "尚未測試",
       "reachable": "可達",
       "unreachable": "不可達",
-      "customTestPlaceholder": "自訂測試位址，例如 https://example.com",
       "route": { "direct": "直接連線", "proxy": "代理" },
-      "targets": { "googleOAuth": "Google OAuth", "github": "GitHub", "openai": "OpenAI", "claude": "Claude", "gemini": "Gemini", "glm": "GLM", "qwen": "Qwen", "custom": "自訂位址" }
+      "targets": { "googleOAuth": "Google OAuth", "github": "GitHub", "openai": "OpenAI", "claude": "Claude", "gemini": "Gemini", "glm": "GLM", "qwen": "Qwen" }
     },
     "general": {
       "headerDesc": "統一管理介面主題、語言與啟動行為。",

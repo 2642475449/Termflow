@@ -785,7 +785,7 @@ const SETTINGS_ID = "__settings__";
 const LAUNCHER_WORKSPACE_KEY = "__launcher__";
 const DEFAULT_SIDEBAR_WIDTH = 248;
 const MIN_SIDEBAR_WIDTH = 220;
-const MAX_SIDEBAR_WIDTH = 360;
+const MAX_SIDEBAR_WIDTH = 600;
 const DEFAULT_LAYOUT: WorkspaceLayout = {
   root: { type: "pane", paneId: MAIN_PANE_ID },
 };

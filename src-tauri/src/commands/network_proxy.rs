@@ -43,10 +43,9 @@ pub fn resolve_network_proxy_settings(
 #[tauri::command]
 pub async fn test_network_proxy(
     target: String,
-    custom_url: Option<String>,
     settings: NetworkProxySettings,
 ) -> Result<NetworkProxyTestResult, String> {
-    let url = target_url(&target, custom_url.as_deref())?;
+    let url = target_url(&target)?;
     let resolved = resolve_network_proxy(&settings)?;
     let proxy_url = resolved
         .https_proxy
@@ -110,7 +109,7 @@ pub fn load_resolved_proxy(
     resolve_network_proxy(&settings)
 }
 
-fn target_url(target: &str, custom_url: Option<&str>) -> Result<String, String> {
+fn target_url(target: &str) -> Result<String, String> {
     let url = match target {
         "googleOAuth" => "https://oauth2.googleapis.com/token",
         "github" => "https://api.github.com",
@@ -119,10 +118,6 @@ fn target_url(target: &str, custom_url: Option<&str>) -> Result<String, String> 
         "gemini" => "https://generativelanguage.googleapis.com/v1beta/models",
         "glm" => "https://open.bigmodel.cn/api/paas/v4",
         "qwen" => "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation",
-        "custom" => custom_url
-            .map(str::trim)
-            .filter(|url| !url.is_empty())
-            .ok_or_else(|| "请输入自定义测试地址".to_string())?,
         _ => return Err("未知的网络测试目标".into()),
     };
     let parsed = reqwest::Url::parse(url).map_err(|error| format!("测试地址无效: {error}"))?;
@@ -161,7 +156,7 @@ mod tests {
             "glm",
             "qwen",
         ] {
-            let url = target_url(target, None).unwrap();
+            let url = target_url(target).unwrap();
             assert!(
                 url.starts_with("https://"),
                 "unexpected URL for {target}: {url}"
@@ -170,8 +165,7 @@ mod tests {
     }
 
     #[test]
-    fn custom_connectivity_target_rejects_non_http_protocols() {
-        let error = target_url("custom", Some("file:///etc/passwd")).unwrap_err();
-        assert!(error.contains("HTTP"));
+    fn unknown_connectivity_target_is_rejected() {
+        assert!(target_url("custom").is_err());
     }
 }

@@ -39,7 +39,7 @@ const { Sider } = Layout;
 const TERMINAL_LAYOUT_SYNC_EVENT = "terminal:layout-sync";
 const DEFAULT_SIDEBAR_WIDTH = 248;
 const MIN_SIDEBAR_WIDTH = 220;
-const MAX_SIDEBAR_WIDTH = 360;
+const MAX_SIDEBAR_WIDTH = 600;
 const RESIZE_HANDLE_WIDTH = 6;
 
 interface SidebarProps {

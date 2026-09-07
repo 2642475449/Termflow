@@ -68,6 +68,9 @@ pub fn run() {
     let voice_overlay_state = VoiceOverlayState::new();
     let voice_shortcut_state = VoiceShortcutState::new();
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+            commands::window::handle_second_instance(app, args, cwd);
+        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(
@@ -176,6 +179,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::agents::inspect_agent_clis,
+            commands::agent_versions::check_agent_latest_version,
             commands::session::check_claude_ready,
             commands::session::get_claude_cli_info,
             commands::session::spawn_pty,
@@ -267,6 +271,7 @@ pub fn run() {
             commands::window::focus_existing_project_window,
             commands::window::get_existing_project_paths,
             commands::window::get_window_project_context,
+            commands::window::list_open_project_windows,
             commands::window::release_window_project_context,
             commands::window::close_project_sessions,
             commands::window::focus_project_window,

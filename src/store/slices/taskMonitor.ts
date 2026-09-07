@@ -1,0 +1,62 @@
+import { create } from "zustand";
+import { emit, listen } from "@tauri-apps/api/event";
+import { useAppStore } from "@/store";
+import { collectTaskMonitorTabs, type TaskMonitorSnapshot } from "@/lib/taskMonitor";
+
+const SNAPSHOT_EVENT = "termflow-task-monitor-snapshot";
+const REQUEST_EVENT = "termflow-task-monitor-request";
+
+interface TaskMonitorState {
+  snapshots: Record<string, TaskMonitorSnapshot>;
+  setSnapshot: (snapshot: TaskMonitorSnapshot) => void;
+}
+
+export const useTaskMonitorStore = create<TaskMonitorState>((set) => ({
+  snapshots: {},
+  setSnapshot: (snapshot) => set((state) => ({
+    snapshots: { ...state.snapshots, [snapshot.windowLabel]: snapshot },
+  })),
+}));
+
+export async function requestTaskMonitorSnapshots() {
+  await emit(REQUEST_EVENT);
+}
+
+// 每个项目窗口常驻响应快照请求，状态只传标签元数据，不传终端内容。
+export function startTaskMonitorSync(): () => void {
+  let disposed = false;
+  const cleanups: (() => void)[] = [];
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const publish = () => {
+    const state = useAppStore.getState();
+    const snapshot: TaskMonitorSnapshot = {
+      windowLabel: state.windowLabel,
+      projectPath: state.currentProject?.path ?? "",
+      tabs: collectTaskMonitorTabs(state.sessions, state.panesById, state.tabsById),
+    };
+    useTaskMonitorStore.getState().setSnapshot(snapshot);
+    void emit(SNAPSHOT_EVENT, snapshot).catch((error) => console.error("Task monitor sync failed:", error));
+  };
+  const register = async () => {
+    const results = await Promise.allSettled([
+      listen<TaskMonitorSnapshot>(SNAPSHOT_EVENT, ({ payload }) => {
+        if (!disposed) useTaskMonitorStore.getState().setSnapshot(payload);
+      }),
+      listen(REQUEST_EVENT, () => { if (!disposed) publish(); }),
+    ]);
+    for (const result of results) {
+      if (result.status === "fulfilled") {
+        if (disposed) result.value(); else cleanups.push(result.value);
+      } else { console.error("Task monitor listener failed:", result.reason); }
+    }
+    if (!disposed) publish();
+  };
+  void register();
+  cleanups.push(useAppStore.subscribe((state, previous) => {
+    if (state.sessions === previous.sessions && state.panesById === previous.panesById &&
+      state.tabsById === previous.tabsById && state.currentProject === previous.currentProject) return;
+    clearTimeout(timer);
+    timer = setTimeout(publish, 80);
+  }));
+  return () => { disposed = true; clearTimeout(timer); cleanups.forEach((cleanup) => cleanup()); };
+}

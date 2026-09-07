@@ -15,6 +15,8 @@ import CloneRepositoryModal from "@/components/layout/CloneRepositoryModal";
 import { useAppStore } from "@/store";
 import { isSessionTurnRunning } from "@/lib/sessions";
 import { focusExistingProjectWindow } from "@/lib/api";
+import { collectOpenProjects, projectPathKey } from "@/lib/openProjects";
+import { useOpenProjectsStore } from "@/store/slices/openProjects";
 
 const PROJECT_SWATCHES = ["#34d399", "#a78bfa", "#60a5fa", "#f59e0b", "#f472b6", "#22d3ee"];
 const CURRENT_PROJECT_BACKGROUND =
@@ -50,9 +52,19 @@ function TitleBarProjectSwitcher() {
   const projectOpenBehavior = useAppStore((state) => state.projectOpenBehavior);
   const setProjectOpenBehavior = useAppStore((state) => state.setProjectOpenBehavior);
   const [open, setOpen] = useState(false);
+  const projectWindows = useOpenProjectsStore((state) => state.windows);
+  const setOpenProjectWindows = useOpenProjectsStore((state) => state.setOpenProjectWindows);
   const [cloneOpen, setCloneOpen] = useState(false);
   const [pendingProjectPath, setPendingProjectPath] = useState<string | null>(null);
   const [rememberOpenChoice, setRememberOpenChoice] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    void setOpenProjectWindows();
+    // 仅在菜单展开时刷新，让其他窗口打开、切换和关闭后及时更新列表。
+    const interval = window.setInterval(() => void setOpenProjectWindows(), 2000);
+    return () => window.clearInterval(interval);
+  }, [open, currentProject?.path, setOpenProjectWindows]);
 
   const quickActions = [
     {
@@ -171,9 +183,9 @@ function TitleBarProjectSwitcher() {
     removeRecentProject(path);
   }
 
-  const otherRecentProjects = recentProjects.filter(
-    (project) => project.path !== currentProject?.path,
-  );
+  const openProjects = collectOpenProjects(projectWindows, currentProject);
+  const openProjectPaths = new Set(openProjects.map((project) => projectPathKey(project.path)));
+  const otherRecentProjects = recentProjects.filter((project) => !openProjectPaths.has(projectPathKey(project.path)));
 
   function renderProjectRow(
     project: { name: string; path: string },
@@ -297,7 +309,7 @@ function TitleBarProjectSwitcher() {
         </div>
       </div>
 
-      {currentProject ? (
+      {openProjects.length > 0 ? (
         <div
           className="px-1.5 pb-1.5 pt-1.5"
           style={{ borderTop: "1px solid var(--cs-border-card, var(--cs-border-sidebar))" }}
@@ -308,7 +320,11 @@ function TitleBarProjectSwitcher() {
           >
             {t("titleBar.projectSwitcherCurrentProject")}
           </div>
-          {renderProjectRow(currentProject, { current: true })}
+          <div className="flex max-h-[min(220px,32vh)] flex-col overflow-y-auto">
+            {openProjects.map((project) => renderProjectRow(project, {
+              current: !!currentProject && projectPathKey(project.path) === projectPathKey(currentProject.path),
+            }))}
+          </div>
         </div>
       ) : null}
 

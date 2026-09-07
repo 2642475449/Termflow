@@ -100,6 +100,14 @@ impl WindowRegistry {
         self.project_to_label.lock().get(project_path).cloned()
     }
 
+    pub fn project_contexts(&self) -> Vec<WindowProjectContext> {
+        let mut contexts: Vec<_> = self.contexts_by_label.lock().values()
+            .filter(|context| context.mode == WindowMode::Project && context.project_path.is_some())
+            .cloned().collect();
+        contexts.sort_by(|left, right| left.project_path.cmp(&right.project_path));
+        contexts
+    }
+
     pub fn is_launcher(&self, window_label: &str) -> bool {
         self.get_context(window_label).mode == WindowMode::Launcher
     }
@@ -339,6 +347,42 @@ fn restorable_project_path(settings: &PersistentSettingsRecord) -> Option<String
         .and_then(|path| ensure_existing_project_directory(path).ok())
 }
 
+/// 将再次启动时的项目参数转交给已有进程，统一窗口登记与聚焦行为。
+pub fn handle_second_instance(app: &tauri::AppHandle, args: Vec<String>, cwd: String) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let path = match resolve_project_path_from_launch_arguments(
+            args.get(1..).unwrap_or_default(), &cwd,
+        ) {
+            Ok(path) => path,
+            Err(error) => {
+                eprintln!("Invalid second-instance project argument: {error}");
+                return;
+            }
+        };
+        let window = app.get_webview_window("main").or_else(|| {
+            app.webview_windows().into_values().find(|window| {
+                window.label() != VOICE_OVERLAY_LABEL && window.label() != VOICE_WORKER_LABEL
+            })
+        });
+        let Some(window) = window else {
+            eprintln!("No workspace window available for second-instance activation");
+            return;
+        };
+        if let Some(path) = path {
+            let registry = app.state::<Arc<WindowRegistry>>();
+            let manager = app.state::<Arc<PtyManager>>();
+            if let Err(error) = open_project_window(
+                path, "auto".into(), app.clone(), window, registry, manager,
+            ).await {
+                eprintln!("Failed to open second-instance project: {error}");
+            }
+        } else {
+            focus_window(&window);
+        }
+    });
+}
+
 #[tauri::command]
 pub async fn open_project_window(
     path: String,
@@ -450,6 +494,17 @@ pub fn get_window_project_context(
     registry: State<'_, Arc<WindowRegistry>>,
 ) -> WindowProjectContext {
     registry.get_context(window.label())
+}
+
+#[tauri::command]
+pub fn list_open_project_windows(
+    app: tauri::AppHandle,
+    registry: State<'_, Arc<WindowRegistry>>,
+) -> Vec<WindowProjectContext> {
+    // 以存活的 WebView 为准，排除创建失败或正在关闭的窗口登记。
+    registry.project_contexts().into_iter()
+        .filter(|context| app.get_webview_window(&context.window_label).is_some())
+        .collect()
 }
 
 #[tauri::command]
@@ -969,6 +1024,23 @@ mod tests {
             registry.get_label_by_project("/workspace/beta").as_deref(),
             Some("project:beta")
         );
+    }
+
+    #[test]
+    fn open_projects_follow_window_bind_switch_and_close() {
+        let registry = WindowRegistry::new();
+        assert!(registry.project_contexts().is_empty());
+        registry.bind_project("a", "/orca".into(), "orca".into());
+        registry.bind_project("b", "/chat".into(), "chat".into());
+        assert_eq!(registry.project_contexts().len(), 2);
+        registry.bind_project("a", "/new".into(), "new".into());
+        assert!(!registry.project_contexts().iter().any(|item| item.project_path.as_deref() == Some("/orca")));
+        registry.release_window("b");
+        let contexts = registry.project_contexts();
+        assert_eq!(contexts.len(), 1);
+        assert_eq!(contexts[0].project_path.as_deref(), Some("/new"));
+        registry.set_launcher("a");
+        assert!(registry.project_contexts().is_empty());
     }
 
     #[test]
