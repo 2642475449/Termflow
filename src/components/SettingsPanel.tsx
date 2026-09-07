@@ -71,6 +71,8 @@ import {
   deleteMcpServer,
   testMcpServer,
   setExplorerContextMenuEnabled,
+  startLiveAsr,
+  finishLiveAsr,
 } from "@/lib/api";
 import type {
   SkillCatalog,
@@ -732,6 +734,7 @@ type AsrProvider = "mimo" | "dashscope";
 const MIMO_ASR_MODELS = ASR_MODELS.filter((option) => option.value === DEFAULT_ASR_MODEL);
 
 const DASHSCOPE_ASR_MODELS = [
+  { value: "qwen-audio-3.0-asr-flash-streaming", label: "Qwen-Audio-3.0-ASR-Flash-Streaming（实时）" },
   { value: "qwen3-asr-flash", label: "Qwen3-ASR-Flash (阿里百炼)" },
 ];
 
@@ -754,7 +757,7 @@ function VoiceRecognitionPage() {
   const [testing, setTesting] = useState(false);
   const [isRecordingShortcut, setIsRecordingShortcut] = useState(false);
   const asrProvider: AsrProvider =
-    asrModel.startsWith("fun-asr-flash") || asrModel.startsWith("qwen3-asr-flash")
+    asrModel.startsWith("fun-asr-flash") || asrModel.startsWith("qwen3-asr-flash") || asrModel.startsWith("qwen-audio-3.0-asr")
       ? "dashscope"
       : "mimo";
   const isDashScopeProvider = asrProvider === "dashscope";
@@ -791,7 +794,7 @@ function VoiceRecognitionPage() {
     : shortcutDisplay || shortcutPlaceholder;
   const handleProviderChange = (provider: AsrProvider) => {
     if (provider === "dashscope") {
-      setAsrModel("qwen3-asr-flash");
+      setAsrModel("qwen-audio-3.0-asr-flash-streaming");
       return;
     }
     setAsrModel(DEFAULT_ASR_MODEL);
@@ -810,6 +813,13 @@ function VoiceRecognitionPage() {
     setTesting(true);
 
     try {
+      if (asrModel.trim() === "qwen-audio-3.0-asr-flash-streaming") {
+        const sessionId = typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `settings-test-${Date.now()}`;
+        await startLiveAsr(sessionId, asrApiKey.trim(), asrModel.trim(), asrRegion);
+        await finishLiveAsr(sessionId);
+      } else {
       const probeDataUrl = await createSilentWavDataUrl();
       if (isDashScopeProvider) {
         // DashScope 模型：使用 fetch 直接调用
@@ -846,6 +856,7 @@ function VoiceRecognitionPage() {
           apiKey: asrApiKey.trim(),
           authMode: asrAuthMode,
         });
+      }
       }
 
       const successMsg = t("settings.voiceRecognition.testSuccess", {

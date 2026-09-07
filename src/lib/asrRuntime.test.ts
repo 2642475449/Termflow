@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getAsrTransport, normalizeAsrError } from "./asrRuntime";
+import { getAsrTransport, isLiveAsrModel, normalizeAsrError } from "./asrRuntime";
 
 describe("getAsrTransport", () => {
   it("routes MiMo through the native proxy used by connection testing", () => {
@@ -9,6 +9,14 @@ describe("getAsrTransport", () => {
   it("keeps DashScope models on their dedicated transport", () => {
     expect(getAsrTransport("qwen3-asr-flash")).toBe("dashscope");
     expect(getAsrTransport("fun-asr-flash-2026-06-15")).toBe("dashscope");
+    expect(getAsrTransport("qwen-audio-3.0-asr-flash-streaming")).toBe("dashscope");
+  });
+});
+
+describe("isLiveAsrModel", () => {
+  it("only enables streaming for the supported real-time DashScope model", () => {
+    expect(isLiveAsrModel("qwen-audio-3.0-asr-flash-streaming")).toBe(true);
+    expect(isLiveAsrModel("qwen3-asr-flash")).toBe(false);
   });
 });
 

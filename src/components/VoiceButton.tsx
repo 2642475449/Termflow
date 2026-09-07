@@ -16,6 +16,7 @@ export interface VoiceStatusCapsuleProps {
   level: number;
   elapsedMs: number;
   errorMessage?: string | null;
+  liveText?: string;
   shortcutLabel: string;
   onStart: () => void;
   onStop: () => void;
@@ -283,6 +284,7 @@ export const VoiceStatusCapsule: React.FC<VoiceStatusCapsuleProps> = ({
   level,
   elapsedMs,
   errorMessage,
+  liveText,
   shortcutLabel,
   onStart,
   onStop,
@@ -381,6 +383,20 @@ export const VoiceStatusCapsule: React.FC<VoiceStatusCapsuleProps> = ({
         >
           {hideRecordingIcon ? null : <PhaseIcon phase={phase} color={fg} />}
           {showText ? <StatusText phase={phase} errorMessage={errorMessage} /> : null}
+          {liveText ? (
+            <span
+              style={{
+                maxWidth: 360,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                fontSize: 13,
+                color: "var(--cs-text-primary, #e8e6f0)",
+              }}
+            >
+              {liveText}
+            </span>
+          ) : null}
           {showCompactStatusLabel ? <CompactStatusLabel phase={phase} /> : null}
           {shouldShowDivider ? (
             <div

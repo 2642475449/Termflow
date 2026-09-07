@@ -1,5 +1,7 @@
 export type AsrTransport = "dashscope" | "native-proxy";
 
+export const LIVE_DASHSCOPE_ASR_MODEL = "qwen-audio-3.0-asr-flash-streaming";
+
 export type AsrErrorCode =
   | "permission_denied"
   | "no_microphone"
@@ -22,7 +24,12 @@ const DASHSCOPE_MODELS = new Set([
   "qwen3-asr-flash",
   "qwen3-asr-flash-2026-02-10",
   "qwen3-asr-flash-2025-09-08",
+  LIVE_DASHSCOPE_ASR_MODEL,
 ]);
+
+export function isLiveAsrModel(model: string): boolean {
+  return model.trim() === LIVE_DASHSCOPE_ASR_MODEL;
+}
 
 const ASR_ERROR_CODES = new Set<AsrErrorCode>([
   "permission_denied",

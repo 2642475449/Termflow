@@ -18,6 +18,7 @@ use commands::content_search::ContentSearchState;
 use commands::git::GitWatcher;
 use commands::search_index::SearchIndexState;
 use commands::voice_shortcut::VoiceShortcutState;
+use commands::voice::LiveAsrSessions;
 use commands::window::{VoiceOverlayState, WindowMode, WindowRegistry};
 use database::Database;
 use hook_ingest::{create_ingest_config, start_ingest_server, HookStatusRuntime};
@@ -67,6 +68,7 @@ pub fn run() {
     let window_registry = WindowRegistry::new();
     let voice_overlay_state = VoiceOverlayState::new();
     let voice_shortcut_state = VoiceShortcutState::new();
+    let live_asr_sessions = LiveAsrSessions::default();
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
             commands::window::handle_second_instance(app, args, cwd);
@@ -97,6 +99,7 @@ pub fn run() {
         .manage(window_registry.clone())
         .manage(voice_overlay_state.clone())
         .manage(voice_shortcut_state.clone())
+        .manage(live_asr_sessions)
         .manage(ContentSearchState::default())
         .manage(SearchIndexState::default())
         .on_window_event(|window, event| {
@@ -286,6 +289,10 @@ pub fn run() {
             commands::image::read_image_preview,
             commands::system_input::send_text_to_focused_window,
             commands::voice::transcribe_audio,
+            commands::voice::start_live_asr,
+            commands::voice::send_live_asr_audio,
+            commands::voice::finish_live_asr,
+            commands::voice::cancel_live_asr,
             commands::voice_shortcut::configure_voice_global_shortcut,
             commands::voice_shortcut::is_voice_global_shortcut_registered,
             commands::git::git_repo_info,

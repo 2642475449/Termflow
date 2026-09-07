@@ -128,6 +128,7 @@ interface WorkerVoiceStatePayload {
   level: number;
   elapsedMs: number;
   errorMessage: string | null;
+  liveText: string;
   shortcutLabel: string;
   inputTarget: "terminal" | "system";
   hasGlobalShortcut: boolean;
@@ -161,6 +162,7 @@ const INITIAL_WORKER_VOICE_STATE: WorkerVoiceStatePayload = {
   level: 0,
   elapsedMs: 0,
   errorMessage: null,
+  liveText: "",
   shortcutLabel: "Ctrl+Shift+V",
   inputTarget: "terminal",
   hasGlobalShortcut: false,

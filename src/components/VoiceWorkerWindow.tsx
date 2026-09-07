@@ -31,6 +31,7 @@ interface VoiceWorkerStatePayload {
   level: number;
   elapsedMs: number;
   errorMessage: string | null;
+  liveText: string;
   shortcutLabel: string;
   inputTarget: VoiceInputTarget;
   hasGlobalShortcut: boolean;
@@ -106,6 +107,7 @@ function VoiceWorkerWindow() {
       level: voice.level,
       elapsedMs: voice.elapsedMs,
       errorMessage: voice.errorMessage,
+      liveText: voice.liveText,
       shortcutLabel: config.shortcut,
       inputTarget: config.inputTarget,
       hasGlobalShortcut,
@@ -115,6 +117,7 @@ function VoiceWorkerWindow() {
       hasGlobalShortcut,
       voice.elapsedMs,
       voice.errorMessage,
+      voice.liveText,
       voice.level,
       voice.phase,
     ],
@@ -230,11 +233,13 @@ function VoiceWorkerWindow() {
       level: workerState.level,
       elapsedMs: workerState.elapsedMs,
       errorMessage: workerState.errorMessage,
+      liveText: workerState.liveText,
       shortcutLabel: workerState.shortcutLabel,
     }),
     [
       workerState.elapsedMs,
       workerState.errorMessage,
+      workerState.liveText,
       workerState.level,
       workerState.phase,
       workerState.shortcutLabel,

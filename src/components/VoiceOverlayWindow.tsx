@@ -8,6 +8,7 @@ interface VoiceOverlayStatePayload {
   level: number;
   elapsedMs: number;
   errorMessage: string | null;
+  liveText: string;
   shortcutLabel: string;
 }
 
@@ -16,6 +17,7 @@ const INITIAL_STATE: VoiceOverlayStatePayload = {
   level: 0,
   elapsedMs: 0,
   errorMessage: null,
+  liveText: "",
   shortcutLabel: "Ctrl+Shift+V",
 };
 
@@ -124,11 +126,12 @@ function VoiceOverlayWindow() {
         level={voiceState.level}
         elapsedMs={voiceState.elapsedMs}
         errorMessage={voiceState.errorMessage}
+        liveText={voiceState.liveText}
         shortcutLabel={voiceState.shortcutLabel}
         onStart={() => {}}
         onStop={() => {}}
         interactive={false}
-        showText={voiceState.phase === "error"}
+        showText={voiceState.phase === "error" || Boolean(voiceState.liveText)}
         wrapperStyle={{
           pointerEvents: "none",
           // The card variables are white in light themes and dark in dark themes.

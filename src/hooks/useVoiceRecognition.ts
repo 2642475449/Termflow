@@ -1,9 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import i18n from "@/i18n";
+import {
+  cancelLiveAsr,
+  finishLiveAsr,
+  sendLiveAsrAudio,
+  startLiveAsr,
+} from "@/lib/api";
 import { type MimoAuthMode } from "@/lib/mimoAsr";
 import {
   getAsrTransport,
+  isLiveAsrModel,
   normalizeAsrError,
   type AsrError,
 } from "@/lib/asrRuntime";
@@ -82,10 +90,19 @@ export interface UseVoiceRecognitionReturn {
   level: number;
   errorMessage: string | null;
   lastText: string;
+  liveText: string;
   isSupported: boolean;
   start: () => Promise<void>;
   stop: () => Promise<void>;
   cancel: () => void;
+}
+
+interface LiveAsrEvent {
+  session_id: string;
+  kind: "started" | "result" | "finished" | "error";
+  text?: string;
+  sentence_end?: boolean;
+  message?: string;
 }
 
 const LOCALIZED_ASR_ERROR_KEYS: Partial<Record<AsrError["code"], string>> = {
@@ -394,6 +411,7 @@ export function useVoiceRecognition(
   const [level, setLevel] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [lastText, setLastText] = useState("");
+  const [liveText, setLiveText] = useState("");
 
   const isSupported =
     typeof navigator !== "undefined" &&
@@ -428,6 +446,10 @@ export function useVoiceRecognition(
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const levelBufferRef = useRef<Uint8Array | null>(null);
+  const liveSessionIdRef = useRef<string | null>(null);
+  const liveFinalTextRef = useRef<string[]>([]);
+  const liveAudioQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const liveProcessorRef = useRef<ScriptProcessorNode | null>(null);
 
   const setPhaseRef = useCallback((next: AsrPhase) => {
     phaseRef.current = next;
@@ -497,6 +519,11 @@ export function useVoiceRecognition(
   );
 
   const releaseStream = useCallback(() => {
+    if (liveProcessorRef.current) {
+      liveProcessorRef.current.onaudioprocess = null;
+      liveProcessorRef.current.disconnect();
+      liveProcessorRef.current = null;
+    }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
@@ -519,6 +546,64 @@ export function useVoiceRecognition(
     },
     [scheduleAutoResetToIdle, setPhaseRef],
   );
+
+  useEffect(() => {
+    let disposed = false;
+    const unlistenPromise = listen<LiveAsrEvent>("voice-live-asr-event", (event) => {
+      if (disposed || event.payload.session_id !== liveSessionIdRef.current) return;
+      const payload = event.payload;
+      if (payload.kind === "result" && payload.text) {
+        if (payload.sentence_end) {
+          liveFinalTextRef.current.push(payload.text);
+          setLiveText(liveFinalTextRef.current.join(""));
+        } else {
+          setLiveText([...liveFinalTextRef.current, payload.text].join(""));
+        }
+        return;
+      }
+      if (payload.kind === "error") {
+        liveSessionIdRef.current = null;
+        emitError({ code: "network", message: payload.message || "实时转写失败" });
+        return;
+      }
+      if (payload.kind === "finished") {
+        const text = liveFinalTextRef.current.join("").trim();
+        liveSessionIdRef.current = null;
+        if (!text || getHallucinationWords(modelRef.current).has(text)) {
+          emitError({ code: "empty_audio", message: "未识别到语音内容" });
+          return;
+        }
+        setLastText(text);
+        setLiveText(text);
+        setPhaseRef("done");
+        onResultRef.current?.(text);
+        scheduleAutoResetToIdle("done", SUCCESS_SETTLE_MS);
+      }
+    });
+    return () => {
+      disposed = true;
+      void unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, [emitError, scheduleAutoResetToIdle, setPhaseRef]);
+
+  const queueLiveAudio = useCallback((samples: Float32Array) => {
+    const sessionId = liveSessionIdRef.current;
+    if (!sessionId) return;
+    const pcm = new Int16Array(samples.length);
+    for (let index = 0; index < samples.length; index += 1) {
+      const sample = Math.max(-1, Math.min(1, samples[index]));
+      pcm[index] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+    }
+    const bytes = new Uint8Array(pcm.buffer.slice(0));
+    liveAudioQueueRef.current = liveAudioQueueRef.current
+      .then(() => sendLiveAsrAudio(sessionId, bytes))
+      .catch((error) => {
+        if (liveSessionIdRef.current === sessionId) {
+          liveSessionIdRef.current = null;
+          emitError({ code: "network", message: error instanceof Error ? error.message : "发送实时音频失败" });
+        }
+      });
+  }, [emitError]);
 
   const reset = useCallback(() => {
     stopTimers();
@@ -639,11 +724,27 @@ export function useVoiceRecognition(
     clearAutoResetTimer();
     setErrorMessage(null);
     chunksRef.current = [];
+    liveFinalTextRef.current = [];
+    liveAudioQueueRef.current = Promise.resolve();
+    setLiveText("");
     setPhaseRef("requesting_permission");
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
+      const isLive = isLiveAsrModel(modelRef.current);
+      if (isLive) {
+        const sessionId = typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        liveSessionIdRef.current = sessionId;
+        await startLiveAsr(
+          sessionId,
+          apiKeyRef.current,
+          modelRef.current,
+          regionRef.current,
+        );
+      }
 
       // Audio analysis for level meter
       try {
@@ -651,7 +752,7 @@ export function useVoiceRecognition(
           window.AudioContext ||
           (window as unknown as { webkitAudioContext: typeof AudioContext })
             .webkitAudioContext;
-        const ctx = new AudioCtor();
+        const ctx = new AudioCtor({ sampleRate: 16_000 });
         audioContextRef.current = ctx;
         const source = ctx.createMediaStreamSource(stream);
         const analyser = ctx.createAnalyser();
@@ -661,6 +762,15 @@ export function useVoiceRecognition(
         // Cast through unknown to align with Web Audio typings on TS 5.7+
         const buf = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount));
         levelBufferRef.current = buf as unknown as Uint8Array<ArrayBuffer>;
+        if (isLive) {
+          const processor = ctx.createScriptProcessor(4096, 1, 1);
+          processor.onaudioprocess = (event) => {
+            queueLiveAudio(event.inputBuffer.getChannelData(0));
+          };
+          source.connect(processor);
+          processor.connect(ctx.destination);
+          liveProcessorRef.current = processor;
+        }
       } catch {
         // Non-fatal: level meter is optional
       }
@@ -687,6 +797,18 @@ export function useVoiceRecognition(
         stopTimers();
         releaseStream();
         mediaRecorderRef.current = null;
+        if (isLive) {
+          setPhaseRef("transcribing");
+          const sessionId = liveSessionIdRef.current;
+          if (!sessionId) return;
+          void liveAudioQueueRef.current
+            .then(() => finishLiveAsr(sessionId))
+            .catch((error) => {
+              liveSessionIdRef.current = null;
+              emitError({ code: "network", message: error instanceof Error ? error.message : "结束实时转写失败" });
+            });
+          return;
+        }
         if (blob.size === 0) {
           emitError({ code: "empty_audio", message: "未识别到语音内容" });
           return;
@@ -743,6 +865,9 @@ export function useVoiceRecognition(
       }, maxDurationMs);
     } catch (err) {
       stopTimers();
+      const liveSessionId = liveSessionIdRef.current;
+      liveSessionIdRef.current = null;
+      if (liveSessionId) void cancelLiveAsr(liveSessionId);
       releaseStream();
       if (err instanceof Error) {
         if (err.name === "NotAllowedError" || err.name === "SecurityError") {
@@ -756,7 +881,7 @@ export function useVoiceRecognition(
         emitError({ code: "unknown", message: "录音启动失败" });
       }
     }
-  }, [clearAutoResetTimer, emitError, isSupported, maxDurationMs, releaseStream, setPhaseRef, stopTimers, transcribe]);
+  }, [clearAutoResetTimer, emitError, isSupported, maxDurationMs, queueLiveAudio, releaseStream, setPhaseRef, stopTimers, transcribe]);
 
   const stop = useCallback(async () => {
     if (phaseRef.current !== "recording") return;
@@ -781,6 +906,11 @@ export function useVoiceRecognition(
       mediaRecorderRef.current = null;
     }
     chunksRef.current = [];
+    const liveSessionId = liveSessionIdRef.current;
+    liveSessionIdRef.current = null;
+    if (liveSessionId) void cancelLiveAsr(liveSessionId);
+    liveFinalTextRef.current = [];
+    setLiveText("");
     releaseStream();
     setLevel(0);
     setElapsedMs(0);
@@ -802,6 +932,9 @@ export function useVoiceRecognition(
         }
         mediaRecorderRef.current = null;
       }
+      const liveSessionId = liveSessionIdRef.current;
+      liveSessionIdRef.current = null;
+      if (liveSessionId) void cancelLiveAsr(liveSessionId);
       releaseStream();
     };
   }, [clearAutoResetTimer, releaseStream, stopTimers]);
@@ -812,6 +945,7 @@ export function useVoiceRecognition(
     level,
     errorMessage,
     lastText,
+    liveText,
     isSupported,
     start,
     stop,

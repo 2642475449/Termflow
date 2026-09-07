@@ -1,9 +1,298 @@
+use std::{collections::HashMap, sync::Arc};
+
+use futures_util::{SinkExt, StreamExt};
+use parking_lot::Mutex;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use tauri::{AppHandle, Emitter};
+use tokio::sync::mpsc;
+use tokio_tungstenite::{
+    connect_async,
+    tungstenite::{client::IntoClientRequest, http::header::AUTHORIZATION, Message},
+};
 
 const MIMO_API_CHAT_COMPLETIONS_ENDPOINT: &str = "https://api.xiaomimimo.com/v1/chat/completions";
 const MIMO_TOKEN_PLAN_CHAT_COMPLETIONS_ENDPOINT: &str =
     "https://token-plan-cn.xiaomimimo.com/v1/chat/completions";
 const DEFAULT_ASR_LANGUAGE: &str = "zh";
+const LIVE_ASR_MODEL: &str = "qwen-audio-3.0-asr-flash-streaming";
+
+/// 实时识别会话由后端持有，以便在 WebSocket 握手时安全携带 API Key。
+#[derive(Clone, Default)]
+pub struct LiveAsrSessions(Arc<Mutex<HashMap<String, mpsc::UnboundedSender<LiveAsrCommand>>>>);
+
+enum LiveAsrCommand {
+    Audio(Vec<u8>),
+    Finish,
+    Cancel,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+struct LiveAsrEvent {
+    session_id: String,
+    kind: String,
+    text: Option<String>,
+    sentence_end: Option<bool>,
+    message: Option<String>,
+}
+
+#[tauri::command]
+pub async fn start_live_asr(
+    app: AppHandle,
+    sessions: tauri::State<'_, LiveAsrSessions>,
+    session_id: String,
+    api_key: String,
+    model: String,
+    region: String,
+) -> Result<(), String> {
+    if session_id.trim().is_empty() {
+        return Err("实时语音会话 ID 不能为空".into());
+    }
+    if api_key.trim().is_empty() {
+        return Err("请先在设置中配置语音识别 API Key".into());
+    }
+    if model.trim() != LIVE_ASR_MODEL {
+        return Err("当前模型不支持实时转写".into());
+    }
+
+    let endpoint = match region.trim() {
+        "beijing" => "wss://dashscope.aliyuncs.com/api-ws/v1/inference",
+        "singapore" => "wss://dashscope-intl.aliyuncs.com/api-ws/v1/inference",
+        _ => return Err("实时转写目前仅支持北京或新加坡地域".into()),
+    };
+    let mut request = endpoint
+        .into_client_request()
+        .map_err(|error| format!("创建实时语音请求失败: {error}"))?;
+    request.headers_mut().insert(
+        AUTHORIZATION,
+        format!("Bearer {}", api_key.trim())
+            .parse()
+            .map_err(|error| format!("设置实时语音鉴权失败: {error}"))?,
+    );
+    request.headers_mut().insert(
+        "user-agent",
+        "Termflow/1.0"
+            .parse()
+            .map_err(|error| format!("设置实时语音客户端标识失败: {error}"))?,
+    );
+
+    let (socket, _) = connect_async(request)
+        .await
+        .map_err(|error| format!("连接实时语音服务失败: {error}"))?;
+    let (mut writer, mut reader) = socket.split();
+    let task_id = new_live_asr_task_id();
+    let start = json!({
+        "header": { "action": "run-task", "task_id": task_id, "streaming": "duplex" },
+        "payload": {
+            "task_group": "audio", "task": "asr", "function": "recognition",
+            "model": LIVE_ASR_MODEL,
+            "parameters": { "format": "pcm", "sample_rate": 16000, "max_sentence_silence": 600 },
+            "input": {}
+        }
+    });
+    writer
+        .send(Message::Text(start.to_string().into()))
+        .await
+        .map_err(|error| format!("启动实时语音任务失败: {error}"))?;
+
+    loop {
+        let Some(message) = reader.next().await else {
+            return Err("实时语音服务在任务启动前关闭了连接".into());
+        };
+        let message = message.map_err(|error| format!("读取实时语音响应失败: {error}"))?;
+        if let Some(event) = parse_live_asr_event(&session_id, &message)? {
+            if event.kind == "started" {
+                break;
+            }
+            if event.kind == "error" {
+                return Err(event
+                    .message
+                    .unwrap_or_else(|| "实时语音任务启动失败".into()));
+            }
+        }
+    }
+
+    let (sender, mut receiver) = mpsc::unbounded_channel();
+    sessions.0.lock().insert(session_id.clone(), sender);
+    let session_map = sessions.0.clone();
+    tauri::async_runtime::spawn(async move {
+        let mut finishing = false;
+        loop {
+            tokio::select! {
+                command = receiver.recv() => match command {
+                    Some(LiveAsrCommand::Audio(audio)) if !finishing => {
+                        if writer.send(Message::Binary(audio.into())).await.is_err() { break; }
+                    }
+                    Some(LiveAsrCommand::Finish) if !finishing => {
+                        finishing = true;
+                        let finish = json!({
+                            "header": { "action": "finish-task", "task_id": task_id, "streaming": "duplex" },
+                            "payload": { "input": {} }
+                        });
+                        if writer.send(Message::Text(finish.to_string().into())).await.is_err() { break; }
+                    }
+                    Some(LiveAsrCommand::Cancel) | None => break,
+                    _ => {}
+                },
+                message = reader.next() => match message {
+                    Some(Ok(message)) => match parse_live_asr_event(&session_id, &message) {
+                        Ok(Some(event)) => {
+                            let finished = event.kind == "finished" || event.kind == "error";
+                            let _ = app.emit("voice-live-asr-event", event);
+                            if finished { break; }
+                        }
+                        Ok(None) => {}
+                        Err(message) => { let _ = emit_live_asr_error(&app, &session_id, message); break; }
+                    },
+                    Some(Err(error)) => { let _ = emit_live_asr_error(&app, &session_id, format!("实时语音连接错误: {error}")); break; }
+                    None => break,
+                }
+            }
+        }
+        session_map.lock().remove(&session_id);
+        let _ = writer.close().await;
+    });
+    Ok(())
+}
+
+#[tauri::command]
+pub fn send_live_asr_audio(
+    sessions: tauri::State<'_, LiveAsrSessions>,
+    session_id: String,
+    audio: Vec<u8>,
+) -> Result<(), String> {
+    if audio.is_empty() {
+        return Ok(());
+    }
+    sessions
+        .0
+        .lock()
+        .get(&session_id)
+        .ok_or_else(|| "实时语音会话未启动".to_string())?
+        .send(LiveAsrCommand::Audio(audio))
+        .map_err(|_| "实时语音会话已关闭".to_string())
+}
+
+#[tauri::command]
+pub fn finish_live_asr(
+    sessions: tauri::State<'_, LiveAsrSessions>,
+    session_id: String,
+) -> Result<(), String> {
+    sessions
+        .0
+        .lock()
+        .get(&session_id)
+        .ok_or_else(|| "实时语音会话未启动".to_string())?
+        .send(LiveAsrCommand::Finish)
+        .map_err(|_| "实时语音会话已关闭".to_string())
+}
+
+#[tauri::command]
+pub fn cancel_live_asr(
+    sessions: tauri::State<'_, LiveAsrSessions>,
+    session_id: String,
+) -> Result<(), String> {
+    if let Some(sender) = sessions.0.lock().remove(&session_id) {
+        let _ = sender.send(LiveAsrCommand::Cancel);
+    }
+    Ok(())
+}
+
+fn new_live_asr_task_id() -> String {
+    let value = rand::random::<u128>();
+    format!(
+        "{:08x}-{:04x}-{:04x}-{:04x}-{:012x}",
+        value >> 96,
+        (value >> 80) & 0xffff,
+        (value >> 64) & 0xffff,
+        (value >> 48) & 0xffff,
+        value & 0xffffffffffff
+    )
+}
+
+fn parse_live_asr_event(
+    session_id: &str,
+    message: &Message,
+) -> Result<Option<LiveAsrEvent>, String> {
+    let Message::Text(text) = message else {
+        return Ok(None);
+    };
+    let payload: Value =
+        serde_json::from_str(text).map_err(|error| format!("解析实时语音响应失败: {error}"))?;
+    let header = payload.get("header").and_then(Value::as_object);
+    let event = header
+        .and_then(|header| header.get("event"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    match event {
+        "task-started" => Ok(Some(LiveAsrEvent {
+            session_id: session_id.into(),
+            kind: "started".into(),
+            text: None,
+            sentence_end: None,
+            message: None,
+        })),
+        "result-generated" => {
+            let sentence = payload.pointer("/payload/output/sentence");
+            let text = sentence
+                .and_then(|value| value.get("text"))
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .trim()
+                .to_string();
+            let sentence_end = sentence
+                .and_then(|value| value.get("sentence_end"))
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            if text.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(LiveAsrEvent {
+                    session_id: session_id.into(),
+                    kind: "result".into(),
+                    text: Some(text),
+                    sentence_end: Some(sentence_end),
+                    message: None,
+                }))
+            }
+        }
+        "task-finished" => Ok(Some(LiveAsrEvent {
+            session_id: session_id.into(),
+            kind: "finished".into(),
+            text: None,
+            sentence_end: None,
+            message: None,
+        })),
+        "task-failed" => Ok(Some(LiveAsrEvent {
+            session_id: session_id.into(),
+            kind: "error".into(),
+            text: None,
+            sentence_end: None,
+            message: header
+                .and_then(|header| header.get("error_message"))
+                .and_then(Value::as_str)
+                .map(str::to_string),
+        })),
+        _ => Ok(None),
+    }
+}
+
+fn emit_live_asr_error(
+    app: &AppHandle,
+    session_id: &str,
+    message: String,
+) -> Result<(), tauri::Error> {
+    app.emit(
+        "voice-live-asr-event",
+        LiveAsrEvent {
+            session_id: session_id.into(),
+            kind: "error".into(),
+            text: None,
+            sentence_end: None,
+            message: Some(message),
+        },
+    )
+}
 
 #[tauri::command]
 pub async fn transcribe_audio(

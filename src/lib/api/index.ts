@@ -1197,6 +1197,27 @@ export async function isVoiceGlobalShortcutRegistered(): Promise<boolean> {
   return await invoke("is_voice_global_shortcut_registered");
 }
 
+export async function startLiveAsr(
+  sessionId: string,
+  apiKey: string,
+  model: string,
+  region: string,
+): Promise<void> {
+  await invoke("start_live_asr", { sessionId, apiKey, model, region });
+}
+
+export async function sendLiveAsrAudio(sessionId: string, audio: Uint8Array): Promise<void> {
+  await invoke("send_live_asr_audio", { sessionId, audio: Array.from(audio) });
+}
+
+export async function finishLiveAsr(sessionId: string): Promise<void> {
+  await invoke("finish_live_asr", { sessionId });
+}
+
+export async function cancelLiveAsr(sessionId: string): Promise<void> {
+  await invoke("cancel_live_asr", { sessionId });
+}
+
 // Git API
 
 export async function gitRepoInfo(projectPath: string): Promise<GitRepoInfo> {
