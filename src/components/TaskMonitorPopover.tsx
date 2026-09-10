@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
-import { Button, Popover, Tooltip, message } from "antd";
-import { CloseOutlined, FileSearchOutlined, FolderOutlined } from "@ant-design/icons";
+import { Popover, Tooltip, message } from "antd";
+import { FileSearchOutlined, FolderOpenOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
-import { AgentIcon } from "@/components/AgentIcon";
 import { useAppStore } from "@/store";
 import { focusProjectWindow } from "@/lib/api";
 import { collectOpenProjects, projectPathKey } from "@/lib/openProjects";
@@ -56,9 +55,7 @@ export function TaskMonitorPopover() {
   const content = (
     <div className="app-task-monitor">
       <div className="app-task-monitor-header">
-        <strong>{t("taskMonitor.title")}</strong>
-        <Button type="text" size="small" aria-label={t("common.collapse")}
-          icon={<CloseOutlined />} onClick={() => setOpen(false)} />
+        <span>{t("taskMonitor.title")}</span>
       </div>
       <div className="app-task-monitor-projects">
         {projects.length === 0 && <p className="app-task-monitor-empty">{t("taskMonitor.noProjects")}</p>}
@@ -70,15 +67,18 @@ export function TaskMonitorPopover() {
           const projectTabs = isCurrent ? collectTaskMonitorTabs(sessions, panes, tabs)
             : snapshot && projectPathKey(snapshot.projectPath) === key ? snapshot.tabs : null;
           return (
-            <section key={key} className="app-task-monitor-project">
+            <section key={key} className="app-task-monitor-project" aria-label={project.name}>
               <div className="app-task-monitor-project-name" title={project.path}>
-                <FolderOutlined /><span className="truncate">{project.name}</span>
+                <FolderOpenOutlined />
+                <span className="truncate">{project.name}</span>
               </div>
+              {(!projectTabs || projectTabs.length === 0) && (
+                <p className="app-task-monitor-empty">{t(projectTabs ? "taskMonitor.noTabs" : "taskMonitor.loading")}</p>
+              )}
               {projectTabs?.map((tab) => (
                 <button key={tab.id} type="button" className="app-task-monitor-row"
                   data-active={isCurrent && focusedTabId === tab.id ? "true" : "false"}
                   onClick={() => void navigate(project.path, tab)} title={tab.name}>
-                  <AgentIcon agentId={tab.agentId} size={18} />
                   <span className="min-w-0 flex-1 truncate text-left">{tab.name}</span>
                   <Tooltip title={t(`taskMonitor.status.${tab.status}`)}>
                     <span className="app-task-monitor-dot" data-status={tab.status}
@@ -86,9 +86,6 @@ export function TaskMonitorPopover() {
                   </Tooltip>
                 </button>
               ))}
-              {(!projectTabs || projectTabs.length === 0) && (
-                <p className="app-task-monitor-empty">{t(projectTabs ? "taskMonitor.noTabs" : "taskMonitor.loading")}</p>
-              )}
             </section>
           );
         })}
@@ -98,14 +95,14 @@ export function TaskMonitorPopover() {
 
   return (
     <div className="app-task-monitor-trigger-wrap">
-      <Popover open={open} onOpenChange={(next) => { setTooltipOpen(false); setOpen(next); }}
-        trigger="click" placement="bottomRight" arrow={false} content={content}
+      <Popover open={open} trigger={[]} placement="bottomRight" arrow={false} content={content}
         overlayClassName="app-task-monitor-popover">
         <Tooltip title={t("taskMonitor.title")} mouseEnterDelay={0.4}
           open={!open && tooltipOpen} onOpenChange={setTooltipOpen}>
           <button type="button"
             className="app-rail-button app-marker-host app-marker-rail mr-1 flex h-8 w-10 items-center justify-center rounded-md"
-            aria-label={t("taskMonitor.title")} aria-pressed={open} data-active={open ? "true" : "false"}>
+            aria-label={t("taskMonitor.title")} aria-pressed={open} data-active={open ? "true" : "false"}
+            onClick={() => { setTooltipOpen(false); setOpen((current) => !current); }}>
             <FileSearchOutlined />
           </button>
         </Tooltip>

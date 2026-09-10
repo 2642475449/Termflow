@@ -1,6 +1,9 @@
 {
   "taskMonitor": {
     "title": "任务监控",
+    "overview": "{{count}} 个项目 · 跨窗口概览",
+    "current": "当前",
+    "tabCount": "{{count}} 个智能体标签",
     "noProjects": "暂无打开的项目",
     "noTabs": "暂无智能体标签",
     "loading": "正在同步标签…",

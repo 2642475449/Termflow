@@ -1,6 +1,9 @@
 {
   "taskMonitor": {
     "title": "タスク監視",
+    "overview": "{{count}} プロジェクト · ウィンドウ全体",
+    "current": "現在",
+    "tabCount": "{{count}} 個のエージェントタブ",
     "noProjects": "開いているプロジェクトはありません",
     "noTabs": "エージェントタブはありません",
     "loading": "タブを同期中…",

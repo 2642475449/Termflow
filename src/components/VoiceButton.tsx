@@ -382,7 +382,7 @@ export const VoiceStatusCapsule: React.FC<VoiceStatusCapsuleProps> = ({
           }}
         >
           {hideRecordingIcon ? null : <PhaseIcon phase={phase} color={fg} />}
-          {showText ? <StatusText phase={phase} errorMessage={errorMessage} /> : null}
+          {showText && phase !== "recording" ? <StatusText phase={phase} errorMessage={errorMessage} /> : null}
           {liveText ? (
             <span
               style={{

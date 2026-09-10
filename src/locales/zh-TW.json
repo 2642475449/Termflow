@@ -1,6 +1,9 @@
 {
   "taskMonitor": {
     "title": "任務監控",
+    "overview": "{{count}} 個專案 · 跨視窗概覽",
+    "current": "目前",
+    "tabCount": "{{count}} 個智慧體分頁",
     "noProjects": "暫無開啟的專案",
     "noTabs": "暫無智慧體分頁",
     "loading": "正在同步分頁…",

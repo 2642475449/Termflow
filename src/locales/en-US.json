@@ -1,6 +1,9 @@
 {
   "taskMonitor": {
     "title": "Task Monitor",
+    "overview": "{{count}} projects · Across windows",
+    "current": "Current",
+    "tabCount": "{{count}} agent tabs",
     "noProjects": "No open projects",
     "noTabs": "No open agent tabs",
     "loading": "Syncing tabs…",
