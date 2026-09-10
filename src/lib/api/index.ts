@@ -1339,6 +1339,22 @@ export async function gitFetch(projectPath: string): Promise<GitRemoteResult> {
   return await invoke("git_fetch", { projectPath });
 }
 
+export async function gitRemoteState(projectPath: string): Promise<import("@/lib/gitRemoteAction").GitRemoteState> {
+  return invoke("git_remote_state", { projectPath });
+}
+
+export async function gitSetUpstream(projectPath: string, branchName: string, upstream: string): Promise<void> {
+  return invoke("git_set_upstream", { projectPath, branchName, upstream });
+}
+
+export async function gitSaveRemote(projectPath: string, remoteName: string, remoteUrl: string, update: boolean): Promise<void> {
+  return invoke("git_save_remote", { projectPath, remoteName, remoteUrl, update });
+}
+
+export async function gitPublishBranch(projectPath: string, remoteName: string, branchName: string): Promise<GitRemoteResult> {
+  return invoke("git_publish_branch", { projectPath, remoteName, branchName });
+}
+
 export async function gitPull(projectPath: string): Promise<GitRemoteResult> {
   return await invoke("git_pull", { projectPath });
 }

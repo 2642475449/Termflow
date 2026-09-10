@@ -3,6 +3,7 @@ import { gitBranchInfo, gitFetch, gitRepoInfo, gitStatus } from "@/lib/api";
 import type { GitBranchInfo, GitFileStatus } from "@/types";
 import { GIT_STATUS_SNAPSHOT_EVENT, type GitStatusSnapshot } from "@/lib/gitStatusEvents";
 import { dispatchGitGraphRefresh } from "@/lib/gitGraphEvents";
+import { useGitRemoteStore } from "@/store/slices/gitRemote";
 
 const REMOTE_FETCH_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -86,6 +87,7 @@ export function useGitStatus({
         lastFetchRef.current = { projectPath, fetchedAt: now };
         void gitFetch(projectPath)
         .then((result) => {
+          useGitRemoteStore.getState().setFetchError(projectPath, result.success ? null : result.message);
           if (!result.success || !isCurrentRequest()) return null;
           dispatchGitGraphRefresh(projectPath);
           return gitBranchInfo(projectPath);
@@ -95,7 +97,7 @@ export function useGitStatus({
           setBranchInfo(freshBranch);
           onStatusChange?.(statuses.length, freshBranch.ahead ?? 0, freshBranch.behind ?? 0);
         })
-        .catch(() => undefined);
+        .catch((error) => useGitRemoteStore.getState().setFetchError(projectPath, String(error)));
       }
     } catch {
       if (!isCurrentRequest()) return;

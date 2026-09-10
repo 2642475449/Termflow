@@ -5,13 +5,13 @@ import {
   CheckOutlined,
   DownOutlined,
   LoadingOutlined,
-  ReloadOutlined,
 } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import type { GitCommitMessageProfile, GitRepositoryOperationState } from "@/types";
 import { getGitOperationLabelKey, isGitOperationInProgress } from "@/lib/gitOperationState";
 
 interface GitCommitComposerProps {
+  remoteReady?: boolean;
   branchName: string;
   hasLocalChanges: boolean;
   stagedChangeCount: number;
@@ -43,12 +43,12 @@ interface PendingCommitAction {
 }
 
 export function GitCommitComposer({
+  remoteReady = true,
   branchName,
   hasLocalChanges,
   stagedChangeCount,
   unstagedChangeCount,
   hasSyncChanges,
-  syncChangeCount,
   operationState,
   committing,
   canGenerateCommitMessage,
@@ -85,16 +85,11 @@ export function GitCommitComposer({
   const canCommit =
     !committing && !operationInProgress && hasLocalChanges && trimmedMessage.length > 0;
   const canSync =
-    !committing && !operationInProgress && hasSyncChanges;
-  const showSyncPrimaryAction = !hasLocalChanges && hasSyncChanges;
+    !committing && !operationInProgress && remoteReady && hasSyncChanges;
   const canOpenCommitMenu =
     !committing && !operationInProgress && (hasLocalChanges || hasSyncChanges);
-  const canPrimaryAction = showSyncPrimaryAction ? canSync : canCommit;
+  const canPrimaryAction = canCommit;
 
-  const syncActionText =
-    syncChangeCount > 0
-      ? `${t("sidebar.gitSyncChanges")} ${syncChangeCount}`
-      : t("sidebar.gitSyncChanges");
   const primaryCommitText = willStageAllBeforeCommit
     ? t("sidebar.gitStageAllAndCommit", { defaultValue: "暂存并提交" })
     : t("sidebar.gitCommit");
@@ -125,9 +120,7 @@ export function GitCommitComposer({
       ? "当前没有可用的提交或同步操作"
       : null;
 
-  const primaryActionDisabledReason = showSyncPrimaryAction
-    ? syncDisabledReason
-    : commitDisabledReason;
+  const primaryActionDisabledReason = commitDisabledReason;
 
   const commitComposerBackground =
     "color-mix(in srgb, var(--cs-bg-card-solid, var(--cs-bg-card)) 93%, var(--cs-bg-sidebar) 7%)";
@@ -262,18 +255,18 @@ export function GitCommitComposer({
     {
       key: "commit-and-push",
       label: t("sidebar.gitCommitAndPush"),
-      disabled: !canCommit,
+      disabled: !canCommit || !remoteReady,
     },
     {
       key: "commit-and-sync",
       label: t("sidebar.gitCommitAndSync"),
-      disabled: !canCommit,
+      disabled: !canCommit || !remoteReady,
     },
     { type: "divider" },
     {
       key: "pull",
       label: t("sidebar.gitPull"),
-      disabled: committing || operationInProgress,
+      disabled: committing || operationInProgress || !remoteReady,
       title: operationInProgress ? operationBlockedReason : undefined,
     },
     {
@@ -449,19 +442,20 @@ export function GitCommitComposer({
         </div>
       </div>
 
-      {showSyncPrimaryAction ? (
-        <Tooltip title={canSync ? syncActionText : primaryActionDisabledReason} mouseEnterDelay={0.4}>
-          <span className="block w-full">
+      <div className="flex w-full items-stretch">
+        <Tooltip title={canCommit ? primaryCommitText : primaryActionDisabledReason} mouseEnterDelay={0.4}>
+          <span className="flex-1">
             <Button
-              block
+              className="flex-1 rounded-r-none"
               size="large"
-              icon={<ReloadOutlined />}
+              icon={<CheckOutlined />}
               loading={committing}
-              disabled={!canSync}
-              onClick={onSyncChanges}
+              disabled={!canCommit}
+              onClick={handleCommit}
               style={{
+                width: "100%",
                 height: 28,
-                borderRadius: 8,
+                borderRadius: "8px 0 0 8px",
                 borderColor: commitActionBorder,
                 background: commitActionBackground,
                 color: commitActionText,
@@ -470,86 +464,53 @@ export function GitCommitComposer({
                 lineHeight: 1.2,
                 fontWeight: 600,
                 letterSpacing: "0.01em",
-                cursor: canSync ? "pointer" : "not-allowed",
-                opacity: canSync ? 1 : 0.7,
+                cursor: canCommit ? "pointer" : "not-allowed",
+                opacity: canCommit ? 1 : 0.7,
                 boxShadow: "none",
               }}
             >
-              <span>{syncActionText}</span>
+              <span>{primaryCommitText}</span>
             </Button>
           </span>
         </Tooltip>
-      ) : (
-        <div className="flex w-full items-stretch">
-          <Tooltip title={canCommit ? primaryCommitText : primaryActionDisabledReason} mouseEnterDelay={0.4}>
-            <span className="flex-1">
+        <Dropdown
+          trigger={["click"]}
+          menu={{ items: commitMenuItems, onClick: handleCommitMenuClick }}
+          open={commitMenuOpen}
+          onOpenChange={setCommitMenuOpen}
+        >
+          <Tooltip title={canOpenCommitMenu ? t("sidebar.moreActions", { defaultValue: "更多提交操作" }) : commitMenuDisabledReason} mouseEnterDelay={0.4}>
+            <span>
               <Button
-                className="flex-1 rounded-r-none"
+                className="rounded-l-none"
                 size="large"
-                icon={<CheckOutlined />}
-                loading={committing}
-                disabled={!canCommit}
-                onClick={handleCommit}
+                disabled={!canOpenCommitMenu}
                 style={{
-                  width: "100%",
+                  width: 36,
                   height: 28,
-                  borderRadius: "8px 0 0 8px",
-                  borderColor: commitActionBorder,
-                  background: commitActionBackground,
-                  color: commitActionText,
-                  fontFamily: "inherit",
-                  fontSize: 13,
-                  lineHeight: 1.2,
-                  fontWeight: 600,
-                  letterSpacing: "0.01em",
-                  cursor: canCommit ? "pointer" : "not-allowed",
-                  opacity: canCommit ? 1 : 0.7,
+                  paddingInline: 0,
+                  borderRadius: "0 8px 8px 0",
+                  borderColor: canOpenCommitMenu ? commitActionBorder : "color-mix(in srgb, var(--cs-border-sidebar) 70%, var(--cs-text-primary) 10%)",
+                  borderLeftColor: canOpenCommitMenu
+                    ? "color-mix(in srgb, var(--cs-primary) 46%, var(--cs-border-sidebar) 54%)"
+                    : "color-mix(in srgb, var(--cs-border-sidebar) 70%, var(--cs-text-primary) 10%)",
+                  background: canOpenCommitMenu
+                    ? "color-mix(in srgb, var(--cs-primary) 9%, var(--cs-bg-card-solid, var(--cs-bg-card)) 91%)"
+                    : "color-mix(in srgb, var(--cs-bg-hover) 54%, var(--cs-bg-card-solid, var(--cs-bg-card)) 46%)",
+                  color: canOpenCommitMenu
+                    ? "color-mix(in srgb, var(--cs-primary) 64%, var(--cs-text-primary) 36%)"
+                    : "var(--cs-text-tertiary)",
+                  cursor: canOpenCommitMenu ? "pointer" : "not-allowed",
+                  opacity: canOpenCommitMenu ? 1 : 0.7,
                   boxShadow: "none",
                 }}
               >
-                <span>{primaryCommitText}</span>
+                <DownOutlined className="text-[10px]" />
               </Button>
             </span>
           </Tooltip>
-          <Dropdown
-            trigger={["click"]}
-            menu={{ items: commitMenuItems, onClick: handleCommitMenuClick }}
-            open={commitMenuOpen}
-            onOpenChange={setCommitMenuOpen}
-          >
-            <Tooltip title={canOpenCommitMenu ? t("sidebar.moreActions", { defaultValue: "更多提交操作" }) : commitMenuDisabledReason} mouseEnterDelay={0.4}>
-              <span>
-                <Button
-                  className="rounded-l-none"
-                  size="large"
-                  disabled={!canOpenCommitMenu}
-                  style={{
-                    width: 36,
-                    height: 28,
-                    paddingInline: 0,
-                    borderRadius: "0 8px 8px 0",
-                    borderColor: canOpenCommitMenu ? commitActionBorder : "color-mix(in srgb, var(--cs-border-sidebar) 70%, var(--cs-text-primary) 10%)",
-                    borderLeftColor: canOpenCommitMenu
-                      ? "color-mix(in srgb, var(--cs-primary) 46%, var(--cs-border-sidebar) 54%)"
-                      : "color-mix(in srgb, var(--cs-border-sidebar) 70%, var(--cs-text-primary) 10%)",
-                    background: canOpenCommitMenu
-                      ? "color-mix(in srgb, var(--cs-primary) 9%, var(--cs-bg-card-solid, var(--cs-bg-card)) 91%)"
-                      : "color-mix(in srgb, var(--cs-bg-hover) 54%, var(--cs-bg-card-solid, var(--cs-bg-card)) 46%)",
-                    color: canOpenCommitMenu
-                      ? "color-mix(in srgb, var(--cs-primary) 64%, var(--cs-text-primary) 36%)"
-                      : "var(--cs-text-tertiary)",
-                    cursor: canOpenCommitMenu ? "pointer" : "not-allowed",
-                    opacity: canOpenCommitMenu ? 1 : 0.7,
-                    boxShadow: "none",
-                  }}
-                >
-                  <DownOutlined className="text-[10px]" />
-                </Button>
-              </span>
-            </Tooltip>
-          </Dropdown>
-        </div>
-      )}
+        </Dropdown>
+      </div>
 
       {hasMixedChanges ? (
         <div

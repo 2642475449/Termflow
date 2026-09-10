@@ -11,6 +11,161 @@ use std::time::{Duration, Instant};
 
 const REMOTE_COMMAND_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
+#[derive(serde::Serialize)]
+pub struct RemoteEntry {
+    name: String,
+    url: String,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteState {
+    remotes: Vec<RemoteEntry>,
+    upstream: Option<String>,
+    has_commit: bool,
+    branches: Vec<String>,
+    branch_name: Option<String>,
+}
+
+#[tauri::command]
+pub async fn git_remote_state(project_path: String) -> Result<RemoteState, String> {
+    read_remote_state(&project_path)
+}
+
+fn read_remote_state(project_path: &str) -> Result<RemoteState, String> {
+    let repo = open_repo(&project_path)?;
+    let names = repo.remotes().map_err(|e| e.to_string())?;
+    let mut remotes = Vec::new();
+    for name in names.iter().flatten() {
+        let remote = repo.find_remote(name).map_err(|e| e.to_string())?;
+        remotes.push(RemoteEntry {
+            name: name.to_string(),
+            url: remote.url().unwrap_or("").to_string(),
+        });
+    }
+    let head = repo.head().ok();
+    let upstream = head
+        .as_ref()
+        .filter(|h| h.is_branch())
+        .and_then(|h| h.name())
+        .and_then(|name| repo.branch_upstream_name(name).ok())
+        .and_then(|name| name.as_str().map(ToOwned::to_owned));
+    let branches = repo
+        .branches(Some(git2::BranchType::Remote))
+        .map_err(|e| e.to_string())?
+        .map(|item| {
+            let (branch, _) = item.map_err(|e| e.to_string())?;
+            Ok(branch
+                .name()
+                .map_err(|e| e.to_string())?
+                .unwrap_or("")
+                .to_string())
+        })
+        .collect::<Result<Vec<_>, String>>()?
+        .into_iter()
+        .filter(|name| !name.ends_with("/HEAD"))
+        .collect();
+    Ok(RemoteState {
+        remotes,
+        upstream,
+        branch_name: head
+            .as_ref()
+            .and_then(|h| h.shorthand())
+            .map(ToOwned::to_owned),
+        has_commit: head.and_then(|h| h.target()).is_some(),
+        branches,
+    })
+}
+
+#[tauri::command]
+pub async fn git_set_upstream(
+    project_path: String,
+    branch_name: String,
+    upstream: String,
+) -> Result<(), String> {
+    run_git_write(project_path.clone(), "设置 Git 上游", move || {
+        let repo = open_repo(&project_path)?;
+        repo.find_branch(&upstream, git2::BranchType::Remote)
+            .map_err(|e| e.to_string())?;
+        let mut branch = repo
+            .find_branch(&branch_name, git2::BranchType::Local)
+            .map_err(|e| e.to_string())?;
+        branch
+            .set_upstream(Some(&upstream))
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn git_save_remote(
+    project_path: String,
+    remote_name: String,
+    remote_url: String,
+    update: bool,
+) -> Result<(), String> {
+    let name = validate_remote_name(&remote_name)?.to_string();
+    let url = validate_remote_url(&remote_url)?.to_string();
+    run_git_write(project_path.clone(), "保存 Git 远程仓库", move || {
+        save_remote(&project_path, &name, &url, update)
+    })
+    .await
+}
+
+fn save_remote(project_path: &str, name: &str, url: &str, update: bool) -> Result<(), String> {
+    let repo = open_repo(&project_path)?;
+    if update {
+        repo.find_remote(&name).map_err(|e| e.to_string())?;
+        repo.remote_set_url(&name, &url)
+            .map_err(|e| e.to_string())?;
+    } else {
+        repo.remote(&name, &url).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn git_publish_branch(
+    project_path: String,
+    remote_name: String,
+    branch_name: String,
+    database: tauri::State<'_, std::sync::Arc<crate::database::Database>>,
+) -> Result<GitRemoteResult, String> {
+    let name = validate_remote_name(&remote_name)?.to_string();
+    let branch = validate_branch_name(&branch_name)?.to_string();
+    let proxy = super::super::network_proxy::load_resolved_proxy(&database)?;
+    run_git_write(project_path.clone(), "发布 Git 分支", move || {
+        publish_branch(&project_path, &name, &branch, &proxy)
+    })
+    .await
+}
+
+fn publish_branch(
+    project_path: &str,
+    name: &str,
+    branch: &str,
+    proxy: &ResolvedNetworkProxy,
+) -> Result<GitRemoteResult, String> {
+    let repo = open_repo(&project_path)?;
+    let head = repo.head().map_err(|e| e.to_string())?;
+    if !head.is_branch() || head.shorthand() != Some(branch) {
+        return Err("当前分支已改变，请重新打开发布窗口".to_string());
+    }
+    repo.find_remote(&name).map_err(|e| e.to_string())?;
+    run_remote_command(
+        &project_path,
+        &[
+            "push",
+            "--set-upstream",
+            &name,
+            &format!("refs/heads/{0}:refs/heads/{0}", branch),
+        ],
+        "发布成功",
+        "发布失败",
+        &proxy,
+    )
+}
+
 fn validate_remote_name(remote_name: &str) -> Result<&str, String> {
     let remote_name = remote_name.trim();
     if remote_name.is_empty() {
@@ -550,6 +705,63 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::process::Command;
     use tempfile::TempDir;
+
+    #[test]
+    fn remote_configuration_does_not_publish_and_preserves_existing_remote() {
+        let temp = TempDir::new().unwrap();
+        run_git(temp.path(), &["init"]);
+        let path = temp.path().to_str().unwrap();
+        assert!(read_remote_state(path).unwrap().remotes.is_empty());
+        save_remote(path, "origin", "https://example.com/first.git", false).unwrap();
+        let state = read_remote_state(path).unwrap();
+        assert!(!state.has_commit);
+        assert!(state.upstream.is_none());
+        assert!(state.branches.is_empty());
+        assert_eq!(state.remotes[0].url, "https://example.com/first.git");
+        assert!(save_remote(path, "origin", "https://example.com/second.git", false).is_err());
+        assert_eq!(
+            read_remote_state(path).unwrap().remotes[0].url,
+            "https://example.com/first.git"
+        );
+        save_remote(path, "origin", "https://example.com/second.git", true).unwrap();
+        assert_eq!(
+            read_remote_state(path).unwrap().remotes[0].url,
+            "https://example.com/second.git"
+        );
+    }
+
+    #[test]
+    fn remote_state_distinguishes_new_branch_from_tracking_branch() {
+        let (_temp, local, _peer) = create_remote_clones();
+        let path = local.to_str().unwrap();
+        let state = read_remote_state(path).unwrap();
+        assert_eq!(state.upstream.as_deref(), Some("refs/remotes/origin/main"));
+        assert!(state.branches.contains(&"origin/main".to_string()));
+        run_git(&local, &["checkout", "-b", "feature"]);
+        let state = read_remote_state(path).unwrap();
+        assert!(state.has_commit);
+        assert!(state.upstream.is_none());
+        assert_eq!(state.remotes.len(), 1);
+    }
+
+    #[test]
+    fn publishing_sets_upstream_and_rejects_a_changed_current_branch() {
+        let (_temp, local, _peer) = create_remote_clones();
+        let path = local.to_str().unwrap();
+        run_git(&local, &["checkout", "-b", "feature"]);
+        assert!(publish_branch(path, "origin", "main", &direct_proxy()).is_err());
+        assert!(
+            publish_branch(path, "origin", "feature", &direct_proxy())
+                .unwrap()
+                .success
+        );
+        let state = read_remote_state(path).unwrap();
+        assert_eq!(
+            state.upstream.as_deref(),
+            Some("refs/remotes/origin/feature")
+        );
+        assert_eq!(state.branch_name.as_deref(), Some("feature"));
+    }
 
     fn direct_proxy() -> ResolvedNetworkProxy {
         crate::network_proxy::resolve_network_proxy(&crate::network_proxy::NetworkProxySettings {

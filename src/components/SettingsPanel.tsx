@@ -43,7 +43,7 @@ import {
   DEFAULT_VOICE_SHORTCUT,
 } from "@/store";
 import { createSilentWavDataUrl, type MimoAuthMode } from "@/lib/mimoAsr";
-import { captureShortcutFromEvent, formatShortcutDisplay, parseShortcut } from "@/lib/shortcut";
+import { captureShortcutFromEvent, formatShortcutDisplay } from "@/lib/shortcut";
 import { stripAnsiEscapeSequences } from "@/lib/textContent";
 import { TERMINAL_SCROLLBACK_OPTIONS } from "@/lib/terminalSettings";
 import {
@@ -901,26 +901,6 @@ function VoiceRecognitionPage() {
         return;
       }
 
-      const parsedShortcut = parseShortcut(nextShortcut);
-      const hasModifier = Boolean(
-        parsedShortcut &&
-        (
-          parsedShortcut.primaryKey ||
-          parsedShortcut.altKey ||
-          parsedShortcut.metaKey ||
-          parsedShortcut.shiftKey
-        )
-      );
-
-      if (!hasModifier) {
-        message.warning(
-          t("settings.voiceRecognition.shortcutModifierRequired", {
-            defaultValue: "请至少包含一个修饰键，例如 Ctrl、Alt、Shift 或 Cmd",
-          })
-        );
-        return;
-      }
-
       setVoiceShortcut(nextShortcut);
       setIsRecordingShortcut(false);
       message.success(
@@ -1040,20 +1020,20 @@ function VoiceRecognitionPage() {
       <SettingSection title={t("settings.voiceRecognition.shortcutLabel", { defaultValue: "语音输入" })}>
         <SettingRow
           label={t("settings.voiceRecognition.shortcutLabel", { defaultValue: "语音输入快捷键" })}
-          desc={t("settings.voiceRecognition.shortcutDesc", {
-            defaultValue: "按住快捷键时开始录音，松开后结束并转录。",
-          })}
+          desc={`${t("settings.voiceRecognition.shortcutDesc")} ${t("settings.voiceRecognition.shortcutRecordHint")}`}
         >
           <div className="flex flex-wrap items-center gap-2">
             <Input
               readOnly
               value={currentShortcutLabel}
+              size="middle"
               placeholder={shortcutPlaceholder}
               onClick={() => setIsRecordingShortcut(true)}
-              style={{ width: 220, cursor: "pointer" }}
+              className="w-[220px] cursor-pointer"
             />
             <Button
               type={isRecordingShortcut ? "primary" : "default"}
+              size="middle"
               onClick={() => setIsRecordingShortcut((current) => !current)}
             >
               {isRecordingShortcut
@@ -1065,7 +1045,7 @@ function VoiceRecognitionPage() {
                   })}
             </Button>
             <Button
-              size="small"
+              size="middle"
               onClick={() => {
                 setVoiceShortcut(DEFAULT_VOICE_SHORTCUT);
                 setIsRecordingShortcut(false);
@@ -1074,7 +1054,7 @@ function VoiceRecognitionPage() {
               {t("settings.voiceRecognition.shortcutReset", { defaultValue: "恢复默认" })}
             </Button>
             <Button
-              size="small"
+              size="middle"
               icon={<DeleteOutlined />}
               disabled={!voiceShortcut.trim()}
               onClick={() => {

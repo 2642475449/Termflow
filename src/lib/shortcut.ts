@@ -43,6 +43,7 @@ function normalizeModifierToken(token: string): keyof Omit<ShortcutMatch, "key">
 }
 
 function normalizeKeyToken(token: string): string {
+  if (token === " ") return " ";
   const trimmed = token.trim();
   const lower = trimmed.toLowerCase();
   switch (lower) {
