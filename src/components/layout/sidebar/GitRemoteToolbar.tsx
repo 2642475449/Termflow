@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Button, Dropdown, Input, Modal, Select, Tooltip, message } from "antd";
+import { Dropdown, Input, Modal, Select, message } from "antd";
 import type { MenuProps } from "antd";
 import { EllipsisOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
@@ -9,7 +9,6 @@ import {
   gitSaveRemote,
   gitSetUpstream,
 } from "@/lib/api";
-import { getGitRemoteAction } from "@/lib/gitRemoteAction";
 import { refreshGitStateAndGraph } from "@/lib/gitGraphEvents";
 import { useGitRemoteStore } from "@/store/slices/gitRemote";
 import type { GitBranchInfo } from "@/types";
@@ -19,9 +18,6 @@ interface Props {
   branch: GitBranchInfo | null;
   disabled: boolean;
   refresh: () => Promise<void>;
-  push: () => Promise<void>;
-  pull: () => Promise<void>;
-  sync: () => Promise<void>;
   menuItems: MenuProps["items"];
   onMenuClick: NonNullable<MenuProps["onClick"]>;
 }
@@ -31,9 +27,6 @@ export function GitRemoteToolbar({
   branch,
   disabled,
   refresh,
-  push,
-  pull,
-  sync,
   menuItems,
   onMenuClick,
 }: Props) {
@@ -48,14 +41,12 @@ export function GitRemoteToolbar({
   >(null);
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
-  const fetchError = useGitRemoteStore((s) => s.fetchErrors[projectPath]);
   const setFetchError = (error: string | null) =>
     useGitRemoteStore.getState().setFetchError(projectPath, error);
   useEffect(() => {
     void refreshRemote(projectPath);
   }, [projectPath, branch, refreshRemote]);
   const state = entry?.data ?? null;
-  const action = getGitRemoteAction(state, branch);
   const blocked = disabled || !!busy;
   const openDialog = (mode: "add" | "manage" | "upstream" | "publish") => {
     setMenuOpen(false);
@@ -93,36 +84,6 @@ export function GitRemoteToolbar({
       }
     }
   };
-  const fetchRemote = () =>
-    run("fetch", async () => {
-      try {
-        const result = await gitFetch(projectPath);
-        if (!result.success) throw new Error(result.message);
-        setFetchError(null);
-        message.success(t("sidebar.remoteActions.fetched"));
-      } catch (error) {
-        setFetchError(String(error));
-        throw error;
-      }
-    });
-  const primary = () => {
-    if (action === "add" || action === "publish") {
-      openDialog(action);
-      return;
-    }
-    if (action === "retry") {
-      void run("retry", () => refreshRemote(projectPath));
-      return;
-    }
-    if (action === "fetch") {
-      void fetchRemote();
-      return;
-    }
-    void run(
-      action,
-      action === "push" ? push : action === "pull" ? pull : sync,
-    );
-  };
   const save = () => {
     if (
       !name.trim() ||
@@ -141,41 +102,30 @@ export function GitRemoteToolbar({
         if (!result.success) throw new Error(result.message);
       } else {
         await gitSaveRemote(projectPath, name, url, dialog === "manage");
+        await refreshRemote(projectPath);
+        if (
+          useGitRemoteStore.getState().entries[projectPath]?.data?.requiresFetch
+        ) {
+          try {
+            const fetched = await gitFetch(projectPath);
+            if (!fetched.success) throw new Error(fetched.message);
+            setFetchError(null);
+          } catch (error) {
+            setFetchError(String(error));
+            message.warning(
+              t("sidebar.gitRemoteSavedUnverified", { detail: String(error) }),
+            );
+            setDialog(null);
+            return;
+          }
+        }
       }
       setDialog(null);
       message.success(t("sidebar.remoteActions.saved"));
     });
   };
-  const count =
-    action === "push"
-      ? ` ↑${branch?.ahead}`
-      : action === "pull"
-        ? ` ↓${branch?.behind}`
-        : action === "sync"
-          ? ` ↑${branch?.ahead} ↓${branch?.behind}`
-          : "";
-  const label =
-    t(
-      `sidebar.remoteActions.${busy ? `${busy}Working` : action === "fetch" && fetchError ? "fetchRetry" : action}`,
-    ) + (busy ? "" : count);
   return (
     <div className="flex shrink-0 items-center gap-1">
-      <Tooltip
-        title={
-          entry?.error ?? fetchError ?? t("sidebar.remoteActions.statusHint")
-        }
-      >
-        <Button
-          type="text"
-          size="small"
-          className="text-[var(--cs-text-secondary)]"
-          loading={!!busy}
-          disabled={blocked || (!entry && action === "retry")}
-          onClick={primary}
-        >
-          {label}
-        </Button>
-      </Tooltip>
       <Dropdown
         open={menuOpen}
         onOpenChange={setMenuOpen}
@@ -197,14 +147,15 @@ export function GitRemoteToolbar({
               label: t("sidebar.remoteActions.upstream"),
               disabled:
                 blocked ||
+                state?.requiresFetch ||
                 !state?.branches.length ||
                 !state.hasCommit ||
                 branch?.isDetached,
             },
             {
-              key: "remote-fetch",
-              label: t("sidebar.remoteActions.fetch"),
-              disabled: blocked || !state?.remotes.length,
+              key: "remote-publish",
+              label: t("sidebar.remoteActions.publish"),
+              disabled: blocked || !state?.remotes.length || !state.hasCommit || state.requiresFetch || branch?.isDetached || !branch,
             },
             { type: "divider" },
             ...(menuItems ?? []),
@@ -214,7 +165,7 @@ export function GitRemoteToolbar({
             if (event.key === "remote-add") openDialog("add");
             else if (event.key === "remote-manage") openDialog("manage");
             else if (event.key === "remote-upstream") openDialog("upstream");
-            else if (event.key === "remote-fetch") void fetchRemote();
+            else if (event.key === "remote-publish") openDialog("publish");
             else onMenuClick(event);
           },
         }}

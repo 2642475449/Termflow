@@ -579,6 +579,13 @@
     "gitPushSuccess": "推送成功",
     "gitPushFailed": "推送失败",
     "gitFetchFailed": "获取远程更新失败",
+    "gitBusy": "Git 操作正在进行，请稍候",
+    "gitSyncSuccess": "同步完成",
+    "gitCommitRemotePartial": "提交 {{oid}} 已保存到本地，但远程操作未完成：{{detail}}。请重试远程操作，无需重新提交。",
+    "gitWorkflowUnknown": "无法确认操作结果：{{detail}}。请刷新并检查提交历史后再决定是否重试，不要直接重复提交。",
+    "gitRefreshFailed": "读取 Git 状态失败，正在保留上次成功数据：{{detail}}",
+    "gitRemoteSavedUnverified": "远程地址已保存，但新仓库验证失败：{{detail}}。请重试获取更新。",
+    "gitRemoteNeedsFetch": "远程地址已改变，需要先获取更新验证新仓库",
     "remoteActions": {
       "add": "添加远程",
       "manage": "管理远程仓库",
@@ -607,6 +614,8 @@
       "pushWorking": "正在推送…",
       "pullWorking": "正在拉取…",
       "syncWorking": "正在同步…",
+      "commitWorking": "正在提交…",
+      "branchWorking": "分支操作中…",
       "retryWorking": "正在读取…"
     },
     "gitConnectRemote": "连接远程",

@@ -1,162 +1,81 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { gitBranchInfo, gitFetch, gitRepoInfo, gitStatus } from "@/lib/api";
-import type { GitBranchInfo, GitFileStatus } from "@/types";
-import { GIT_STATUS_SNAPSHOT_EVENT, type GitStatusSnapshot } from "@/lib/gitStatusEvents";
-import { dispatchGitGraphRefresh } from "@/lib/gitGraphEvents";
+import { useCallback, useEffect, useRef } from "react";
+import {
+  GIT_STATUS_SNAPSHOT_EVENT,
+  type GitStatusSnapshot,
+} from "@/lib/gitStatusEvents";
 import { useGitRemoteStore } from "@/store/slices/gitRemote";
-
-const REMOTE_FETCH_INTERVAL_MS = 5 * 60 * 1000;
+import { EMPTY_GIT_STATUS, useGitStatusStore } from "@/store/slices/gitStatus";
 
 interface UseGitStatusOptions {
   currentProject: { name: string; path: string } | null;
   onStatusChange?: (changeCount: number, ahead: number, behind: number) => void;
 }
 
-interface UseGitStatusReturn {
-  isRepo: boolean;
-  loading: boolean;
-  branchInfo: GitBranchInfo | null;
-  fileStatuses: GitFileStatus[];
-  stagedFiles: GitFileStatus[];
-  unstagedFiles: GitFileStatus[];
-  branchName: string;
-  hasLocalChanges: boolean;
-  hasSyncChanges: boolean;
-  syncChangeCount: number;
-  refresh: () => Promise<void>;
-}
-
 export function useGitStatus({
   currentProject,
   onStatusChange,
-}: UseGitStatusOptions): UseGitStatusReturn {
-  const [isRepo, setIsRepo] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [branchInfo, setBranchInfo] = useState<GitBranchInfo | null>(null);
-  const [fileStatuses, setFileStatuses] = useState<GitFileStatus[]>([]);
-  const requestSequenceRef = useRef(0);
-  const lastSnapshotGenerationRef = useRef(0);
-  const activeProjectPathRef = useRef(currentProject?.path ?? null);
-  const lastFetchRef = useRef<{ projectPath: string; fetchedAt: number } | null>(null);
-  activeProjectPathRef.current = currentProject?.path ?? null;
-
-  const refresh = useCallback(async () => {
-    const requestId = ++requestSequenceRef.current;
-    if (!currentProject) {
-      setIsRepo(false);
-      setBranchInfo(null);
-      setFileStatuses([]);
-      onStatusChange?.(0, 0, 0);
-      return;
-    }
-
-    const projectPath = currentProject.path;
-    const isCurrentRequest = () =>
-      requestSequenceRef.current === requestId && activeProjectPathRef.current === projectPath;
-
-    setLoading(true);
-    try {
-      const info = await gitRepoInfo(projectPath);
-      if (!isCurrentRequest()) return;
-      setIsRepo(info.isRepo);
-
-      if (!info.isRepo) {
-        setFileStatuses([]);
-        setBranchInfo(null);
-        onStatusChange?.(0, 0, 0);
-        return;
-      }
-
-      // `git_repo_info` 已同时携带分支与仓库操作状态。不要因为独立的 HEAD
-      // 查询暂时失败而把一个有效的（尤其是新初始化）仓库误判成非 Git 仓库。
-      const statuses = await gitStatus(projectPath);
-      if (!isCurrentRequest()) return;
-
-      setFileStatuses(statuses);
-      setBranchInfo(info.branchInfo);
-      onStatusChange?.(
-        statuses.length,
-        info.branchInfo?.ahead ?? 0,
-        info.branchInfo?.behind ?? 0,
-      );
-
-      // Keep ahead/behind meaningful without blocking the local change list.
-      const now = Date.now();
-      const lastFetch = lastFetchRef.current;
-      if (!lastFetch || lastFetch.projectPath !== projectPath || now - lastFetch.fetchedAt >= REMOTE_FETCH_INTERVAL_MS) {
-        lastFetchRef.current = { projectPath, fetchedAt: now };
-        void gitFetch(projectPath)
-        .then((result) => {
-          useGitRemoteStore.getState().setFetchError(projectPath, result.success ? null : result.message);
-          if (!result.success || !isCurrentRequest()) return null;
-          dispatchGitGraphRefresh(projectPath);
-          return gitBranchInfo(projectPath);
-        })
-        .then((freshBranch) => {
-          if (!freshBranch || !isCurrentRequest()) return;
-          setBranchInfo(freshBranch);
-          onStatusChange?.(statuses.length, freshBranch.ahead ?? 0, freshBranch.behind ?? 0);
-        })
-        .catch((error) => useGitRemoteStore.getState().setFetchError(projectPath, String(error)));
-      }
-    } catch {
-      if (!isCurrentRequest()) return;
-      setIsRepo(false);
-      setFileStatuses([]);
-      setBranchInfo(null);
-      onStatusChange?.(0, 0, 0);
-    } finally {
-      if (isCurrentRequest()) setLoading(false);
-    }
-  }, [currentProject, onStatusChange]);
-
+}: UseGitStatusOptions) {
+  const path = currentProject?.path ?? null;
+  const entry = useGitStatusStore((s) =>
+    path ? (s.entries[path] ?? EMPTY_GIT_STATUS) : EMPTY_GIT_STATUS,
+  );
+  const refreshStore = useGitStatusStore((s) => s.refresh);
+  const generation = useRef(0);
+  const refreshWithRemote = useCallback(async (force: boolean) => {
+    if (!path) return;
+    await refreshStore(path);
+    const status = useGitStatusStore.getState().entries[path];
+    if (status?.isRepo && !status.error) await useGitRemoteStore.getState().fetchUpdates(path, force);
+  }, [path, refreshStore]);
+  const refresh = useCallback(() => refreshWithRemote(false), [refreshWithRemote]);
+  const refreshAll = useCallback(() => refreshWithRemote(true), [refreshWithRemote]);
   useEffect(() => {
     void refresh();
-  }, [refresh]);
-
-  useEffect(() => {
-    lastSnapshotGenerationRef.current = 0;
-  }, [currentProject?.path]);
-
-  useEffect(() => {
-    const handleSnapshot = (event: Event) => {
-      const snapshot = (event as CustomEvent<GitStatusSnapshot>).detail;
-      if (!snapshot || snapshot.projectPath !== activeProjectPathRef.current) return;
-      if (snapshot.generation <= lastSnapshotGenerationRef.current) return;
-      lastSnapshotGenerationRef.current = snapshot.generation;
-      requestSequenceRef.current += 1;
-      setLoading(false);
-      setIsRepo(snapshot.isRepo);
-      setFileStatuses(snapshot.statuses);
-      setBranchInfo(snapshot.branch);
-      onStatusChange?.(
-        snapshot.statuses.length,
-        snapshot.branch?.ahead ?? 0,
-        snapshot.branch?.behind ?? 0
-      );
+    const check = () => { if (document.visibilityState === "visible") void refresh(); };
+    const timer = window.setInterval(check, 60_000);
+    document.addEventListener("visibilitychange", check);
+    window.addEventListener("focus", check);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", check);
+      window.removeEventListener("focus", check);
     };
-    window.addEventListener(GIT_STATUS_SNAPSHOT_EVENT, handleSnapshot);
-    return () => window.removeEventListener(GIT_STATUS_SNAPSHOT_EVENT, handleSnapshot);
-  }, [onStatusChange]);
-
-  const stagedFiles = fileStatuses.filter((f) => f.staged);
-  const unstagedFiles = fileStatuses.filter((f) => !f.staged);
-  const branchName = branchInfo?.branchName ?? "";
-  const hasLocalChanges = fileStatuses.length > 0;
-  const hasSyncChanges = (branchInfo?.ahead ?? 0) > 0 || (branchInfo?.behind ?? 0) > 0;
-  const syncChangeCount = (branchInfo?.ahead ?? 0) + (branchInfo?.behind ?? 0);
-
+  }, [refresh]);
+  useEffect(() => {
+    generation.current = 0;
+    const handler = (event: Event) => {
+      const snapshot = (event as CustomEvent<GitStatusSnapshot>).detail;
+      if (
+        !snapshot ||
+        snapshot.projectPath !== path ||
+        snapshot.generation <= generation.current
+      )
+        return;
+      generation.current = snapshot.generation;
+      useGitStatusStore.getState().setSnapshot(snapshot);
+    };
+    window.addEventListener(GIT_STATUS_SNAPSHOT_EVENT, handler);
+    return () => window.removeEventListener(GIT_STATUS_SNAPSHOT_EVENT, handler);
+  }, [path]);
+  useEffect(() => {
+    onStatusChange?.(
+      entry.fileStatuses.length,
+      entry.branchInfo?.ahead ?? 0,
+      entry.branchInfo?.behind ?? 0,
+    );
+  }, [entry.fileStatuses, entry.branchInfo, onStatusChange]);
+  const { branchInfo, fileStatuses } = entry;
   return {
-    isRepo,
-    loading,
-    branchInfo,
-    fileStatuses,
-    stagedFiles,
-    unstagedFiles,
-    branchName,
-    hasLocalChanges,
-    hasSyncChanges,
-    syncChangeCount,
+    ...entry,
+    loading: entry.loading || (entry.isRepo === null && !entry.error),
+    stagedFiles: fileStatuses.filter((f) => f.staged),
+    unstagedFiles: fileStatuses.filter((f) => !f.staged),
+    branchName: branchInfo?.branchName ?? "",
+    hasLocalChanges: fileStatuses.length > 0,
+    hasSyncChanges:
+      (branchInfo?.ahead ?? 0) > 0 || (branchInfo?.behind ?? 0) > 0,
+    syncChangeCount: (branchInfo?.ahead ?? 0) + (branchInfo?.behind ?? 0),
     refresh,
+    refreshAll,
   };
 }

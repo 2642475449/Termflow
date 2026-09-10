@@ -5,10 +5,13 @@ import {
   CheckOutlined,
   DownOutlined,
   LoadingOutlined,
+  SyncOutlined,
 } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import type { GitCommitMessageProfile, GitRepositoryOperationState } from "@/types";
 import { getGitOperationLabelKey, isGitOperationInProgress } from "@/lib/gitOperationState";
+
+import { getGitPrimaryAction } from "@/lib/gitPrimaryAction";
 
 interface GitCommitComposerProps {
   remoteReady?: boolean;
@@ -31,6 +34,7 @@ interface GitCommitComposerProps {
   onCommitAmend: (message: string) => Promise<void>;
   onCommitAndPush: (message: string) => Promise<void>;
   onCommitAndSync: (message: string) => Promise<void>;
+  onPush: () => Promise<void>;
   onPull: () => Promise<void>;
   onPullWithStash: () => Promise<void>;
   onSyncChanges: () => Promise<void>;
@@ -49,6 +53,8 @@ export function GitCommitComposer({
   stagedChangeCount,
   unstagedChangeCount,
   hasSyncChanges,
+  aheadCount,
+  behindCount,
   operationState,
   committing,
   canGenerateCommitMessage,
@@ -60,6 +66,7 @@ export function GitCommitComposer({
   onCommitAmend,
   onCommitAndPush,
   onCommitAndSync,
+  onPush,
   onPull,
   onPullWithStash,
   onSyncChanges,
@@ -87,8 +94,9 @@ export function GitCommitComposer({
   const canSync =
     !committing && !operationInProgress && remoteReady && hasSyncChanges;
   const canOpenCommitMenu =
-    !committing && !operationInProgress && (hasLocalChanges || hasSyncChanges);
-  const canPrimaryAction = canCommit;
+    !committing && !operationInProgress;
+  const primaryAction = getGitPrimaryAction({ hasLocalChanges, remoteReady, ahead: aheadCount, behind: behindCount });
+  const canPrimaryAction = primaryAction === "commit" ? canCommit : primaryAction !== "none" && !committing && !operationInProgress;
 
   const primaryCommitText = willStageAllBeforeCommit
     ? t("sidebar.gitStageAllAndCommit", { defaultValue: "暂存并提交" })
@@ -120,7 +128,12 @@ export function GitCommitComposer({
       ? "当前没有可用的提交或同步操作"
       : null;
 
-  const primaryActionDisabledReason = commitDisabledReason;
+  const primaryActionDisabledReason = primaryAction === "commit" ? commitDisabledReason : operationInProgress ? operationBlockedReason : committing ? t("sidebar.gitBusy") : t("sidebar.gitNoChanges");
+  const primaryActionText = primaryAction === "commit" ? primaryCommitText
+    : primaryAction === "push" ? `↑ ${t("sidebar.remoteActions.push")} ${aheadCount}`
+    : primaryAction === "pull" ? `↓ ${t("sidebar.remoteActions.pull")} ${behindCount}`
+    : primaryAction === "sync" ? `${t("sidebar.remoteActions.sync")} ↑${aheadCount} ↓${behindCount}`
+    : t("sidebar.gitNoChanges");
 
   const commitComposerBackground =
     "color-mix(in srgb, var(--cs-bg-card-solid, var(--cs-bg-card)) 93%, var(--cs-bg-sidebar) 7%)";
@@ -224,7 +237,7 @@ export function GitCommitComposer({
     }
     setCommitMenuOpen(false);
     if (!hasLocalChanges) {
-      void onPull();
+      void onPull().catch(() => undefined);
       return;
     }
 
@@ -263,6 +276,7 @@ export function GitCommitComposer({
       disabled: !canCommit || !remoteReady,
     },
     { type: "divider" },
+    { key: "push", label: t("sidebar.remoteActions.push"), disabled: committing || operationInProgress || !remoteReady || aheadCount === 0 },
     {
       key: "pull",
       label: t("sidebar.gitPull"),
@@ -292,17 +306,21 @@ export function GitCommitComposer({
         case "commit-and-sync":
           void handleCommitAndSync();
           break;
+        case "push":
+          setCommitMenuOpen(false);
+          void onPush().catch(() => undefined);
+          break;
         case "pull":
           requestPull();
           break;
         case "sync-changes":
-          void onSyncChanges();
+          void onSyncChanges().catch(() => undefined);
           break;
         default:
           break;
       }
     },
-    [handleCommit, handleCommitAmend, handleCommitAndPush, handleCommitAndSync, onSyncChanges, requestPull]
+    [handleCommit, handleCommitAmend, handleCommitAndPush, handleCommitAndSync, onPush, onSyncChanges, requestPull]
   );
 
   const handleGenerateCommitMessage = useCallback(async (profileId?: string) => {
@@ -443,15 +461,20 @@ export function GitCommitComposer({
       </div>
 
       <div className="flex w-full items-stretch">
-        <Tooltip title={canCommit ? primaryCommitText : primaryActionDisabledReason} mouseEnterDelay={0.4}>
+        <Tooltip title={canPrimaryAction ? primaryActionText : primaryActionDisabledReason} mouseEnterDelay={0.4}>
           <span className="flex-1">
             <Button
               className="flex-1 rounded-r-none"
               size="large"
-              icon={<CheckOutlined />}
+              icon={primaryAction === "commit" || primaryAction === "none" ? <CheckOutlined /> : primaryAction === "sync" ? <SyncOutlined /> : undefined}
               loading={committing}
-              disabled={!canCommit}
-              onClick={handleCommit}
+              disabled={!canPrimaryAction}
+              onClick={() => {
+                if (!canPrimaryAction) return;
+                if (primaryAction === "commit") void handleCommit();
+                else if (primaryAction === "pull") requestPull();
+                else void (primaryAction === "push" ? onPush() : onSyncChanges()).catch(() => undefined);
+              }}
               style={{
                 width: "100%",
                 height: 28,
@@ -464,12 +487,12 @@ export function GitCommitComposer({
                 lineHeight: 1.2,
                 fontWeight: 600,
                 letterSpacing: "0.01em",
-                cursor: canCommit ? "pointer" : "not-allowed",
-                opacity: canCommit ? 1 : 0.7,
+                cursor: canPrimaryAction ? "pointer" : "not-allowed",
+                opacity: canPrimaryAction ? 1 : 0.7,
                 boxShadow: "none",
               }}
             >
-              <span>{primaryCommitText}</span>
+              <span>{primaryActionText}</span>
             </Button>
           </span>
         </Tooltip>

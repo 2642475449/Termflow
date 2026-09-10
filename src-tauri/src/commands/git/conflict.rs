@@ -112,6 +112,28 @@ pub fn git_resolve_conflict(
     with_git_repository_access(&project_path, GitRepositoryAccess::Write, || {
         let repo = open_repo(&project_path)?;
         resolve_worktree_file_path(&repo, &file_path)?;
+        if matches!(resolution.as_str(), "ours" | "theirs") {
+            let index = repo.index().map_err(|e| e.to_string())?;
+            let file = Path::new(&file_path);
+            let has_conflict = (1..=3).any(|stage| index.get_path(file, stage).is_some());
+            if !has_conflict {
+                return Err("文件已不处于冲突状态，请刷新后重试".to_string());
+            }
+            let stage = if resolution == "ours" { 2 } else { 3 };
+            // 缺失的一侧表示删除，而不是空文件；只对实际冲突路径执行删除并暂存。
+            if index.get_path(file, stage).is_none() {
+                let output = git_command()
+                    .args(["rm", "-f", "--", &file_path])
+                    .current_dir(crate::path_utils::normalize_input_path(&project_path))
+                    .output()
+                    .map_err(|e| e.to_string())?;
+                return if output.status.success() {
+                    Ok(())
+                } else {
+                    Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+                };
+            }
+        }
         drop(repo);
         let path = crate::path_utils::normalize_input_path(&project_path);
 
@@ -350,7 +372,69 @@ pub fn git_abort_merge(project_path: String) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{abort_args_for_state, continue_args_for_state};
+    use super::{
+        abort_args_for_state, continue_args_for_state, git_command, git_resolve_conflict, open_repo,
+    };
+
+    fn conflict_git(path: &std::path::Path, args: &[&str]) {
+        let result = git_command().args(args).current_dir(path).output().unwrap();
+        assert!(
+            result.status.success(),
+            "{:?}: {}",
+            args,
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
+
+    #[test]
+    fn resolves_modify_delete_conflicts_in_both_directions() {
+        for deleted_side in ["ours", "theirs"] {
+            for chosen_side in ["ours", "theirs"] {
+                let temp = tempfile::TempDir::new().unwrap();
+                let path = temp.path();
+                conflict_git(path, &["init"]);
+                conflict_git(path, &["config", "user.name", "Test"]);
+                conflict_git(path, &["config", "user.email", "test@example.invalid"]);
+                std::fs::write(path.join("file.txt"), "base").unwrap();
+                conflict_git(path, &["add", "."]);
+                conflict_git(path, &["commit", "-m", "base"]);
+                conflict_git(path, &["branch", "-M", "main"]);
+                conflict_git(path, &["checkout", "-b", "deleted"]);
+                conflict_git(path, &["rm", "file.txt"]);
+                conflict_git(path, &["commit", "-m", "delete"]);
+                conflict_git(path, &["checkout", "main"]);
+                std::fs::write(path.join("file.txt"), "modified").unwrap();
+                conflict_git(path, &["commit", "-am", "modify"]);
+                let merge_target = if deleted_side == "ours" {
+                    conflict_git(path, &["checkout", "deleted"]);
+                    "main"
+                } else {
+                    "deleted"
+                };
+                let result = git_command()
+                    .args(["merge", merge_target])
+                    .current_dir(path)
+                    .output()
+                    .unwrap();
+                assert!(!result.status.success());
+                git_resolve_conflict(
+                    path.to_str().unwrap().to_string(),
+                    "file.txt".into(),
+                    chosen_side.into(),
+                )
+                .unwrap();
+                let repo = open_repo(path.to_str().unwrap()).unwrap();
+                assert!(!repo.index().unwrap().has_conflicts());
+                assert_eq!(path.join("file.txt").exists(), chosen_side != deleted_side);
+                assert!(git_resolve_conflict(
+                    path.to_str().unwrap().to_string(),
+                    "file.txt".into(),
+                    chosen_side.into()
+                )
+                .is_err());
+            }
+        }
+    }
 
     #[test]
     fn selects_the_matching_abort_command_for_each_supported_operation() {

@@ -1343,6 +1343,23 @@ export async function gitRemoteState(projectPath: string): Promise<import("@/lib
   return invoke("git_remote_state", { projectPath });
 }
 
+export interface GitWorkflowResult {
+  commitOid: string | null;
+  success: boolean;
+  failedStage: string | null;
+  message: string;
+}
+
+export async function gitRunWorkflow(options: {
+  projectPath: string;
+  expectedBranch: string;
+  action: "push" | "pull" | "sync" | "commit-and-push" | "commit-and-sync";
+  message?: string;
+  files: string[];
+}): Promise<GitWorkflowResult> {
+  return invoke("git_run_workflow", options);
+}
+
 export async function gitSetUpstream(projectPath: string, branchName: string, upstream: string): Promise<void> {
   return invoke("git_set_upstream", { projectPath, branchName, upstream });
 }

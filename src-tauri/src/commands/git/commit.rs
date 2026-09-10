@@ -17,7 +17,7 @@ pub async fn git_commit(
     .await
 }
 
-fn git_commit_sync(
+pub(super) fn git_commit_sync(
     project_path: String,
     message: String,
     files: Vec<String>,

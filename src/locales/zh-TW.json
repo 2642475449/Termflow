@@ -579,6 +579,13 @@
     "gitPushSuccess": "推送成功",
     "gitPushFailed": "推送失敗",
     "gitFetchFailed": "取得遠端更新失敗",
+    "gitBusy": "Git 操作正在進行，請稍候",
+    "gitSyncSuccess": "同步完成",
+    "gitCommitRemotePartial": "提交 {{oid}} 已儲存至本機，但遠端操作未完成：{{detail}}。請重試遠端操作，無需重新提交。",
+    "gitWorkflowUnknown": "無法確認操作結果：{{detail}}。請重新整理並檢查提交記錄後再決定是否重試，勿直接重複提交。",
+    "gitRefreshFailed": "讀取 Git 狀態失敗，保留上次成功資料：{{detail}}",
+    "gitRemoteSavedUnverified": "遠端位址已儲存，但新儲存庫驗證失敗：{{detail}}。請重試取得更新。",
+    "gitRemoteNeedsFetch": "遠端位址已變更，需要先取得更新以驗證新儲存庫",
     "remoteActions": {
       "add": "新增遠端",
       "manage": "管理遠端儲存庫",
@@ -607,6 +614,8 @@
       "pushWorking": "正在推送…",
       "pullWorking": "正在拉取…",
       "syncWorking": "正在同步…",
+      "commitWorking": "正在提交…",
+      "branchWorking": "分支操作中…",
       "retryWorking": "正在讀取…"
     },
     "gitConnectRemote": "連接遠端",

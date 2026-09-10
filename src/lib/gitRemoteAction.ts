@@ -6,6 +6,7 @@ export interface GitRemoteState {
   hasCommit: boolean;
   branches: string[];
   branchName: string | null;
+  requiresFetch: boolean;
 }
 
 export function getGitRemoteAction(
@@ -15,6 +16,7 @@ export function getGitRemoteAction(
   if (!state || !branch) return "retry";
   if (state.hasCommit && state.branchName !== branch.branchName) return "retry";
   if (state.remotes.length === 0) return "add";
+  if (state.requiresFetch) return "fetch";
   if (branch.isDetached || !state.hasCommit) return "fetch";
   if (!state.upstream) return "publish";
   if (branch.ahead > 0 && branch.behind > 0) return "sync";

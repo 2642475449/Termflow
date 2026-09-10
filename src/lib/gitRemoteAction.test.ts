@@ -10,6 +10,7 @@ const branch: GitBranchInfo = {
   operationState: "clean",
 };
 const state: GitRemoteState = {
+  requiresFetch: false,
   branchName: "main",
   remotes: [{ name: "origin", url: "repo" }],
   upstream: "origin/main",
@@ -17,6 +18,10 @@ const state: GitRemoteState = {
   branches: ["origin/main"],
 };
 describe("Git remote primary action", () => {
+  it("requires verification after a remote URL change even if old counts exist", () => {
+    expect(getGitRemoteAction({ ...state, requiresFetch: true }, { ...branch, ahead: 3 })).toBe("fetch");
+    expect(getGitRemoteAction({ ...state, requiresFetch: true, upstream: null }, branch)).toBe("fetch");
+  });
   it("does not confuse unavailable configuration with no remotes", () => {
     expect(getGitRemoteAction(null, branch)).toBe("retry");
     expect(getGitRemoteAction({ ...state, remotes: [] }, branch)).toBe("add");

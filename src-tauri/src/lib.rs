@@ -70,6 +70,17 @@ pub fn run() {
     let voice_shortcut_state = VoiceShortcutState::new();
     let live_asr_sessions = LiveAsrSessions::default();
     tauri::Builder::default()
+        .plugin(
+            tauri::plugin::Builder::<tauri::Wry>::new("foreground-activation")
+                .setup(|app, _| {
+                    #[cfg(windows)]
+                    commands::window::allow_existing_instance_foreground(&app.config().identifier);
+                    #[cfg(not(windows))]
+                    let _ = app;
+                    Ok(())
+                })
+                .build(),
+        )
         .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
             commands::window::handle_second_instance(app, args, cwd);
         }))
@@ -328,6 +339,7 @@ pub fn run() {
             commands::git::git_push,
             commands::git::git_add_remote_and_push,
             commands::git::git_remote_state,
+            commands::git::git_run_workflow,
             commands::git::git_set_upstream,
             commands::git::git_save_remote,
             commands::git::git_publish_branch,

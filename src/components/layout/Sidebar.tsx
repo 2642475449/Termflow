@@ -466,6 +466,7 @@ function Sidebar({ collapsed, section }: SidebarProps) {
               />
             ) : section === "git" ? (
               <SidebarGitPanel
+                key={currentProject?.path ?? "no-project"}
                 currentProject={currentProject}
               />
             ) : (

@@ -1,21 +1,20 @@
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { message } from "antd";
 import {
   gitCommit,
   gitCommitAmend,
-  gitBranchInfo,
-  gitFetch,
-  gitPull,
   gitPullWithStash,
-  gitPullRebase,
-  gitPush,
+  gitRunWorkflow,
 } from "@/lib/api";
-import { getGitSyncPlan } from "@/lib/gitSyncPolicy";
+import { useGitRemoteStore } from "@/store/slices/gitRemote";
+import { getGitWorkflowOutcome } from "@/lib/gitWorkflowOutcome";
 import { refreshGitStateAndGraph } from "@/lib/gitGraphEvents";
 import { summarizeGitRemoteError } from "@/lib/gitRemoteError";
 import type { GitFileStatus } from "@/types";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
+
+class WorkflowReportedError extends Error {}
 
 function formatGitRemoteError(rawMessage: string, t: TFunction): string {
   const summary = summarizeGitRemoteError(rawMessage);
@@ -36,16 +35,20 @@ function formatGitRemoteError(rawMessage: string, t: TFunction): string {
 }
 
 function getGitRefreshController() {
-  return (window as unknown as Record<string, unknown>).__gitRefreshController as {
-    requestRefresh: () => void;
-    refreshNow: () => void;
-    markOperationStart: () => string;
-    markOperationEnd: (operationId: string) => void;
-  } | undefined;
+  return (window as unknown as Record<string, unknown>)
+    .__gitRefreshController as
+    | {
+        requestRefresh: () => void;
+        refreshNow: () => void;
+        markOperationStart: () => string;
+        markOperationEnd: (operationId: string) => void;
+      }
+    | undefined;
 }
 
 interface UseGitCommitOptions {
   projectPath: string | null;
+  expectedBranch: string;
   stagedFiles: GitFileStatus[];
   unstagedFiles: GitFileStatus[];
   refresh: () => Promise<void>;
@@ -66,11 +69,15 @@ interface UseGitCommitReturn {
 async function prepareFiles(
   _projectPath: string,
   stagedFiles: GitFileStatus[],
-  unstagedFiles: GitFileStatus[]
+  unstagedFiles: GitFileStatus[],
 ): Promise<string[]> {
   if (stagedFiles.length === 0 && unstagedFiles.length > 0) {
     return Array.from(
-      new Set(unstagedFiles.flatMap((file) => [file.oldPath, file.path].filter((path): path is string => !!path)))
+      new Set(
+        unstagedFiles.flatMap((file) =>
+          [file.oldPath, file.path].filter((path): path is string => !!path),
+        ),
+      ),
     );
   }
 
@@ -80,104 +87,80 @@ async function prepareFiles(
 
 export function useGitCommit({
   projectPath,
+  expectedBranch,
   stagedFiles,
   unstagedFiles,
   refresh,
 }: UseGitCommitOptions): UseGitCommitReturn {
   const { t } = useTranslation();
-  const [committing, setCommitting] = useState(false);
+  const committing = useGitRemoteStore((s) => !!s.busy[projectPath ?? ""]);
 
   const runGitOperation = useCallback(
-    async (operation: () => Promise<void>) => {
+    async (operation: () => Promise<void>, label = "commit") => {
+      if (!projectPath) return;
+      if (useGitRemoteStore.getState().busy[projectPath])
+        throw new Error(t("sidebar.gitBusy"));
+      useGitRemoteStore.getState().setBusy(projectPath, label);
       const controller = getGitRefreshController();
       const operationId = controller?.markOperationStart();
-      setCommitting(true);
+
       try {
         await operation();
       } finally {
-        setCommitting(false);
+        useGitRemoteStore.getState().setBusy(projectPath, null);
         if (operationId) controller?.markOperationEnd(operationId);
       }
     },
-    []
+    [projectPath, t],
   );
 
-  /**
-   * 推送被拒绝后不能继续沿用旧的 ahead/behind。立即 fetch 并刷新图形与状态，
-   * 让下一次同步根据远端最新引用重新决策。
-   */
-  const refreshAfterPushFailure = useCallback(async () => {
-    if (!projectPath) return;
-    try {
-      await gitFetch(projectPath);
-    } catch {
-      // 保留原始推送错误；fetch 失败不应覆盖用户真正需要处理的原因。
-    }
-    await refreshGitStateAndGraph(projectPath, refresh);
-  }, [projectPath, refresh]);
+  const commit = useCallback(
+    async (commitMessage: string) => {
+      if (!projectPath) return;
 
-  const commit = useCallback(async (commitMessage: string) => {
-    if (!projectPath) return;
+      await runGitOperation(async () => {
+        try {
+          const files = await prepareFiles(
+            projectPath,
+            stagedFiles,
+            unstagedFiles,
+          );
+          await gitCommit(projectPath, commitMessage, files);
+          message.success(t("sidebar.gitCommitSuccess"));
+          await refreshGitStateAndGraph(projectPath, refresh);
+        } catch (e) {
+          const detail = e instanceof Error ? e.message : String(e);
+          message.error(`${t("sidebar.gitCommitFailed")}: ${detail}`);
+          throw e;
+        }
+      });
+    },
+    [projectPath, refresh, runGitOperation, stagedFiles, t, unstagedFiles],
+  );
 
-    await runGitOperation(async () => {
-      try {
-        const files = await prepareFiles(projectPath, stagedFiles, unstagedFiles);
-        await gitCommit(projectPath, commitMessage, files);
-        message.success(t("sidebar.gitCommitSuccess"));
-        await refreshGitStateAndGraph(projectPath, refresh);
-      } catch (e) {
-        const detail = e instanceof Error ? e.message : String(e);
-        message.error(`${t("sidebar.gitCommitFailed")}: ${detail}`);
-        throw e;
-      }
-    });
-  }, [projectPath, refresh, runGitOperation, stagedFiles, t, unstagedFiles]);
+  const commitAmend = useCallback(
+    async (commitMessage: string) => {
+      if (!projectPath) return;
 
-  const commitAmend = useCallback(async (commitMessage: string) => {
-    if (!projectPath) return;
-
-    await runGitOperation(async () => {
-      try {
-        const files = await prepareFiles(projectPath, stagedFiles, unstagedFiles);
-        await gitCommitAmend(projectPath, commitMessage, files);
-        message.success(t("sidebar.gitAmendSuccess"));
-        await refreshGitStateAndGraph(projectPath, refresh);
-      } catch (e) {
-        const detail = e instanceof Error ? e.message : String(e);
-        message.error(`${t("sidebar.gitAmendFailed")}: ${detail}`);
-        throw e;
-      }
-    });
-  }, [projectPath, refresh, runGitOperation, stagedFiles, t, unstagedFiles]);
-
-  const push = useCallback(async () => {
-    if (!projectPath) return;
-
-    await runGitOperation(async () => {
-      const pushResult = await gitPush(projectPath);
-      if (pushResult.success) {
-        message.success(t("sidebar.gitPushSuccess"));
-        await refreshGitStateAndGraph(projectPath, refresh);
-      } else {
-        message.error(`${t("sidebar.gitPushFailed")}: ${formatGitRemoteError(pushResult.message, t)}`);
-        await refreshAfterPushFailure();
-      }
-    });
-  }, [projectPath, refresh, refreshAfterPushFailure, runGitOperation, t]);
-
-  const pull = useCallback(async () => {
-    if (!projectPath) return;
-
-    await runGitOperation(async () => {
-      const pullResult = await gitPull(projectPath);
-      if (pullResult.success) {
-        message.success(t("sidebar.gitPullSuccess"));
-        await refreshGitStateAndGraph(projectPath, refresh);
-      } else {
-        message.error(`${t("sidebar.gitPullFailed")}: ${formatGitRemoteError(pullResult.message, t)}`);
-      }
-    });
-  }, [projectPath, refresh, runGitOperation, t]);
+      await runGitOperation(async () => {
+        try {
+          const files = await prepareFiles(
+            projectPath,
+            stagedFiles,
+            unstagedFiles,
+          );
+          await gitCommitAmend(projectPath, commitMessage, files);
+          message.success(t("sidebar.gitAmendSuccess"));
+          await refreshGitStateAndGraph(projectPath, refresh);
+        } catch (e) {
+          const detail = e instanceof Error ? e.message : String(e);
+          message.error(`${t("sidebar.gitAmendFailed")}: ${detail}`);
+          throw e;
+        }
+      });
+    },
+    [projectPath, refresh, runGitOperation, stagedFiles, t, unstagedFiles],
+  );
 
   const pullWithStash = useCallback(async () => {
     if (!projectPath) return;
@@ -188,7 +171,9 @@ export function useGitCommit({
         await refreshGitStateAndGraph(projectPath, refresh);
 
         if (!result.success) {
-          message.error(`${t("sidebar.gitPullFailed")}: ${formatGitRemoteError(result.message, t)}`);
+          message.error(
+            `${t("sidebar.gitPullFailed")}: ${formatGitRemoteError(result.message, t)}`,
+          );
           return;
         }
 
@@ -213,119 +198,103 @@ export function useGitCommit({
     });
   }, [projectPath, refresh, runGitOperation, t]);
 
-  /**
-   * 手动同步的唯一入口：先更新远端跟踪引用，再使用刚刚读取的 ahead/behind 计算动作。
-   */
-  const syncWithLatestRemoteState = useCallback(async (showSuccess: boolean): Promise<boolean> => {
-    if (!projectPath) return false;
+  const workflow = useCallback(
+    async (
+      action: "push" | "pull" | "sync" | "commit-and-push" | "commit-and-sync",
+      commitMessage?: string,
+    ) => {
+      if (!projectPath) return;
+      await runGitOperation(
+        async () => {
+          let committed = false;
+          try {
+            const result = await gitRunWorkflow({
+              projectPath,
+              expectedBranch,
+              action,
+              message: commitMessage,
+              files:
+                commitMessage === undefined
+                  ? []
+                  : await prepareFiles(projectPath, stagedFiles, unstagedFiles),
+            });
+            committed = !!result.commitOid;
+            const outcome = getGitWorkflowOutcome(result);
+            if (outcome === "partial") {
+              message.warning(
+                t("sidebar.gitCommitRemotePartial", {
+                  oid: result.commitOid?.slice(0, 8),
+                  detail: formatGitRemoteError(result.message, t),
+                }),
+              );
+            } else if (outcome === "failed") {
+              message.error(
+                `${t("sidebar.remoteActions.failed")}: ${formatGitRemoteError(result.message, t)}`,
+              );
+              // 提交未发生时保留输入内容；提交成功后永远不提示重新提交。
+              if (commitMessage !== undefined)
+                throw new WorkflowReportedError(result.message);
+            } else {
+              message.success(
+                t(
+                  action === "pull"
+                    ? "sidebar.gitPullSuccess"
+                    : action === "push" || action === "commit-and-push"
+                      ? "sidebar.gitPushSuccess"
+                      : "sidebar.gitSyncSuccess",
+                ),
+              );
+            }
+          } catch (error) {
+            // IPC 结果丢失时不能断言提交失败，更不能自动重复提交。
+            if (!committed) {
+              if (!(error instanceof WorkflowReportedError)) {
+                message.error(
+                  t("sidebar.gitWorkflowUnknown", { detail: String(error) }),
+                );
+              }
+              throw error;
+            }
+          } finally {
+            try {
+              await refreshGitStateAndGraph(projectPath, refresh);
+              await useGitRemoteStore.getState().refresh(projectPath);
+            } catch (error) {
+              message.warning(
+                t("sidebar.gitRefreshFailed", { detail: String(error) }),
+              );
+            }
+          }
+        },
+        action === "commit-and-push"
+          ? "push"
+          : action === "commit-and-sync"
+            ? "sync"
+            : action,
+      );
+    },
+    [
+      projectPath,
+      expectedBranch,
+      runGitOperation,
+      refresh,
+      stagedFiles,
+      unstagedFiles,
+      t,
+    ],
+  );
 
-    const fetchResult = await gitFetch(projectPath);
-    if (!fetchResult.success) {
-      message.error(`${t("sidebar.gitFetchFailed")}: ${formatGitRemoteError(fetchResult.message, t)}`);
-      await refreshGitStateAndGraph(projectPath, refresh);
-      return false;
-    }
-
-    const freshBranch = await gitBranchInfo(projectPath);
-    const plan = getGitSyncPlan({
-      ahead: freshBranch.ahead,
-      behind: freshBranch.behind,
-    });
-
-    if (plan.action === "none") {
-      await refreshGitStateAndGraph(projectPath, refresh);
-      return true;
-    }
-
-    if (plan.action === "push") {
-      const pushResult = await gitPush(projectPath);
-      if (!pushResult.success) {
-        message.error(`${t("sidebar.gitPushFailed")}: ${formatGitRemoteError(pushResult.message, t)}`);
-        await refreshAfterPushFailure();
-        return false;
-      }
-      if (showSuccess) message.success(t("sidebar.gitPushSuccess"));
-      await refreshGitStateAndGraph(projectPath, refresh);
-      return true;
-    }
-
-    const pullResult = plan.action === "pull-rebase-and-push"
-      ? await gitPullRebase(projectPath)
-      : await gitPull(projectPath);
-    if (!pullResult.success) {
-      message.error(`${t("sidebar.gitPullFailed")}: ${formatGitRemoteError(pullResult.message, t)}`);
-      await refreshGitStateAndGraph(projectPath, refresh);
-      return false;
-    }
-
-    if (plan.action === "pull") {
-      if (showSuccess) message.success(t("sidebar.gitPullSuccess"));
-      await refreshGitStateAndGraph(projectPath, refresh);
-      return true;
-    }
-
-    const pushResult = await gitPush(projectPath);
-    if (!pushResult.success) {
-      message.error(`${t("sidebar.gitPushFailed")}: ${formatGitRemoteError(pushResult.message, t)}`);
-      await refreshAfterPushFailure();
-      return false;
-    }
-
-    if (showSuccess) message.success(t("sidebar.gitPushSuccess"));
-    await refreshGitStateAndGraph(projectPath, refresh);
-    return true;
-  }, [projectPath, refresh, refreshAfterPushFailure, t]);
-
-  const sync = useCallback(async () => {
-    if (!projectPath) return;
-
-    await runGitOperation(async () => {
-      await syncWithLatestRemoteState(true);
-    });
-  }, [projectPath, runGitOperation, syncWithLatestRemoteState]);
-
-  const commitAndPush = useCallback(async (commitMessage: string) => {
-    if (!projectPath) return;
-
-    await runGitOperation(async () => {
-      try {
-        const files = await prepareFiles(projectPath, stagedFiles, unstagedFiles);
-        await gitCommit(projectPath, commitMessage, files);
-        await refresh();
-
-        const pushResult = await gitPush(projectPath);
-        if (pushResult.success) {
-          message.success(t("sidebar.gitPushSuccess"));
-        } else {
-          message.error(`${t("sidebar.gitPushFailed")}: ${formatGitRemoteError(pushResult.message, t)}`);
-          await refreshAfterPushFailure();
-          return;
-        }
-        await refreshGitStateAndGraph(projectPath, refresh);
-      } catch (e) {
-        const detail = e instanceof Error ? e.message : String(e);
-        message.error(`${t("sidebar.gitCommitFailed")}: ${detail}`);
-        throw e;
-      }
-    });
-  }, [projectPath, refresh, refreshAfterPushFailure, runGitOperation, stagedFiles, t, unstagedFiles]);
-
-  const commitAndSync = useCallback(async (commitMessage: string) => {
-    if (!projectPath) return;
-
-    await runGitOperation(async () => {
-      try {
-        const files = await prepareFiles(projectPath, stagedFiles, unstagedFiles);
-        await gitCommit(projectPath, commitMessage, files);
-        const synced = await syncWithLatestRemoteState(false);
-        if (synced) message.success(t("sidebar.gitCommitAndSync"));
-      } catch (e) {
-        const detail = e instanceof Error ? e.message : String(e);
-        message.error(`${t("sidebar.gitCommitFailed")}: ${detail}`);
-        throw e;
-      }
-    });
-  }, [projectPath, runGitOperation, stagedFiles, syncWithLatestRemoteState, t, unstagedFiles]);
+  const push = useCallback(() => workflow("push"), [workflow]);
+  const pull = useCallback(() => workflow("pull"), [workflow]);
+  const sync = useCallback(() => workflow("sync"), [workflow]);
+  const commitAndPush = useCallback(
+    (text: string) => workflow("commit-and-push", text),
+    [workflow],
+  );
+  const commitAndSync = useCallback(
+    (text: string) => workflow("commit-and-sync", text),
+    [workflow],
+  );
 
   return {
     committing,

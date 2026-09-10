@@ -12,6 +12,7 @@ pub mod status;
 pub mod types;
 pub mod utils;
 pub mod watcher;
+pub mod workflow;
 
 // Re-export commands
 pub use ai::*;
@@ -25,6 +26,7 @@ pub use graph::*;
 pub use remote::*;
 pub use status::*;
 pub use watcher::*;
+pub use workflow::*;
 
 // Re-export watcher
 pub use watcher::GitWatcher;

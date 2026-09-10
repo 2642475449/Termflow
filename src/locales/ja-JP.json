@@ -579,6 +579,13 @@
     "gitPushSuccess": "プッシュしました",
     "gitPushFailed": "プッシュに失敗しました",
     "gitFetchFailed": "リモート更新の取得に失敗しました",
+    "gitBusy": "Git 操作が進行中です",
+    "gitSyncSuccess": "同期が完了しました",
+    "gitCommitRemotePartial": "コミット {{oid}} はローカルに保存されましたが、リモート操作は未完了です：{{detail}}。再コミットせず、リモート操作を再試行してください。",
+    "gitWorkflowUnknown": "操作結果を確認できません：{{detail}}。更新してコミット履歴を確認してから再試行してください。",
+    "gitRefreshFailed": "Git 状態を読み取れません。最後に取得したデータを保持しています：{{detail}}",
+    "gitRemoteSavedUnverified": "リモート URL を保存しましたが、検証に失敗しました：{{detail}}。再度フェッチしてください。",
+    "gitRemoteNeedsFetch": "リモート URL が変更されました。フェッチして新しいリポジトリを検証してください",
     "remoteActions": {
       "add": "リモートを追加",
       "manage": "リモートを管理",
@@ -607,6 +614,8 @@
       "pushWorking": "プッシュ中…",
       "pullWorking": "プル中…",
       "syncWorking": "同期中…",
+      "commitWorking": "コミット中…",
+      "branchWorking": "ブランチ操作中…",
       "retryWorking": "読み込み中…"
     },
     "gitConnectRemote": "リモートを接続",

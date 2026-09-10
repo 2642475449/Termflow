@@ -139,6 +139,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
   // 使用 useGitStatus hook 管理 Git 状态
   const {
     isRepo,
+    error: statusError,
     loading,
     branchInfo,
     fileStatuses,
@@ -149,6 +150,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
     hasSyncChanges,
     syncChangeCount,
     refresh: loadGitData,
+    refreshAll,
   } = useGitStatus({
     currentProject,
     onStatusChange: useCallback(
@@ -181,6 +183,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
     sync: syncChanges,
   } = useGitCommit({
     projectPath: currentProject?.path ?? null,
+    expectedBranch: rawBranchName,
     stagedFiles,
     unstagedFiles,
     refresh: loadGitData,
@@ -188,9 +191,17 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
 
   const remoteReady = useGitRemoteStore((s) => {
     const remote = s.entries[currentProject?.path ?? ""]?.data;
-    return !!remote?.upstream && remote.branchName === rawBranchName && !branchInfo?.isDetached;
+    return !remote?.requiresFetch && !!remote?.upstream && remote.branchName === rawBranchName && !branchInfo?.isDetached;
   });
+  const remoteFetching = useGitRemoteStore((s) => !!s.fetching[currentProject?.path ?? ""]);
+  const remoteFetchError = useGitRemoteStore((s) => s.fetchErrors[currentProject?.path ?? ""]);
+  const remoteStateError = useGitRemoteStore((s) => s.entries[currentProject?.path ?? ""]?.error);
   const remoteBusy = useGitRemoteStore((s) => !!s.busy[currentProject?.path ?? ""]);
+
+  const gitActionsBlocked = gitOperationInProgress || !!statusError || remoteBusy;
+  const gitActionsBlockedReason = statusError
+    ? t("sidebar.gitRefreshFailed", { detail: statusError })
+    : remoteBusy ? t("sidebar.gitBusy") : gitOperationBlockedReason;
 
   const [generatingCommitMessage, setGeneratingCommitMessage] = useState(false);
   const [openingDiffPath, setOpeningDiffPath] = useState<string | null>(null);
@@ -292,15 +303,15 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
 
   const handleDiscard = useCallback(
     (file: GitFileStatus) => {
-      if (gitOperationInProgress) {
-        message.warning(gitOperationBlockedReason);
+      if (gitActionsBlocked) {
+        message.warning(gitActionsBlockedReason);
         return;
       }
       setDiscardConfirmFiles([file]);
       setDiscardConfirmTitle(t("sidebar.gitDiscardConfirm", { name: file.path }));
       setDiscardConfirmVisible(true);
     },
-    [gitOperationBlockedReason, gitOperationInProgress, t]
+    [gitActionsBlockedReason, gitActionsBlocked, t]
   );
 
   const handleOpenFile = useCallback(
@@ -333,8 +344,8 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
 
   const handleStageFile = useCallback(
     async (file: GitFileStatus) => {
-      if (!currentProject || gitOperationInProgress) {
-        if (gitOperationInProgress) message.warning(gitOperationBlockedReason);
+      if (!currentProject || gitActionsBlocked) {
+        if (gitActionsBlocked) message.warning(gitActionsBlockedReason);
         return;
       }
       const controller = getGitRefreshController();
@@ -351,13 +362,13 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
         if (operationId) controller?.markOperationEnd(operationId);
       }
     },
-    [currentProject, gitOperationBlockedReason, gitOperationInProgress, loadGitData, t]
+    [currentProject, gitActionsBlockedReason, gitActionsBlocked, loadGitData, t]
   );
 
   const handleUnstageFile = useCallback(
     async (file: GitFileStatus) => {
-      if (!currentProject || gitOperationInProgress) {
-        if (gitOperationInProgress) message.warning(gitOperationBlockedReason);
+      if (!currentProject || gitActionsBlocked) {
+        if (gitActionsBlocked) message.warning(gitActionsBlockedReason);
         return;
       }
       const controller = getGitRefreshController();
@@ -374,12 +385,12 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
         if (operationId) controller?.markOperationEnd(operationId);
       }
     },
-    [currentProject, gitOperationBlockedReason, gitOperationInProgress, loadGitData, t]
+    [currentProject, gitActionsBlockedReason, gitActionsBlocked, loadGitData, t]
   );
 
   const handleStageAll = useCallback(async () => {
-    if (!currentProject || unstagedFiles.length === 0 || gitOperationInProgress) {
-      if (gitOperationInProgress) message.warning(gitOperationBlockedReason);
+    if (!currentProject || unstagedFiles.length === 0 || gitActionsBlocked) {
+      if (gitActionsBlocked) message.warning(gitActionsBlockedReason);
       return;
     }
     const controller = getGitRefreshController();
@@ -396,21 +407,21 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
     } finally {
       if (operationId) controller?.markOperationEnd(operationId);
     }
-  }, [currentProject, gitOperationBlockedReason, gitOperationInProgress, unstagedFiles, loadGitData, t]);
+  }, [currentProject, gitActionsBlockedReason, gitActionsBlocked, unstagedFiles, loadGitData, t]);
 
   const handleDiscardAll = useCallback(() => {
-    if (gitOperationInProgress) {
-      message.warning(gitOperationBlockedReason);
+    if (gitActionsBlocked) {
+      message.warning(gitActionsBlockedReason);
       return;
     }
     setDiscardConfirmFiles(unstagedFiles);
     setDiscardConfirmTitle(t("sidebar.gitDiscardAllConfirm"));
     setDiscardConfirmVisible(true);
-  }, [gitOperationBlockedReason, gitOperationInProgress, unstagedFiles, t]);
+  }, [gitActionsBlockedReason, gitActionsBlocked, unstagedFiles, t]);
 
   const handleUnstageAll = useCallback(async () => {
-    if (!currentProject || stagedFiles.length === 0 || gitOperationInProgress) {
-      if (gitOperationInProgress) message.warning(gitOperationBlockedReason);
+    if (!currentProject || stagedFiles.length === 0 || gitActionsBlocked) {
+      if (gitActionsBlocked) message.warning(gitActionsBlockedReason);
       return;
     }
     const controller = getGitRefreshController();
@@ -427,7 +438,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
     } finally {
       if (operationId) controller?.markOperationEnd(operationId);
     }
-  }, [currentProject, gitOperationBlockedReason, gitOperationInProgress, stagedFiles, loadGitData, t]);
+  }, [currentProject, gitActionsBlockedReason, gitActionsBlocked, stagedFiles, loadGitData, t]);
 
   const handleChangesMenuClick = useCallback(
     ({ key }: { key: string }) => {
@@ -457,12 +468,12 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
           ? {
               key: "unstage",
               label: t("sidebar.gitUnstage"),
-              disabled: gitOperationInProgress,
+              disabled: gitActionsBlocked,
             }
           : {
               key: "stage",
               label: t("sidebar.gitStage"),
-              disabled: gitOperationInProgress,
+              disabled: gitActionsBlocked,
             },
       ];
 
@@ -471,7 +482,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
           key: "discard",
           label: t("sidebar.gitContextDiscardChanges", { defaultValue: "放弃更改" }),
           danger: true,
-          disabled: gitOperationInProgress,
+          disabled: gitActionsBlocked,
         });
       }
 
@@ -534,7 +545,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
       handleStageFile,
       handleUnstageFile,
       handleViewDiff,
-      gitOperationInProgress,
+      gitActionsBlocked,
       t,
     ]
   );
@@ -637,7 +648,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
   }
 
   // Not a git repo
-  if (!isRepo && !loading) {
+  if (isRepo === false && !statusError && !loading) {
     return (
       <div className="flex h-full flex-col px-5 pt-6">
         <div className="flex flex-col gap-3">
@@ -686,19 +697,22 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
           key={`${currentProject.path}:${rawBranchName}`}
           projectPath={currentProject.path}
           branch={branchInfo}
-          disabled={loading || committing || gitOperationInProgress}
+          disabled={loading || !!statusError || committing || gitActionsBlocked}
           refresh={loadGitData}
-          push={push}
-          pull={pull}
-          sync={syncChanges}
           menuItems={collapsePanelMenuItems}
           onMenuClick={handleCollapsePanelMenuClick}
         />
       </div>
 
+      {statusError && <div role="alert" className="px-3 py-2 text-xs text-[var(--cs-error)]">
+        <span>{t("sidebar.gitRefreshFailed", { detail: statusError })}</span>
+        <Button type="link" size="small" onClick={() => void loadGitData()}>{t("sidebar.remoteActions.retry")}</Button>
+      </div>}
       {/* Branch panel (collapsible) */}
       {showBranchPanel && (
         <GitBranchPanel
+          key={currentProject.path}
+          disabled={!!statusError || committing || remoteBusy || gitActionsBlocked}
           projectPath={currentProject?.path ?? null}
           currentBranch={branchName}
           visible={showBranchPanel}
@@ -742,19 +756,19 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
                 <span>{t("sidebar.gitChangesPanel")}</span>
               </button>
               <div className="flex items-center gap-1">
-                <Tooltip title={t("sidebar.gitRefresh")} mouseEnterDelay={0.4}>
+                <Tooltip title={remoteFetchError || remoteStateError || t("sidebar.gitRefresh")} mouseEnterDelay={0.4}>
                   <Button
                     type="text"
                     size="small"
-                    icon={loading ? <LoadingOutlined /> : <ReloadOutlined />}
+                    icon={loading || remoteFetching ? <LoadingOutlined /> : <ReloadOutlined />}
                     style={{
                       width: 24,
                       height: 24,
                       padding: 0,
-                      color: "var(--cs-text-secondary)",
+                      color: remoteFetchError || remoteStateError ? "var(--cs-error)" : "var(--cs-text-secondary)",
                     }}
-                    onClick={loadGitData}
-                    disabled={loading}
+                    onClick={() => void refreshAll()}
+                    disabled={loading || remoteFetching || remoteBusy}
                   />
                 </Tooltip>
               </div>
@@ -774,7 +788,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
                   hasSyncChanges={hasSyncChanges}
                   syncChangeCount={syncChangeCount}
                   operationState={operationState}
-                  committing={committing || remoteBusy}
+                  committing={committing || remoteBusy || !!statusError}
                   canGenerateCommitMessage={canGenerateCommitMessage}
                   generateCommitMessageHint={
                     defaultAgentId
@@ -788,6 +802,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
                   onCommitAmend={commitAmend}
                   onCommitAndPush={commitAndPush}
                   onCommitAndSync={commitAndSync}
+                  onPush={push}
                   onPull={pull}
                   onPullWithStash={pullWithStash}
                   onSyncChanges={syncChanges}
@@ -808,7 +823,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
                   onToggleFile={handleUnstageFile}
                   onToggleAll={handleUnstageAll}
                   buildFileMenu={buildFileMenu}
-                  actionsDisabled={gitOperationInProgress}
+                  actionsDisabled={gitActionsBlocked}
                 />
 
                 {/* Unstaged files */}
@@ -825,7 +840,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
                   onToggleFile={handleStageFile}
                   onToggleAll={handleStageAll}
                   buildFileMenu={buildFileMenu}
-                  actionsDisabled={gitOperationInProgress}
+                  actionsDisabled={gitActionsBlocked}
                   extraActions={
                     <Dropdown
                       trigger={["click"]}

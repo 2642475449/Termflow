@@ -229,16 +229,19 @@ fn git_repo_info_sync(project_path: String) -> Result<GitRepoInfo, String> {
     let path = crate::path_utils::normalize_input_path(&project_path);
     match Repository::open(&path) {
         Ok(repo) => {
-            let branch_info = resolve_branch_info(&repo).ok();
+            let branch_info = Some(resolve_branch_info(&repo)?);
             Ok(GitRepoInfo {
                 is_repo: true,
                 branch_info,
             })
         }
-        Err(_) => Ok(GitRepoInfo {
-            is_repo: false,
-            branch_info: None,
-        }),
+        Err(error) if error.code() == ErrorCode::NotFound && !path.join(".git").exists() => {
+            Ok(GitRepoInfo {
+                is_repo: false,
+                branch_info: None,
+            })
+        }
+        Err(error) => Err(format!("读取 Git 仓库失败: {}", error)),
     }
 }
 
@@ -372,6 +375,15 @@ mod tests {
         let signature = Signature::now("Termflow Test", "termflow@example.com").unwrap();
         repo.commit(Some("HEAD"), &signature, &signature, "initial", &tree, &[])
             .unwrap();
+    }
+
+    #[test]
+    fn distinguishes_a_plain_directory_from_a_broken_git_directory() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let path = temp.path().to_str().unwrap().to_string();
+        assert!(!super::git_repo_info_sync(path.clone()).unwrap().is_repo);
+        fs::write(temp.path().join(".git"), "gitdir: missing-directory").unwrap();
+        assert!(super::git_repo_info_sync(path).is_err());
     }
 
     #[test]

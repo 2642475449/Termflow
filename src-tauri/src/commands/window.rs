@@ -202,6 +202,30 @@ fn focus_window(window: &WebviewWindow) {
     let _ = window.set_focus();
 }
 
+/// 必须在 single-instance 插件转发参数并退出之前，由新进程授予已有进程前台权限。
+#[cfg(windows)]
+pub fn allow_existing_instance_foreground(identifier: &str) {
+    use windows::core::PCWSTR;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        AllowSetForegroundWindow, FindWindowW, GetWindowThreadProcessId,
+    };
+
+    // 与 tauri-plugin-single-instance 2 的消息窗口命名保持一致（未启用 semver）。
+    let class: Vec<u16> = format!("{identifier}-sic").encode_utf16().chain(Some(0)).collect();
+    let title: Vec<u16> = format!("{identifier}-siw").encode_utf16().chain(Some(0)).collect();
+    unsafe {
+        if let Ok(hwnd) = FindWindowW(PCWSTR(class.as_ptr()), PCWSTR(title.as_ptr())) {
+            let mut process_id = 0;
+            GetWindowThreadProcessId(hwnd, Some(&mut process_id));
+            if process_id != 0 {
+                if let Err(error) = AllowSetForegroundWindow(process_id) {
+                    eprintln!("Failed to grant existing instance foreground permission: {error}");
+                }
+            }
+        }
+    }
+}
+
 fn should_reuse_launcher_window(window_label: &str, launched_from_launcher: bool) -> bool {
     launched_from_launcher && window_label == "main"
 }
@@ -287,6 +311,9 @@ pub fn restore_main_window_context_on_startup(
 
     if let Some(main_window) = app.get_webview_window("main") {
         let _ = main_window.set_title(&window_title(&context));
+        if launch_project_path.is_some() {
+            focus_window(&main_window);
+        }
     }
 
     Ok(())
@@ -409,8 +436,7 @@ pub async fn open_project_window(
 
     if let Some(existing_label) = registry.get_label_by_project(&project_path) {
         if let Some(existing_window) = app.get_webview_window(&existing_label) {
-            let _ = existing_window.show();
-            let _ = existing_window.set_focus();
+            focus_window(&existing_window);
             if launched_from_launcher && existing_label != window.label() {
                 let _ = window.close();
             }
@@ -429,13 +455,13 @@ pub async fn open_project_window(
         let context = registry.bind_project(window.label(), project_path.clone(), project_name);
         let _ = window.set_title(&window_title(&context));
         let _ = app.emit_to(window.label(), "window-context-updated", &context);
+        focus_window(&window);
         return Ok(context);
     }
 
     let label = project_window_label(&project_path);
     if let Some(existing_window) = app.get_webview_window(&label) {
-        let _ = existing_window.show();
-        let _ = existing_window.set_focus();
+        focus_window(&existing_window);
         if close_secondary_launcher {
             let _ = window.close();
         }
@@ -457,6 +483,7 @@ pub async fn open_project_window(
     if close_secondary_launcher {
         let _ = window.close();
     }
+    focus_window(&project_window);
     Ok(context)
 }
 

@@ -12,16 +12,18 @@ import {
 } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import {
-  gitListBranches,
   gitCreateBranch,
   gitSwitchBranch,
   gitDeleteBranch,
   gitMergeBranch,
 } from "@/lib/api";
 import { refreshGitStateAndGraph } from "@/lib/gitGraphEvents";
+import { EMPTY_GIT_BRANCHES, useGitBranchesStore } from "@/store/slices/gitBranches";
+import { useGitRemoteStore } from "@/store/slices/gitRemote";
 import type { GitBranchListItem } from "@/types";
 
 interface GitBranchPanelProps {
+  disabled?: boolean;
   /** 当前项目路径 */
   projectPath: string | null;
   /** 当前分支名称 */
@@ -45,14 +47,17 @@ function isRemoteHeadBranch(name: string) {
  */
 export function GitBranchPanel({
   projectPath,
-  currentBranch: _currentBranch,
+  currentBranch,
+  disabled = false,
   visible,
   onClose,
   onBranchChanged,
 }: GitBranchPanelProps) {
   const { t } = useTranslation();
-  const [branches, setBranches] = useState<GitBranchListItem[]>([]);
-  const [loading, setLoading] = useState(false);
+  const { branches, loading, error } = useGitBranchesStore((s) => s.entries[projectPath ?? ""] ?? EMPTY_GIT_BRANCHES);
+  const refreshBranches = useGitBranchesStore((s) => s.refresh);
+  const busy = useGitRemoteStore((s) => !!s.busy[projectPath ?? ""]);
+  const blocked = disabled || busy || loading;
   const [creating, setCreating] = useState(false);
   const [newBranchName, setNewBranchName] = useState("");
   const [showCreateInput, setShowCreateInput] = useState(false);
@@ -62,31 +67,17 @@ export function GitBranchPanel({
   );
   const [operatingBranch, setOperatingBranch] = useState<string | null>(null);
 
-  // 加载分支列表
   const loadBranches = useCallback(async () => {
-    if (!projectPath) return;
-    setLoading(true);
-    try {
-      const list = await gitListBranches(projectPath);
-      setBranches(list);
-    } catch (e) {
-      message.error(
-        `加载分支列表失败: ${e instanceof Error ? e.message : String(e)}`
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [projectPath]);
-
+    if (projectPath) await refreshBranches(projectPath);
+  }, [projectPath, refreshBranches]);
   useEffect(() => {
-    if (visible) {
-      void loadBranches();
-    }
-  }, [visible, loadBranches]);
+    if (visible && !busy) void loadBranches();
+  }, [visible, currentBranch, busy, loadBranches]);
 
   // 创建分支
   const handleCreateBranch = useCallback(async () => {
-    if (!projectPath || !newBranchName.trim()) return;
+    if (!projectPath || !newBranchName.trim() || disabled || useGitRemoteStore.getState().busy[projectPath]) return;
+    useGitRemoteStore.getState().setBusy(projectPath, "branch");
     setCreating(true);
     try {
       await gitCreateBranch(projectPath, newBranchName.trim());
@@ -101,13 +92,15 @@ export function GitBranchPanel({
       );
     } finally {
       setCreating(false);
+      useGitRemoteStore.getState().setBusy(projectPath, null);
     }
-  }, [projectPath, newBranchName, loadBranches, onBranchChanged, t]);
+  }, [projectPath, disabled, newBranchName, loadBranches, onBranchChanged, t]);
 
   // 切换分支
   const handleSwitchBranch = useCallback(
     async (name: string) => {
-      if (!projectPath) return;
+      if (!projectPath || disabled || useGitRemoteStore.getState().busy[projectPath]) return;
+      useGitRemoteStore.getState().setBusy(projectPath, "branch");
       setOperatingBranch(name);
       try {
         await gitSwitchBranch(projectPath, name);
@@ -122,15 +115,17 @@ export function GitBranchPanel({
         );
       } finally {
         setOperatingBranch(null);
+        useGitRemoteStore.getState().setBusy(projectPath, null);
       }
     },
-    [projectPath, loadBranches, onBranchChanged, t]
+    [projectPath, disabled, loadBranches, onBranchChanged, t]
   );
 
   // 删除分支
   const handleDeleteBranch = useCallback(
     async (name: string, force: boolean = false) => {
-      if (!projectPath) return;
+      if (!projectPath || disabled || useGitRemoteStore.getState().busy[projectPath]) return;
+      useGitRemoteStore.getState().setBusy(projectPath, "branch");
       setOperatingBranch(name);
       try {
         await gitDeleteBranch(projectPath, name, force);
@@ -143,17 +138,19 @@ export function GitBranchPanel({
         );
       } finally {
         setOperatingBranch(null);
+        useGitRemoteStore.getState().setBusy(projectPath, null);
         setDeleteConfirmVisible(false);
         setDeleteTargetBranch(null);
       }
     },
-    [projectPath, loadBranches, onBranchChanged, t]
+    [projectPath, disabled, loadBranches, onBranchChanged, t]
   );
 
   // 合并分支
   const handleMergeBranch = useCallback(
     async (name: string) => {
-      if (!projectPath) return;
+      if (!projectPath || disabled || useGitRemoteStore.getState().busy[projectPath]) return;
+      useGitRemoteStore.getState().setBusy(projectPath, "branch");
       setOperatingBranch(name);
       try {
         const result = await gitMergeBranch(projectPath, name);
@@ -170,9 +167,10 @@ export function GitBranchPanel({
         );
       } finally {
         setOperatingBranch(null);
+        useGitRemoteStore.getState().setBusy(projectPath, null);
       }
     },
-    [projectPath, loadBranches, onBranchChanged, t]
+    [projectPath, disabled, loadBranches, onBranchChanged, t]
   );
 
   // 构建分支操作菜单
@@ -209,7 +207,7 @@ export function GitBranchPanel({
       }
 
       return {
-        items,
+        items: items.map((item) => item && item.type !== "divider" ? { ...item, disabled: blocked } : item),
         onClick: ({ key }) => {
           switch (key) {
             case "switch":
@@ -226,7 +224,7 @@ export function GitBranchPanel({
         },
       };
     },
-    [handleSwitchBranch, handleMergeBranch, t]
+    [handleSwitchBranch, handleMergeBranch, t, blocked]
   );
 
   // 分离本地和远程分支
@@ -297,13 +295,13 @@ export function GitBranchPanel({
             placeholder={t("sidebar.gitBranchNamePlaceholder")}
             onPressEnter={() => void handleCreateBranch()}
             style={{ fontSize: 12 }}
-            disabled={creating}
+            disabled={blocked}
           />
           <Button
             size="small"
             type="primary"
             loading={creating}
-            disabled={!newBranchName.trim()}
+            disabled={blocked || !newBranchName.trim()}
             onClick={() => void handleCreateBranch()}
             style={{ fontSize: 12 }}
           >
@@ -312,6 +310,10 @@ export function GitBranchPanel({
         </div>
       )}
 
+      {error && <div role="alert" className="px-3 py-2 text-xs text-[var(--cs-error)]">
+        {t("sidebar.gitRefreshFailed", { detail: error })}
+        <Button type="link" size="small" onClick={() => void loadBranches()}>{t("sidebar.remoteActions.retry")}</Button>
+      </div>}
       {/* 分支列表 */}
       <div className="flex-1 min-h-0 overflow-y-auto app-project-tree-scroll px-1 pb-1">
         {loading ? (
@@ -348,7 +350,7 @@ export function GitBranchPanel({
                           : "transparent",
                       }}
                       onClick={() => {
-                        if (!branch.isCurrent) {
+                        if (!branch.isCurrent && !blocked) {
                           void handleSwitchBranch(branch.name);
                         }
                       }}
@@ -419,6 +421,7 @@ export function GitBranchPanel({
                                 padding: 0,
                                 color: "var(--cs-text-tertiary)",
                               }}
+                              disabled={blocked}
                               loading={operatingBranch === branch.name}
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -445,7 +448,7 @@ export function GitBranchPanel({
                   {t("sidebar.gitRemoteBranches")}
                 </div>
                 {remoteBranches.map((branch) => {
-                  const canCheckout = !isRemoteHeadBranch(branch.name);
+                  const canCheckout = !blocked && !isRemoteHeadBranch(branch.name);
                   return (
                     <Dropdown
                       key={branch.name}
@@ -507,7 +510,8 @@ export function GitBranchPanel({
         open={deleteConfirmVisible}
         okText={t("common.delete")}
         cancelText={t("common.cancel")}
-        okButtonProps={{ danger: true }}
+        okButtonProps={{ danger: true, disabled: blocked }}
+        confirmLoading={!!operatingBranch}
         onOk={() => {
           if (deleteTargetBranch) {
             void handleDeleteBranch(deleteTargetBranch, false);

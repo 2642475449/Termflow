@@ -579,6 +579,13 @@
     "gitPushSuccess": "Pushed successfully",
     "gitPushFailed": "Push failed",
     "gitFetchFailed": "Failed to fetch remote updates",
+    "gitBusy": "A Git operation is in progress",
+    "gitSyncSuccess": "Sync completed",
+    "gitCommitRemotePartial": "Commit {{oid}} is saved locally, but the remote operation did not complete: {{detail}}. Retry the remote operation without committing again.",
+    "gitWorkflowUnknown": "The operation outcome is unknown: {{detail}}. Refresh and inspect commit history before retrying; do not repeat the commit blindly.",
+    "gitRefreshFailed": "Could not read Git status. The last successful data is retained: {{detail}}",
+    "gitRemoteSavedUnverified": "The remote URL was saved, but verification failed: {{detail}}. Retry fetching updates.",
+    "gitRemoteNeedsFetch": "The remote URL changed. Fetch updates to verify the new repository",
     "remoteActions": {
       "add": "Add Remote",
       "manage": "Manage Remotes",
@@ -607,6 +614,8 @@
       "pushWorking": "Pushing…",
       "pullWorking": "Pulling…",
       "syncWorking": "Syncing…",
+      "commitWorking": "Committing…",
+      "branchWorking": "Updating branch…",
       "retryWorking": "Loading…"
     },
     "gitConnectRemote": "Connect Remote",

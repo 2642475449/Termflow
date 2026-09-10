@@ -1,7 +1,7 @@
 use super::types::{GitPullWithStashResult, GitRemoteResult};
 use super::utils::{
     ensure_repository_allows_normal_commit, git_command, git_command_with_proxy, open_repo,
-    run_git_write,
+    run_git_read, run_git_write,
 };
 use crate::network_proxy::ResolvedNetworkProxy;
 use std::io::Read;
@@ -25,11 +25,15 @@ pub struct RemoteState {
     has_commit: bool,
     branches: Vec<String>,
     branch_name: Option<String>,
+    requires_fetch: bool,
 }
 
 #[tauri::command]
 pub async fn git_remote_state(project_path: String) -> Result<RemoteState, String> {
-    read_remote_state(&project_path)
+    run_git_read(project_path.clone(), "读取 Git 远程状态", move || {
+        read_remote_state(&project_path)
+    })
+    .await
 }
 
 fn read_remote_state(project_path: &str) -> Result<RemoteState, String> {
@@ -49,7 +53,8 @@ fn read_remote_state(project_path: &str) -> Result<RemoteState, String> {
         .filter(|h| h.is_branch())
         .and_then(|h| h.name())
         .and_then(|name| repo.branch_upstream_name(name).ok())
-        .and_then(|name| name.as_str().map(ToOwned::to_owned));
+        .and_then(|name| name.as_str().map(ToOwned::to_owned))
+        .filter(|name| repo.find_reference(name).is_ok());
     let branches = repo
         .branches(Some(git2::BranchType::Remote))
         .map_err(|e| e.to_string())?
@@ -66,6 +71,7 @@ fn read_remote_state(project_path: &str) -> Result<RemoteState, String> {
         .filter(|name| !name.ends_with("/HEAD"))
         .collect();
     Ok(RemoteState {
+        requires_fetch: remote_requires_fetch(&repo, None)?,
         remotes,
         upstream,
         branch_name: head
@@ -115,11 +121,69 @@ pub async fn git_save_remote(
 fn save_remote(project_path: &str, name: &str, url: &str, update: bool) -> Result<(), String> {
     let repo = open_repo(&project_path)?;
     if update {
-        repo.find_remote(&name).map_err(|e| e.to_string())?;
+        let old_url = repo
+            .find_remote(name)
+            .map_err(|e| e.to_string())?
+            .url()
+            .map(ToOwned::to_owned);
+        if old_url.as_deref() == Some(url) {
+            return Ok(());
+        }
+        // 配置标记跨窗口和应用重启保留，只有成功获取新远程后才能恢复同步。
+        repo.config()
+            .map_err(|e| e.to_string())?
+            .set_bool(&format!("remote.{}.termflowNeedsFetch", name), true)
+            .map_err(|e| e.to_string())?;
         repo.remote_set_url(&name, &url)
             .map_err(|e| e.to_string())?;
+        let prefix = format!("refs/remotes/{}/", name);
+        let refs = repo
+            .references()
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok().and_then(|r| r.name().map(ToOwned::to_owned)))
+            .filter(|r| r.starts_with(&prefix))
+            .collect::<Vec<_>>();
+        for name in refs {
+            repo.find_reference(&name)
+                .and_then(|mut r| r.delete())
+                .map_err(|e| e.to_string())?;
+        }
     } else {
         repo.remote(&name, &url).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+pub(super) fn remote_requires_fetch(
+    repo: &git2::Repository,
+    name: Option<&str>,
+) -> Result<bool, String> {
+    let config = repo.config().map_err(|e| e.to_string())?;
+    let names = repo.remotes().map_err(|e| e.to_string())?;
+    Ok(names
+        .iter()
+        .flatten()
+        .filter(|n| name.is_none_or(|name| name == *n))
+        .any(|n| {
+            config
+                .get_bool(&format!("remote.{}.termflowNeedsFetch", n))
+                .unwrap_or(false)
+        }))
+}
+
+fn mark_fetched(project_path: &str, remote_name: Option<&str>) -> Result<(), String> {
+    let repo = open_repo(project_path)?;
+    let names = repo.remotes().map_err(|e| e.to_string())?;
+    let mut config = repo.config().map_err(|e| e.to_string())?;
+    for name in names
+        .iter()
+        .flatten()
+        .filter(|n| remote_name.is_none_or(|name| name == *n))
+    {
+        let key = format!("remote.{}.termflowNeedsFetch", name);
+        if config.get_bool(&key).unwrap_or(false) {
+            config.set_bool(&key, false).map_err(|e| e.to_string())?;
+        }
     }
     Ok(())
 }
@@ -147,6 +211,9 @@ fn publish_branch(
     proxy: &ResolvedNetworkProxy,
 ) -> Result<GitRemoteResult, String> {
     let repo = open_repo(&project_path)?;
+    if remote_requires_fetch(&repo, Some(name))? {
+        return Err("远程地址已改变，请先获取更新验证新仓库".into());
+    }
     let head = repo.head().map_err(|e| e.to_string())?;
     if !head.is_branch() || head.shorthand() != Some(branch) {
         return Err("当前分支已改变，请重新打开发布窗口".to_string());
@@ -282,7 +349,7 @@ fn wait_with_timeout(mut child: Child, timeout: Duration) -> Result<Output, Stri
     })
 }
 
-fn run_remote_command(
+pub(super) fn run_remote_command(
     project_path: &str,
     args: &[&str],
     success_message: &str,
@@ -308,6 +375,14 @@ fn run_remote_command(
         .map_err(|e| format!("执行 git 命令失败: {}", e))?;
     let output = wait_with_timeout(output, REMOTE_COMMAND_TIMEOUT)?;
 
+    if output.status.success() && args.first() == Some(&"fetch") {
+        let name = args
+            .iter()
+            .skip(1)
+            .find(|arg| !arg.starts_with('-'))
+            .copied();
+        mark_fetched(project_path, name)?;
+    }
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
     let combined = format!("{}{}", stdout, stderr).trim().to_string();
@@ -761,6 +836,51 @@ mod tests {
             Some("refs/remotes/origin/feature")
         );
         assert_eq!(state.branch_name.as_deref(), Some("feature"));
+    }
+
+    #[test]
+    fn changed_remote_url_invalidates_tracking_until_a_successful_fetch() {
+        let (temp, local, _peer) = create_remote_clones();
+        let path = local.to_str().unwrap();
+        let empty_remote = temp.path().join("new-remote.git");
+        fs::create_dir(&empty_remote).unwrap();
+        run_git(&empty_remote, &["init", "--bare"]);
+        save_remote(path, "origin", empty_remote.to_str().unwrap(), true).unwrap();
+        let changed = read_remote_state(path).unwrap();
+        assert!(changed.requires_fetch);
+        assert!(changed.branches.is_empty());
+        // 重新读取/打开仓库不能消除待验证标记。
+        assert!(read_remote_state(path).unwrap().requires_fetch);
+        let fetched = run_remote_command(
+            path,
+            &["fetch", "--all", "--prune"],
+            "ok",
+            "failed",
+            &direct_proxy(),
+        )
+        .unwrap();
+        assert!(fetched.success);
+        let verified = read_remote_state(path).unwrap();
+        assert!(!verified.requires_fetch);
+        assert!(verified.branches.is_empty());
+        assert!(verified.upstream.is_none());
+        save_remote(
+            path,
+            "origin",
+            temp.path().join("missing.git").to_str().unwrap(),
+            true,
+        )
+        .unwrap();
+        let failed = run_remote_command(
+            path,
+            &["fetch", "--all", "--prune"],
+            "ok",
+            "failed",
+            &direct_proxy(),
+        )
+        .unwrap();
+        assert!(!failed.success);
+        assert!(read_remote_state(path).unwrap().requires_fetch);
     }
 
     fn direct_proxy() -> ResolvedNetworkProxy {
