@@ -21,6 +21,18 @@ const VOICE_OVERLAY_WIDTH: u32 = 520;
 const VOICE_OVERLAY_HEIGHT: u32 = 88;
 const VOICE_OVERLAY_BOTTOM_MARGIN: i32 = 104;
 
+// 隐藏的语音窗口不能延长桌面工作区的生命周期。
+pub fn should_exit_after_window_destroyed<'a>(
+    destroyed_label: &str,
+    remaining_labels: impl IntoIterator<Item = &'a str>,
+) -> bool {
+    let is_workspace = |label: &str| label != VOICE_OVERLAY_LABEL && label != VOICE_WORKER_LABEL;
+    is_workspace(destroyed_label)
+        && !remaining_labels.into_iter().any(|label| {
+            label != destroyed_label && is_workspace(label)
+        })
+}
+
 #[derive(Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum WindowMode {
@@ -795,6 +807,31 @@ fn window_title(context: &WindowProjectContext) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn closing_last_workspace_exits_even_with_hidden_voice_windows() {
+        assert!(should_exit_after_window_destroyed(
+            "main", ["main", VOICE_OVERLAY_LABEL, VOICE_WORKER_LABEL],
+        ));
+        assert!(should_exit_after_window_destroyed(
+            "project:1", [VOICE_OVERLAY_LABEL, VOICE_WORKER_LABEL],
+        ));
+        assert!(should_exit_after_window_destroyed("main", []));
+    }
+
+    #[test]
+    fn closing_workspace_preserves_other_workspaces() {
+        assert!(!should_exit_after_window_destroyed(
+            "main", ["project:1", VOICE_WORKER_LABEL],
+        ));
+        assert!(!should_exit_after_window_destroyed("project:1", ["main"]));
+    }
+
+    #[test]
+    fn closing_voice_windows_does_not_exit_the_app() {
+        assert!(!should_exit_after_window_destroyed(VOICE_OVERLAY_LABEL, []));
+        assert!(!should_exit_after_window_destroyed(VOICE_WORKER_LABEL, ["main"]));
+    }
 
     fn temporary_project(name: &str) -> std::path::PathBuf {
         let path =

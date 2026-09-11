@@ -3,7 +3,7 @@ pub mod schema;
 use parking_lot::Mutex;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::{collections::BTreeMap, fs, sync::Arc};
+use std::{collections::BTreeMap, fs, path::Path, sync::Arc};
 use tauri::{AppHandle, Manager};
 
 use crate::network_proxy::{default_no_proxy, default_proxy_mode, NetworkProxySettings};
@@ -97,6 +97,14 @@ fn default_feishu_notification_threshold_ms() -> i64 {
     300_000
 }
 
+fn default_terminal_completion_notification_threshold_ms() -> i64 {
+    30_000
+}
+
+fn default_terminal_completion_notifications_enabled() -> bool {
+    true
+}
+
 fn default_agent_permission_defaults() -> serde_json::Value {
     serde_json::Value::Object(Default::default())
 }
@@ -187,6 +195,10 @@ pub struct PersistentSettingsRecord {
     pub notification_sound_enabled: bool,
     pub notification_sound_map: NotificationSoundMapRecord,
     pub notification_threshold_ms: i64,
+    #[serde(default = "default_terminal_completion_notifications_enabled")]
+    pub terminal_completion_notifications_enabled: bool,
+    #[serde(default = "default_terminal_completion_notification_threshold_ms")]
+    pub terminal_completion_notification_threshold_ms: i64,
     #[serde(default = "default_remote_notifications")]
     pub remote_notifications: serde_json::Value,
     // Kept in sync with `remote_notifications.feishu` for databases and
@@ -240,6 +252,9 @@ impl Default for PersistentSettingsRecord {
             notification_sound_enabled: true,
             notification_sound_map: NotificationSoundMapRecord::default(),
             notification_threshold_ms: 10_000,
+            terminal_completion_notifications_enabled: default_terminal_completion_notifications_enabled(),
+            terminal_completion_notification_threshold_ms:
+                default_terminal_completion_notification_threshold_ms(),
             remote_notifications: default_remote_notifications(),
             feishu_notification_enabled: false,
             feishu_notification_threshold_ms: default_feishu_notification_threshold_ms(),
@@ -357,6 +372,37 @@ pub struct AgentUsageStorageStatus {
     pub last_error: Option<String>,
 }
 
+#[derive(Debug, Clone)]
+pub struct ClipboardContentObject {
+    pub content_hash: String,
+    pub relative_path: String,
+    pub size_bytes: u64,
+    pub unreferenced_at_ms: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClipboardAttachmentRecord {
+    pub attachment_id: String,
+    pub session_id: String,
+    pub content_hash: String,
+    pub path: String,
+    pub file_name: String,
+    pub mime_type: String,
+    pub size_bytes: u64,
+    pub status: String,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
+    pub available: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClipboardStorageTotals {
+    pub protected_bytes: u64,
+    pub reclaimable_bytes: u64,
+}
+
 impl Database {
     pub fn init(app: &AppHandle) -> Result<Arc<Self>, String> {
         let app_data_dir = app
@@ -391,6 +437,419 @@ impl Database {
         Self {
             conn: Mutex::new(conn),
         }
+    }
+
+    pub fn attach_clipboard_image(
+        &self,
+        attachment_id: &str,
+        session_id: &str,
+        content_hash: &str,
+        relative_path: &str,
+        mime_type: &str,
+        size_bytes: u64,
+        now_ms: i64,
+    ) -> Result<ClipboardAttachmentRecord, String> {
+        let mut conn = self.conn.lock();
+        let transaction = conn
+            .transaction()
+            .map_err(|error| format!("开始剪贴板图片事务失败: {error}"))?;
+
+        let existing = transaction
+            .query_row(
+                "SELECT relative_path, mime_type, size_bytes, created_at_ms
+                 FROM clipboard_content_objects WHERE content_hash = ?1",
+                [content_hash],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, i64>(2)?,
+                        row.get::<_, i64>(3)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(|error| format!("查询剪贴板图片对象失败: {error}"))?;
+
+        let (stored_relative_path, stored_mime_type, stored_size_bytes, _object_created_at_ms) =
+            if let Some(existing) = existing {
+                transaction
+                    .execute(
+                        "UPDATE clipboard_content_objects
+                         SET last_used_at_ms = ?2, unreferenced_at_ms = NULL
+                         WHERE content_hash = ?1",
+                        params![content_hash, now_ms],
+                    )
+                    .map_err(|error| format!("更新剪贴板图片对象失败: {error}"))?;
+                existing
+            } else {
+                let stored_size_bytes = u64_to_sqlite_integer(size_bytes);
+                transaction
+                    .execute(
+                        "INSERT INTO clipboard_content_objects
+                         (content_hash, relative_path, mime_type, size_bytes, created_at_ms, last_used_at_ms, unreferenced_at_ms)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?5, NULL)",
+                        params![
+                            content_hash,
+                            relative_path,
+                            mime_type,
+                            stored_size_bytes,
+                            now_ms,
+                        ],
+                    )
+                    .map_err(|error| format!("写入剪贴板图片对象失败: {error}"))?;
+                (
+                    relative_path.to_string(),
+                    mime_type.to_string(),
+                    stored_size_bytes,
+                    now_ms,
+                )
+            };
+
+        transaction
+            .execute(
+                "INSERT INTO clipboard_attachments
+                 (attachment_id, session_id, content_hash, status, created_at_ms, updated_at_ms)
+                 VALUES (?1, ?2, ?3, 'ready', ?4, ?4)",
+                params![attachment_id, session_id, content_hash, now_ms],
+            )
+            .map_err(|error| format!("创建剪贴板图片附件失败: {error}"))?;
+        transaction
+            .commit()
+            .map_err(|error| format!("提交剪贴板图片事务失败: {error}"))?;
+
+        Ok(ClipboardAttachmentRecord {
+            attachment_id: attachment_id.to_string(),
+            session_id: session_id.to_string(),
+            content_hash: content_hash.to_string(),
+            path: stored_relative_path.clone(),
+            file_name: Path::new(&stored_relative_path)
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or("clipboard-image")
+                .to_string(),
+            mime_type: stored_mime_type,
+            size_bytes: stored_size_bytes.max(0) as u64,
+            status: "ready".to_string(),
+            created_at_ms: now_ms,
+            updated_at_ms: now_ms,
+            available: true,
+        })
+    }
+
+    pub fn get_clipboard_content_object(
+        &self,
+        content_hash: &str,
+    ) -> Result<Option<ClipboardContentObject>, String> {
+        let conn = self.conn.lock();
+        conn.query_row(
+            "SELECT content_hash, relative_path, size_bytes, unreferenced_at_ms
+             FROM clipboard_content_objects WHERE content_hash = ?1",
+            [content_hash],
+            clipboard_content_object_from_row,
+        )
+        .optional()
+        .map_err(|error| format!("读取剪贴板图片对象失败: {error}"))
+    }
+
+    pub fn list_clipboard_attachments(
+        &self,
+        session_id: &str,
+    ) -> Result<Vec<ClipboardAttachmentRecord>, String> {
+        let conn = self.conn.lock();
+        let mut statement = conn
+            .prepare(
+                "SELECT a.attachment_id, a.session_id, a.content_hash, o.relative_path, o.mime_type,
+                        o.size_bytes, a.status, a.created_at_ms, a.updated_at_ms
+                 FROM clipboard_attachments a
+                 JOIN clipboard_content_objects o ON o.content_hash = a.content_hash
+                 WHERE a.session_id = ?1 AND a.status <> 'released'
+                 ORDER BY a.created_at_ms ASC",
+            )
+            .map_err(|error| format!("准备读取剪贴板附件失败: {error}"))?;
+        let records = statement
+            .query_map([session_id], clipboard_attachment_from_row)
+            .map_err(|error| format!("读取剪贴板附件失败: {error}"))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("解析剪贴板附件失败: {error}"))?;
+        Ok(records)
+    }
+
+    pub fn recover_interrupted_clipboard_attachment_operations(
+        &self,
+        session_id: &str,
+        now_ms: i64,
+    ) -> Result<(), String> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "UPDATE clipboard_attachments
+             SET status = 'deliveryUnknown', updated_at_ms = ?2
+             WHERE session_id = ?1 AND status IN ('inserting', 'sending')",
+            params![session_id, now_ms],
+        )
+        .map_err(|error| format!("恢复中断的剪贴板附件操作失败: {error}"))?;
+        Ok(())
+    }
+
+    pub fn get_clipboard_attachment(
+        &self,
+        session_id: &str,
+        attachment_id: &str,
+    ) -> Result<ClipboardAttachmentRecord, String> {
+        let conn = self.conn.lock();
+        conn.query_row(
+            "SELECT a.attachment_id, a.session_id, a.content_hash, o.relative_path, o.mime_type,
+                    o.size_bytes, a.status, a.created_at_ms, a.updated_at_ms
+             FROM clipboard_attachments a
+             JOIN clipboard_content_objects o ON o.content_hash = a.content_hash
+             WHERE a.session_id = ?1 AND a.attachment_id = ?2 AND a.status <> 'released'",
+            params![session_id, attachment_id],
+            clipboard_attachment_from_row,
+        )
+        .map_err(|error| match error {
+            rusqlite::Error::QueryReturnedNoRows => "剪贴板附件不存在或不属于当前会话".to_string(),
+            other => format!("读取剪贴板附件失败: {other}"),
+        })
+    }
+
+    pub fn set_clipboard_attachment_status(
+        &self,
+        session_id: &str,
+        attachment_id: &str,
+        status: &str,
+        now_ms: i64,
+    ) -> Result<ClipboardAttachmentRecord, String> {
+        let mut conn = self.conn.lock();
+        let transaction = conn
+            .transaction()
+            .map_err(|error| format!("开始附件状态事务失败: {error}"))?;
+        let content_hash = transaction
+            .query_row(
+                "SELECT content_hash FROM clipboard_attachments
+                 WHERE attachment_id = ?1 AND session_id = ?2 AND status <> 'released'",
+                params![attachment_id, session_id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|error| format!("查询剪贴板附件状态失败: {error}"))?
+            .ok_or_else(|| "剪贴板附件不存在或不属于当前会话".to_string())?;
+
+        transaction
+            .execute(
+                "UPDATE clipboard_attachments SET status = ?3, updated_at_ms = ?4
+                 WHERE attachment_id = ?1 AND session_id = ?2",
+                params![attachment_id, session_id, status, now_ms],
+            )
+            .map_err(|error| format!("更新剪贴板附件状态失败: {error}"))?;
+        transaction
+            .execute(
+                "UPDATE clipboard_content_objects
+                 SET last_used_at_ms = ?2, unreferenced_at_ms = NULL
+                 WHERE content_hash = ?1",
+                params![content_hash, now_ms],
+            )
+            .map_err(|error| format!("更新剪贴板图片使用时间失败: {error}"))?;
+        transaction
+            .commit()
+            .map_err(|error| format!("提交附件状态事务失败: {error}"))?;
+        drop(conn);
+        self.get_clipboard_attachment(session_id, attachment_id)
+    }
+
+    pub fn release_clipboard_attachment(
+        &self,
+        session_id: &str,
+        attachment_id: &str,
+        now_ms: i64,
+    ) -> Result<(), String> {
+        self.release_clipboard_attachments(session_id, Some(attachment_id), now_ms)
+    }
+
+    pub fn release_clipboard_session_attachments(
+        &self,
+        session_id: &str,
+        now_ms: i64,
+    ) -> Result<(), String> {
+        self.release_clipboard_attachments(session_id, None, now_ms)
+    }
+
+    fn release_clipboard_attachments(
+        &self,
+        session_id: &str,
+        attachment_id: Option<&str>,
+        now_ms: i64,
+    ) -> Result<(), String> {
+        let mut conn = self.conn.lock();
+        let transaction = conn
+            .transaction()
+            .map_err(|error| format!("开始释放附件事务失败: {error}"))?;
+        let hashes = match attachment_id {
+            Some(id) => {
+                let mut statement = transaction
+                    .prepare(
+                        "SELECT content_hash FROM clipboard_attachments
+                         WHERE session_id = ?1 AND attachment_id = ?2 AND status <> 'released'",
+                    )
+                    .map_err(|error| format!("准备读取待释放附件失败: {error}"))?;
+                let rows = statement
+                    .query_map(params![session_id, id], |row| row.get::<_, String>(0))
+                    .map_err(|error| format!("读取待释放附件失败: {error}"))?;
+                rows.collect::<Result<Vec<_>, _>>()
+                    .map_err(|error| format!("解析待释放附件失败: {error}"))?
+            }
+            None => {
+                let mut statement = transaction
+                    .prepare(
+                        "SELECT content_hash FROM clipboard_attachments
+                         WHERE session_id = ?1 AND status <> 'released'",
+                    )
+                    .map_err(|error| format!("准备读取待释放附件失败: {error}"))?;
+                let rows = statement
+                    .query_map([session_id], |row| row.get::<_, String>(0))
+                    .map_err(|error| format!("读取待释放附件失败: {error}"))?;
+                rows.collect::<Result<Vec<_>, _>>()
+                    .map_err(|error| format!("解析待释放附件失败: {error}"))?
+            }
+        };
+
+        if attachment_id.is_some() && hashes.is_empty() {
+            return Err("剪贴板附件不存在或已移除".to_string());
+        }
+
+        match attachment_id {
+            Some(id) => transaction
+                .execute(
+                    "UPDATE clipboard_attachments SET status = 'released', updated_at_ms = ?3
+                     WHERE session_id = ?1 AND attachment_id = ?2 AND status <> 'released'",
+                    params![session_id, id, now_ms],
+                ),
+            None => transaction
+                .execute(
+                    "UPDATE clipboard_attachments SET status = 'released', updated_at_ms = ?2
+                     WHERE session_id = ?1 AND status <> 'released'",
+                    params![session_id, now_ms],
+                ),
+        }
+        .map_err(|error| format!("释放剪贴板附件失败: {error}"))?;
+
+        for content_hash in hashes {
+            let has_active_reference = transaction
+                .query_row(
+                    "SELECT EXISTS(
+                        SELECT 1 FROM clipboard_attachments
+                        WHERE content_hash = ?1 AND status <> 'released'
+                    )",
+                    [content_hash.as_str()],
+                    |row| row.get::<_, i64>(0),
+                )
+                .map_err(|error| format!("检查剪贴板图片引用失败: {error}"))?
+                != 0;
+            if !has_active_reference {
+                transaction
+                    .execute(
+                        "UPDATE clipboard_content_objects
+                         SET unreferenced_at_ms = COALESCE(unreferenced_at_ms, ?2), last_used_at_ms = ?2
+                         WHERE content_hash = ?1",
+                        params![content_hash, now_ms],
+                    )
+                    .map_err(|error| format!("标记可回收剪贴板图片失败: {error}"))?;
+            }
+        }
+
+        transaction
+            .commit()
+            .map_err(|error| format!("提交释放附件事务失败: {error}"))?;
+        Ok(())
+    }
+
+    pub fn clipboard_storage_totals(&self) -> Result<ClipboardStorageTotals, String> {
+        let conn = self.conn.lock();
+        let (protected_bytes, reclaimable_bytes) = conn
+            .query_row(
+                "SELECT
+                    COALESCE(SUM(CASE WHEN EXISTS(
+                        SELECT 1 FROM clipboard_attachments a
+                        WHERE a.content_hash = o.content_hash AND a.status <> 'released'
+                    ) THEN o.size_bytes ELSE 0 END), 0),
+                    COALESCE(SUM(CASE WHEN NOT EXISTS(
+                        SELECT 1 FROM clipboard_attachments a
+                        WHERE a.content_hash = o.content_hash AND a.status <> 'released'
+                    ) THEN o.size_bytes ELSE 0 END), 0)
+                 FROM clipboard_content_objects o",
+                [],
+                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
+            )
+            .map_err(|error| format!("统计剪贴板图片容量失败: {error}"))?;
+        Ok(ClipboardStorageTotals {
+            protected_bytes: protected_bytes.max(0) as u64,
+            reclaimable_bytes: reclaimable_bytes.max(0) as u64,
+        })
+    }
+
+    pub fn list_clipboard_gc_candidates(&self) -> Result<Vec<ClipboardContentObject>, String> {
+        let conn = self.conn.lock();
+        let mut statement = conn
+            .prepare(
+                "SELECT o.content_hash, o.relative_path, o.size_bytes, o.unreferenced_at_ms
+                 FROM clipboard_content_objects o
+                 WHERE NOT EXISTS(
+                    SELECT 1 FROM clipboard_attachments a
+                    WHERE a.content_hash = o.content_hash AND a.status <> 'released'
+                 )
+                 ORDER BY o.last_used_at_ms ASC, o.created_at_ms ASC",
+            )
+            .map_err(|error| format!("准备读取可回收剪贴板图片失败: {error}"))?;
+        let rows = statement
+            .query_map([], clipboard_content_object_from_row)
+            .map_err(|error| format!("读取可回收剪贴板图片失败: {error}"))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("解析可回收剪贴板图片失败: {error}"))
+    }
+
+    pub fn delete_clipboard_content_object_if_unreferenced(
+        &self,
+        content_hash: &str,
+    ) -> Result<bool, String> {
+        let conn = self.conn.lock();
+        let affected = conn
+            .execute(
+                "DELETE FROM clipboard_content_objects
+                 WHERE content_hash = ?1 AND NOT EXISTS(
+                    SELECT 1 FROM clipboard_attachments a
+                    WHERE a.content_hash = clipboard_content_objects.content_hash
+                      AND a.status <> 'released'
+                 )",
+                [content_hash],
+            )
+            .map_err(|error| format!("删除可回收剪贴板图片记录失败: {error}"))?;
+        Ok(affected > 0)
+    }
+
+    pub fn list_clipboard_content_objects(&self) -> Result<Vec<ClipboardContentObject>, String> {
+        let conn = self.conn.lock();
+        let mut statement = conn
+            .prepare(
+                "SELECT content_hash, relative_path, size_bytes, unreferenced_at_ms
+                 FROM clipboard_content_objects",
+            )
+            .map_err(|error| format!("准备读取剪贴板图片对象失败: {error}"))?;
+        let rows = statement
+            .query_map([], clipboard_content_object_from_row)
+            .map_err(|error| format!("读取剪贴板图片对象失败: {error}"))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("解析剪贴板图片对象失败: {error}"))
+    }
+
+    pub fn mark_clipboard_content_missing(&self, content_hash: &str, now_ms: i64) -> Result<(), String> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "UPDATE clipboard_attachments
+             SET status = 'failed', updated_at_ms = ?2
+             WHERE content_hash = ?1 AND status <> 'released'",
+            params![content_hash, now_ms],
+        )
+        .map_err(|error| format!("标记缺失剪贴板附件失败: {error}"))?;
+        Ok(())
     }
 
     pub fn has_any_settings(&self) -> Result<bool, String> {
@@ -454,6 +913,16 @@ impl Database {
             .unwrap_or(settings.notification_sound_map);
         settings.notification_threshold_ms = read_setting(&conn, "notification.thresholdMs")?
             .unwrap_or(settings.notification_threshold_ms);
+        settings.terminal_completion_notifications_enabled = read_setting(
+            &conn,
+            "terminal.completionNotificationsEnabled",
+        )?
+        .unwrap_or(settings.terminal_completion_notifications_enabled);
+        settings.terminal_completion_notification_threshold_ms = read_setting(
+            &conn,
+            "terminal.completionNotificationThresholdMs",
+        )?
+        .unwrap_or(settings.terminal_completion_notification_threshold_ms);
         settings.remote_notifications = read_setting(&conn, "notification.remoteNotifications")?
             .unwrap_or(settings.remote_notifications);
         settings.feishu_notification_enabled = read_setting(&conn, "notification.feishu.enabled")?
@@ -636,6 +1105,16 @@ impl Database {
             &conn,
             "notification.thresholdMs",
             &settings.notification_threshold_ms,
+        )?;
+        write_setting(
+            &conn,
+            "terminal.completionNotificationsEnabled",
+            &settings.terminal_completion_notifications_enabled,
+        )?;
+        write_setting(
+            &conn,
+            "terminal.completionNotificationThresholdMs",
+            &settings.terminal_completion_notification_threshold_ms,
         )?;
         write_setting(
             &conn,
@@ -936,6 +1415,40 @@ impl Database {
     }
 }
 
+fn clipboard_content_object_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ClipboardContentObject> {
+    let size_bytes = row.get::<_, i64>(2)?;
+    Ok(ClipboardContentObject {
+        content_hash: row.get(0)?,
+        relative_path: row.get(1)?,
+        size_bytes: size_bytes.max(0) as u64,
+        unreferenced_at_ms: row.get(3)?,
+    })
+}
+
+fn clipboard_attachment_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ClipboardAttachmentRecord> {
+    let relative_path = row.get::<_, String>(3)?;
+    let size_bytes = row.get::<_, i64>(5)?;
+    Ok(ClipboardAttachmentRecord {
+        attachment_id: row.get(0)?,
+        session_id: row.get(1)?,
+        content_hash: row.get(2)?,
+        path: relative_path.clone(),
+        file_name: Path::new(&relative_path)
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("clipboard-image")
+            .to_string(),
+        mime_type: row.get(4)?,
+        size_bytes: size_bytes.max(0) as u64,
+        status: row.get(6)?,
+        created_at_ms: row.get(7)?,
+        updated_at_ms: row.get(8)?,
+        // The database has no access to the cache root. The image command
+        // resolves the controlled path and replaces this with the real value.
+        available: true,
+    })
+}
+
 fn u64_to_sqlite_integer(value: u64) -> i64 {
     value.min(i64::MAX as u64) as i64
 }
@@ -1061,6 +1574,19 @@ mod tests {
     }
 
     #[test]
+    fn terminal_completion_notification_preferences_remain_backward_compatible() {
+        let mut value = serde_json::to_value(PersistentSettingsRecord::default()).unwrap();
+        let object = value.as_object_mut().unwrap();
+        object.remove("terminalCompletionNotificationsEnabled");
+        object.remove("terminalCompletionNotificationThresholdMs");
+
+        let restored: PersistentSettingsRecord = serde_json::from_value(value).unwrap();
+
+        assert!(restored.terminal_completion_notifications_enabled);
+        assert_eq!(restored.terminal_completion_notification_threshold_ms, 30_000);
+    }
+
+    #[test]
     fn persistent_settings_without_remote_notifications_remain_backward_compatible() {
         let mut value = serde_json::to_value(PersistentSettingsRecord::default()).unwrap();
         value.as_object_mut().unwrap().remove("remoteNotifications");
@@ -1125,6 +1651,93 @@ mod tests {
                 .unwrap()
                 .terminal_scrollback,
             20_000
+        );
+    }
+
+    #[test]
+    fn terminal_completion_notification_preferences_round_trip_through_the_database() {
+        let database = Database::open_in_memory();
+        let mut settings = PersistentSettingsRecord::default();
+        settings.terminal_completion_notifications_enabled = false;
+        settings.terminal_completion_notification_threshold_ms = 60_000;
+
+        database.save_persistent_settings(&settings).unwrap();
+
+        let restored = database.load_persistent_settings().unwrap();
+        assert!(!restored.terminal_completion_notifications_enabled);
+        assert_eq!(restored.terminal_completion_notification_threshold_ms, 60_000);
+    }
+
+    #[test]
+    fn clipboard_attachments_deduplicate_content_and_release_by_reference() {
+        let database = Database::open_in_memory();
+        let hash = "a".repeat(64);
+        database
+            .attach_clipboard_image(
+                "attachment-1",
+                "session-1",
+                &hash,
+                "objects/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png",
+                "image/png",
+                128,
+                10,
+            )
+            .unwrap();
+        database
+            .attach_clipboard_image(
+                "attachment-2",
+                "session-2",
+                &hash,
+                "objects/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png",
+                "image/png",
+                128,
+                20,
+            )
+            .unwrap();
+
+        assert_eq!(database.clipboard_storage_totals().unwrap().protected_bytes, 128);
+        database
+            .release_clipboard_attachment("session-1", "attachment-1", 30)
+            .unwrap();
+        assert_eq!(database.clipboard_storage_totals().unwrap().protected_bytes, 128);
+
+        database
+            .release_clipboard_session_attachments("session-2", 40)
+            .unwrap();
+        let totals = database.clipboard_storage_totals().unwrap();
+        assert_eq!(totals.protected_bytes, 0);
+        assert_eq!(totals.reclaimable_bytes, 128);
+        let candidates = database.list_clipboard_gc_candidates().unwrap();
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].content_hash, hash);
+    }
+
+    #[test]
+    fn interrupted_clipboard_attachment_operations_become_unknown() {
+        let database = Database::open_in_memory();
+        let hash = "b".repeat(64);
+        database
+            .attach_clipboard_image(
+                "attachment-1",
+                "session-1",
+                &hash,
+                "objects/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png",
+                "image/png",
+                128,
+                10,
+            )
+            .unwrap();
+        database
+            .set_clipboard_attachment_status("session-1", "attachment-1", "inserting", 20)
+            .unwrap();
+
+        database
+            .recover_interrupted_clipboard_attachment_operations("session-1", 30)
+            .unwrap();
+
+        assert_eq!(
+            database.list_clipboard_attachments("session-1").unwrap()[0].status,
+            "deliveryUnknown"
         );
     }
 

@@ -1,4 +1,6 @@
 import type { AiAgentId, ClaudeCliInfo, GitCommitMessageProfile, NetworkProxyMode, ProjectOpenBehavior, Session, WindowMode, WindowProjectContext } from "@/types";
+import type { TerminalCompletionNotificationSlice } from "./slices/terminalCompletionNotification";
+import type { TerminalCompletionRuntimeSlice } from "./slices/terminalCompletionRuntime";
 
 export type ThemeMode = "light-glass" | "light-warm" | "dark-starry" | "dark-mocha";
 export type ThemeCategory = "light" | "dark" | "system";
@@ -40,7 +42,8 @@ export type SessionEventType =
   | "process_exit"
   | "process_error"
   | "hook_error"
-  | "heartbeat_timeout";
+  | "heartbeat_timeout"
+  | "terminal_command_complete";
 
 export type TabKind = "session" | "settings" | "diff" | "preview" | "file";
 export type TabDropPosition = "before" | "after";
@@ -147,7 +150,9 @@ export interface ProjectWorkspace {
   focusedTabId: string | null;
 }
 
-export interface AppState {
+export interface AppState
+  extends TerminalCompletionNotificationSlice,
+    TerminalCompletionRuntimeSlice {
   windowContextReady: boolean;
   windowMode: WindowMode;
   windowLabel: string;

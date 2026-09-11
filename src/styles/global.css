@@ -117,6 +117,127 @@
   opacity: 1 !important;
 }
 
+.app-terminal-attachment-bar {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--cs-border);
+  background: var(--cs-bg-card-solid, var(--cs-bg-card));
+  color: var(--cs-text-primary);
+  padding: 8px 10px;
+}
+
+.app-terminal-attachment-bar__heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.app-terminal-attachment-bar__hint,
+.app-terminal-attachment-card__meta {
+  color: var(--cs-text-secondary);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.app-terminal-attachment-bar__items {
+  display: flex;
+  gap: 8px;
+  max-width: 100%;
+  overflow-x: auto;
+  padding-bottom: 1px;
+}
+
+.app-terminal-attachment-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 260px;
+  max-width: 340px;
+  padding: 6px;
+  border: 1px solid var(--cs-border);
+  border-radius: 8px;
+  background: var(--cs-bg-sidebar);
+}
+
+.app-terminal-attachment-card__thumbnail {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 36px;
+  overflow: hidden;
+  border: 1px solid var(--cs-border);
+  border-radius: 5px;
+  background: var(--cs-bg-hover);
+  color: var(--cs-text-secondary);
+  cursor: pointer;
+}
+
+.app-terminal-attachment-card__thumbnail:disabled,
+.app-terminal-attachment-card__action:disabled,
+.app-terminal-attachment-card__icon-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.app-terminal-attachment-card__thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.app-terminal-attachment-card__details {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.app-terminal-attachment-card__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.app-terminal-attachment-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.app-terminal-attachment-card__action,
+.app-terminal-attachment-card__icon-action {
+  border: 1px solid var(--cs-border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--cs-text-primary);
+  cursor: pointer;
+}
+
+.app-terminal-attachment-card__action {
+  padding: 3px 6px;
+  font-size: 11px;
+}
+
+.app-terminal-attachment-card__icon-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+}
+
+.app-terminal-attachment-card__action:not(:disabled):hover,
+.app-terminal-attachment-card__icon-action:not(:disabled):hover,
+.app-terminal-attachment-card__thumbnail:not(:disabled):hover {
+  border-color: var(--cs-primary);
+  color: var(--cs-primary);
+}
+
 [data-theme="light-glass"] .app-main-content {
   background: transparent;
 }

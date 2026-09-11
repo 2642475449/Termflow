@@ -7,6 +7,7 @@ export type NotificationChannel = "system" | RemoteNotificationProvider;
 export type NotificationSuppressionReason =
   | "notifications-disabled"
   | "foreground-session"
+  | "foreground-window"
   | "completion-duration-unavailable"
   | "below-duration-threshold"
   | "permission-denied";

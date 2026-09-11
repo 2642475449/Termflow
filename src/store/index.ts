@@ -71,6 +71,15 @@ import {
   type NetworkProxySlice,
 } from "./slices/networkProxy";
 import {
+  createTerminalCompletionNotificationSlice,
+  normalizeTerminalCompletionNotificationThreshold,
+  type TerminalCompletionNotificationSlice,
+} from "./slices/terminalCompletionNotification";
+import {
+  createTerminalCompletionRuntimeSlice,
+  type TerminalCompletionRuntimeSlice,
+} from "./slices/terminalCompletionRuntime";
+import {
   normalizeNetworkProxyMode,
   normalizeNoProxy,
 } from "@/lib/networkProxy";
@@ -122,7 +131,8 @@ export type SessionEventType =
   | "process_exit"
   | "process_error"
   | "hook_error"
-  | "heartbeat_timeout";
+  | "heartbeat_timeout"
+  | "terminal_command_complete";
 
 function createMemoryStateStorage(): StateStorage {
   const data = new Map<string, string>();
@@ -279,6 +289,8 @@ export function getPersistentSettingsSnapshot(): PersistentSettings {
     notificationSoundEnabled: state.notificationSoundEnabled,
     notificationSoundMap: state.notificationSoundMap,
     notificationThresholdMs: state.notificationThresholdMs,
+    terminalCompletionNotificationsEnabled: state.terminalCompletionNotificationsEnabled,
+    terminalCompletionNotificationThresholdMs: state.terminalCompletionNotificationThresholdMs,
     remoteNotifications: state.remoteNotificationChannels,
     asrApiKey: state.asrApiKey,
     asrAuthMode: state.asrAuthMode,
@@ -335,6 +347,11 @@ export function applyPersistentSettingsToStore(settings: PersistentSettings) {
       waiting: normalizeNotificationSoundValue(settings.notificationSoundMap?.waiting),
     },
     notificationThresholdMs: Math.max(0, Math.round(settings.notificationThresholdMs ?? 10000)),
+    terminalCompletionNotificationsEnabled: settings.terminalCompletionNotificationsEnabled ?? true,
+    terminalCompletionNotificationThresholdMs:
+      normalizeTerminalCompletionNotificationThreshold(
+        settings.terminalCompletionNotificationThresholdMs,
+      ),
     remoteNotificationChannels: normalizeRemoteNotificationChannels(settings),
     asrApiKey: settings.asrApiKey ?? "",
     asrAuthMode: normalizeMimoAuthMode(settings.asrAuthMode, settings.asrApiKey),
@@ -581,7 +598,10 @@ interface ProjectWorkspace {
   focusedTabId: string | null;
 }
 
-interface AppState extends NetworkProxySlice {
+interface AppState
+  extends NetworkProxySlice,
+    TerminalCompletionNotificationSlice,
+    TerminalCompletionRuntimeSlice {
   windowContextReady: boolean;
   windowMode: WindowMode;
   windowLabel: string;
@@ -1483,6 +1503,8 @@ function transitionAttentionById(
 const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
   return {
       ...createNetworkProxySlice((partial) => set(partial)),
+      ...createTerminalCompletionNotificationSlice((partial) => set(partial)),
+      ...createTerminalCompletionRuntimeSlice((partial) => set(partial), () => get()),
       windowContextReady: false,
       currentProject: null,
       windowMode: "launcher",
@@ -2487,7 +2509,10 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
               // Hook attention events carry a revision and have a paired
               // agent-status update. They must not independently roll back
               // runtime state. Runtime PTY events remain the legacy fallback.
-              status: revision === null ? mapStatusFromEvent(event.eventType) : session.status,
+              status:
+                revision === null && event.eventType !== "terminal_command_complete"
+                  ? mapStatusFromEvent(event.eventType)
+                  : session.status,
               unreadCount,
               lastEventAt: isNewestEvent ? event.createdAt : session.lastEventAt,
               lastEventType: isNewestEvent ? event.eventType : session.lastEventType,

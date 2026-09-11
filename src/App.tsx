@@ -133,6 +133,12 @@ function App() {
   const notificationSoundEnabled = useAppStore((s) => s.notificationSoundEnabled);
   const notificationSoundMap = useAppStore((s) => s.notificationSoundMap);
   const notificationThresholdMs = useAppStore((s) => s.notificationThresholdMs);
+  const terminalCompletionNotificationsEnabled = useAppStore(
+    (s) => s.terminalCompletionNotificationsEnabled,
+  );
+  const terminalCompletionNotificationThresholdMs = useAppStore(
+    (s) => s.terminalCompletionNotificationThresholdMs,
+  );
   const remoteNotificationChannels = useAppStore((s) => s.remoteNotificationChannels);
   const asrApiKey = useAppStore((s) => s.asrApiKey);
   const asrAuthMode = useAppStore((s) => s.asrAuthMode);
@@ -189,6 +195,8 @@ function App() {
       notificationSoundEnabled,
       notificationSoundMap,
       notificationThresholdMs,
+      terminalCompletionNotificationsEnabled,
+      terminalCompletionNotificationThresholdMs,
       remoteNotifications: remoteNotificationChannels,
       asrApiKey,
       asrAuthMode,
@@ -212,6 +220,8 @@ function App() {
       notificationSoundEnabled,
       notificationSoundMap,
       notificationThresholdMs,
+      terminalCompletionNotificationsEnabled,
+      terminalCompletionNotificationThresholdMs,
       remoteNotificationChannels,
       agentPermissionDefaults,
       startupRestoreLastProject,

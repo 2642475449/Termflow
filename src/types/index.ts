@@ -94,6 +94,8 @@ export interface PersistentSettings {
   notificationSoundEnabled: boolean;
   notificationSoundMap: PersistentNotificationSoundMap;
   notificationThresholdMs: number;
+  terminalCompletionNotificationsEnabled: boolean;
+  terminalCompletionNotificationThresholdMs: number;
   remoteNotifications?: Partial<Record<"feishu" | "dingtalk" | "wechat" | "qq" | "telegram", PersistentRemoteNotificationChannel>>;
   /** @deprecated Migrated to remoteNotifications.feishu when settings are loaded. */
   feishuNotificationEnabled?: boolean;
@@ -615,6 +617,41 @@ export interface SearchIndexStorageStatus {
   projectCount: number;
 }
 
+export type TerminalAttachmentStatus =
+  | "saving"
+  | "ready"
+  | "inserting"
+  | "sending"
+  | "inserted"
+  | "delivered"
+  | "failed"
+  | "deliveryUnknown"
+  | "released";
+
+export interface ClipboardAttachment {
+  attachmentId: string;
+  sessionId: string;
+  contentHash: string;
+  path: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  status: TerminalAttachmentStatus;
+  createdAt: number;
+  updatedAt: number;
+  available: boolean;
+}
+
+export interface ClipboardImageStorageStatus {
+  cacheRoot: string;
+  protectedBytes: number;
+  reclaimableBytes: number;
+  legacyBytes: number;
+  softTargetBytes: number;
+  hardLimitBytes: number;
+}
+
+/** @deprecated Clipboard saves now return a session-scoped ClipboardAttachment. */
 export interface SavedImagePayload {
   path: string;
   fileName: string;

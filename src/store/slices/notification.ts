@@ -123,7 +123,8 @@ export const createNotificationSlice: StateCreator<AppState, [], [], Notificatio
         return {
           ...session,
           status:
-            event.revision === null || event.revision === undefined
+            (event.revision === null || event.revision === undefined) &&
+            event.eventType !== "terminal_command_complete"
               ? mapStatusFromEvent(event.eventType)
               : session.status,
           unreadCount,

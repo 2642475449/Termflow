@@ -496,6 +496,43 @@ describe("useAppStore actions", () => {
     expect(state.sessions[0].lastEventType).toBe("session_started");
   });
 
+  it("records terminal command completion without changing the interactive shell status", () => {
+    const store = createAppStore();
+    const projectPath = "D:/workspace/demo";
+    const session = createSession("terminal-1", "PowerShell", projectPath, {
+      agentId: "powershell",
+      status: "waiting",
+    });
+    store.setState({
+      currentProject: { path: projectPath, name: "demo" },
+      projectSessions: { [projectPath]: [session] },
+      projectWorkspaces: { [projectPath]: createDefaultWorkspace() },
+      sessions: [session],
+    });
+
+    expect(store.getState().pushSessionEvent({
+      id: "terminal-command:terminal-1:1",
+      revision: null,
+      sessionId: "terminal-1",
+      projectPath,
+      sessionName: "PowerShell",
+      eventType: "terminal_command_complete",
+      title: "命令已完成",
+      body: "",
+      severity: "success",
+      source: "terminal",
+      requiresAttention: true,
+      actionable: true,
+      createdAt: 200,
+      metadata: { commandId: 1, durationMs: 30_000, exitCode: 0 },
+    })).toBe("accepted");
+
+    const state = store.getState();
+    expect(state.sessions[0].status).toBe("waiting");
+    expect(state.sessions[0].unreadCount).toBe(1);
+    expect(state.sessions[0].lastEventType).toBe("terminal_command_complete");
+  });
+
   it("pushSessionEvent deduplicates events before unread state changes", () => {
     const store = createAppStore();
     const projectPath = "D:/workspace/demo";

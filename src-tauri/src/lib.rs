@@ -9,6 +9,7 @@ mod hook_ingest;
 mod network_proxy;
 mod opencode_control;
 mod path_utils;
+mod powershell_integration;
 mod pty;
 mod qoder_config;
 mod qoder_usage;
@@ -69,6 +70,7 @@ pub fn run() {
     let voice_overlay_state = VoiceOverlayState::new();
     let voice_shortcut_state = VoiceShortcutState::new();
     let live_asr_sessions = LiveAsrSessions::default();
+    let clipboard_image_cache_state = Arc::new(commands::image::ClipboardImageCacheState::default());
     tauri::Builder::default()
         .plugin(
             tauri::plugin::Builder::<tauri::Wry>::new("foreground-activation")
@@ -111,6 +113,7 @@ pub fn run() {
         .manage(voice_overlay_state.clone())
         .manage(voice_shortcut_state.clone())
         .manage(live_asr_sessions)
+        .manage(clipboard_image_cache_state)
         .manage(ContentSearchState::default())
         .manage(SearchIndexState::default())
         .on_window_event(|window, event| {
@@ -119,8 +122,6 @@ pub fn run() {
                 let manager = window.state::<Arc<PtyManager>>();
                 let voice_overlay_state = window.state::<Arc<VoiceOverlayState>>();
                 let voice_shortcut_state = window.state::<Arc<VoiceShortcutState>>();
-                let main_was_launcher =
-                    window.label() == "main" && registry.is_launcher(window.label());
                 let closing_context = registry.get_context(window.label());
                 if closing_context.mode == WindowMode::Project {
                     if let Some(project_path) = closing_context.project_path.as_deref() {
@@ -141,16 +142,19 @@ pub fn run() {
                     &voice_overlay_state,
                 );
 
-                if window.label() == "main" {
+                // 最后一个工作窗口关闭时退出；隐藏语音窗口否则会占住单实例锁，
+                // 导致再次启动只能唤醒一个没有工作窗口的后台进程。
+                let remaining_windows = window.app_handle().webview_windows();
+                if commands::window::should_exit_after_window_destroyed(
+                    window.label(),
+                    remaining_windows.keys().map(String::as_str),
+                ) {
                     commands::voice_shortcut::cleanup_voice_global_shortcut(
                         &window.app_handle(),
                         &voice_shortcut_state,
                     );
-                }
-
-                // 只有主窗口仍处于 launcher 模式时，才视为应用退出并清理全部会话。
-                if main_was_launcher {
                     manager.cleanup_all();
+                    window.app_handle().exit(0);
                 }
             }
         })
@@ -163,6 +167,12 @@ pub fn run() {
             app.manage(database);
             let registry = app.state::<Arc<WindowRegistry>>();
             let database = app.state::<Arc<Database>>();
+            if let Err(error) = commands::image::reconcile_clipboard_image_cache(
+                &app.handle(),
+                database.inner().as_ref(),
+            ) {
+                eprintln!("Failed to reconcile clipboard image cache: {error}");
+            }
             // The installer enables the menu by default. Only apply an
             // existing opt-out here so development launches never write global
             // Explorer registry state merely because the default is true.
@@ -297,6 +307,13 @@ pub fn run() {
             commands::remote_notification::clear_remote_notification_credentials,
             commands::remote_notification::send_remote_notification,
             commands::image::save_clipboard_image,
+            commands::image::list_clipboard_attachments,
+            commands::image::set_clipboard_attachment_status,
+            commands::image::release_clipboard_attachment,
+            commands::image::release_clipboard_session_attachments,
+            commands::image::read_clipboard_attachment_preview,
+            commands::image::get_clipboard_image_storage_status,
+            commands::image::cleanup_clipboard_image_cache,
             commands::image::read_image_preview,
             commands::system_input::send_text_to_focused_window,
             commands::voice::transcribe_audio,

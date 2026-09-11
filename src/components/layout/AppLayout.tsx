@@ -69,6 +69,10 @@ import {
   type OpenGlobalTextSearchDetail,
 } from "@/lib/globalSearch";
 import { getNotificationSuppressionReason } from "@/lib/attentionDiagnostics";
+import {
+  getTerminalCompletionDeliverySuppressionReason,
+  getTerminalCompletionIngestSuppressionReason,
+} from "@/lib/terminalCompletionNotificationPolicy";
 import { isSessionVisibleInWorkspace } from "@/lib/sessionVisibility";
 import { checkpointSessionUpdates } from "@/lib/checkpointReview";
 import {
@@ -457,6 +461,11 @@ function getEventDurationMs(metadata: Record<string, unknown> | undefined): numb
   const value = metadata?.durationMs;
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
+
+function getTerminalCommandExitCode(metadata: Record<string, unknown> | undefined): number | null {
+  const value = metadata?.exitCode;
+  return typeof value === "number" && Number.isSafeInteger(value) ? value : null;
+}
 function getRemoteNotificationEventType(eventType: string): "completed" | "error" | "waiting" | "permission" | null {
   if (eventType === "assistant_complete") return "completed";
   if (eventType === "permission_request") return "permission";
@@ -485,6 +494,18 @@ function formatNotificationDuration(durationMs: number, locale: string): string 
   }).format(minutes);
 }
 
+function formatTerminalCompletionDuration(durationMs: number, locale: string): string {
+  const normalizedLocale = locale.replace("_", "-");
+  if (durationMs < 60_000) {
+    return new Intl.NumberFormat(normalizedLocale, {
+      style: "unit",
+      unit: "second",
+      unitDisplay: "short",
+    }).format(Math.max(1, Math.round(durationMs / 1000)));
+  }
+  return formatNotificationDuration(durationMs, locale);
+}
+
 function AppLayout() {
   const activeSessionId = useAppStore((s) => s.activeSessionId);
   const sessions = useAppStore((s) => s.sessions);
@@ -503,6 +524,12 @@ function AppLayout() {
   const soundEnabled = useAppStore((s) => s.notificationSoundEnabled);
   const soundMap = useAppStore((s) => s.notificationSoundMap);
   const notificationThresholdMs = useAppStore((s) => s.notificationThresholdMs);
+  const terminalCompletionNotificationsEnabled = useAppStore(
+    (s) => s.terminalCompletionNotificationsEnabled,
+  );
+  const terminalCompletionNotificationThresholdMs = useAppStore(
+    (s) => s.terminalCompletionNotificationThresholdMs,
+  );
   const remoteNotificationChannels = useAppStore((s) => s.remoteNotificationChannels);
   const windowContextReady = useAppStore((s) => s.windowContextReady);
   const windowMode = useAppStore((s) => s.windowMode);
@@ -525,6 +552,7 @@ function AppLayout() {
     open: boolean;
     scopePath: string | null;
   }>({ open: false, scopePath: null });
+  const terminalNotificationPermissionDeniedRef = useRef(false);
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const visibleTerminalSessionKey = Object.values(panesById)
@@ -1452,6 +1480,61 @@ function AppLayout() {
         storeState.currentProject?.path === normalized.projectPath ||
         storeState.sessions.some((session) => session.id === normalized.sessionId);
       if (!belongsToWindow) return;
+      const isTerminalCommandCompletion = normalized.eventType === "terminal_command_complete";
+      const durationMs = getEventDurationMs(normalized.metadata);
+      const session = storeState.sessions.find((item) => item.id === normalized.sessionId);
+      const sessionLabel =
+        session?.name ||
+        normalized.sessionName ||
+        (isTerminalCommandCompletion
+          ? i18n.t("settings.notifications.terminalCompletion.defaultSession")
+          : "Termflow");
+
+      if (isTerminalCommandCompletion) {
+        const suppressionReason = getTerminalCompletionIngestSuppressionReason({
+          enabled: terminalCompletionNotificationsEnabled,
+          durationMs,
+          thresholdMs: terminalCompletionNotificationThresholdMs,
+        });
+        if (suppressionReason) {
+          useAppStore.getState().recordNotificationDelivery({
+            channel: "system",
+            eventId: normalized.id,
+            eventType: normalized.eventType,
+            status: "suppressed",
+            reason: suppressionReason,
+            updatedAt: Date.now(),
+          });
+          return;
+        }
+
+        if (durationMs === null) return;
+        const exitCode = getTerminalCommandExitCode(normalized.metadata);
+        const duration = formatTerminalCompletionDuration(durationMs, i18n.language);
+        if (exitCode === 0) {
+          normalized.title = i18n.t("settings.notifications.terminalCompletion.successTitle", {
+            session: sessionLabel,
+          });
+          normalized.body = i18n.t("settings.notifications.terminalCompletion.successBody", {
+            duration,
+          });
+        } else if (exitCode === null) {
+          normalized.title = i18n.t("settings.notifications.terminalCompletion.unknownTitle", {
+            session: sessionLabel,
+          });
+          normalized.body = i18n.t("settings.notifications.terminalCompletion.unknownBody", {
+            duration,
+          });
+        } else {
+          normalized.title = i18n.t("settings.notifications.terminalCompletion.failureTitle", {
+            session: sessionLabel,
+          });
+          normalized.body = i18n.t("settings.notifications.terminalCompletion.failureBody", {
+            exitCode,
+            duration,
+          });
+        }
+      }
       const targetSessionVisible =
         isSessionVisibleInAuxiliaryDock(normalized.sessionId) ||
         isSessionVisibleInWorkspace(normalized.sessionId, {
@@ -1483,13 +1566,107 @@ function AppLayout() {
       if (ingestResult !== "accepted") return;
       if (!normalized.requiresAttention) return;
       if (normalized.eventType === "process_exit") return;
-      const durationMs = getEventDurationMs(normalized.metadata);
-      const session = storeState.sessions.find((item) => item.id === normalized.sessionId);
       const projectFolder = normalized.projectPath
         .split(/[\\/]/)
         .filter(Boolean)
         .pop();
-      const sessionLabel = session?.name ?? normalized.sessionName ?? "Termflow";
+
+      if (isTerminalCommandCompletion) {
+        const deliverySuppressionReason = getTerminalCompletionDeliverySuppressionReason({
+          externalNotificationsEnabled: notificationEnabled,
+          targetObserved: foreground,
+          windowForeground: document.visibilityState === "visible" && document.hasFocus(),
+        });
+        if (
+          deliverySuppressionReason === "foreground-session" ||
+          deliverySuppressionReason === "notifications-disabled"
+        ) {
+          useAppStore.getState().recordNotificationDelivery({
+            channel: "system",
+            eventId: normalized.id,
+            eventType: normalized.eventType,
+            status: "suppressed",
+            reason: deliverySuppressionReason,
+            updatedAt: Date.now(),
+          });
+          return;
+        }
+
+        const exitCode = getTerminalCommandExitCode(normalized.metadata);
+        if (soundEnabled) {
+          playNotificationSound(
+            exitCode === 0
+              ? soundMap.taskComplete
+              : exitCode === null
+                ? soundMap.waiting
+                : soundMap.error,
+          );
+        }
+
+        if (deliverySuppressionReason === "foreground-window") {
+          useAppStore.getState().recordNotificationDelivery({
+            channel: "system",
+            eventId: normalized.id,
+            eventType: normalized.eventType,
+            status: "suppressed",
+            reason: deliverySuppressionReason,
+            updatedAt: Date.now(),
+          });
+          return;
+        }
+
+        void isPermissionGranted()
+          .then((granted) => {
+            if (granted) {
+              terminalNotificationPermissionDeniedRef.current = false;
+              return "granted";
+            }
+            if (terminalNotificationPermissionDeniedRef.current) return "denied";
+            return requestPermission();
+          })
+          .then((permission) => {
+            if (permission !== "granted") {
+              terminalNotificationPermissionDeniedRef.current = true;
+              useAppStore.getState().recordNotificationDelivery({
+                channel: "system",
+                eventId: normalized.id,
+                eventType: normalized.eventType,
+                status: "suppressed",
+                reason: "permission-denied",
+                updatedAt: Date.now(),
+              });
+              return;
+            }
+            return sendSessionNotification(
+              normalized.title,
+              normalized.body,
+              normalized.sessionId,
+              normalized.projectPath,
+            ).then(() => {
+              useAppStore.getState().recordNotificationDelivery({
+                channel: "system",
+                eventId: normalized.id,
+                eventType: normalized.eventType,
+                status: "sent",
+                updatedAt: Date.now(),
+              });
+            });
+          })
+          .catch((error) => {
+            const errorText = error instanceof Error ? error.message : String(error);
+            console.warn("Failed to send terminal command completion notification:", error);
+            useAppStore.getState().recordNotificationDelivery({
+              channel: "system",
+              eventId: normalized.id,
+              eventType: normalized.eventType,
+              status: "failed",
+              error: errorText,
+              updatedAt: Date.now(),
+            });
+          });
+        return;
+      }
+
       const systemSuppressionReason = getNotificationSuppressionReason({
           enabled: notificationEnabled,
           foreground,
@@ -1658,6 +1835,8 @@ function AppLayout() {
     soundEnabled,
     soundMap,
     notificationThresholdMs,
+    terminalCompletionNotificationsEnabled,
+    terminalCompletionNotificationThresholdMs,
     remoteNotificationChannels,
   ]);
 

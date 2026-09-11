@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import type { DragEvent as ReactDragEvent } from "react";
 import { Dropdown, Modal, message } from "antd";
 import type { MenuProps } from "antd";
@@ -8,20 +8,23 @@ import {
   SelectOutlined,
   DeleteOutlined,
   MessageOutlined,
-  CloseOutlined,
 } from "@ant-design/icons";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import {
   inferAgentUserResponse,
   ptyInput,
   ptyResize,
   submitAgentTurnInput,
   saveClipboardImage,
+  listClipboardAttachments,
+  setClipboardAttachmentStatus,
+  releaseClipboardAttachment,
+  readClipboardAttachmentPreview,
   inspectProjectFile,
   resolveProjectLink,
   inspectAgentClis,
@@ -49,7 +52,6 @@ import {
   containsTerminalInterrupt,
   consumeTerminalSubmissionInput,
   hasTerminalPromptText,
-  terminalInputContainsInsertedText,
 } from "@/lib/terminalSubmission";
 import { AgentIcon } from "@/components/AgentIcon";
 import { SideQuestionComposer } from "@/components/SideQuestionComposer";
@@ -62,7 +64,14 @@ import {
 } from "@/lib/agentUserResponse";
 import { createPtyResizeGate } from "@/lib/terminalResize";
 import { createTerminalImeOutputGate } from "@/lib/terminalImeOutput";
-import type { AgentCliInfo } from "@/types";
+import { createTerminalCommandWatcher } from "@/lib/terminalCommandWatcher";
+import { TerminalAttachmentBar } from "@/components/terminal/TerminalAttachmentBar";
+import {
+  canQueueTerminalAttachment,
+  selectReadyTerminalAttachments,
+} from "@/lib/terminalAttachments";
+import { selectSessionAttachments, useTerminalAttachmentStore } from "@/store/slices/terminalAttachmentSlice";
+import type { AgentCliInfo, ClipboardAttachment } from "@/types";
 import { useTranslation } from "react-i18next";
 import "@xterm/xterm/css/xterm.css";
 
@@ -158,14 +167,8 @@ interface TerminalImagePreview {
   y: number;
 }
 
-interface TerminalPastedImagePreview {
-  id: string;
-  src: string;
-  alt: string;
-  insertedText: string;
-}
-
 const IMAGE_REFERENCE_PATTERN = /\.(?:png|jpe?g|gif|webp|bmp|svg|avif)(?:$|[?#])/i;
+const MAX_CLIPBOARD_IMAGE_BYTES = 10 * 1024 * 1024;
 
 function isImageReference(value: string): boolean {
   return IMAGE_REFERENCE_PATTERN.test(value.trim());
@@ -203,6 +206,8 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
   const pendingTitleEscapeSequenceRef = useRef("");
   const pendingSubmissionInputRef = useRef("");
   const pendingSubmissionEscapeSequenceRef = useRef("");
+  const enqueueInputRef = useRef<((operation: () => Promise<void>) => Promise<void>) | null>(null);
+  const cancelledSavingAttachmentIdsRef = useRef(new Set<string>());
   const titleRequestStartedRef = useRef(false);
   const sideQuestionSubmittingRef = useRef(false);
   const hideCursorWhileRunningRef = useRef(false);
@@ -216,13 +221,17 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
   const [sideQuestionText, setSideQuestionText] = useState("");
   const [pendingTerminalLink, setPendingTerminalLink] = useState<PendingTerminalLink | null>(null);
   const [imagePreview, setImagePreview] = useState<TerminalImagePreview | null>(null);
-  const [pastedImagePreviews, setPastedImagePreviews] = useState<TerminalPastedImagePreview[]>([]);
-  const [pastedImageDialogId, setPastedImageDialogId] = useState<string | null>(null);
+  const [attachmentPreviewId, setAttachmentPreviewId] = useState<string | null>(null);
+  const [attachmentPreviewDataUrl, setAttachmentPreviewDataUrl] = useState<string | null>(null);
   const [openingTerminalLink, setOpeningTerminalLink] = useState(false);
   const openingTerminalLinkRef = useRef(false);
   const captureInputForAutoTitleRef = useRef<((data: string) => void) | undefined>(undefined);
   const isDropPositionInsideTerminalRef = useRef<((position: { x: number; y: number }) => boolean) | undefined>(undefined);
   const currentSessionPathRef = useRef("");
+  const currentSessionNameRef = useRef("");
+  const isNativePowerShellTerminalRef = useRef(false);
+  const terminalIntegrationReportedRef = useRef(false);
+  const terminalCommandWatcherRef = useRef(createTerminalCommandWatcher());
   const imagePreviewRequestRef = useRef(0);
   const imagePreviewDismissTimerRef = useRef<number | null>(null);
 
@@ -238,6 +247,21 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
   const openFileTab = useAppStore((s) => s.openFileTab);
   const setSidebarCollapsed = useAppStore((s) => s.setSidebarCollapsed);
   const setActiveSidebarSection = useAppStore((s) => s.setActiveSidebarSection);
+  const setTerminalCompletionIntegration = useAppStore(
+    (s) => s.setTerminalCompletionIntegration,
+  );
+  const attachments = useTerminalAttachmentStore((state) =>
+    selectSessionAttachments(state, sessionId),
+  );
+  const attachmentsRef = useRef(attachments);
+  attachmentsRef.current = attachments;
+  const visibleAttachments = useMemo(
+    () => attachments.filter((attachment) => attachment.status !== "inserted" && attachment.status !== "delivered"),
+    [attachments],
+  );
+  const setSessionAttachments = useTerminalAttachmentStore((state) => state.setSessionAttachments);
+  const upsertAttachment = useTerminalAttachmentStore((state) => state.upsertAttachment);
+  const removeAttachment = useTerminalAttachmentStore((state) => state.removeAttachment);
   const currentSession = useAppStore((s) =>
     s.sessions.find((session) => session.id === sessionId)
   );
@@ -252,44 +276,226 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
   const termTheme = getTerminalTheme(activeTheme);
   const currentSessionPath = currentSession?.path ?? "";
 
-  const pasteIntoTerminal = useCallback(async (term: XTerm | null) => {
-    const pastedImage = await pasteClipboardIntoTerminal(sessionId, term, t);
-    if (!pastedImage) return;
+  useEffect(() => {
+    if (currentSession?.agentId !== "powershell") {
+      setTerminalCompletionIntegration(sessionId, {
+        shell: "unsupported",
+        status: "unavailable",
+        reason: "unsupported-shell",
+        updatedAt: Date.now(),
+      });
+      return;
+    }
 
-    const submissionCapture = consumeTerminalSubmissionInput(
-      pendingSubmissionInputRef.current,
-      pastedImage.insertedText,
-      pendingSubmissionEscapeSequenceRef.current,
-    );
-    pendingSubmissionInputRef.current = submissionCapture.nextValue;
-    pendingSubmissionEscapeSequenceRef.current = submissionCapture.pendingSequence;
-    captureInputForAutoTitleRef.current?.(pastedImage.insertedText);
-    setPastedImagePreviews((current) => [...current, pastedImage]);
-    setPastedImageDialogId(null);
-  }, [sessionId, t]);
+    setTerminalCompletionIntegration(sessionId, {
+      shell: "powershell",
+      status: "pending",
+      updatedAt: Date.now(),
+    });
+    const verificationTimeout = window.setTimeout(() => {
+      if (terminalIntegrationReportedRef.current) return;
+      setTerminalCompletionIntegration(sessionId, {
+        shell: "powershell",
+        status: "unavailable",
+        reason: "integration-not-reported",
+        updatedAt: Date.now(),
+      });
+    }, 5_000);
+    return () => window.clearTimeout(verificationTimeout);
+  }, [currentSession?.agentId, sessionId, setTerminalCompletionIntegration]);
 
   useEffect(() => {
-    setPastedImagePreviews([]);
-    setPastedImageDialogId(null);
+    let cancelled = false;
+    void listClipboardAttachments(sessionId)
+      .then((savedAttachments) => {
+        if (!cancelled) setSessionAttachments(sessionId, savedAttachments);
+      })
+      .catch((error) => {
+        console.error("Failed to restore terminal attachments:", error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, setSessionAttachments]);
+
+  const pasteIntoTerminal = useCallback(async (term: XTerm | null) => {
+    const text = await navigator.clipboard.readText().catch(() => "");
+    if (text) {
+      // Let xterm normalize line endings and emit bracketed paste when the app enabled it.
+      if (term) {
+        term.paste(text);
+      } else {
+        await ptyInput(sessionId, text);
+      }
+      return;
+    }
+
+    const clipboardImage = await readClipboardImage();
+    if (!clipboardImage) {
+      message.warning(t("terminal.clipboardEmpty"));
+      return;
+    }
+    if (clipboardImage.blob.size > MAX_CLIPBOARD_IMAGE_BYTES) {
+      throw new Error(t("terminal.attachmentTooLarge"));
+    }
+    if (!canQueueTerminalAttachment(attachmentsRef.current)) {
+      message.warning(t("terminal.attachmentQueueFull", { count: 10 }));
+      return;
+    }
+
+    const savingAttachmentId = createSavingAttachmentId();
+    const now = Date.now();
+    upsertAttachment({
+      attachmentId: savingAttachmentId,
+      sessionId,
+      contentHash: "",
+      path: "",
+      fileName: t("terminal.attachmentSavingName"),
+      mimeType: clipboardImage.mimeType,
+      sizeBytes: clipboardImage.blob.size,
+      status: "saving",
+      createdAt: now,
+      updatedAt: now,
+      available: false,
+    });
+
+    try {
+      const dataBase64 = await blobToBase64(clipboardImage.blob);
+      const saved = await saveClipboardImage(sessionId, dataBase64, clipboardImage.mimeType);
+      if (cancelledSavingAttachmentIdsRef.current.delete(savingAttachmentId)) {
+        try {
+          await releaseClipboardAttachment(sessionId, saved.attachmentId);
+        } catch (error) {
+          // Keep the durable reference when cancellation cannot be committed;
+          // it will be reconciled on the next session restore instead of
+          // reintroducing a locally cancelled saving card.
+          console.error("Failed to release a cancelled image attachment:", error);
+        }
+        return;
+      }
+      removeAttachment(sessionId, savingAttachmentId);
+      upsertAttachment(saved);
+      message.success(t("terminal.attachmentSaved"));
+    } catch (error) {
+      upsertAttachment({
+        attachmentId: savingAttachmentId,
+        sessionId,
+        contentHash: "",
+        path: "",
+        fileName: t("terminal.attachmentSavingName"),
+        mimeType: clipboardImage.mimeType,
+        sizeBytes: clipboardImage.blob.size,
+        status: "failed",
+        createdAt: now,
+        updatedAt: Date.now(),
+        available: false,
+      });
+      throw error;
+    }
+  }, [removeAttachment, sessionId, t, upsertAttachment]);
+
+  const attachmentPreview = attachmentPreviewId
+    ? attachments.find((attachment) => attachment.attachmentId === attachmentPreviewId) ?? null
+    : null;
+
+  const loadAttachmentPreview = useCallback(async (attachment: ClipboardAttachment) => {
+    const preview = await readClipboardAttachmentPreview(sessionId, attachment.attachmentId);
+    return preview.dataUrl;
   }, [sessionId]);
 
-  const pastedImageDialogPreview = pastedImagePreviews.find(
-    (preview) => preview.id === pastedImageDialogId,
-  ) ?? null;
+  const handleAttachmentPreview = useCallback((attachment: ClipboardAttachment) => {
+    setAttachmentPreviewId(attachment.attachmentId);
+    setAttachmentPreviewDataUrl(null);
+    void loadAttachmentPreview(attachment)
+      .then((dataUrl) => setAttachmentPreviewDataUrl(dataUrl))
+      .catch((error) => {
+        setAttachmentPreviewId(null);
+        message.error(error instanceof Error ? error.message : t("terminal.attachmentPreviewFailed"));
+      });
+  }, [loadAttachmentPreview, t]);
 
-  const removeStalePastedImagePreviews = useCallback((terminalInput: string) => {
-    setPastedImagePreviews((current) => {
-      const next = current.filter((preview) =>
-        terminalInputContainsInsertedText(terminalInput, preview.insertedText),
-      );
-      if (next.length !== current.length) {
-        setPastedImageDialogId((dialogId) =>
-          dialogId && next.some((preview) => preview.id === dialogId) ? dialogId : null,
-        );
-      }
-      return next;
-    });
+  const closeAttachmentPreview = useCallback(() => {
+    setAttachmentPreviewId(null);
+    setAttachmentPreviewDataUrl(null);
+    window.setTimeout(() => terminalRef.current?.focus(), 0);
   }, []);
+
+  const handleCopyAttachmentPath = useCallback((attachment: ClipboardAttachment) => {
+    void navigator.clipboard.writeText(attachment.path)
+      .then(() => message.success(t("terminal.attachmentPathCopied")))
+      .catch(() => message.error(t("terminal.attachmentPathCopyFailed")));
+  }, [t]);
+
+  const handleRemoveAttachment = useCallback((attachment: ClipboardAttachment) => {
+    if (!attachment.contentHash) {
+      if (attachment.status === "saving") {
+        cancelledSavingAttachmentIdsRef.current.add(attachment.attachmentId);
+      }
+      removeAttachment(sessionId, attachment.attachmentId);
+      return;
+    }
+    void releaseClipboardAttachment(sessionId, attachment.attachmentId)
+      .then(() => {
+        removeAttachment(sessionId, attachment.attachmentId);
+        message.success(t("terminal.attachmentRemoved"));
+      })
+      .catch((error) => message.error(error instanceof Error ? error.message : t("terminal.attachmentRemoveFailed")));
+  }, [removeAttachment, sessionId, t]);
+
+  const handleInsertAttachmentPath = useCallback(async (attachment: ClipboardAttachment) => {
+    if (selectReadyTerminalAttachments(attachments, attachment.attachmentId).length === 0) return;
+    const session = useAppStore.getState().sessions.find((item) => item.id === sessionId);
+    if (!session?.active) {
+      message.warning(t("terminal.attachmentSessionInactive"));
+      return;
+    }
+    const enqueueInput = enqueueInputRef.current;
+    if (!enqueueInput) {
+      message.error(t("terminal.attachmentInsertFailed"));
+      return;
+    }
+
+    try {
+      const inserting = await setClipboardAttachmentStatus(sessionId, attachment.attachmentId, "inserting");
+      upsertAttachment(inserting);
+      const insertedText = quotePathForShell(inserting.path);
+      const submissionCapture = consumeTerminalSubmissionInput(
+        pendingSubmissionInputRef.current,
+        insertedText,
+        pendingSubmissionEscapeSequenceRef.current,
+      );
+      pendingSubmissionInputRef.current = submissionCapture.nextValue;
+      pendingSubmissionEscapeSequenceRef.current = submissionCapture.pendingSequence;
+      captureInputForAutoTitleRef.current?.(insertedText);
+
+      await enqueueInput(async () => {
+        const latest = useAppStore.getState().sessions.find((item) => item.id === sessionId);
+        if (!latest?.active) {
+          throw new Error(t("terminal.attachmentSessionInactive"));
+        }
+        try {
+          await ptyInput(sessionId, insertedText);
+          const inserted = await setClipboardAttachmentStatus(sessionId, attachment.attachmentId, "inserted");
+          upsertAttachment(inserted);
+        } catch (error) {
+          try {
+            const unknown = await setClipboardAttachmentStatus(
+              sessionId,
+              attachment.attachmentId,
+              "deliveryUnknown",
+            );
+            upsertAttachment(unknown);
+          } catch (statusError) {
+            console.error("Failed to preserve uncertain attachment delivery:", statusError);
+          }
+          throw error;
+        }
+      });
+      message.success(t("terminal.attachmentPathInserted"));
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : t("terminal.attachmentInsertFailed"));
+    }
+  }, [attachments, sessionId, t, upsertAttachment]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -717,6 +923,8 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
   captureInputForAutoTitleRef.current = captureInputForAutoTitle;
   isDropPositionInsideTerminalRef.current = isDropPositionInsideTerminal;
   currentSessionPathRef.current = currentSessionPath;
+  currentSessionNameRef.current = currentSession?.name ?? "";
+  isNativePowerShellTerminalRef.current = currentSession?.agentId === "powershell";
 
   const cancelImagePreviewDismissal = useCallback(() => {
     if (imagePreviewDismissTimerRef.current !== null) {
@@ -861,6 +1069,68 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
         })
       : null;
 
+    const commandLifecycleDisposable = term.parser.registerOscHandler(133, (data) => {
+      const marker = data.split(";", 1)[0];
+      if (marker !== "A" && marker !== "B" && marker !== "C" && marker !== "D") {
+        return false;
+      }
+
+      const completion = terminalCommandWatcherRef.current.consumeOsc133(data, performance.now());
+      const projectPath = currentSessionPathRef.current;
+      const lifecycleCapability = data.split(";").find((part) =>
+        part.startsWith("command-lifecycle="),
+      );
+      if (
+        marker === "A" &&
+        data.split(";").includes("termflow=1") &&
+        isNativePowerShellTerminalRef.current
+      ) {
+        terminalIntegrationReportedRef.current = true;
+        useAppStore.getState().setTerminalCompletionIntegration(sessionId, {
+          shell: "powershell",
+          status: lifecycleCapability === "command-lifecycle=enabled" ? "available" : "unavailable",
+          reason:
+            lifecycleCapability === "command-lifecycle=enabled"
+              ? undefined
+              : "command-lifecycle-unavailable",
+          version: "1",
+          updatedAt: Date.now(),
+        });
+      }
+      if (completion && isNativePowerShellTerminalRef.current && projectPath) {
+        const eventId = `terminal-command:${sessionId}:${completion.commandId}`;
+        void emit("session-event", {
+          id: eventId,
+          revision: null,
+          sessionId,
+          projectPath,
+          sessionName: currentSessionNameRef.current,
+          eventType: "terminal_command_complete",
+          title: "",
+          body: "",
+          severity:
+            completion.exitCode === 0
+              ? "success"
+              : completion.exitCode === null
+                ? "info"
+                : "error",
+          source: "terminal",
+          requiresAttention: true,
+          actionable: true,
+          dedupeKey: eventId,
+          createdAt: Date.now(),
+          metadata: {
+            commandId: completion.commandId,
+            durationMs: completion.durationMs,
+            exitCode: completion.exitCode,
+          },
+        }).catch((error) => {
+          console.warn("Failed to dispatch terminal command completion:", error);
+        });
+      }
+      return true;
+    });
+
     let webglAddon: WebglAddon | null = null;
     let webglContextLossListener: { dispose(): void } | null = null;
     let fallbackAnimationFrame: number | null = null;
@@ -931,7 +1201,9 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
         .finally(() => {
           queuedInputOperations -= 1;
         });
+      return inputQueue;
     };
+    enqueueInputRef.current = enqueueInput;
 
     // Send user input to PTY as-is. Control keys like Backspace may repeat rapidly,
     // so deduplicating identical payloads here will make deletion feel laggy.
@@ -971,13 +1243,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       pendingSubmissionInputRef.current = submissionCapture.nextValue;
       pendingSubmissionEscapeSequenceRef.current = submissionCapture.pendingSequence;
 
-      if (submissionCapture.submittedText === null) {
-        removeStalePastedImagePreviews(submissionCapture.nextValue);
-      }
-
       if (data === "\r" || data === "\n") {
-        setPastedImagePreviews([]);
-        setPastedImageDialogId(null);
         captureInputForAutoTitleRef.current?.(data);
         const waitingSession = useAppStore.getState().sessions.find(
           (item) => item.id === sessionId,
@@ -1198,6 +1464,13 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       "pty-exit",
       (event) => {
         if (event.payload.session_id === sessionId) {
+          terminalCommandWatcherRef.current.reset();
+          useAppStore.getState().setTerminalCompletionIntegration(sessionId, {
+            shell: isNativePowerShellTerminalRef.current ? "powershell" : "unsupported",
+            status: "unavailable",
+            reason: "terminal-closed",
+            updatedAt: Date.now(),
+          });
           term.write(`\r\n\x1b[33m[${t("terminal.processExited")}]\x1b[0m\r\n`);
           onExitRef.current?.();
           if (onCloseRef.current) {
@@ -1257,10 +1530,14 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       filePathDisposable.dispose();
       voiceInputPromise.then((unlisten) => unlisten());
       cursorStyleDisposable?.dispose();
+      commandLifecycleDisposable.dispose();
       disposeWebglAddon();
       outputPromise.then((unlisten) => unlisten());
       exitPromise.then((unlisten) => unlisten());
       dropPromise.then((unlisten) => unlisten());
+      if (enqueueInputRef.current === enqueueInput) {
+        enqueueInputRef.current = null;
+      }
       terminalRef.current = null;
       term.dispose();
     };
@@ -1282,7 +1559,6 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
     showLocalImagePreview,
     scheduleImagePreviewDismissal,
     pasteIntoTerminal,
-    removeStalePastedImagePreviews,
   ]);
 
   useEffect(() => {
@@ -1334,6 +1610,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
 
   return (
     <>
+      <div className="flex h-full min-h-0 w-full flex-col">
       <Dropdown
         menu={{
           items: contextMenuItems,
@@ -1344,7 +1621,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       >
         <div
           ref={containerRef}
-          className="app-terminal-surface w-full h-full p-1"
+          className="app-terminal-surface min-h-0 w-full flex-1 p-1"
           style={{
             background: termTheme.cssBackground,
             outline: isImageDragOver || isAgentFileDragOver ? "2px dashed var(--cs-accent)" : "none",
@@ -1397,55 +1674,17 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
               />
             </div>
           ) : null}
-          {pastedImagePreviews.length > 0 ? (
-            <div
-              className="absolute bottom-4 right-24 z-20 flex max-w-[calc(100%_-_120px)] items-end justify-end gap-3 overflow-x-auto px-2 pt-2"
-            >
-              {pastedImagePreviews.map((preview) => (
-                <div
-                  key={preview.id}
-                  className="relative h-[92px] w-[116px] shrink-0 overflow-visible rounded-[10px] border p-1.5 shadow-xl"
-                  style={{
-                    borderColor: "var(--cs-border)",
-                    background: "var(--cs-bg-card-solid, rgba(255,255,255,0.98))",
-                  }}
-                >
-                  <button
-                    type="button"
-                    className="block h-full w-full overflow-hidden rounded-[6px] border-0 p-0"
-                    style={{ background: "color-mix(in srgb, var(--cs-bg-sidebar) 88%, transparent)" }}
-                    title={t("terminal.openPastedImagePreview")}
-                    onClick={() => setPastedImageDialogId(preview.id)}
-                  >
-                    <img
-                      src={preview.src}
-                      alt={preview.alt}
-                      className="block h-full w-full object-contain"
-                    />
-                  </button>
-                  <button
-                    type="button"
-                    className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border shadow-md"
-                    style={{
-                      borderColor: "var(--cs-border)",
-                      background: "var(--cs-bg-card-solid, #fff)",
-                      color: "var(--cs-text-secondary)",
-                    }}
-                    title={t("terminal.closePastedImagePreview")}
-                    aria-label={t("terminal.closePastedImagePreview")}
-                    onClick={() => {
-                      setPastedImageDialogId((current) => current === preview.id ? null : current);
-                      setPastedImagePreviews((current) => current.filter((item) => item.id !== preview.id));
-                    }}
-                  >
-                    <CloseOutlined style={{ fontSize: 11 }} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : null}
         </div>
       </Dropdown>
+      <TerminalAttachmentBar
+        attachments={visibleAttachments}
+        onCopyPath={handleCopyAttachmentPath}
+        onInsertPath={(attachment) => void handleInsertAttachmentPath(attachment)}
+        onPreview={handleAttachmentPreview}
+        onRemove={handleRemoveAttachment}
+        loadThumbnail={loadAttachmentPreview}
+      />
+      </div>
       <SideQuestionComposer
         open={Boolean(sideQuestionDraft)}
         agent={sideQuestionDraft?.agent ?? null}
@@ -1458,23 +1697,23 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
         onSubmit={handleSideQuestionSubmit}
       />
       <Modal
-        open={Boolean(pastedImageDialogPreview)}
-        title={t("terminal.pastedImagePreviewTitle")}
+        open={Boolean(attachmentPreview)}
+        title={attachmentPreview?.fileName ?? t("terminal.attachmentPreviewTitle")}
         footer={null}
         width="min(880px, calc(100vw - 48px))"
         centered
-        onCancel={() => setPastedImageDialogId(null)}
+        onCancel={closeAttachmentPreview}
         destroyOnHidden={false}
       >
-        {pastedImageDialogPreview ? (
+        {attachmentPreviewDataUrl ? (
           <div className="flex max-h-[72vh] items-center justify-center overflow-auto rounded border p-2" style={{ borderColor: "var(--cs-border)" }}>
             <img
-              src={pastedImageDialogPreview.src}
-              alt={pastedImageDialogPreview.alt}
+              src={attachmentPreviewDataUrl}
+              alt={attachmentPreview?.fileName ?? ""}
               className="block max-h-[68vh] max-w-full object-contain"
             />
           </div>
-        ) : null}
+        ) : <div className="py-12 text-center text-sm text-[var(--cs-text-secondary)]">{t("terminal.attachmentPreviewLoading")}</div>}
       </Modal>
       <Modal
         open={Boolean(pendingTerminalLink)}
@@ -1497,41 +1736,6 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
 }
 
 export default Terminal;
-
-async function pasteClipboardIntoTerminal(
-  sessionId: string,
-  term: XTerm | null,
-  t: (key: string, options?: Record<string, unknown>) => string
-): Promise<TerminalPastedImagePreview | null> {
-  const text = await navigator.clipboard.readText().catch(() => "");
-  if (text) {
-    // Let xterm normalize line endings and emit bracketed paste when the app enabled it.
-    if (term) {
-      term.paste(text);
-      return null;
-    }
-
-    await ptyInput(sessionId, text);
-    return null;
-  }
-
-  const clipboardImage = await readClipboardImage();
-  if (clipboardImage) {
-    const dataBase64 = await blobToBase64(clipboardImage.blob);
-    const saved = await saveClipboardImage(dataBase64, clipboardImage.mimeType);
-    const insertedText = quotePathForShell(saved.path);
-    await ptyInput(sessionId, insertedText);
-    return {
-      id: saved.path,
-      src: `data:${clipboardImage.mimeType};base64,${dataBase64}`,
-      alt: saved.fileName,
-      insertedText,
-    };
-  }
-
-  message.warning(t("terminal.clipboardEmpty"));
-  return null;
-}
 
 async function readClipboardImage(): Promise<{ blob: Blob; mimeType: string } | null> {
   if (typeof navigator === "undefined" || !navigator.clipboard?.read) {
@@ -1570,6 +1774,13 @@ function blobToBase64(blob: Blob): Promise<string> {
     };
     reader.readAsDataURL(blob);
   });
+}
+
+function createSavingAttachmentId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `saving-${crypto.randomUUID()}`;
+  }
+  return `saving-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 function quotePathForShell(path: string): string {

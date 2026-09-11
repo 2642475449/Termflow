@@ -4,6 +4,10 @@ use crate::commands::git::checkpoint::{self, AgentTurnReview};
 use crate::events::{emit_session_event, SessionEvent, SessionEventSeverity, SessionEventType};
 use crate::hook_ingest::HookIngestConfig;
 use crate::opencode_control::{with_tui_server_args, OpenCodePromptControl};
+use crate::powershell_integration::{
+    POWERSHELL_COMPLETION_INTEGRATION_COMMAND, POWERSHELL_COMPLETION_INTEGRATION_ENV,
+    POWERSHELL_COMPLETION_INTEGRATION_SCRIPT,
+};
 use parking_lot::Mutex;
 use portable_pty::{CommandBuilder, PtyPair, PtySize};
 use serde::Serialize;
@@ -134,7 +138,7 @@ pub struct ActiveAgentTurn {
 
 struct SessionShell {
     program: String,
-    args: Vec<&'static str>,
+    args: Vec<String>,
     line_ending: &'static str,
 }
 
@@ -178,7 +182,9 @@ impl PtyManager {
             })
             .map_err(|e| format!("创建 PTY 失败: {}", e))?;
 
-        let shell = session_shell(shell_type)?;
+        let enable_powershell_completion_integration =
+            should_enable_powershell_completion_integration(shell_type, agent_id.as_deref());
+        let shell = session_shell(shell_type, enable_powershell_completion_integration)?;
         let mut startup_command = match startup_command_override {
             Some(cmd) => cmd,
             None => build_claude_start_command(
@@ -216,6 +222,12 @@ impl PtyManager {
         cmd.env("TERMFLOW_PROJECT_PATH", &path);
         cmd.env("TERMFLOW_INGEST_PORT", self.ingest_config.port.to_string());
         cmd.env("TERMFLOW_INGEST_TOKEN", &self.ingest_config.token);
+        if enable_powershell_completion_integration {
+            cmd.env(
+                POWERSHELL_COMPLETION_INTEGRATION_ENV,
+                POWERSHELL_COMPLETION_INTEGRATION_SCRIPT,
+            );
+        }
         crate::network_proxy::apply_proxy_to_pty_command(&mut cmd, &network_proxy);
         if let Some(control) = opencode_control.as_ref() {
             cmd.env("OPENCODE_SERVER_PASSWORD", control.password());
@@ -872,7 +884,10 @@ fn build_startup_input(startup_command: &str, line_ending: &str) -> Option<Strin
     }
 }
 
-fn session_shell(shell_type: &str) -> Result<SessionShell, String> {
+fn session_shell(
+    shell_type: &str,
+    enable_powershell_completion_integration: bool,
+) -> Result<SessionShell, String> {
     #[cfg(target_os = "windows")]
     {
         match shell_type {
@@ -883,7 +898,16 @@ fn session_shell(shell_type: &str) -> Result<SessionShell, String> {
             }),
             _ => Ok(SessionShell {
                 program: "powershell.exe".to_string(),
-                args: vec!["-NoLogo"],
+                args: if enable_powershell_completion_integration {
+                    vec![
+                        "-NoLogo".to_string(),
+                        "-NoExit".to_string(),
+                        "-Command".to_string(),
+                        POWERSHELL_COMPLETION_INTEGRATION_COMMAND.to_string(),
+                    ]
+                } else {
+                    vec!["-NoLogo".to_string()]
+                },
                 line_ending: "\r\n",
             }),
         }
@@ -897,6 +921,13 @@ fn session_shell(shell_type: &str) -> Result<SessionShell, String> {
             line_ending: "\n",
         })
     }
+}
+
+fn should_enable_powershell_completion_integration(
+    shell_type: &str,
+    agent_id: Option<&str>,
+) -> bool {
+    shell_type == "powershell" && agent_id == Some("powershell")
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -958,6 +989,45 @@ mod tests {
         assert!(!should_spawn_claude_usage_monitor(Some("qoder")));
         assert!(!should_spawn_claude_usage_monitor(Some("antigravity")));
         assert!(!should_spawn_claude_usage_monitor(Some("opencode")));
+    }
+
+    #[test]
+    fn completion_integration_is_limited_to_regular_powershell_terminals() {
+        assert!(should_enable_powershell_completion_integration(
+            "powershell",
+            Some("powershell"),
+        ));
+        assert!(!should_enable_powershell_completion_integration(
+            "powershell",
+            Some("claude"),
+        ));
+        assert!(!should_enable_powershell_completion_integration(
+            "cmd",
+            Some("cmd")
+        ));
+        assert!(!should_enable_powershell_completion_integration(
+            "powershell",
+            None
+        ));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn powershell_completion_integration_is_loaded_as_a_session_local_command() {
+        let shell = session_shell("powershell", true).unwrap();
+        assert_eq!(shell.program, "powershell.exe");
+        assert_eq!(
+            shell.args,
+            vec![
+                "-NoLogo".to_string(),
+                "-NoExit".to_string(),
+                "-Command".to_string(),
+                POWERSHELL_COMPLETION_INTEGRATION_COMMAND.to_string(),
+            ],
+        );
+
+        let plain_shell = session_shell("powershell", false).unwrap();
+        assert_eq!(plain_shell.args, vec!["-NoLogo".to_string()]);
     }
 
     #[test]

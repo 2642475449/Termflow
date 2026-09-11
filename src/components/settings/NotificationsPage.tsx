@@ -106,11 +106,28 @@ export function NotificationsPage() {
   const soundEnabled = useAppStore((state) => state.notificationSoundEnabled);
   const soundMap = useAppStore((state) => state.notificationSoundMap);
   const notificationThresholdMs = useAppStore((state) => state.notificationThresholdMs);
+  const terminalCompletionNotificationsEnabled = useAppStore(
+    (state) => state.terminalCompletionNotificationsEnabled,
+  );
+  const terminalCompletionNotificationThresholdMs = useAppStore(
+    (state) => state.terminalCompletionNotificationThresholdMs,
+  );
+  const terminalCompletionIntegration = useAppStore((state) =>
+    state.activeSessionId
+      ? state.terminalCompletionIntegrationBySession[state.activeSessionId] ?? null
+      : null,
+  );
   const remoteNotificationChannels = useAppStore((state) => state.remoteNotificationChannels);
   const setNotificationEnabled = useAppStore((state) => state.setNotificationEnabled);
   const setSoundEnabled = useAppStore((state) => state.setNotificationSoundEnabled);
   const setSoundMap = useAppStore((state) => state.setNotificationSoundMap);
   const setNotificationThreshold = useAppStore((state) => state.setNotificationThreshold);
+  const setTerminalCompletionNotificationsEnabled = useAppStore(
+    (state) => state.setTerminalCompletionNotificationsEnabled,
+  );
+  const setTerminalCompletionNotificationThreshold = useAppStore(
+    (state) => state.setTerminalCompletionNotificationThreshold,
+  );
   const setRemoteEnabled = useAppStore((state) => state.setRemoteNotificationEnabled);
   const setRemoteThreshold = useAppStore((state) => state.setRemoteNotificationThreshold);
   const setRemoteEvent = useAppStore((state) => state.setRemoteNotificationEvent);
@@ -157,6 +174,13 @@ export function NotificationsPage() {
     { label: t("settings.notifications.threshold.min10"), value: 600000 },
     { label: t("settings.notifications.threshold.min30"), value: 1800000 },
     { label: t("settings.notifications.threshold.hour1"), value: 3600000 },
+  ];
+  const terminalCompletionThresholdOptions = [
+    { label: t("settings.notificationThreshold.sec10"), value: 10_000 },
+    { label: t("settings.notificationThreshold.sec30"), value: 30_000 },
+    { label: t("settings.notificationThreshold.min1"), value: 60_000 },
+    { label: t("settings.notifications.threshold.min5"), value: 300_000 },
+    { label: t("settings.notifications.threshold.min10"), value: 600_000 },
   ];
   const soundOptions = SOUND_OPTIONS.map((option) => ({
     value: option.value as NotificationSoundType,
@@ -260,6 +284,22 @@ export function NotificationsPage() {
   }
 
   const selectedChannel = remoteNotificationChannels[selectedProvider];
+  const terminalCompletionStatusKey = terminalCompletionIntegration
+    ? `settings.notifications.terminalCompletion.status.${terminalCompletionIntegration.status}`
+    : "settings.notifications.terminalCompletion.status.noActiveTerminal";
+  const terminalCompletionStatusDescriptionKey = !terminalCompletionIntegration
+    ? "settings.notifications.terminalCompletion.status.noActiveTerminalDesc"
+    : terminalCompletionIntegration.reason
+      ? `settings.notifications.terminalCompletion.statusReason.${terminalCompletionIntegration.reason}`
+      : terminalCompletionIntegration.status === "available"
+        ? "settings.notifications.terminalCompletion.statusReason.available"
+        : "settings.notifications.terminalCompletion.statusReason.pending";
+  const terminalCompletionStatusColor =
+    terminalCompletionIntegration?.status === "available"
+      ? "success"
+      : terminalCompletionIntegration?.status === "pending"
+        ? "processing"
+        : "default";
 
   return (
     <>
@@ -337,6 +377,38 @@ export function NotificationsPage() {
             ))}
           </>
         )}
+      </NotificationSection>
+
+      <NotificationSection title={t("settings.notifications.terminalCompletion.section")}>
+        <NotificationRow
+          label={t("settings.notifications.terminalCompletion.enabled")}
+          desc={t("settings.notifications.terminalCompletion.enabledDesc")}
+        >
+          <Switch
+            checked={terminalCompletionNotificationsEnabled}
+            onChange={setTerminalCompletionNotificationsEnabled}
+          />
+        </NotificationRow>
+        {terminalCompletionNotificationsEnabled && (
+          <NotificationRow
+            label={t("settings.notifications.terminalCompletion.threshold")}
+            desc={t("settings.notifications.terminalCompletion.thresholdDesc")}
+          >
+            <Select
+              size="small"
+              value={terminalCompletionNotificationThresholdMs}
+              options={terminalCompletionThresholdOptions}
+              onChange={setTerminalCompletionNotificationThreshold}
+              style={{ width: 140 }}
+            />
+          </NotificationRow>
+        )}
+        <NotificationRow
+          label={t("settings.notifications.terminalCompletion.integrationStatus")}
+          desc={t(terminalCompletionStatusDescriptionKey)}
+        >
+          <Tag color={terminalCompletionStatusColor}>{t(terminalCompletionStatusKey)}</Tag>
+        </NotificationRow>
       </NotificationSection>
 
       {selectedChannel.enabled && (
