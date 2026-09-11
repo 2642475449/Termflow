@@ -137,8 +137,8 @@ fn install_antigravity_hook() -> Result<AgentHookStatus, String> {
     let home = dirs_next::home_dir().ok_or("无法读取用户主目录")?;
     let config_path = home.join(".gemini").join("config").join("hooks.json");
     let script_path = write_managed_script()?;
-    let pre_invocation_command = node_command(&script_path, "antigravity", Some("PreInvocation"));
-    let stop_command = node_command(&script_path, "antigravity", Some("Stop"));
+    let pre_invocation_command = antigravity_hook_command(&script_path, "PreInvocation");
+    let stop_command = antigravity_hook_command(&script_path, "Stop");
     let mut config = read_json_object(&config_path)?;
     install_antigravity_hook_group(&mut config, &pre_invocation_command, &stop_command)?;
     write_json(&config_path, &config)?;
@@ -530,6 +530,23 @@ fn node_command(script_path: &Path, agent: &str, event: Option<&str>) -> String 
     }
 }
 
+fn antigravity_hook_command(script_path: &Path, event: &str) -> String {
+    if !cfg!(windows) {
+        return node_command(script_path, "antigravity", Some(event));
+    }
+    // Windows 的 Hook 执行器会保留路径引号。编码路径可避免空格、中文及引号
+    // 被命令拆分器误解析；补回脚本参数以保持 managed_hook_script 的 argv 契约。
+    let encoded_path: String = script_path
+        .to_string_lossy()
+        .as_bytes()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    format!(
+        "node -e process.argv.splice(1,0,Buffer.from('{encoded_path}','hex').toString());require(process.argv[1])/*{OWNED_MARKER}*/ antigravity {event}"
+    )
+}
+
 fn managed_hook_script() -> &'static str {
     r#"#!/usr/bin/env node
 const crypto = require('crypto');
@@ -733,6 +750,30 @@ mod tests {
     };
     use serde_json::json;
     use std::path::PathBuf;
+
+    #[test]
+    #[cfg(windows)]
+    fn antigravity_windows_hook_handles_literal_arguments_and_spaced_unicode_paths() {
+        let directory = tempfile::tempdir().unwrap();
+        let script = directory.path().join("含 空格 termflow-agent-hook.cjs");
+        std::fs::write(&script, managed_hook_script()).unwrap();
+        for (event, expected) in [
+            ("PreInvocation", "{\"injectSteps\":[]}"),
+            ("Stop", "{\"decision\":\"\"}"),
+        ] {
+            let command = super::antigravity_hook_command(&script, event);
+            assert!(super::value_contains_owned_command(&json!({"command": command})));
+            let mut args = command.split_whitespace();
+            let output = std::process::Command::new(args.next().unwrap())
+                .args(args)
+                .env_remove("TERMFLOW_INGEST_PORT")
+                .stdin(std::process::Stdio::null())
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+            assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), expected);
+        }
+    }
 
     #[test]
     fn pi_does_not_attempt_an_unsupported_status_hook_install() {

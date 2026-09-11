@@ -95,6 +95,9 @@ function VoiceWorkerWindow() {
       });
     },
     onError: (err) => {
+      if (err.code === "empty_audio") {
+        return;
+      }
       void emit("voice-worker-error", err);
     },
   });

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Input, Modal, Select, Spin, Switch } from "antd";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Alert, Input, Modal, Select, Spin, Switch, type InputRef } from "antd";
+import { EnterOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { useTranslation } from "react-i18next";
 import { getClaudeEffortInfo, inspectAgentClis } from "@/lib/api";
@@ -49,6 +50,7 @@ export function NewSessionDialog({
   onCreate,
 }: NewSessionDialogProps) {
   const { t } = useTranslation();
+  const nameInputRef = useRef<InputRef>(null);
   const currentProject = useAppStore((state) => state.currentProject);
   const agentPermissionDefaults = useAppStore((state) => state.agentPermissionDefaults);
   const [name, setName] = useState("");
@@ -77,6 +79,8 @@ export function NewSessionDialog({
     let disposed = false;
     setName(t("sidebar.sessionDefaultName", { time: dayjs().format("HH:mm:ss") }));
     setNameEdited(false);
+    // 弹窗组件关闭后仍保留状态；每次新建都重新采用当前默认智能体。
+    setAgentId(null);
     setDetecting(true);
     setDetectionFailed(false);
     const claudeDefaults = getDefaultAgentLaunchOptions(
@@ -246,12 +250,21 @@ export function NewSessionDialog({
     <Modal
       open={open}
       title={title ?? t("newSession.title")}
-      okText={t("newSession.create")}
+      okText={
+        <span className="inline-flex items-center gap-2">
+          {t("newSession.create")}
+          <EnterOutlined aria-hidden="true" />
+        </span>
+      }
       cancelText={t("common.cancel")}
       confirmLoading={creating}
       okButtonProps={{ disabled: !canCreate }}
       onOk={handleConfirmCreate}
       onCancel={onCancel}
+      afterOpenChange={(visible) => {
+        // 等弹窗完成焦点管理后再聚焦，保证 Ctrl+N 后可直接回车创建。
+        if (visible) nameInputRef.current?.focus();
+      }}
       destroyOnHidden
       width={480}
     >
@@ -261,6 +274,7 @@ export function NewSessionDialog({
             {t("newSession.name")}
           </div>
           <Input
+            ref={nameInputRef}
             value={name}
             onChange={(event) => {
               setNameEdited(true);
@@ -270,8 +284,13 @@ export function NewSessionDialog({
             maxLength={80}
             autoFocus
             onPressEnter={(event) => {
-              if (event.nativeEvent.isComposing) return;
+              if (
+                event.nativeEvent.isComposing ||
+                event.nativeEvent.keyCode === 229 ||
+                event.repeat
+              ) return;
               event.preventDefault();
+              event.stopPropagation();
               handleConfirmCreate();
             }}
           />

@@ -36,7 +36,6 @@ export function TaskMonitorPopover() {
   }, [open, refreshWindows]);
 
   async function navigate(projectPath: string, tab: TaskMonitorTab) {
-    setOpen(false);
     if (currentProject && projectPathKey(currentProject.path) === projectPathKey(projectPath)) {
       useAppStore.getState().setActiveSession(tab.id, tab.paneId);
       return;

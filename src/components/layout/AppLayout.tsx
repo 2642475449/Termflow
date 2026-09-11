@@ -1006,7 +1006,8 @@ function AppLayout() {
       if (err.code === "no_api_key") {
         void message.warning(err.message);
       } else if (err.code === "empty_audio") {
-        void message.info(err.message);
+        // 静默处理，不展示全局 Toast 提示
+        return;
       } else if (err.code === "shortcut_register_failed") {
         void message.warning({
           key: "voice-shortcut-register-failed",
