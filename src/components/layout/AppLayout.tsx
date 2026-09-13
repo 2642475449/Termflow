@@ -82,6 +82,8 @@ import {
 } from "@/lib/auxiliaryDock";
 import { isSessionVisibleInAuxiliaryDock } from "@/store/auxiliaryDock";
 import { ApplicationUpdateController } from "@/components/updater/ApplicationUpdateController";
+import { SCHEDULED_TASKS_TAB_ID } from "@/lib/scheduledTasks";
+import { startScheduledTaskSync } from "@/store/slices/scheduledTasks";
 
 const { Content } = Layout;
 const SETTINGS_ID = "__settings__";
@@ -90,6 +92,7 @@ const STATUS_AGENT_IDS = getAgentIdsWithCapability("statusEvents");
 const MIN_SPLIT_PANE_SIZE = 320;
 
 const SettingsPanel = lazy(() => import("@/components/SettingsPanel"));
+const ScheduledTasksPanel = lazy(() => import("@/components/ScheduledTasksPanel"));
 const FileTabView = lazy(() => import("@/components/FileTabView"));
 const GitDiffTabView = lazy(() => import("@/components/GitDiffTabView"));
 const Terminal = lazy(() => import("@/components/Terminal"));
@@ -218,12 +221,13 @@ function WorkspacePane({ paneId }: { paneId: string }) {
             {pane.tabIds.map((tabId) => {
               const tab = tabsById[tabId];
               const isSettings = tabId === SETTINGS_ID || tab?.kind === "settings";
+              const isScheduledTasks = tabId === SCHEDULED_TASKS_TAB_ID || tab?.kind === "scheduled-tasks";
               const isFile = tab?.kind === "file";
               const isDiff = tab?.kind === "diff";
-              const session = isSettings || isFile || isDiff
+              const session = isSettings || isScheduledTasks || isFile || isDiff
                 ? null
                 : sessions.find((item) => item.id === tabId);
-              if (!isSettings && !isFile && !isDiff && !session) return null;
+              if (!isSettings && !isScheduledTasks && !isFile && !isDiff && !session) return null;
 
               return (
                 <div
@@ -237,6 +241,8 @@ function WorkspacePane({ paneId }: { paneId: string }) {
                   <Suspense fallback={<WorkspaceContentFallback />}>
                     {isSettings ? (
                       <SettingsPanel />
+                    ) : isScheduledTasks ? (
+                      <ScheduledTasksPanel />
                     ) : isFile && currentProject ? (
                       <FileTabView
                         tabId={tabId}
@@ -553,6 +559,8 @@ function AppLayout() {
     scopePath: string | null;
   }>({ open: false, scopePath: null });
   const terminalNotificationPermissionDeniedRef = useRef(false);
+
+  useEffect(() => startScheduledTaskSync(), []);
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const visibleTerminalSessionKey = Object.values(panesById)

@@ -83,6 +83,10 @@ import type {
   AgentTurnStartResult,
   CheckpointRestoreResult,
   CheckpointReviewDecision,
+  ScheduledTask,
+  ScheduledTaskInput,
+  ScheduledTaskRun,
+  ScheduledTaskSchedule,
 } from "@/types";
 
 export async function spawnPty(
@@ -220,6 +224,66 @@ export async function inspectAgentClis(options?: {
     });
 
   return agentCliInspectionRequest;
+}
+
+export async function listScheduledTasks(projectPath?: string | null): Promise<ScheduledTask[]> {
+  return await invoke("list_scheduled_tasks", { projectPath: projectPath ?? null });
+}
+
+export async function createScheduledTask(task: ScheduledTaskInput): Promise<ScheduledTask> {
+  return await invoke("create_scheduled_task", { task });
+}
+
+export async function updateScheduledTask(
+  taskId: string,
+  task: ScheduledTaskInput,
+): Promise<ScheduledTask> {
+  return await invoke("update_scheduled_task", { taskId, task });
+}
+
+export async function setScheduledTaskEnabled(
+  taskId: string,
+  enabled: boolean,
+): Promise<ScheduledTask> {
+  return await invoke("set_scheduled_task_enabled", { taskId, enabled });
+}
+
+export async function deleteScheduledTask(taskId: string): Promise<void> {
+  await invoke("delete_scheduled_task", { taskId });
+}
+
+export async function runScheduledTaskNow(taskId: string): Promise<ScheduledTaskRun> {
+  return await invoke("run_scheduled_task_now", { taskId });
+}
+
+export async function listScheduledTaskRuns(options?: {
+  projectPath?: string | null;
+  limit?: number;
+}): Promise<ScheduledTaskRun[]> {
+  return await invoke("list_scheduled_task_runs", {
+    projectPath: options?.projectPath ?? null,
+    limit: options?.limit ?? null,
+  });
+}
+
+export async function getScheduledTaskRun(runId: string): Promise<ScheduledTaskRun> {
+  return await invoke("get_scheduled_task_run", { runId });
+}
+
+export async function getScheduledTaskRunLog(runId: string): Promise<string> {
+  return await invoke("get_scheduled_task_run_log", { runId });
+}
+
+export async function cancelScheduledTaskRun(runId: string): Promise<void> {
+  await invoke("cancel_scheduled_task_run", { runId });
+}
+
+export async function previewScheduledTaskRuns(
+  schedule: ScheduledTaskSchedule,
+  timezone: string,
+  count = 3,
+): Promise<number[]> {
+  return await invoke("preview_scheduled_task_runs", { schedule, timezone, count });
 }
 
 export async function getClaudeEffortInfo(

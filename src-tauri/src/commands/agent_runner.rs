@@ -137,7 +137,7 @@ fn build_agent_command<'a>(
     Ok((command, stdin_input))
 }
 
-fn executable_command(executable_path: &str) -> Command {
+pub(crate) fn executable_command(executable_path: &str) -> Command {
     let lower_path = executable_path.to_ascii_lowercase();
 
     if cfg!(target_os = "windows") && (lower_path.ends_with(".cmd") || lower_path.ends_with(".bat"))

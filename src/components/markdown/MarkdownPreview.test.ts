@@ -2,11 +2,27 @@ import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Root } from "hast";
+import { parseScheduledTaskLog } from "@/lib/scheduledTasks";
 import MarkdownPreview, {
   isLikelyMarkdownPath,
   renderInlineMarkdown,
   renderStarryNightTree,
 } from "./MarkdownPreview";
+
+it("renders a saved scheduled-task report as a table, list and code block", () => {
+  const { output } = parseScheduledTaskLog("status: succeeded\nexitCode: 0\n\n--- output ---\n**新增功能**\n\n| 功能 | 说明 |\n|---|---|\n| 定时任务 | 代码巡查 |\n\n- 支持每日运行\n\n```sh\ngit status\n```\n\n--- stderr ---\nCLI diagnostics");
+  const markup = renderToStaticMarkup(createElement(MarkdownPreview, {
+    content: output,
+    emptyText: "empty",
+    className: "app-scheduled-result",
+  }));
+  expect(markup).toMatch(/<strong>[\s\S]*?新增功能[\s\S]*?<\/strong>/);
+  expect(markup).toMatch(/<table[\s>]/);
+  expect(markup).toMatch(/<li[\s>]/);
+  expect(markup).toContain("<pre");
+  expect(markup).not.toContain("CLI diagnostics");
+  expect(markup).not.toContain("exitCode");
+});
 
 describe("isLikelyMarkdownPath", () => {
   it("recognizes absolute and relative project paths", () => {

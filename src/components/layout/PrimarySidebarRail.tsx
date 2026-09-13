@@ -1,4 +1,4 @@
-import { CodeOutlined, FolderOutlined, SettingOutlined, BranchesOutlined } from "@ant-design/icons";
+import { CodeOutlined, FolderOutlined, SettingOutlined, BranchesOutlined, ClockCircleOutlined } from "@ant-design/icons";
 import { message, Popover, Tooltip } from "antd";
 import { useCallback, useState } from "react";
 import { getQuickSettingsSubmenuOnPopoverChange, toggleQuickSettingsSubmenu, type QuickSettingsSubmenu } from "@/lib/quickSettingsMenu";
@@ -9,6 +9,7 @@ import { useAppStore, type Language, type SidebarSection, type ThemeCategory } f
 import { setClaudeTheme } from "@/lib/api";
 import { checkForApplicationUpdate } from "@/lib/applicationUpdater";
 import { useApplicationUpdateStore } from "@/store/slices/applicationUpdate";
+import { SCHEDULED_TASKS_TAB_ID } from "@/lib/scheduledTasks";
 import i18n, { toI18nLanguage } from "@/i18n";
 
 interface RailButtonProps {
@@ -301,6 +302,7 @@ function PrimarySidebarRail() {
   const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed);
   const setActiveSidebarSection = useAppStore((s) => s.setActiveSidebarSection);
   const setSidebarCollapsed = useAppStore((s) => s.setSidebarCollapsed);
+  const openTab = useAppStore((s) => s.openTab);
   const gitChangeCount = useAppStore((s) => s.gitChangeCount);
   const gitAheadCount = useAppStore((s) => s.gitAheadCount);
   const gitBehindCount = useAppStore((s) => s.gitBehindCount);
@@ -372,6 +374,12 @@ function PrimarySidebarRail() {
     [activeSidebarSection, setActiveSidebarSection, setSidebarCollapsed, sidebarCollapsed]
   );
 
+  const handleOpenScheduledTasks = useCallback(() => {
+    setActiveSidebarSection("schedules");
+    setSidebarCollapsed(false);
+    openTab(SCHEDULED_TASKS_TAB_ID);
+  }, [openTab, setActiveSidebarSection, setSidebarCollapsed]);
+
   const gitTooltip = (
     <div className="flex flex-col gap-1 text-xs leading-5">
       <div>{t("sidebar.gitSection", "Git")}</div>
@@ -421,6 +429,13 @@ function PrimarySidebarRail() {
             </span>
           )}
         </div>
+        <RailButton
+          active={activeSidebarSection === "schedules"}
+          title={t("scheduledTasks.title")}
+          onClick={handleOpenScheduledTasks}
+        >
+          <ClockCircleOutlined className="text-[18px]" />
+        </RailButton>
       </div>
       <div className="flex flex-col items-center gap-1.5">
         <Popover

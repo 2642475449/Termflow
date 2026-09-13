@@ -7,11 +7,23 @@ use std::{collections::BTreeMap, fs, path::Path, sync::Arc};
 use tauri::{AppHandle, Manager};
 
 use crate::network_proxy::{default_no_proxy, default_proxy_mode, NetworkProxySettings};
+use crate::scheduled_tasks::{
+    NewScheduledTaskRun, ScheduledTaskExecutionKind, ScheduledTaskMissedRunPolicy,
+    ScheduledTaskNotificationPolicy, ScheduledTaskRecord, ScheduledTaskRunCompletion,
+    ScheduledTaskRunRecord, ScheduledTaskRunStatus, ScheduledTaskSchedule, ScheduledTaskTrigger,
+};
 
 const DATABASE_FILE_NAME: &str = "termflow.db";
 const SEARCH_INDEX_PROJECT_PREFERENCES_KEY: &str = "searchIndex.projectPreferences";
 const SEARCH_INDEX_STORAGE_KEY: &str = "searchIndex.storage";
 pub const DEFAULT_SEARCH_INDEX_QUOTA_BYTES: u64 = 5 * 1024 * 1024 * 1024;
+
+#[derive(Debug, Clone)]
+pub struct ScheduledTaskRunLogRecord {
+    pub run_id: String,
+    pub log_path: String,
+    pub completed_at_ms: i64,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -252,7 +264,8 @@ impl Default for PersistentSettingsRecord {
             notification_sound_enabled: true,
             notification_sound_map: NotificationSoundMapRecord::default(),
             notification_threshold_ms: 10_000,
-            terminal_completion_notifications_enabled: default_terminal_completion_notifications_enabled(),
+            terminal_completion_notifications_enabled:
+                default_terminal_completion_notifications_enabled(),
             terminal_completion_notification_threshold_ms:
                 default_terminal_completion_notification_threshold_ms(),
             remote_notifications: default_remote_notifications(),
@@ -437,6 +450,435 @@ impl Database {
         Self {
             conn: Mutex::new(conn),
         }
+    }
+
+    pub fn list_scheduled_tasks(
+        &self,
+        project_path: Option<&str>,
+    ) -> Result<Vec<ScheduledTaskRecord>, String> {
+        let conn = self.conn.lock();
+        let query = "SELECT id, project_path, project_name, name, execution_kind, agent_id, prompt,
+                     command, shell, schedule_json, timezone, enabled, next_run_at_ms, timeout_ms,
+                     missed_run_policy, notification_policy, created_at_ms, updated_at_ms, deleted_at_ms
+                     FROM scheduled_tasks WHERE deleted_at_ms IS NULL";
+        let mut statement = if project_path.is_some() {
+            conn.prepare(&format!(
+                "{query} AND project_path = ?1 ORDER BY updated_at_ms DESC"
+            ))
+        } else {
+            conn.prepare(&format!("{query} ORDER BY updated_at_ms DESC"))
+        }
+        .map_err(|error| format!("查询定时任务失败: {error}"))?;
+
+        let rows = match project_path {
+            Some(path) => statement.query_map([path], read_scheduled_task_row),
+            None => statement.query_map([], read_scheduled_task_row),
+        }
+        .map_err(|error| format!("读取定时任务失败: {error}"))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("解析定时任务失败: {error}"))
+    }
+
+    pub fn get_scheduled_task(&self, task_id: &str) -> Result<ScheduledTaskRecord, String> {
+        let conn = self.conn.lock();
+        conn.query_row(
+            "SELECT id, project_path, project_name, name, execution_kind, agent_id, prompt,
+             command, shell, schedule_json, timezone, enabled, next_run_at_ms, timeout_ms,
+             missed_run_policy, notification_policy, created_at_ms, updated_at_ms, deleted_at_ms
+             FROM scheduled_tasks WHERE id = ?1 AND deleted_at_ms IS NULL",
+            [task_id],
+            read_scheduled_task_row,
+        )
+        .optional()
+        .map_err(|error| format!("读取定时任务失败: {error}"))?
+        .ok_or_else(|| "未找到定时任务".to_string())
+    }
+
+    pub fn create_scheduled_task(&self, task: &ScheduledTaskRecord) -> Result<(), String> {
+        let schedule_json = serde_json::to_string(&task.schedule)
+            .map_err(|error| format!("序列化定时规则失败: {error}"))?;
+        let conn = self.conn.lock();
+        conn.execute(
+            "INSERT INTO scheduled_tasks (
+                id, project_path, project_name, name, execution_kind, agent_id, prompt, command,
+                shell, schedule_json, timezone, enabled, next_run_at_ms, timeout_ms,
+                missed_run_policy, notification_policy, created_at_ms, updated_at_ms, deleted_at_ms
+             ) VALUES (
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19
+             )",
+            params![
+                task.id,
+                task.project_path,
+                task.project_name,
+                task.name,
+                task.execution_kind.as_str(),
+                task.agent_id,
+                task.prompt,
+                task.command,
+                task.shell,
+                schedule_json,
+                task.timezone,
+                if task.enabled { 1_i64 } else { 0_i64 },
+                task.next_run_at_ms,
+                task.timeout_ms,
+                task.missed_run_policy.as_str(),
+                task.notification_policy.as_str(),
+                task.created_at_ms,
+                task.updated_at_ms,
+                task.deleted_at_ms,
+            ],
+        )
+        .map_err(|error| format!("保存定时任务失败: {error}"))?;
+        Ok(())
+    }
+
+    pub fn update_scheduled_task(&self, task: &ScheduledTaskRecord) -> Result<(), String> {
+        let schedule_json = serde_json::to_string(&task.schedule)
+            .map_err(|error| format!("序列化定时规则失败: {error}"))?;
+        let conn = self.conn.lock();
+        let changed = conn
+            .execute(
+                "UPDATE scheduled_tasks SET
+                    project_path = ?2, project_name = ?3, name = ?4, execution_kind = ?5,
+                    agent_id = ?6, prompt = ?7, command = ?8, shell = ?9, schedule_json = ?10,
+                    timezone = ?11, enabled = ?12, next_run_at_ms = ?13, timeout_ms = ?14,
+                    missed_run_policy = ?15, notification_policy = ?16, updated_at_ms = ?17
+                 WHERE id = ?1 AND deleted_at_ms IS NULL",
+                params![
+                    task.id,
+                    task.project_path,
+                    task.project_name,
+                    task.name,
+                    task.execution_kind.as_str(),
+                    task.agent_id,
+                    task.prompt,
+                    task.command,
+                    task.shell,
+                    schedule_json,
+                    task.timezone,
+                    if task.enabled { 1_i64 } else { 0_i64 },
+                    task.next_run_at_ms,
+                    task.timeout_ms,
+                    task.missed_run_policy.as_str(),
+                    task.notification_policy.as_str(),
+                    task.updated_at_ms,
+                ],
+            )
+            .map_err(|error| format!("更新定时任务失败: {error}"))?;
+        if changed == 0 {
+            return Err("未找到定时任务".to_string());
+        }
+        Ok(())
+    }
+
+    pub fn delete_scheduled_task(&self, task_id: &str, now_ms: i64) -> Result<(), String> {
+        let conn = self.conn.lock();
+        let changed = conn
+            .execute(
+                "UPDATE scheduled_tasks SET enabled = 0, next_run_at_ms = NULL,
+                 deleted_at_ms = ?2, updated_at_ms = ?2
+                 WHERE id = ?1 AND deleted_at_ms IS NULL",
+                params![task_id, now_ms],
+            )
+            .map_err(|error| format!("删除定时任务失败: {error}"))?;
+        if changed == 0 {
+            return Err("未找到定时任务".to_string());
+        }
+        Ok(())
+    }
+
+    pub fn list_due_scheduled_tasks(
+        &self,
+        now_ms: i64,
+        limit: usize,
+    ) -> Result<Vec<ScheduledTaskRecord>, String> {
+        let conn = self.conn.lock();
+        let mut statement = conn
+            .prepare(
+                "SELECT id, project_path, project_name, name, execution_kind, agent_id, prompt,
+                 command, shell, schedule_json, timezone, enabled, next_run_at_ms, timeout_ms,
+                 missed_run_policy, notification_policy, created_at_ms, updated_at_ms, deleted_at_ms
+                 FROM scheduled_tasks
+                 WHERE deleted_at_ms IS NULL AND enabled = 1 AND next_run_at_ms IS NOT NULL
+                 AND next_run_at_ms <= ?1
+                 ORDER BY next_run_at_ms ASC LIMIT ?2",
+            )
+            .map_err(|error| format!("查询到期定时任务失败: {error}"))?;
+        let rows = statement
+            .query_map(params![now_ms, limit as i64], read_scheduled_task_row)
+            .map_err(|error| format!("读取到期定时任务失败: {error}"))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("解析到期定时任务失败: {error}"))
+    }
+
+    pub fn claim_scheduled_task_run(
+        &self,
+        task: &ScheduledTaskRecord,
+        scheduled_at_ms: i64,
+        next_run_at_ms: Option<i64>,
+        now_ms: i64,
+    ) -> Result<Option<ScheduledTaskRunRecord>, String> {
+        let snapshot = serde_json::to_value(task)
+            .map_err(|error| format!("序列化定时任务快照失败: {error}"))?;
+        let snapshot_json = serde_json::to_string(&snapshot)
+            .map_err(|error| format!("序列化定时任务快照失败: {error}"))?;
+        let run = NewScheduledTaskRun {
+            id: crate::scheduled_tasks::unique_id("scheduled-run", now_ms),
+            task_id: task.id.clone(),
+            trigger: ScheduledTaskTrigger::Schedule,
+            scheduled_at_ms: Some(scheduled_at_ms),
+            config_snapshot: snapshot,
+            created_at_ms: now_ms,
+        };
+        let mut conn = self.conn.lock();
+        let transaction = conn
+            .transaction()
+            .map_err(|error| format!("开始领取定时任务事务失败: {error}"))?;
+        let changed = transaction
+            .execute(
+                "UPDATE scheduled_tasks SET next_run_at_ms = ?3,
+                 enabled = CASE WHEN ?3 IS NULL THEN 0 ELSE enabled END,
+                 updated_at_ms = ?4
+                 WHERE id = ?1 AND enabled = 1 AND next_run_at_ms = ?2 AND deleted_at_ms IS NULL",
+                params![task.id, scheduled_at_ms, next_run_at_ms, now_ms],
+            )
+            .map_err(|error| format!("领取定时任务失败: {error}"))?;
+        if changed == 0 {
+            return Ok(None);
+        }
+        transaction
+            .execute(
+                "INSERT INTO scheduled_task_runs (
+                    id, task_id, trigger, scheduled_at_ms, status, config_snapshot_json,
+                    started_at_ms, completed_at_ms, exit_code, summary, error, log_path, created_at_ms
+                 ) VALUES (?1, ?2, ?3, ?4, 'queued', ?5, NULL, NULL, NULL, NULL, NULL, NULL, ?6)",
+                params![
+                    run.id,
+                    run.task_id,
+                    run.trigger.as_str(),
+                    run.scheduled_at_ms,
+                    snapshot_json,
+                    run.created_at_ms,
+                ],
+            )
+            .map_err(|error| format!("创建定时任务运行记录失败: {error}"))?;
+        transaction
+            .commit()
+            .map_err(|error| format!("提交定时任务领取失败: {error}"))?;
+        Ok(Some(ScheduledTaskRunRecord {
+            id: run.id,
+            task_id: run.task_id,
+            task_name: task.name.clone(),
+            project_path: task.project_path.clone(),
+            trigger: run.trigger,
+            scheduled_at_ms: run.scheduled_at_ms,
+            status: ScheduledTaskRunStatus::Queued,
+            config_snapshot: run.config_snapshot,
+            started_at_ms: None,
+            completed_at_ms: None,
+            exit_code: None,
+            summary: None,
+            error: None,
+            log_available: false,
+            created_at_ms: run.created_at_ms,
+        }))
+    }
+
+    pub fn create_manual_scheduled_task_run(
+        &self,
+        task: &ScheduledTaskRecord,
+        now_ms: i64,
+    ) -> Result<ScheduledTaskRunRecord, String> {
+        let config_snapshot = serde_json::to_value(task)
+            .map_err(|error| format!("序列化定时任务快照失败: {error}"))?;
+        let snapshot_json = serde_json::to_string(&config_snapshot)
+            .map_err(|error| format!("序列化定时任务快照失败: {error}"))?;
+        let run = NewScheduledTaskRun {
+            id: crate::scheduled_tasks::unique_id("scheduled-run", now_ms),
+            task_id: task.id.clone(),
+            trigger: ScheduledTaskTrigger::Manual,
+            scheduled_at_ms: None,
+            config_snapshot,
+            created_at_ms: now_ms,
+        };
+        let conn = self.conn.lock();
+        conn.execute(
+            "INSERT INTO scheduled_task_runs (
+                id, task_id, trigger, scheduled_at_ms, status, config_snapshot_json,
+                started_at_ms, completed_at_ms, exit_code, summary, error, log_path, created_at_ms
+             ) VALUES (?1, ?2, ?3, ?4, 'queued', ?5, NULL, NULL, NULL, NULL, NULL, NULL, ?6)",
+            params![
+                run.id,
+                run.task_id,
+                run.trigger.as_str(),
+                run.scheduled_at_ms,
+                snapshot_json,
+                run.created_at_ms,
+            ],
+        )
+        .map_err(|error| format!("创建定时任务运行记录失败: {error}"))?;
+        Ok(ScheduledTaskRunRecord {
+            id: run.id,
+            task_id: run.task_id,
+            task_name: task.name.clone(),
+            project_path: task.project_path.clone(),
+            trigger: run.trigger,
+            scheduled_at_ms: None,
+            status: ScheduledTaskRunStatus::Queued,
+            config_snapshot: run.config_snapshot,
+            started_at_ms: None,
+            completed_at_ms: None,
+            exit_code: None,
+            summary: None,
+            error: None,
+            log_available: false,
+            created_at_ms: run.created_at_ms,
+        })
+    }
+
+    pub fn mark_scheduled_task_run_running(&self, run_id: &str, now_ms: i64) -> Result<(), String> {
+        let conn = self.conn.lock();
+        let changed = conn
+            .execute(
+                "UPDATE scheduled_task_runs SET status = ?2, started_at_ms = ?3
+                 WHERE id = ?1 AND status = 'queued'",
+                params![run_id, ScheduledTaskRunStatus::Running.as_str(), now_ms],
+            )
+            .map_err(|error| format!("更新定时任务运行状态失败: {error}"))?;
+        if changed == 0 {
+            return Err("定时任务运行记录已不处于等待状态".to_string());
+        }
+        Ok(())
+    }
+
+    pub fn complete_scheduled_task_run(
+        &self,
+        run_id: &str,
+        completion: ScheduledTaskRunCompletion,
+    ) -> Result<(), String> {
+        let conn = self.conn.lock();
+        let changed = conn
+            .execute(
+                "UPDATE scheduled_task_runs SET status = ?2, completed_at_ms = ?3, exit_code = ?4,
+                 summary = ?5, error = ?6, log_path = ?7
+                 WHERE id = ?1 AND status IN ('queued', 'running')",
+                params![
+                    run_id,
+                    completion.status.as_str(),
+                    completion.completed_at_ms,
+                    completion.exit_code,
+                    completion.summary,
+                    completion.error,
+                    completion.log_path,
+                ],
+            )
+            .map_err(|error| format!("保存定时任务运行结果失败: {error}"))?;
+        if changed == 0 {
+            return Err("定时任务运行记录已结束".to_string());
+        }
+        Ok(())
+    }
+
+    pub fn list_scheduled_task_runs(
+        &self,
+        project_path: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<ScheduledTaskRunRecord>, String> {
+        let conn = self.conn.lock();
+        let query = "SELECT r.id, r.task_id, t.name, t.project_path, r.trigger, r.scheduled_at_ms,
+                     r.status, r.config_snapshot_json, r.started_at_ms, r.completed_at_ms,
+                     r.exit_code, r.summary, r.error, r.log_path, r.created_at_ms
+                     FROM scheduled_task_runs r
+                     JOIN scheduled_tasks t ON t.id = r.task_id";
+        let mut statement = if project_path.is_some() {
+            conn.prepare(&format!(
+                "{query} WHERE t.project_path = ?1 ORDER BY r.created_at_ms DESC LIMIT ?2"
+            ))
+        } else {
+            conn.prepare(&format!("{query} ORDER BY r.created_at_ms DESC LIMIT ?1"))
+        }
+        .map_err(|error| format!("查询定时任务运行记录失败: {error}"))?;
+        let rows = match project_path {
+            Some(path) => {
+                statement.query_map(params![path, limit as i64], read_scheduled_task_run_row)
+            }
+            None => statement.query_map(params![limit as i64], read_scheduled_task_run_row),
+        }
+        .map_err(|error| format!("读取定时任务运行记录失败: {error}"))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("解析定时任务运行记录失败: {error}"))
+    }
+
+    pub fn get_scheduled_task_run(&self, run_id: &str) -> Result<ScheduledTaskRunRecord, String> {
+        let conn = self.conn.lock();
+        conn.query_row(
+            "SELECT r.id, r.task_id, t.name, t.project_path, r.trigger, r.scheduled_at_ms,
+             r.status, r.config_snapshot_json, r.started_at_ms, r.completed_at_ms,
+             r.exit_code, r.summary, r.error, r.log_path, r.created_at_ms
+             FROM scheduled_task_runs r
+             JOIN scheduled_tasks t ON t.id = r.task_id WHERE r.id = ?1",
+            [run_id],
+            read_scheduled_task_run_row,
+        )
+        .optional()
+        .map_err(|error| format!("读取定时任务运行记录失败: {error}"))?
+        .ok_or_else(|| "未找到定时任务运行记录".to_string())
+    }
+
+    pub fn get_scheduled_task_run_log_path(&self, run_id: &str) -> Result<Option<String>, String> {
+        let conn = self.conn.lock();
+        conn.query_row(
+            "SELECT log_path FROM scheduled_task_runs WHERE id = ?1",
+            [run_id],
+            |row| row.get::<_, Option<String>>(0),
+        )
+        .optional()
+        .map_err(|error| format!("读取定时任务日志路径失败: {error}"))?
+        .ok_or_else(|| "未找到定时任务运行记录".to_string())
+    }
+
+    pub fn list_scheduled_task_run_logs(&self) -> Result<Vec<ScheduledTaskRunLogRecord>, String> {
+        let conn = self.conn.lock();
+        let mut statement = conn
+            .prepare(
+                "SELECT id, log_path, completed_at_ms FROM scheduled_task_runs
+                 WHERE log_path IS NOT NULL AND completed_at_ms IS NOT NULL
+                 ORDER BY completed_at_ms ASC",
+            )
+            .map_err(|error| format!("查询定时任务日志失败: {error}"))?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok(ScheduledTaskRunLogRecord {
+                    run_id: row.get(0)?,
+                    log_path: row.get(1)?,
+                    completed_at_ms: row.get(2)?,
+                })
+            })
+            .map_err(|error| format!("读取定时任务日志失败: {error}"))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("解析定时任务日志失败: {error}"))
+    }
+
+    pub fn clear_scheduled_task_run_log_path(&self, run_id: &str) -> Result<(), String> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "UPDATE scheduled_task_runs SET log_path = NULL WHERE id = ?1",
+            [run_id],
+        )
+        .map_err(|error| format!("清理定时任务日志索引失败: {error}"))?;
+        Ok(())
+    }
+
+    pub fn mark_interrupted_scheduled_task_runs(&self, now_ms: i64) -> Result<(), String> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "UPDATE scheduled_task_runs SET status = 'interrupted', completed_at_ms = ?1,
+             summary = '应用退出导致执行中断', error = '无法确认上次运行的进程状态'
+             WHERE status IN ('queued', 'running')",
+            [now_ms],
+        )
+        .map_err(|error| format!("恢复中断的定时任务运行记录失败: {error}"))?;
+        Ok(())
     }
 
     pub fn attach_clipboard_image(
@@ -717,18 +1159,16 @@ impl Database {
         }
 
         match attachment_id {
-            Some(id) => transaction
-                .execute(
-                    "UPDATE clipboard_attachments SET status = 'released', updated_at_ms = ?3
+            Some(id) => transaction.execute(
+                "UPDATE clipboard_attachments SET status = 'released', updated_at_ms = ?3
                      WHERE session_id = ?1 AND attachment_id = ?2 AND status <> 'released'",
-                    params![session_id, id, now_ms],
-                ),
-            None => transaction
-                .execute(
-                    "UPDATE clipboard_attachments SET status = 'released', updated_at_ms = ?2
+                params![session_id, id, now_ms],
+            ),
+            None => transaction.execute(
+                "UPDATE clipboard_attachments SET status = 'released', updated_at_ms = ?2
                      WHERE session_id = ?1 AND status <> 'released'",
-                    params![session_id, now_ms],
-                ),
+                params![session_id, now_ms],
+            ),
         }
         .map_err(|error| format!("释放剪贴板附件失败: {error}"))?;
 
@@ -840,7 +1280,11 @@ impl Database {
             .map_err(|error| format!("解析剪贴板图片对象失败: {error}"))
     }
 
-    pub fn mark_clipboard_content_missing(&self, content_hash: &str, now_ms: i64) -> Result<(), String> {
+    pub fn mark_clipboard_content_missing(
+        &self,
+        content_hash: &str,
+        now_ms: i64,
+    ) -> Result<(), String> {
         let conn = self.conn.lock();
         conn.execute(
             "UPDATE clipboard_attachments
@@ -913,16 +1357,12 @@ impl Database {
             .unwrap_or(settings.notification_sound_map);
         settings.notification_threshold_ms = read_setting(&conn, "notification.thresholdMs")?
             .unwrap_or(settings.notification_threshold_ms);
-        settings.terminal_completion_notifications_enabled = read_setting(
-            &conn,
-            "terminal.completionNotificationsEnabled",
-        )?
-        .unwrap_or(settings.terminal_completion_notifications_enabled);
-        settings.terminal_completion_notification_threshold_ms = read_setting(
-            &conn,
-            "terminal.completionNotificationThresholdMs",
-        )?
-        .unwrap_or(settings.terminal_completion_notification_threshold_ms);
+        settings.terminal_completion_notifications_enabled =
+            read_setting(&conn, "terminal.completionNotificationsEnabled")?
+                .unwrap_or(settings.terminal_completion_notifications_enabled);
+        settings.terminal_completion_notification_threshold_ms =
+            read_setting(&conn, "terminal.completionNotificationThresholdMs")?
+                .unwrap_or(settings.terminal_completion_notification_threshold_ms);
         settings.remote_notifications = read_setting(&conn, "notification.remoteNotifications")?
             .unwrap_or(settings.remote_notifications);
         settings.feishu_notification_enabled = read_setting(&conn, "notification.feishu.enabled")?
@@ -1415,7 +1855,9 @@ impl Database {
     }
 }
 
-fn clipboard_content_object_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ClipboardContentObject> {
+fn clipboard_content_object_from_row(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<ClipboardContentObject> {
     let size_bytes = row.get::<_, i64>(2)?;
     Ok(ClipboardContentObject {
         content_hash: row.get(0)?,
@@ -1425,7 +1867,9 @@ fn clipboard_content_object_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Resul
     })
 }
 
-fn clipboard_attachment_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ClipboardAttachmentRecord> {
+fn clipboard_attachment_from_row(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<ClipboardAttachmentRecord> {
     let relative_path = row.get::<_, String>(3)?;
     let size_bytes = row.get::<_, i64>(5)?;
     Ok(ClipboardAttachmentRecord {
@@ -1451,6 +1895,79 @@ fn clipboard_attachment_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Cl
 
 fn u64_to_sqlite_integer(value: u64) -> i64 {
     value.min(i64::MAX as u64) as i64
+}
+
+fn scheduled_task_sql_error(index: usize, message: String) -> rusqlite::Error {
+    rusqlite::Error::FromSqlConversionFailure(
+        index,
+        rusqlite::types::Type::Text,
+        Box::new(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            message,
+        )),
+    )
+}
+
+fn read_scheduled_task_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ScheduledTaskRecord> {
+    let execution_kind = row.get::<_, String>(4)?;
+    let schedule_json = row.get::<_, String>(9)?;
+    let missed_run_policy = row.get::<_, String>(14)?;
+    let notification_policy = row.get::<_, String>(15)?;
+    Ok(ScheduledTaskRecord {
+        id: row.get(0)?,
+        project_path: row.get(1)?,
+        project_name: row.get(2)?,
+        name: row.get(3)?,
+        execution_kind: ScheduledTaskExecutionKind::parse(&execution_kind)
+            .map_err(|error| scheduled_task_sql_error(4, error))?,
+        agent_id: row.get(5)?,
+        prompt: row.get(6)?,
+        command: row.get(7)?,
+        shell: row.get(8)?,
+        schedule: serde_json::from_str::<ScheduledTaskSchedule>(&schedule_json)
+            .map_err(|error| scheduled_task_sql_error(9, format!("解析定时规则失败: {error}")))?,
+        timezone: row.get(10)?,
+        enabled: row.get::<_, i64>(11)? != 0,
+        next_run_at_ms: row.get(12)?,
+        timeout_ms: row.get(13)?,
+        missed_run_policy: ScheduledTaskMissedRunPolicy::parse(&missed_run_policy)
+            .map_err(|error| scheduled_task_sql_error(14, error))?,
+        notification_policy: ScheduledTaskNotificationPolicy::parse(&notification_policy)
+            .map_err(|error| scheduled_task_sql_error(15, error))?,
+        created_at_ms: row.get(16)?,
+        updated_at_ms: row.get(17)?,
+        deleted_at_ms: row.get(18)?,
+    })
+}
+
+fn read_scheduled_task_run_row(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<ScheduledTaskRunRecord> {
+    let trigger = row.get::<_, String>(4)?;
+    let status = row.get::<_, String>(6)?;
+    let config_snapshot_json = row.get::<_, String>(7)?;
+    let log_path = row.get::<_, Option<String>>(13)?;
+    Ok(ScheduledTaskRunRecord {
+        id: row.get(0)?,
+        task_id: row.get(1)?,
+        task_name: row.get(2)?,
+        project_path: row.get(3)?,
+        trigger: ScheduledTaskTrigger::parse(&trigger)
+            .map_err(|error| scheduled_task_sql_error(4, error))?,
+        scheduled_at_ms: row.get(5)?,
+        status: ScheduledTaskRunStatus::parse(&status)
+            .map_err(|error| scheduled_task_sql_error(6, error))?,
+        config_snapshot: serde_json::from_str(&config_snapshot_json).map_err(|error| {
+            scheduled_task_sql_error(7, format!("解析定时任务运行快照失败: {error}"))
+        })?,
+        started_at_ms: row.get(8)?,
+        completed_at_ms: row.get(9)?,
+        exit_code: row.get(10)?,
+        summary: row.get(11)?,
+        error: row.get(12)?,
+        log_available: log_path.is_some(),
+        created_at_ms: row.get(14)?,
+    })
 }
 
 fn read_setting<T>(conn: &Connection, key: &str) -> Result<Option<T>, String>
@@ -1501,6 +2018,37 @@ mod tests {
         Database, PersistentSettingsRecord, SearchIndexStorageSettings,
         DEFAULT_SEARCH_INDEX_QUOTA_BYTES,
     };
+    use crate::scheduled_tasks::{
+        ScheduledTaskExecutionKind, ScheduledTaskMissedRunPolicy, ScheduledTaskNotificationPolicy,
+        ScheduledTaskRecord, ScheduledTaskRunCompletion, ScheduledTaskRunStatus,
+        ScheduledTaskSchedule,
+    };
+
+    fn scheduled_task_record() -> ScheduledTaskRecord {
+        ScheduledTaskRecord {
+            id: "scheduled-task-a".to_string(),
+            project_path: "D:/projects/termflow".to_string(),
+            project_name: "Termflow".to_string(),
+            name: "Daily inspection".to_string(),
+            execution_kind: ScheduledTaskExecutionKind::Command,
+            agent_id: None,
+            prompt: None,
+            command: Some("pnpm test".to_string()),
+            shell: Some("powershell".to_string()),
+            schedule: ScheduledTaskSchedule::Daily {
+                time: "09:00".to_string(),
+            },
+            timezone: "Asia/Shanghai".to_string(),
+            enabled: true,
+            next_run_at_ms: Some(1_000),
+            timeout_ms: 30 * 60 * 1_000,
+            missed_run_policy: ScheduledTaskMissedRunPolicy::Skip,
+            notification_policy: ScheduledTaskNotificationPolicy::Failures,
+            created_at_ms: 1,
+            updated_at_ms: 1,
+            deleted_at_ms: None,
+        }
+    }
 
     #[test]
     fn persistent_settings_default_to_beijing_asr_region() {
@@ -1583,7 +2131,10 @@ mod tests {
         let restored: PersistentSettingsRecord = serde_json::from_value(value).unwrap();
 
         assert!(restored.terminal_completion_notifications_enabled);
-        assert_eq!(restored.terminal_completion_notification_threshold_ms, 30_000);
+        assert_eq!(
+            restored.terminal_completion_notification_threshold_ms,
+            30_000
+        );
     }
 
     #[test]
@@ -1665,7 +2216,10 @@ mod tests {
 
         let restored = database.load_persistent_settings().unwrap();
         assert!(!restored.terminal_completion_notifications_enabled);
-        assert_eq!(restored.terminal_completion_notification_threshold_ms, 60_000);
+        assert_eq!(
+            restored.terminal_completion_notification_threshold_ms,
+            60_000
+        );
     }
 
     #[test]
@@ -1695,11 +2249,17 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(database.clipboard_storage_totals().unwrap().protected_bytes, 128);
+        assert_eq!(
+            database.clipboard_storage_totals().unwrap().protected_bytes,
+            128
+        );
         database
             .release_clipboard_attachment("session-1", "attachment-1", 30)
             .unwrap();
-        assert_eq!(database.clipboard_storage_totals().unwrap().protected_bytes, 128);
+        assert_eq!(
+            database.clipboard_storage_totals().unwrap().protected_bytes,
+            128
+        );
 
         database
             .release_clipboard_session_attachments("session-2", 40)
@@ -1911,5 +2471,50 @@ mod tests {
         let restored = database.load_search_index_storage().unwrap();
         assert_eq!(restored.cache_root, configured.cache_root);
         assert_eq!(restored.quota_bytes, configured.quota_bytes);
+    }
+
+    #[test]
+    fn scheduled_task_claims_each_planned_time_once_and_keeps_history_after_deletion() {
+        let database = Database::open_in_memory();
+        let task = scheduled_task_record();
+        database.create_scheduled_task(&task).unwrap();
+
+        let claimed = database
+            .claim_scheduled_task_run(&task, 1_000, Some(2_000), 1_000)
+            .unwrap()
+            .unwrap();
+        assert_eq!(claimed.status, ScheduledTaskRunStatus::Queued);
+        assert!(database
+            .claim_scheduled_task_run(&task, 1_000, Some(2_000), 1_000)
+            .unwrap()
+            .is_none());
+
+        database
+            .complete_scheduled_task_run(
+                &claimed.id,
+                ScheduledTaskRunCompletion {
+                    status: ScheduledTaskRunStatus::Succeeded,
+                    completed_at_ms: 1_200,
+                    exit_code: Some(0),
+                    summary: Some("completed".to_string()),
+                    error: None,
+                    log_path: Some("D:/logs/scheduled-run-a.log".to_string()),
+                },
+            )
+            .unwrap();
+        let logs = database.list_scheduled_task_run_logs().unwrap();
+        assert_eq!(logs.len(), 1);
+        assert_eq!(logs[0].run_id, claimed.id);
+        database
+            .clear_scheduled_task_run_log_path(&claimed.id)
+            .unwrap();
+        assert!(database.list_scheduled_task_run_logs().unwrap().is_empty());
+        database.delete_scheduled_task(&task.id, 1_300).unwrap();
+
+        assert!(database.list_scheduled_tasks(None).unwrap().is_empty());
+        let history = database.list_scheduled_task_runs(None, 20).unwrap();
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].id, claimed.id);
+        assert_eq!(history[0].status, ScheduledTaskRunStatus::Succeeded);
     }
 }

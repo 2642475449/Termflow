@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::{AppHandle, Emitter};
 
+pub const SCHEDULED_TASKS_CHANGED_EVENT: &str = "termflow:scheduled-tasks-changed";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SessionEventType {

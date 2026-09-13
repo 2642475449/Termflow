@@ -83,11 +83,12 @@ import {
   normalizeNetworkProxyMode,
   normalizeNoProxy,
 } from "@/lib/networkProxy";
+import { SCHEDULED_TASKS_TAB_ID } from "@/lib/scheduledTasks";
 
 export type ThemeMode = "light-glass" | "light-warm" | "dark-starry" | "dark-mocha";
 export type ThemeCategory = "light" | "dark" | "system";
 export type Language = "zh_CN" | "zh_TW" | "en" | "ja";
-export type SidebarSection = "project" | "sessions" | "git";
+export type SidebarSection = "project" | "sessions" | "git" | "schedules";
 export type NotificationSoundType =
   | "default"
   | "waiting"
@@ -470,7 +471,7 @@ function normalizeDefaultAgentId(value: unknown): AiAgentId | null {
     : null;
 }
 
-export type TabKind = "session" | "settings" | "diff" | "preview" | "file";
+export type TabKind = "session" | "settings" | "scheduled-tasks" | "diff" | "preview" | "file";
 export type TabDropPosition = "before" | "after";
 export type SplitDirection = "left" | "right" | "up" | "down";
 export type SplitMode = "copy" | "move";
@@ -875,6 +876,21 @@ function createSettingsTab(now = Date.now()): TabEntity {
   };
 }
 
+function createScheduledTasksTab(now = Date.now()): TabEntity {
+  return {
+    id: SCHEDULED_TASKS_TAB_ID,
+    kind: "scheduled-tasks",
+    resourceId: SCHEDULED_TASKS_TAB_ID,
+    title: i18n.t("scheduledTasks.title"),
+    closable: true,
+    pinned: false,
+    dirty: false,
+    preview: false,
+    createdAt: now,
+    lastActivatedAt: now,
+  };
+}
+
 function createSessionTab(session: Session, now = Date.now()): TabEntity {
   return {
     id: session.id,
@@ -1098,9 +1114,11 @@ function normalizeWorkspace(workspace: ProjectWorkspace, sessions: Session[]): P
 
   for (const pane of Object.values(nextWorkspace.panesById)) {
     pane.tabIds = pane.tabIds.filter((tabId) => {
-      if (tabId === SETTINGS_ID) {
+      if (tabId === SETTINGS_ID || tabId === SCHEDULED_TASKS_TAB_ID) {
         if (!nextWorkspace.tabsById[tabId]) {
-          nextWorkspace.tabsById[tabId] = createSettingsTab();
+          nextWorkspace.tabsById[tabId] = tabId === SETTINGS_ID
+            ? createSettingsTab()
+            : createScheduledTasksTab();
         }
         return true;
       }
@@ -1190,6 +1208,11 @@ function ensureTabForId(
   if (workspace.tabsById[tabId]) return workspace.tabsById[tabId];
   if (tabId === SETTINGS_ID) {
     const tab = createSettingsTab();
+    workspace.tabsById[tab.id] = tab;
+    return tab;
+  }
+  if (tabId === SCHEDULED_TASKS_TAB_ID) {
+    const tab = createScheduledTasksTab();
     workspace.tabsById[tab.id] = tab;
     return tab;
   }
@@ -1747,9 +1770,9 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
 
       openTab: (tabId) =>
         set((state) => {
-          // Launcher 模式：允许打开设置标签
+          // 启动器模式允许打开设置和全局定时任务标签。
           if (!state.currentProject) {
-            if (tabId !== SETTINGS_ID) return state;
+            if (tabId !== SETTINGS_ID && tabId !== SCHEDULED_TASKS_TAB_ID) return state;
             const currentWorkspace = state.projectWorkspaces[LAUNCHER_WORKSPACE_KEY] || createDefaultWorkspace();
             const nextWorkspace = openTabInWorkspace(currentWorkspace, tabId, []);
             const normalizedWorkspace = normalizeWorkspace(nextWorkspace, []);

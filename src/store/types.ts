@@ -45,7 +45,7 @@ export type SessionEventType =
   | "heartbeat_timeout"
   | "terminal_command_complete";
 
-export type TabKind = "session" | "settings" | "diff" | "preview" | "file";
+export type TabKind = "session" | "settings" | "scheduled-tasks" | "diff" | "preview" | "file";
 export type TabDropPosition = "before" | "after";
 export type SplitDirection = "left" | "right" | "up" | "down";
 export type SplitMode = "copy" | "move";

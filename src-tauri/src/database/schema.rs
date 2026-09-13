@@ -109,6 +109,68 @@ pub fn migrate(conn: &Connection) -> Result<(), String> {
             .map_err(|error| format!("更新 SQLite schema 版本失败: {error}"))?;
     }
 
+    if version < 6 {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS scheduled_tasks (
+                id TEXT PRIMARY KEY NOT NULL,
+                project_path TEXT NOT NULL,
+                project_name TEXT NOT NULL,
+                name TEXT NOT NULL,
+                execution_kind TEXT NOT NULL,
+                agent_id TEXT,
+                prompt TEXT,
+                command TEXT,
+                shell TEXT,
+                schedule_json TEXT NOT NULL,
+                timezone TEXT NOT NULL,
+                enabled INTEGER NOT NULL,
+                next_run_at_ms INTEGER,
+                timeout_ms INTEGER NOT NULL,
+                missed_run_policy TEXT NOT NULL,
+                notification_policy TEXT NOT NULL,
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL,
+                deleted_at_ms INTEGER
+            ) WITHOUT ROWID;
+
+            CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_due
+                ON scheduled_tasks (enabled, next_run_at_ms)
+                WHERE deleted_at_ms IS NULL;
+            CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_project
+                ON scheduled_tasks (project_path, updated_at_ms DESC)
+                WHERE deleted_at_ms IS NULL;
+
+            CREATE TABLE IF NOT EXISTS scheduled_task_runs (
+                id TEXT PRIMARY KEY NOT NULL,
+                task_id TEXT NOT NULL,
+                trigger TEXT NOT NULL,
+                scheduled_at_ms INTEGER,
+                status TEXT NOT NULL,
+                config_snapshot_json TEXT NOT NULL,
+                started_at_ms INTEGER,
+                completed_at_ms INTEGER,
+                exit_code INTEGER,
+                summary TEXT,
+                error TEXT,
+                log_path TEXT,
+                created_at_ms INTEGER NOT NULL,
+                FOREIGN KEY (task_id) REFERENCES scheduled_tasks(id)
+            ) WITHOUT ROWID;
+
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_scheduled_task_runs_planned
+                ON scheduled_task_runs (task_id, scheduled_at_ms)
+                WHERE scheduled_at_ms IS NOT NULL;
+            CREATE INDEX IF NOT EXISTS idx_scheduled_task_runs_task
+                ON scheduled_task_runs (task_id, created_at_ms DESC);
+            CREATE INDEX IF NOT EXISTS idx_scheduled_task_runs_status
+                ON scheduled_task_runs (status, created_at_ms DESC);",
+        )
+        .map_err(|error| format!("创建定时任务数据表失败: {error}"))?;
+
+        conn.pragma_update(None, "user_version", 6)
+            .map_err(|error| format!("更新 SQLite schema 版本失败: {error}"))?;
+    }
+
     Ok(())
 }
 
@@ -141,7 +203,7 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(version, 5);
+        assert_eq!(version, 6);
         assert_eq!(session_table_exists, 1);
         assert_eq!(control_table_exists, 1);
     }

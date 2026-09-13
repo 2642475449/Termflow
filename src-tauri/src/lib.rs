@@ -13,6 +13,7 @@ mod powershell_integration;
 mod pty;
 mod qoder_config;
 mod qoder_usage;
+mod scheduled_tasks;
 
 use claude_rate_limits::ClaudeRateLimitStore;
 use commands::content_search::ContentSearchState;
@@ -24,6 +25,7 @@ use commands::window::{VoiceOverlayState, WindowMode, WindowRegistry};
 use database::Database;
 use hook_ingest::{create_ingest_config, start_ingest_server, HookStatusRuntime};
 use pty::PtyManager;
+use scheduled_tasks::ScheduledTaskScheduler;
 use std::sync::Arc;
 use tauri::{Manager, WindowEvent};
 
@@ -164,7 +166,10 @@ pub fn run() {
             let git_watcher = GitWatcher::new(app.handle().clone());
             app.manage(Arc::new(git_watcher));
             let database = Database::init(&app.handle())?;
+            let scheduled_task_scheduler =
+                ScheduledTaskScheduler::start(app.handle().clone(), database.clone())?;
             app.manage(database);
+            app.manage(scheduled_task_scheduler);
             let registry = app.state::<Arc<WindowRegistry>>();
             let database = app.state::<Arc<Database>>();
             if let Err(error) = commands::image::reconcile_clipboard_image_cache(
@@ -274,6 +279,17 @@ pub fn run() {
             commands::claude_config::get_claude_usage_overview,
             commands::agent_usage::get_agent_usage_overview,
             commands::agent_usage::get_agent_usage_storage_status,
+            commands::scheduled_tasks::list_scheduled_tasks,
+            commands::scheduled_tasks::create_scheduled_task,
+            commands::scheduled_tasks::update_scheduled_task,
+            commands::scheduled_tasks::set_scheduled_task_enabled,
+            commands::scheduled_tasks::delete_scheduled_task,
+            commands::scheduled_tasks::run_scheduled_task_now,
+            commands::scheduled_tasks::list_scheduled_task_runs,
+            commands::scheduled_tasks::get_scheduled_task_run,
+            commands::scheduled_tasks::get_scheduled_task_run_log,
+            commands::scheduled_tasks::cancel_scheduled_task_run,
+            commands::scheduled_tasks::preview_scheduled_task_runs,
             commands::agent_usage::clear_agent_usage_history,
             commands::agent_usage::rebuild_agent_usage_history,
             codex_rate_limits::get_codex_rate_limits,

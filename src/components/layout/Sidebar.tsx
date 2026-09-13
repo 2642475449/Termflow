@@ -31,6 +31,7 @@ import { useResumeSession } from "@/hooks/useResumeSession";
 import SidebarProjectPanel from "./sidebar/SidebarProjectPanel";
 import SidebarSessionsPanel from "./sidebar/SidebarSessionsPanel";
 import SidebarGitPanel from "./sidebar/SidebarGitPanel";
+import SidebarScheduledTasksPanel from "./sidebar/SidebarScheduledTasksPanel";
 import { useGitRefreshController } from "@/hooks/useGitRefreshController";
 import { useGitFileWatcher } from "@/hooks/useGitFileWatcher";
 import { GIT_REFRESH_EVENT, publishGitStatusSnapshot } from "@/lib/gitStatusEvents";
@@ -444,7 +445,7 @@ function Sidebar({ collapsed, section }: SidebarProps) {
             </div>
           )}
 
-          <div className={section === "project" ? "flex-1 min-h-0 overflow-hidden p-3" : "flex-1 min-h-0 overflow-y-auto app-project-tree-scroll p-2.5"}>
+          <div className={section === "project" ? "flex-1 min-h-0 overflow-hidden p-3" : section === "schedules" ? "flex-1 min-h-0 overflow-hidden" : "flex-1 min-h-0 overflow-y-auto app-project-tree-scroll p-2.5"}>
             {section === "project" ? (
               <SidebarProjectPanel
                 currentProject={currentProject}
@@ -469,6 +470,8 @@ function Sidebar({ collapsed, section }: SidebarProps) {
                 key={currentProject?.path ?? "no-project"}
                 currentProject={currentProject}
               />
+            ) : section === "schedules" ? (
+              <SidebarScheduledTasksPanel currentProject={currentProject} />
             ) : (
               <SidebarSessionsPanel
                 currentProject={currentProject}

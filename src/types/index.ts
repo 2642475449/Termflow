@@ -234,6 +234,70 @@ export interface AgentCliInfo {
   error: string | null;
 }
 
+export type ScheduledTaskExecutionKind = "agent" | "command";
+
+export type ScheduledTaskSchedule =
+  | { kind: "once"; runAtMs: number }
+  | { kind: "interval"; intervalMinutes: number; anchorAtMs: number }
+  | { kind: "daily"; time: string }
+  | { kind: "weekly"; weekday: number; time: string };
+
+export type ScheduledTaskMissedRunPolicy = "skip" | "runOnceWithinGrace";
+export type ScheduledTaskNotificationPolicy = "failures" | "all" | "none";
+export type ScheduledTaskRunStatus =
+  | "queued"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "timedOut"
+  | "cancelled"
+  | "skipped"
+  | "interrupted";
+export type ScheduledTaskTrigger = "schedule" | "manual";
+
+export interface ScheduledTaskInput {
+  projectPath: string;
+  name: string;
+  executionKind: ScheduledTaskExecutionKind;
+  agentId: AiAgentId | null;
+  prompt: string | null;
+  command: string | null;
+  shell: "powershell" | "cmd" | null;
+  schedule: ScheduledTaskSchedule;
+  timezone: string;
+  enabled: boolean;
+  timeoutMs: number;
+  missedRunPolicy: ScheduledTaskMissedRunPolicy;
+  notificationPolicy: ScheduledTaskNotificationPolicy;
+}
+
+export interface ScheduledTask extends ScheduledTaskInput {
+  id: string;
+  projectName: string;
+  nextRunAtMs: number | null;
+  createdAtMs: number;
+  updatedAtMs: number;
+  deletedAtMs: number | null;
+}
+
+export interface ScheduledTaskRun {
+  id: string;
+  taskId: string;
+  taskName: string;
+  projectPath: string;
+  trigger: ScheduledTaskTrigger;
+  scheduledAtMs: number | null;
+  status: ScheduledTaskRunStatus;
+  configSnapshot: ScheduledTask;
+  startedAtMs: number | null;
+  completedAtMs: number | null;
+  exitCode: number | null;
+  summary: string | null;
+  error: string | null;
+  logAvailable: boolean;
+  createdAtMs: number;
+}
+
 export interface ClaudeSessionLaunchOptions {
   skipPermissions: boolean;
   effort: "inherit" | ClaudeEffortLevel;

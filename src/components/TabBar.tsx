@@ -12,6 +12,7 @@ import {
   CopyOutlined,
   StopOutlined,
   CloseCircleOutlined,
+  ClockCircleOutlined,
 } from "@ant-design/icons";
 import { useAppStore, type SplitDirection, type TabDropPosition } from "@/store";
 import { openInAssociatedApplication, openInFileManager } from "@/lib/api";
@@ -23,6 +24,7 @@ import { getKeysForAction } from "@/constants/shortcuts";
 import { closeTabRuntime, confirmCloseTab } from "@/lib/tabClose";
 import { AgentIcon } from "@/components/AgentIcon";
 import { AgentActivityIcon } from "@/components/AgentActivityIcon";
+import { SCHEDULED_TASKS_TAB_ID } from "@/lib/scheduledTasks";
 import {
   getAgentIdsWithCapability,
   getAgentDisplayName,
@@ -327,9 +329,10 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
   function getTabMenuItems(tabId: string): MenuProps["items"] {
     const isSettings = tabId === SETTINGS_ID;
     const tab = tabsById[tabId];
+    const isScheduledTasks = tabId === SCHEDULED_TASKS_TAB_ID || tab?.kind === "scheduled-tasks";
     const isFile = tab?.kind === "file";
     const isDiff = tab?.kind === "diff";
-    const session = isSettings || isFile || isDiff ? null : sessionById.get(tabId);
+    const session = isSettings || isScheduledTasks || isFile || isDiff ? null : sessionById.get(tabId);
 
     const closeKeys = getKeysForAction("closeTab");
 
@@ -397,9 +400,10 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
   function handleTabMenuClick(key: string, tabId: string) {
     const isSettings = tabId === SETTINGS_ID;
     const tab = tabsById[tabId];
+    const isScheduledTasks = tabId === SCHEDULED_TASKS_TAB_ID || tab?.kind === "scheduled-tasks";
     const isFile = tab?.kind === "file";
     const isDiff = tab?.kind === "diff";
-    const session = isSettings || isFile || isDiff ? null : sessionById.get(tabId);
+    const session = isSettings || isScheduledTasks || isFile || isDiff ? null : sessionById.get(tabId);
     const targetPath = isFile || isDiff ? tab?.resourceId : session?.path;
 
     if (key.startsWith("split-")) {
@@ -534,14 +538,15 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
         const isActive = tabId === activeSessionId;
         const isSettings = tabId === SETTINGS_ID;
         const tab = tabsById[tabId];
+        const isScheduledTasks = tabId === SCHEDULED_TASKS_TAB_ID || tab?.kind === "scheduled-tasks";
         const isFile = tab?.kind === "file";
         const isDiff = tab?.kind === "diff";
         const filePath = isFile ? tab?.resourceId ?? null : null;
         const diffPath = isDiff ? tab?.resourceId ?? null : null;
-        const session = isSettings || isFile || isDiff ? null : sessionById.get(tabId);
+        const session = isSettings || isScheduledTasks || isFile || isDiff ? null : sessionById.get(tabId);
         const isDragging = draggingTabId === tabId;
         const fileVisual = (isFile || isDiff) && tab?.title ? getFileIconByName(tab.title) : null;
-        if (!isSettings && !isFile && !isDiff && !session) return null;
+        if (!isSettings && !isScheduledTasks && !isFile && !isDiff && !session) return null;
 
         return (
           <Dropdown
@@ -628,6 +633,8 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
               >
                 {isSettings ? (
                   <SettingOutlined className="text-xs" />
+                ) : isScheduledTasks ? (
+                  <ClockCircleOutlined className="text-xs" />
                 ) : isFile || isDiff ? (
                   <span className="text-xs inline-flex" style={{ color: fileVisual?.color }}>{fileVisual?.icon}</span>
                 ) : (
@@ -640,6 +647,8 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
                 )}
                 {isSettings ? (
                   <span className="text-xs">{t("common.settings")}</span>
+                ) : isScheduledTasks ? (
+                  <span className="text-xs">{t("scheduledTasks.title")}</span>
                 ) : isFile || isDiff ? (
                   <Tooltip title={filePath ?? diffPath ?? undefined} mouseEnterDelay={0.5}>
                     <span className={`text-xs max-w-[120px] truncate ${tab?.preview ? 'italic opacity-70' : ''}`}>
@@ -732,6 +741,9 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
               if (dragPreview.tabId === SETTINGS_ID) {
                 return <SettingOutlined className="text-xs" />;
               }
+              if (dragPreview.tabId === SCHEDULED_TASKS_TAB_ID || previewTab?.kind === "scheduled-tasks") {
+                return <ClockCircleOutlined className="text-xs" />;
+              }
               if (previewFileVisual) {
                 return <span className="text-xs inline-flex" style={{ color: previewFileVisual.color }}>{previewFileVisual.icon}</span>;
               }
@@ -744,6 +756,8 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
             })()}
             {dragPreview.tabId === SETTINGS_ID ? (
               <span className="text-xs">{t("common.settings")}</span>
+            ) : dragPreview.tabId === SCHEDULED_TASKS_TAB_ID || tabsById[dragPreview.tabId]?.kind === "scheduled-tasks" ? (
+              <span className="text-xs">{t("scheduledTasks.title")}</span>
             ) : (
               <span className="text-xs truncate">
                 {tabsById[dragPreview.tabId]?.title ?? sessionById.get(dragPreview.tabId)?.name}

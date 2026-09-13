@@ -2542,3 +2542,490 @@ html, body, #root {
   background: currentColor;
   border-radius: inherit;
 }
+
+/* Scheduled tasks: project-scoped plans and their background run history. */
+.app-scheduled-sidebar-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--cs-text-primary);
+}
+
+.app-scheduled-sidebar-item {
+  display: flex;
+  width: 100%;
+  min-height: 34px;
+  align-items: center;
+  gap: 9px;
+  border: 0;
+  border-radius: 7px;
+  padding: 6px 9px;
+  background: transparent;
+  color: var(--cs-text-secondary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.app-scheduled-sidebar-item:hover,
+.app-scheduled-sidebar-item[data-active="true"] {
+  background: var(--cs-bg-hover);
+  color: var(--cs-text-primary);
+}
+
+.app-scheduled-sidebar-item:focus-visible,
+.app-scheduled-task-name:focus-visible,
+.app-scheduled-run-row:focus-visible {
+  outline: 2px solid var(--cs-primary);
+  outline-offset: -2px;
+}
+
+.app-scheduled-sidebar-count {
+  margin-left: auto;
+  color: var(--cs-text-tertiary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-scheduled-sidebar-label {
+  color: var(--cs-text-tertiary);
+  font-weight: 600;
+}
+
+.app-scheduled-sidebar-status {
+  display: flex;
+  gap: 8px;
+  border-top: 1px solid var(--cs-border-sidebar);
+  color: var(--cs-text-secondary);
+  line-height: 1.4;
+}
+
+.app-scheduled-sidebar-status > span {
+  color: var(--cs-success);
+  font-size: 10px;
+  line-height: 1.7;
+}
+
+.app-scheduled-sidebar-status .text-\[11px\] {
+  color: var(--cs-text-tertiary);
+}
+
+.app-scheduled-tasks {
+  color: var(--cs-text-primary);
+  background: var(--cs-bg-content);
+}
+
+.app-scheduled-content,
+.app-scheduled-form,
+.app-scheduled-run-detail {
+  width: min(100%, 1060px);
+  margin: 0 auto;
+  padding: 26px 30px 34px;
+}
+
+.app-scheduled-page-header,
+.app-scheduled-form-header,
+.app-scheduled-detail-header,
+.app-scheduled-runs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.app-scheduled-page-header {
+  margin-bottom: 22px;
+}
+
+.app-scheduled-page-header h1,
+.app-scheduled-form-header h2,
+.app-scheduled-detail-title h1 {
+  margin: 0;
+  color: var(--cs-text-primary);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.app-scheduled-page-header p,
+.app-scheduled-form-header p,
+.app-scheduled-detail-title p {
+  margin: 5px 0 0;
+  color: var(--cs-text-tertiary);
+  font-size: 12px;
+}
+
+.app-scheduled-loading,
+.app-scheduled-empty {
+  display: flex;
+  min-height: 230px;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-scheduled-task-list {
+  border-top: 1px solid var(--cs-border-card, var(--cs-border-sidebar));
+}
+
+.app-scheduled-task-row {
+  display: flex;
+  min-width: 0;
+  gap: 13px;
+  align-items: flex-start;
+  border-bottom: 1px solid var(--cs-border-card, var(--cs-border-sidebar));
+  padding: 17px 6px;
+}
+
+.app-scheduled-task-icon {
+  display: flex;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--cs-primary) 18%, var(--cs-border-card, var(--cs-border-sidebar)) 82%);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--cs-primary) 7%, var(--cs-bg-card) 93%);
+  color: var(--cs-primary);
+}
+
+.app-scheduled-task-title,
+.app-scheduled-task-meta,
+.app-scheduled-task-actions {
+  display: flex;
+  align-items: center;
+}
+
+.app-scheduled-task-title {
+  gap: 8px;
+}
+
+.app-scheduled-task-name {
+  max-width: 480px;
+  overflow: hidden;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--cs-text-primary);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.app-scheduled-task-name:hover {
+  color: var(--cs-primary);
+}
+
+.app-scheduled-task-meta {
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-top: 4px;
+  color: var(--cs-text-secondary);
+  font-size: 12px;
+}
+
+.app-scheduled-task-meta > span + span::before {
+  margin-right: 12px;
+  color: var(--cs-text-tertiary);
+  content: "·";
+}
+
+.app-scheduled-task-next {
+  margin-top: 6px;
+  color: var(--cs-text-tertiary);
+  font-size: 12px;
+}
+
+.app-scheduled-task-actions {
+  flex: 0 0 auto;
+  gap: 2px;
+}
+
+.app-scheduled-task-actions .ant-switch {
+  margin-left: 6px;
+}
+
+.app-scheduled-tag-enabled,
+.app-scheduled-tag-running,
+.app-scheduled-tag-muted {
+  margin-inline-end: 0;
+  border: 0;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 20px;
+}
+
+.app-scheduled-tag-enabled {
+  background: color-mix(in srgb, var(--cs-success) 14%, transparent);
+  color: var(--cs-success);
+}
+
+.app-scheduled-tag-running {
+  background: color-mix(in srgb, var(--cs-primary) 14%, transparent);
+  color: var(--cs-primary);
+}
+
+.app-scheduled-tag-muted {
+  background: var(--cs-bg-hover);
+  color: var(--cs-text-tertiary);
+}
+
+.app-scheduled-runs-header {
+  margin-top: 27px;
+  border-bottom: 1px solid var(--cs-border-card, var(--cs-border-sidebar));
+}
+
+.app-scheduled-runs-header h2,
+.app-scheduled-log-section h2 {
+  margin: 0;
+  color: var(--cs-text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.app-scheduled-runs-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.app-scheduled-run-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.app-scheduled-run-row {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 18px minmax(0, 1fr) 158px 100px;
+  gap: 10px;
+  align-items: center;
+  border: 0;
+  border-bottom: 1px solid var(--cs-border-card, var(--cs-border-sidebar));
+  padding: 11px 7px;
+  background: transparent;
+  color: var(--cs-text-secondary);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.app-scheduled-run-row:hover {
+  background: var(--cs-bg-hover);
+  color: var(--cs-text-primary);
+}
+
+.app-scheduled-runs-empty {
+  padding: 20px 7px;
+  color: var(--cs-text-tertiary);
+  font-size: 12px;
+}
+
+.app-scheduled-status-success { color: var(--cs-success); }
+.app-scheduled-status-running { color: var(--cs-primary); }
+.app-scheduled-status-muted { color: var(--cs-text-tertiary); }
+.app-scheduled-status-error { color: var(--cs-error); }
+
+.app-scheduled-form,
+.app-scheduled-run-detail {
+  min-height: 100%;
+}
+
+.app-scheduled-form-header {
+  margin-bottom: 20px;
+}
+
+.app-scheduled-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 16px;
+}
+
+.app-scheduled-form-section-title {
+  margin: 22px 0 14px;
+  padding-top: 18px;
+  border-top: 1px solid var(--cs-border-card, var(--cs-border-sidebar));
+  color: var(--cs-text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.app-scheduled-preview {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin: 2px 0 16px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--cs-primary) 18%, var(--cs-border-card, var(--cs-border-sidebar)) 82%);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--cs-primary) 5%, var(--cs-bg-card) 95%);
+  color: var(--cs-text-secondary);
+  font-size: 12px;
+}
+
+.app-scheduled-preview > span:first-child {
+  flex: 0 0 auto;
+  color: var(--cs-text-primary);
+  font-weight: 600;
+}
+
+.app-scheduled-preview-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.app-scheduled-preview-error { color: var(--cs-error); }
+.app-scheduled-muted { color: var(--cs-text-tertiary); }
+
+.app-scheduled-advanced {
+  border-color: var(--cs-border-card, var(--cs-border-sidebar));
+  background: var(--cs-bg-card);
+}
+
+.app-scheduled-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 22px;
+}
+
+.app-scheduled-detail-header {
+  margin-bottom: 22px;
+}
+
+.app-scheduled-detail-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding-bottom: 21px;
+  border-bottom: 1px solid var(--cs-border-card, var(--cs-border-sidebar));
+}
+
+.app-scheduled-detail-title > .anticon {
+  padding-top: 5px;
+  font-size: 20px;
+}
+
+.app-scheduled-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 17px 20px;
+  margin: 22px 0;
+}
+
+.app-scheduled-detail-grid div {
+  min-width: 0;
+}
+
+.app-scheduled-detail-grid dt {
+  color: var(--cs-text-tertiary);
+  font-size: 11px;
+}
+
+.app-scheduled-detail-grid dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--cs-text-primary);
+  font-size: 13px;
+}
+
+.app-scheduled-log-section {
+  border-top: 1px solid var(--cs-border-card, var(--cs-border-sidebar));
+  padding-top: 20px;
+}
+
+.app-scheduled-log-section + .app-scheduled-log-section {
+  margin-top: 20px;
+}
+
+.app-scheduled-log {
+  max-height: 460px;
+  overflow: auto;
+  margin: 12px 0 0;
+  border: 1px solid var(--cs-border-card, var(--cs-border-sidebar));
+  border-radius: 8px;
+  padding: 13px;
+  background: var(--cs-bg-sidebar);
+  color: var(--cs-text-secondary);
+  font-family: var(--cs-font-mono, ui-monospace, SFMono-Regular, Consolas, monospace);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.app-markdown-preview.app-scheduled-result {
+  width: 100%;
+  max-width: none;
+  margin-top: 12px;
+  padding: 0;
+  overflow-wrap: anywhere;
+}
+
+.app-scheduled-diagnostics {
+  margin-top: 24px;
+  color: var(--cs-text-secondary);
+  font-size: 12px;
+}
+
+.app-scheduled-diagnostics summary {
+  cursor: pointer;
+}
+
+@media (max-width: 760px) {
+  .app-scheduled-content,
+  .app-scheduled-form,
+  .app-scheduled-run-detail {
+    padding: 20px;
+  }
+
+  .app-scheduled-form-grid,
+  .app-scheduled-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .app-scheduled-run-row {
+    grid-template-columns: 18px minmax(0, 1fr) 92px;
+  }
+
+  .app-scheduled-run-row > span:nth-last-child(1) {
+    display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .app-scheduled-page-header,
+  .app-scheduled-form-header,
+  .app-scheduled-detail-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .app-scheduled-task-icon {
+    display: none;
+  }
+
+  .app-scheduled-task-row {
+    gap: 8px;
+  }
+
+  .app-scheduled-task-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .app-scheduled-task-name {
+    max-width: 230px;
+  }
+
+  .app-scheduled-preview {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+}

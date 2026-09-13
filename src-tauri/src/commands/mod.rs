@@ -15,6 +15,7 @@ pub mod mcp_servers;
 pub mod network_proxy;
 pub mod notification;
 pub mod remote_notification;
+pub(crate) mod scheduled_tasks;
 pub mod search_index;
 pub mod session;
 pub mod settings;
