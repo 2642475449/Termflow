@@ -318,6 +318,64 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
     };
   }, [sessionId, setSessionAttachments]);
 
+  const handleInsertAttachmentPath = useCallback(async (attachment: ClipboardAttachment) => {
+    if (selectReadyTerminalAttachments(
+      selectSessionAttachments(useTerminalAttachmentStore.getState(), sessionId),
+      attachment.attachmentId,
+    ).length === 0) return;
+    const session = useAppStore.getState().sessions.find((item) => item.id === sessionId);
+    if (!session?.active) {
+      message.warning(t("terminal.attachmentSessionInactive"));
+      return;
+    }
+    const enqueueInput = enqueueInputRef.current;
+    if (!enqueueInput) {
+      message.error(t("terminal.attachmentInsertFailed"));
+      return;
+    }
+
+    try {
+      const inserting = await setClipboardAttachmentStatus(sessionId, attachment.attachmentId, "inserting");
+      upsertAttachment(inserting);
+      const insertedText = quotePathForShell(inserting.path);
+      const submissionCapture = consumeTerminalSubmissionInput(
+        pendingSubmissionInputRef.current,
+        insertedText,
+        pendingSubmissionEscapeSequenceRef.current,
+      );
+      pendingSubmissionInputRef.current = submissionCapture.nextValue;
+      pendingSubmissionEscapeSequenceRef.current = submissionCapture.pendingSequence;
+      captureInputForAutoTitleRef.current?.(insertedText);
+
+      await enqueueInput(async () => {
+        const latest = useAppStore.getState().sessions.find((item) => item.id === sessionId);
+        if (!latest?.active) {
+          throw new Error(t("terminal.attachmentSessionInactive"));
+        }
+        try {
+          await ptyInput(sessionId, insertedText);
+          const inserted = await setClipboardAttachmentStatus(sessionId, attachment.attachmentId, "inserted");
+          upsertAttachment(inserted);
+        } catch (error) {
+          try {
+            const unknown = await setClipboardAttachmentStatus(
+              sessionId,
+              attachment.attachmentId,
+              "deliveryUnknown",
+            );
+            upsertAttachment(unknown);
+          } catch (statusError) {
+            console.error("Failed to preserve uncertain attachment delivery:", statusError);
+          }
+          throw error;
+        }
+      });
+      terminalRef.current?.focus();
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : t("terminal.attachmentInsertFailed"));
+    }
+  }, [sessionId, t, upsertAttachment]);
+
   const pasteIntoTerminal = useCallback(async (term: XTerm | null) => {
     const text = await navigator.clipboard.readText().catch(() => "");
     if (text) {
@@ -375,7 +433,8 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       }
       removeAttachment(sessionId, savingAttachmentId);
       upsertAttachment(saved);
-      message.success(t("terminal.attachmentSaved"));
+      // 保存后直接写入当前终端，沿用手动插入的状态跟踪与输入队列。
+      await handleInsertAttachmentPath(saved);
     } catch (error) {
       upsertAttachment({
         attachmentId: savingAttachmentId,
@@ -392,7 +451,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       });
       throw error;
     }
-  }, [removeAttachment, sessionId, t, upsertAttachment]);
+  }, [handleInsertAttachmentPath, removeAttachment, sessionId, t, upsertAttachment]);
 
   const attachmentPreview = attachmentPreviewId
     ? attachments.find((attachment) => attachment.attachmentId === attachmentPreviewId) ?? null
@@ -442,60 +501,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       .catch((error) => message.error(error instanceof Error ? error.message : t("terminal.attachmentRemoveFailed")));
   }, [removeAttachment, sessionId, t]);
 
-  const handleInsertAttachmentPath = useCallback(async (attachment: ClipboardAttachment) => {
-    if (selectReadyTerminalAttachments(attachments, attachment.attachmentId).length === 0) return;
-    const session = useAppStore.getState().sessions.find((item) => item.id === sessionId);
-    if (!session?.active) {
-      message.warning(t("terminal.attachmentSessionInactive"));
-      return;
-    }
-    const enqueueInput = enqueueInputRef.current;
-    if (!enqueueInput) {
-      message.error(t("terminal.attachmentInsertFailed"));
-      return;
-    }
 
-    try {
-      const inserting = await setClipboardAttachmentStatus(sessionId, attachment.attachmentId, "inserting");
-      upsertAttachment(inserting);
-      const insertedText = quotePathForShell(inserting.path);
-      const submissionCapture = consumeTerminalSubmissionInput(
-        pendingSubmissionInputRef.current,
-        insertedText,
-        pendingSubmissionEscapeSequenceRef.current,
-      );
-      pendingSubmissionInputRef.current = submissionCapture.nextValue;
-      pendingSubmissionEscapeSequenceRef.current = submissionCapture.pendingSequence;
-      captureInputForAutoTitleRef.current?.(insertedText);
-
-      await enqueueInput(async () => {
-        const latest = useAppStore.getState().sessions.find((item) => item.id === sessionId);
-        if (!latest?.active) {
-          throw new Error(t("terminal.attachmentSessionInactive"));
-        }
-        try {
-          await ptyInput(sessionId, insertedText);
-          const inserted = await setClipboardAttachmentStatus(sessionId, attachment.attachmentId, "inserted");
-          upsertAttachment(inserted);
-        } catch (error) {
-          try {
-            const unknown = await setClipboardAttachmentStatus(
-              sessionId,
-              attachment.attachmentId,
-              "deliveryUnknown",
-            );
-            upsertAttachment(unknown);
-          } catch (statusError) {
-            console.error("Failed to preserve uncertain attachment delivery:", statusError);
-          }
-          throw error;
-        }
-      });
-      message.success(t("terminal.attachmentPathInserted"));
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : t("terminal.attachmentInsertFailed"));
-    }
-  }, [attachments, sessionId, t, upsertAttachment]);
 
   useEffect(() => {
     const container = containerRef.current;
