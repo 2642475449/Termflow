@@ -736,6 +736,9 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
                   conflictFiles={conflictFiles}
                   operationState={operationState}
                   onConflictResolved={loadGitData}
+                  onOpenConflictResolver={(filePath) => {
+                    handleViewDiff(filePath, false, undefined, false, false, "conflicted");
+                  }}
                 />
               </div>
             );

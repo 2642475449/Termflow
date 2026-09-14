@@ -35,6 +35,8 @@ interface GitConflictPanelProps {
   operationState: GitRepositoryOperationState;
   /** 操作完成后的回调 */
   onConflictResolved: () => Promise<void>;
+  /** 在主工作区打开可编辑的冲突解决器。 */
+  onOpenConflictResolver: (filePath: string) => void;
 }
 
 /**
@@ -47,6 +49,7 @@ export function GitConflictPanel({
   conflictFiles,
   operationState,
   onConflictResolved,
+  onOpenConflictResolver,
 }: GitConflictPanelProps) {
   const { t } = useTranslation();
   const [operating, setOperating] = useState<string | null>(null);
@@ -249,7 +252,7 @@ export function GitConflictPanel({
                     ? "rgba(220, 38, 38, 0.08)"
                     : "transparent",
                 }}
-                onClick={() => setSelectedFile(isSelected ? null : file.path)}
+                onClick={() => { setSelectedFile(file.path); onOpenConflictResolver(file.path); }}
               >
                 <CloseCircleOutlined
                   style={{ fontSize: 12, color: "#9333ea" }}
@@ -259,6 +262,9 @@ export function GitConflictPanel({
                   style={{ color: "var(--cs-text-primary)" }}
                 >
                   {fileName}
+                </span>
+                <span className={"shrink-0 text-[10px] text-[var(--cs-text-secondary)]"}>
+                  {t("sidebar.gitConflictResolverOpen")}
                 </span>
                 {isOperating && (
                   <LoadingOutlined
