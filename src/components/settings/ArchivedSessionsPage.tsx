@@ -34,7 +34,6 @@ import {
   type ArchivedRow,
 } from "@/lib/archivedSessions";
 import { useAppStore } from "@/store";
-import { releaseClipboardSessionAttachments } from "@/lib/api";
 import type { AgentId, AiAgentId, Session } from "@/types";
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100];
@@ -186,7 +185,6 @@ export function ArchivedSessionsPage() {
       cancelText: t("common.cancel"),
       okButtonProps: { danger: true },
       onOk: async () => {
-        await releaseClipboardSessionAttachments(row.session.id);
         deleteArchivedSession(row.projectPath, row.session.id);
         messageApi.success(t("settings.archived.sessionDeleted"));
       },
@@ -212,7 +210,6 @@ export function ArchivedSessionsPage() {
       cancelText: t("common.cancel"),
       okButtonProps: { danger: true },
       onOk: async () => {
-        await Promise.all(allRows.map((row) => releaseClipboardSessionAttachments(row.session.id)));
         Object.keys(projectArchivedSessions).forEach(deleteAllArchivedSessions);
         messageApi.success(t("settings.archived.allDeleted"));
       },

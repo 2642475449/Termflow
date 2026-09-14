@@ -56,6 +56,8 @@ fn send_windows_session_notification(
     Toast::new(WINDOWS_TOAST_APP_ID)
         .title(&title)
         .text1(&body)
+        // 前端已播放用户配置的提示音，Windows Toast 仅承担视觉提醒，避免双重播放。
+        .sound(None)
         .duration(Duration::Short)
         .on_activated(move |_| {
             let _ =

@@ -73,39 +73,14 @@ pub fn migrate(conn: &Connection) -> Result<(), String> {
             .map_err(|error| format!("failed to update SQLite schema version: {error}"))?;
     }
 
-    if version < 5 {
+    if version < 6 {
         conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS clipboard_content_objects (
-                content_hash TEXT PRIMARY KEY NOT NULL,
-                relative_path TEXT NOT NULL UNIQUE,
-                mime_type TEXT NOT NULL,
-                size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0),
-                created_at_ms INTEGER NOT NULL,
-                last_used_at_ms INTEGER NOT NULL,
-                unreferenced_at_ms INTEGER
-            ) WITHOUT ROWID;
-
-            CREATE TABLE IF NOT EXISTS clipboard_attachments (
-                attachment_id TEXT PRIMARY KEY NOT NULL,
-                session_id TEXT NOT NULL,
-                content_hash TEXT NOT NULL,
-                status TEXT NOT NULL,
-                created_at_ms INTEGER NOT NULL,
-                updated_at_ms INTEGER NOT NULL,
-                FOREIGN KEY (content_hash) REFERENCES clipboard_content_objects(content_hash)
-                    ON DELETE CASCADE
-            ) WITHOUT ROWID;
-
-            CREATE INDEX IF NOT EXISTS idx_clipboard_attachments_session
-                ON clipboard_attachments (session_id, status, created_at_ms);
-            CREATE INDEX IF NOT EXISTS idx_clipboard_attachments_content
-                ON clipboard_attachments (content_hash, status);
-            CREATE INDEX IF NOT EXISTS idx_clipboard_content_gc
-                ON clipboard_content_objects (unreferenced_at_ms, last_used_at_ms);",
+            "DROP TABLE IF EXISTS clipboard_attachments;
+             DROP TABLE IF EXISTS clipboard_content_objects;",
         )
-        .map_err(|error| format!("创建剪贴板图片引用表失败: {error}"))?;
+        .map_err(|error| format!("删除已弃用的剪贴板图片表失败: {error}"))?;
 
-        conn.pragma_update(None, "user_version", 5)
+        conn.pragma_update(None, "user_version", 6)
             .map_err(|error| format!("更新 SQLite schema 版本失败: {error}"))?;
     }
 
@@ -141,7 +116,7 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(version, 5);
+        assert_eq!(version, 6);
         assert_eq!(session_table_exists, 1);
         assert_eq!(control_table_exists, 1);
     }
@@ -194,5 +169,28 @@ mod tests {
             .unwrap();
 
         assert_eq!(legacy_setting_exists, 0);
+    }
+
+    #[test]
+    fn migration_removes_retired_clipboard_image_tables() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE clipboard_content_objects (content_hash TEXT PRIMARY KEY);
+                 CREATE TABLE clipboard_attachments (attachment_id TEXT PRIMARY KEY);
+                 PRAGMA user_version = 5;",
+            )
+            .unwrap();
+
+        migrate(&connection).unwrap();
+        let table_exists = connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name IN ('clipboard_content_objects', 'clipboard_attachments'))",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap();
+
+        assert_eq!(table_exists, 0);
     }
 }
