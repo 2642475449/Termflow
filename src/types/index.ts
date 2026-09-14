@@ -681,47 +681,6 @@ export interface SearchIndexStorageStatus {
   projectCount: number;
 }
 
-export type TerminalAttachmentStatus =
-  | "saving"
-  | "ready"
-  | "inserting"
-  | "sending"
-  | "inserted"
-  | "delivered"
-  | "failed"
-  | "deliveryUnknown"
-  | "released";
-
-export interface ClipboardAttachment {
-  attachmentId: string;
-  sessionId: string;
-  contentHash: string;
-  path: string;
-  fileName: string;
-  mimeType: string;
-  sizeBytes: number;
-  status: TerminalAttachmentStatus;
-  createdAt: number;
-  updatedAt: number;
-  available: boolean;
-}
-
-export interface ClipboardImageStorageStatus {
-  cacheRoot: string;
-  protectedBytes: number;
-  reclaimableBytes: number;
-  legacyBytes: number;
-  softTargetBytes: number;
-  hardLimitBytes: number;
-}
-
-/** @deprecated Clipboard saves now return a session-scoped ClipboardAttachment. */
-export interface SavedImagePayload {
-  path: string;
-  fileName: string;
-  size: number;
-}
-
 export type SkillScope = "workspace" | "user";
 export type SkillAgent = AiAgentId;
 export type SkillConflictStatus = "none" | "identical-copy" | "diverged-copy" | "runtime-conflict";

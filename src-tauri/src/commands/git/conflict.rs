@@ -97,6 +97,28 @@ fn read_index_stage(
     }
 }
 
+/// Git 的冲突标记总是独占一行，并由至少 7 个相同字符组成。
+///
+/// 仅在手动编辑的结果准备暂存时使用此检查。这样既不会把普通代码中的
+/// `<<<<<<<` 字符串误判为冲突，也能避免把未解决的工作树内容写入索引。
+fn contains_unresolved_conflict_markers(content: &str) -> bool {
+    content.lines().any(|line| {
+        let marker = line.trim_end();
+        let Some(first) = marker.chars().next() else {
+            return false;
+        };
+        if !matches!(first, '<' | '=' | '>') {
+            return false;
+        }
+        let marker_length = marker.chars().take_while(|character| *character == first).count();
+        marker_length >= 7
+            && marker
+                .chars()
+                .skip(marker_length)
+                .next()
+                .map_or(true, char::is_whitespace)
+    })
+}
 /// Resolve a conflict.
 ///
 /// Resolution modes:
@@ -108,10 +130,11 @@ pub fn git_resolve_conflict(
     project_path: String,
     file_path: String,
     resolution: String,
+    content: Option<String>,
 ) -> Result<(), String> {
     with_git_repository_access(&project_path, GitRepositoryAccess::Write, || {
         let repo = open_repo(&project_path)?;
-        resolve_worktree_file_path(&repo, &file_path)?;
+        let worktree_path = resolve_worktree_file_path(&repo, &file_path)?;
         if matches!(resolution.as_str(), "ours" | "theirs") {
             let index = repo.index().map_err(|e| e.to_string())?;
             let file = Path::new(&file_path);
@@ -205,7 +228,24 @@ pub fn git_resolve_conflict(
                 }
             }
             "edited" => {
-                // User has manually edited the file, just stage it
+                // 当冲突工作台提供了结果内容时，先把内容写回工作树；旧版调用方
+                // 不传内容时仍可暂存用户在外部编辑器里完成的文件。
+                if let Some(content) = content {
+                    if contains_unresolved_conflict_markers(&content) {
+                        return Err("合并结果仍包含未解决的 Git 冲突标记".to_string());
+                    }
+                    std::fs::write(&worktree_path, content)
+                        .map_err(|error| format!("写入合并结果失败: {}", error))?;
+                }
+
+                // 即使内容由外部编辑器写入，也不能把明显未解决的文本冲突直接暂存。
+                if let Ok(worktree_content) = std::fs::read_to_string(&worktree_path) {
+                    if contains_unresolved_conflict_markers(&worktree_content) {
+                        return Err("合并结果仍包含未解决的 Git 冲突标记".to_string());
+                    }
+                }
+
+                // User has manually edited the file, just stage it.
                 let output = git_command()
                     .args(["add", "--", &file_path])
                     .current_dir(&path)
@@ -373,7 +413,8 @@ pub fn git_abort_merge(project_path: String) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        abort_args_for_state, continue_args_for_state, git_command, git_resolve_conflict, open_repo,
+        abort_args_for_state, contains_unresolved_conflict_markers, continue_args_for_state,
+        git_command, git_resolve_conflict, open_repo,
     };
 
     fn conflict_git(path: &std::path::Path, args: &[&str]) {
@@ -384,6 +425,18 @@ mod tests {
             args,
             String::from_utf8_lossy(&result.stderr)
         );
+    }
+
+    #[test]
+    fn detects_only_line_oriented_git_conflict_markers() {
+        assert!(contains_unresolved_conflict_markers(
+            "before\n<<<<<<< current\nvalue\n=======\nother\n>>>>>>> incoming\n"
+        ));
+        assert!(contains_unresolved_conflict_markers("=======\n"));
+        assert!(!contains_unresolved_conflict_markers(
+            "let marker = \"<<<<<<< not a Git marker\";\n"
+        ));
+        assert!(!contains_unresolved_conflict_markers("<<<<<<<six\n"));
     }
 
     #[test]
@@ -421,6 +474,7 @@ mod tests {
                     path.to_str().unwrap().to_string(),
                     "file.txt".into(),
                     chosen_side.into(),
+                    None,
                 )
                 .unwrap();
                 let repo = open_repo(path.to_str().unwrap()).unwrap();
@@ -429,7 +483,8 @@ mod tests {
                 assert!(git_resolve_conflict(
                     path.to_str().unwrap().to_string(),
                     "file.txt".into(),
-                    chosen_side.into()
+                    chosen_side.into(),
+                    None,
                 )
                 .is_err());
             }

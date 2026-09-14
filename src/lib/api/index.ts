@@ -41,8 +41,6 @@ import type {
   ContentSearchSummary,
   ProjectSearchIndexStatus,
   SearchIndexStorageStatus,
-  ClipboardAttachment,
-  ClipboardImageStorageStatus,
   ImagePreviewPayload,
   WindowProjectContext,
   SkillCatalog,
@@ -1240,54 +1238,6 @@ export async function sendRemoteNotification(
   return await invoke("send_remote_notification", { provider, payload });
 }
 
-export async function saveClipboardImage(
-  sessionId: string,
-  dataBase64: string,
-  mimeType: string
-): Promise<ClipboardAttachment> {
-  return await invoke("save_clipboard_image", { sessionId, dataBase64, mimeType });
-}
-
-export async function listClipboardAttachments(sessionId: string): Promise<ClipboardAttachment[]> {
-  return await invoke("list_clipboard_attachments", { sessionId });
-}
-
-export async function setClipboardAttachmentStatus(
-  sessionId: string,
-  attachmentId: string,
-  status: Exclude<ClipboardAttachment["status"], "saving" | "released">,
-): Promise<ClipboardAttachment> {
-  return await invoke("set_clipboard_attachment_status", { sessionId, attachmentId, status });
-}
-
-export async function releaseClipboardAttachment(
-  sessionId: string,
-  attachmentId: string,
-): Promise<ClipboardImageStorageStatus> {
-  return await invoke("release_clipboard_attachment", { sessionId, attachmentId });
-}
-
-export async function releaseClipboardSessionAttachments(
-  sessionId: string,
-): Promise<ClipboardImageStorageStatus> {
-  return await invoke("release_clipboard_session_attachments", { sessionId });
-}
-
-export async function readClipboardAttachmentPreview(
-  sessionId: string,
-  attachmentId: string,
-): Promise<ImagePreviewPayload> {
-  return await invoke("read_clipboard_attachment_preview", { sessionId, attachmentId });
-}
-
-export async function getClipboardImageStorageStatus(): Promise<ClipboardImageStorageStatus> {
-  return await invoke("get_clipboard_image_storage_status");
-}
-
-export async function cleanupClipboardImageCache(): Promise<ClipboardImageStorageStatus> {
-  return await invoke("cleanup_clipboard_image_cache");
-}
-
 export async function sendTextToFocusedWindow(text: string): Promise<void> {
   await invoke("send_text_to_focused_window", { text });
 }
@@ -1706,9 +1656,15 @@ export async function gitConflictDetail(
 export async function gitResolveConflict(
   projectPath: string,
   filePath: string,
-  resolution: "ours" | "theirs" | "edited"
+  resolution: "ours" | "theirs" | "edited",
+  content?: string,
 ): Promise<void> {
-  await invoke("git_resolve_conflict", { projectPath, filePath, resolution });
+  await invoke("git_resolve_conflict", {
+    projectPath,
+    filePath,
+    resolution,
+    content: content ?? null,
+  });
 }
 
 export async function gitAbortMerge(projectPath: string): Promise<void> {

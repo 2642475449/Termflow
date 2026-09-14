@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useMemo, useState } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import type { DragEvent as ReactDragEvent } from "react";
 import { Dropdown, Modal, message } from "antd";
 import type { MenuProps } from "antd";
@@ -20,11 +20,6 @@ import {
   ptyInput,
   ptyResize,
   submitAgentTurnInput,
-  saveClipboardImage,
-  listClipboardAttachments,
-  setClipboardAttachmentStatus,
-  releaseClipboardAttachment,
-  readClipboardAttachmentPreview,
   inspectProjectFile,
   resolveProjectLink,
   inspectAgentClis,
@@ -65,13 +60,7 @@ import {
 import { createPtyResizeGate } from "@/lib/terminalResize";
 import { createTerminalImeOutputGate } from "@/lib/terminalImeOutput";
 import { createTerminalCommandWatcher } from "@/lib/terminalCommandWatcher";
-import { TerminalAttachmentBar } from "@/components/terminal/TerminalAttachmentBar";
-import {
-  canQueueTerminalAttachment,
-  selectReadyTerminalAttachments,
-} from "@/lib/terminalAttachments";
-import { selectSessionAttachments, useTerminalAttachmentStore } from "@/store/slices/terminalAttachmentSlice";
-import type { AgentCliInfo, ClipboardAttachment } from "@/types";
+import type { AgentCliInfo } from "@/types";
 import { useTranslation } from "react-i18next";
 import "@xterm/xterm/css/xterm.css";
 
@@ -168,7 +157,6 @@ interface TerminalImagePreview {
 }
 
 const IMAGE_REFERENCE_PATTERN = /\.(?:png|jpe?g|gif|webp|bmp|svg|avif)(?:$|[?#])/i;
-const MAX_CLIPBOARD_IMAGE_BYTES = 10 * 1024 * 1024;
 
 function isImageReference(value: string): boolean {
   return IMAGE_REFERENCE_PATTERN.test(value.trim());
@@ -207,7 +195,6 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
   const pendingSubmissionInputRef = useRef("");
   const pendingSubmissionEscapeSequenceRef = useRef("");
   const enqueueInputRef = useRef<((operation: () => Promise<void>) => Promise<void>) | null>(null);
-  const cancelledSavingAttachmentIdsRef = useRef(new Set<string>());
   const titleRequestStartedRef = useRef(false);
   const sideQuestionSubmittingRef = useRef(false);
   const hideCursorWhileRunningRef = useRef(false);
@@ -221,8 +208,6 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
   const [sideQuestionText, setSideQuestionText] = useState("");
   const [pendingTerminalLink, setPendingTerminalLink] = useState<PendingTerminalLink | null>(null);
   const [imagePreview, setImagePreview] = useState<TerminalImagePreview | null>(null);
-  const [attachmentPreviewId, setAttachmentPreviewId] = useState<string | null>(null);
-  const [attachmentPreviewDataUrl, setAttachmentPreviewDataUrl] = useState<string | null>(null);
   const [openingTerminalLink, setOpeningTerminalLink] = useState(false);
   const openingTerminalLinkRef = useRef(false);
   const captureInputForAutoTitleRef = useRef<((data: string) => void) | undefined>(undefined);
@@ -250,18 +235,6 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
   const setTerminalCompletionIntegration = useAppStore(
     (s) => s.setTerminalCompletionIntegration,
   );
-  const attachments = useTerminalAttachmentStore((state) =>
-    selectSessionAttachments(state, sessionId),
-  );
-  const attachmentsRef = useRef(attachments);
-  attachmentsRef.current = attachments;
-  const visibleAttachments = useMemo(
-    () => attachments.filter((attachment) => attachment.status !== "inserted" && attachment.status !== "delivered"),
-    [attachments],
-  );
-  const setSessionAttachments = useTerminalAttachmentStore((state) => state.setSessionAttachments);
-  const upsertAttachment = useTerminalAttachmentStore((state) => state.upsertAttachment);
-  const removeAttachment = useTerminalAttachmentStore((state) => state.removeAttachment);
   const currentSession = useAppStore((s) =>
     s.sessions.find((session) => session.id === sessionId)
   );
@@ -304,78 +277,6 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
     return () => window.clearTimeout(verificationTimeout);
   }, [currentSession?.agentId, sessionId, setTerminalCompletionIntegration]);
 
-  useEffect(() => {
-    let cancelled = false;
-    void listClipboardAttachments(sessionId)
-      .then((savedAttachments) => {
-        if (!cancelled) setSessionAttachments(sessionId, savedAttachments);
-      })
-      .catch((error) => {
-        console.error("Failed to restore terminal attachments:", error);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionId, setSessionAttachments]);
-
-  const handleInsertAttachmentPath = useCallback(async (attachment: ClipboardAttachment) => {
-    if (selectReadyTerminalAttachments(
-      selectSessionAttachments(useTerminalAttachmentStore.getState(), sessionId),
-      attachment.attachmentId,
-    ).length === 0) return;
-    const session = useAppStore.getState().sessions.find((item) => item.id === sessionId);
-    if (!session?.active) {
-      message.warning(t("terminal.attachmentSessionInactive"));
-      return;
-    }
-    const enqueueInput = enqueueInputRef.current;
-    if (!enqueueInput) {
-      message.error(t("terminal.attachmentInsertFailed"));
-      return;
-    }
-
-    try {
-      const inserting = await setClipboardAttachmentStatus(sessionId, attachment.attachmentId, "inserting");
-      upsertAttachment(inserting);
-      const insertedText = quotePathForShell(inserting.path);
-      const submissionCapture = consumeTerminalSubmissionInput(
-        pendingSubmissionInputRef.current,
-        insertedText,
-        pendingSubmissionEscapeSequenceRef.current,
-      );
-      pendingSubmissionInputRef.current = submissionCapture.nextValue;
-      pendingSubmissionEscapeSequenceRef.current = submissionCapture.pendingSequence;
-      captureInputForAutoTitleRef.current?.(insertedText);
-
-      await enqueueInput(async () => {
-        const latest = useAppStore.getState().sessions.find((item) => item.id === sessionId);
-        if (!latest?.active) {
-          throw new Error(t("terminal.attachmentSessionInactive"));
-        }
-        try {
-          await ptyInput(sessionId, insertedText);
-          const inserted = await setClipboardAttachmentStatus(sessionId, attachment.attachmentId, "inserted");
-          upsertAttachment(inserted);
-        } catch (error) {
-          try {
-            const unknown = await setClipboardAttachmentStatus(
-              sessionId,
-              attachment.attachmentId,
-              "deliveryUnknown",
-            );
-            upsertAttachment(unknown);
-          } catch (statusError) {
-            console.error("Failed to preserve uncertain attachment delivery:", statusError);
-          }
-          throw error;
-        }
-      });
-      terminalRef.current?.focus();
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : t("terminal.attachmentInsertFailed"));
-    }
-  }, [sessionId, t, upsertAttachment]);
-
   const pasteIntoTerminal = useCallback(async (term: XTerm | null) => {
     const text = await navigator.clipboard.readText().catch(() => "");
     if (text) {
@@ -388,118 +289,8 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       return;
     }
 
-    const clipboardImage = await readClipboardImage();
-    if (!clipboardImage) {
-      message.warning(t("terminal.clipboardEmpty"));
-      return;
-    }
-    if (clipboardImage.blob.size > MAX_CLIPBOARD_IMAGE_BYTES) {
-      throw new Error(t("terminal.attachmentTooLarge"));
-    }
-    if (!canQueueTerminalAttachment(attachmentsRef.current)) {
-      message.warning(t("terminal.attachmentQueueFull", { count: 10 }));
-      return;
-    }
-
-    const savingAttachmentId = createSavingAttachmentId();
-    const now = Date.now();
-    upsertAttachment({
-      attachmentId: savingAttachmentId,
-      sessionId,
-      contentHash: "",
-      path: "",
-      fileName: t("terminal.attachmentSavingName"),
-      mimeType: clipboardImage.mimeType,
-      sizeBytes: clipboardImage.blob.size,
-      status: "saving",
-      createdAt: now,
-      updatedAt: now,
-      available: false,
-    });
-
-    try {
-      const dataBase64 = await blobToBase64(clipboardImage.blob);
-      const saved = await saveClipboardImage(sessionId, dataBase64, clipboardImage.mimeType);
-      if (cancelledSavingAttachmentIdsRef.current.delete(savingAttachmentId)) {
-        try {
-          await releaseClipboardAttachment(sessionId, saved.attachmentId);
-        } catch (error) {
-          // Keep the durable reference when cancellation cannot be committed;
-          // it will be reconciled on the next session restore instead of
-          // reintroducing a locally cancelled saving card.
-          console.error("Failed to release a cancelled image attachment:", error);
-        }
-        return;
-      }
-      removeAttachment(sessionId, savingAttachmentId);
-      upsertAttachment(saved);
-      // 保存后直接写入当前终端，沿用手动插入的状态跟踪与输入队列。
-      await handleInsertAttachmentPath(saved);
-    } catch (error) {
-      upsertAttachment({
-        attachmentId: savingAttachmentId,
-        sessionId,
-        contentHash: "",
-        path: "",
-        fileName: t("terminal.attachmentSavingName"),
-        mimeType: clipboardImage.mimeType,
-        sizeBytes: clipboardImage.blob.size,
-        status: "failed",
-        createdAt: now,
-        updatedAt: Date.now(),
-        available: false,
-      });
-      throw error;
-    }
-  }, [handleInsertAttachmentPath, removeAttachment, sessionId, t, upsertAttachment]);
-
-  const attachmentPreview = attachmentPreviewId
-    ? attachments.find((attachment) => attachment.attachmentId === attachmentPreviewId) ?? null
-    : null;
-
-  const loadAttachmentPreview = useCallback(async (attachment: ClipboardAttachment) => {
-    const preview = await readClipboardAttachmentPreview(sessionId, attachment.attachmentId);
-    return preview.dataUrl;
-  }, [sessionId]);
-
-  const handleAttachmentPreview = useCallback((attachment: ClipboardAttachment) => {
-    setAttachmentPreviewId(attachment.attachmentId);
-    setAttachmentPreviewDataUrl(null);
-    void loadAttachmentPreview(attachment)
-      .then((dataUrl) => setAttachmentPreviewDataUrl(dataUrl))
-      .catch((error) => {
-        setAttachmentPreviewId(null);
-        message.error(error instanceof Error ? error.message : t("terminal.attachmentPreviewFailed"));
-      });
-  }, [loadAttachmentPreview, t]);
-
-  const closeAttachmentPreview = useCallback(() => {
-    setAttachmentPreviewId(null);
-    setAttachmentPreviewDataUrl(null);
-    window.setTimeout(() => terminalRef.current?.focus(), 0);
-  }, []);
-
-  const handleCopyAttachmentPath = useCallback((attachment: ClipboardAttachment) => {
-    void navigator.clipboard.writeText(attachment.path)
-      .then(() => message.success(t("terminal.attachmentPathCopied")))
-      .catch(() => message.error(t("terminal.attachmentPathCopyFailed")));
-  }, [t]);
-
-  const handleRemoveAttachment = useCallback((attachment: ClipboardAttachment) => {
-    if (!attachment.contentHash) {
-      if (attachment.status === "saving") {
-        cancelledSavingAttachmentIdsRef.current.add(attachment.attachmentId);
-      }
-      removeAttachment(sessionId, attachment.attachmentId);
-      return;
-    }
-    void releaseClipboardAttachment(sessionId, attachment.attachmentId)
-      .then(() => {
-        removeAttachment(sessionId, attachment.attachmentId);
-        message.success(t("terminal.attachmentRemoved"));
-      })
-      .catch((error) => message.error(error instanceof Error ? error.message : t("terminal.attachmentRemoveFailed")));
-  }, [removeAttachment, sessionId, t]);
+    message.warning(t("terminal.clipboardEmpty"));
+  }, [sessionId, t]);
 
 
 
@@ -1682,14 +1473,6 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
           ) : null}
         </div>
       </Dropdown>
-      <TerminalAttachmentBar
-        attachments={visibleAttachments}
-        onCopyPath={handleCopyAttachmentPath}
-        onInsertPath={(attachment) => void handleInsertAttachmentPath(attachment)}
-        onPreview={handleAttachmentPreview}
-        onRemove={handleRemoveAttachment}
-        loadThumbnail={loadAttachmentPreview}
-      />
       </div>
       <SideQuestionComposer
         open={Boolean(sideQuestionDraft)}
@@ -1702,25 +1485,6 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
         onCancel={closeSideQuestionComposer}
         onSubmit={handleSideQuestionSubmit}
       />
-      <Modal
-        open={Boolean(attachmentPreview)}
-        title={attachmentPreview?.fileName ?? t("terminal.attachmentPreviewTitle")}
-        footer={null}
-        width="min(880px, calc(100vw - 48px))"
-        centered
-        onCancel={closeAttachmentPreview}
-        destroyOnHidden={false}
-      >
-        {attachmentPreviewDataUrl ? (
-          <div className="flex max-h-[72vh] items-center justify-center overflow-auto rounded border p-2" style={{ borderColor: "var(--cs-border)" }}>
-            <img
-              src={attachmentPreviewDataUrl}
-              alt={attachmentPreview?.fileName ?? ""}
-              className="block max-h-[68vh] max-w-full object-contain"
-            />
-          </div>
-        ) : <div className="py-12 text-center text-sm text-[var(--cs-text-secondary)]">{t("terminal.attachmentPreviewLoading")}</div>}
-      </Modal>
       <Modal
         open={Boolean(pendingTerminalLink)}
         title={t("terminal.openLinkConfirmTitle")}
@@ -1742,52 +1506,6 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
 }
 
 export default Terminal;
-
-async function readClipboardImage(): Promise<{ blob: Blob; mimeType: string } | null> {
-  if (typeof navigator === "undefined" || !navigator.clipboard?.read) {
-    return null;
-  }
-
-  try {
-    const items = await navigator.clipboard.read();
-    for (const item of items) {
-      const imageType = item.types.find((type) => type.startsWith("image/"));
-      if (imageType) {
-        const blob = await item.getType(imageType);
-        return { blob, mimeType: imageType };
-      }
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
-}
-
-function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("Failed to read image data"));
-    reader.onload = () => {
-      const result = reader.result;
-      if (typeof result !== "string") {
-        reject(new Error("Failed to read image data"));
-        return;
-      }
-
-      const commaIndex = result.indexOf(",");
-      resolve(commaIndex >= 0 ? result.slice(commaIndex + 1) : result);
-    };
-    reader.readAsDataURL(blob);
-  });
-}
-
-function createSavingAttachmentId(): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return `saving-${crypto.randomUUID()}`;
-  }
-  return `saving-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
 
 function quotePathForShell(path: string): string {
   const escaped = path.replace(/"/g, '\\"');
