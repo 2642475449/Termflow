@@ -25,6 +25,7 @@ import {
 import { useAppStore } from "@/store";
 import { useTranslation } from "react-i18next";
 import MonacoContextMenu from "@/components/editors/MonacoContextMenu";
+import { GitConflictTabView } from "@/components/GitConflictTabView";
 
 loader.config({ monaco });
 
@@ -134,6 +135,16 @@ function GitDiffTabView({ tabId }: GitDiffTabViewProps) {
 
   if (!document) {
     return <Empty className="mt-16" description={t("sidebar.gitClickToViewDiff")} />;
+  }
+
+  if (document.changeKind === "conflicted" && currentProject) {
+    return (
+      <GitConflictTabView
+        projectPath={currentProject.path}
+        filePath={document.path}
+        isBinary={document.isBinary}
+      />
+    );
   }
 
   if (document.isBinary) {

@@ -238,7 +238,7 @@ export function GitConflictTabView({ projectPath, filePath, isBinary }: GitConfl
             disabled={resolving}
             unavailableLabel={t("sidebar.gitConflictResolverDeleted")}
             onUse={pane.source === "base" || pane.content === null ? undefined : () => setResult(pane.content ?? "")}
-            onAcceptDeletion={pane.source === "base" || pane.content !== null ? undefined : () => void handleResolveAsDeletedSide(pane.source)}
+            onAcceptDeletion={pane.source === "base" || pane.content !== null ? undefined : () => void handleResolveAsDeletedSide(pane.source as "ours" | "theirs")}
           />
         ))}
       </div>
