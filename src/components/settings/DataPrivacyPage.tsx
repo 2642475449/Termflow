@@ -14,6 +14,7 @@ import {
 } from "@/lib/api";
 import type { AgentUsageHistoryScope, AgentUsageStorageStatus } from "@/types";
 import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
+import { ClipboardCacheSection } from "@/components/settings/ClipboardCacheSection";
 
 type PendingOperation = "clear" | "rebuild" | null;
 
@@ -95,6 +96,8 @@ export function DataPrivacyPage() {
           </Button>
         }
       />
+
+      <ClipboardCacheSection />
 
       <section
         className="app-glass-card mb-4 rounded-xl p-5"

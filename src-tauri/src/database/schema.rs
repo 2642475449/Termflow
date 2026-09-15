@@ -146,6 +146,31 @@ pub fn migrate(conn: &Connection) -> Result<(), String> {
             .map_err(|error| format!("更新 SQLite schema 版本失败: {error}"))?;
     }
 
+    if version < 7 {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS terminal_image_objects (
+                file_name TEXT PRIMARY KEY NOT NULL,
+                size_bytes INTEGER NOT NULL,
+                legacy INTEGER NOT NULL DEFAULT 0,
+                unreferenced_at_ms INTEGER
+            );
+            CREATE TABLE IF NOT EXISTS terminal_image_references (
+                id TEXT PRIMARY KEY NOT NULL,
+                session_id TEXT NOT NULL,
+                file_name TEXT NOT NULL REFERENCES terminal_image_objects(file_name) ON DELETE CASCADE,
+                retained INTEGER NOT NULL DEFAULT 0,
+                created_at_ms INTEGER NOT NULL,
+                released_at_ms INTEGER
+            );
+            CREATE INDEX IF NOT EXISTS idx_terminal_image_session ON terminal_image_references(session_id);
+            CREATE INDEX IF NOT EXISTS idx_terminal_image_object ON terminal_image_references(file_name, released_at_ms);
+            CREATE INDEX IF NOT EXISTS idx_terminal_image_gc ON terminal_image_objects(legacy, unreferenced_at_ms);
+            CREATE TABLE IF NOT EXISTS terminal_image_deleted_sessions (session_id TEXT PRIMARY KEY NOT NULL);"
+        ).map_err(|error| format!("创建截图缓存账本失败: {error}"))?;
+        conn.pragma_update(None, "user_version", 7)
+            .map_err(|error| format!("更新截图缓存版本失败: {error}"))?;
+    }
+
     Ok(())
 }
 
@@ -178,9 +203,20 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(version, 6);
+        assert_eq!(version, 7);
         assert_eq!(session_table_exists, 1);
         assert_eq!(control_table_exists, 1);
+    }
+
+    #[test]
+    fn upgrades_version_six_with_clipboard_reference_tables() -> Result<(), Box<dyn std::error::Error>> {
+        let connection = Connection::open_in_memory()?;
+        connection.pragma_update(None, "user_version", 6)?;
+        migrate(&connection)?;
+        migrate(&connection)?;
+        let count: i64 = connection.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('terminal_image_objects', 'terminal_image_references', 'terminal_image_deleted_sessions')", [], |row| row.get(0))?;
+        assert_eq!(count, 3);
+        Ok(())
     }
 
     #[test]

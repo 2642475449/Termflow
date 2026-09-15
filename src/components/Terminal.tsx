@@ -24,6 +24,8 @@ import {
   resolveProjectLink,
   inspectAgentClis,
   readImagePreview,
+  saveTerminalClipboardImage,
+  retainClipboardImage,
 } from "@/lib/api";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
@@ -60,6 +62,14 @@ import {
 import { createPtyResizeGate } from "@/lib/terminalResize";
 import { createTerminalImeOutputGate } from "@/lib/terminalImeOutput";
 import { createTerminalCommandWatcher } from "@/lib/terminalCommandWatcher";
+import {
+  createTerminalPasteGate,
+  encodeClipboardImage,
+  formatClipboardImageReference,
+  readTerminalClipboard,
+  readTerminalPasteEvent,
+  type TerminalClipboardContent,
+} from "@/lib/terminalClipboard";
 import type { AgentCliInfo } from "@/types";
 import { useTranslation } from "react-i18next";
 import "@xterm/xterm/css/xterm.css";
@@ -190,6 +200,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
   const onExitRef = useRef(onExit);
   const onCloseRef = useRef(onClose);
   const lastPasteTriggerAtRef = useRef(0);
+  const pasteGateRef = useRef<ReturnType<typeof createTerminalPasteGate> | null>(null);
   const pendingTitleInputRef = useRef("");
   const pendingTitleEscapeSequenceRef = useRef("");
   const pendingSubmissionInputRef = useRef("");
@@ -277,19 +288,55 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
     return () => window.clearTimeout(verificationTimeout);
   }, [currentSession?.agentId, sessionId, setTerminalCompletionIntegration]);
 
-  const pasteIntoTerminal = useCallback(async (term: XTerm | null) => {
-    const text = await navigator.clipboard.readText().catch(() => "");
-    if (text) {
-      // Let xterm normalize line endings and emit bracketed paste when the app enabled it.
-      if (term) {
-        term.paste(text);
-      } else {
-        await ptyInput(sessionId, text);
-      }
+  const reportPasteError = useCallback((error: unknown) => {
+    console.error("Terminal paste failed:", error);
+    const key = error instanceof Error ? error.message : String(error);
+    message.error(t(key.startsWith("terminal.clipboard") ? key : "terminal.clipboardPasteFailed"));
+  }, [t]);
+
+  const pasteIntoTerminal = useCallback(async (
+    term: XTerm | null,
+    content?: TerminalClipboardContent,
+  ) => {
+    const gate = pasteGateRef.current;
+    const session = useAppStore.getState().sessions.find((item) => item.id === sessionId);
+    if (!term || !gate || !session?.active || session.status === "starting") {
+      message.warning(t("terminal.sessionDisconnected"));
       return;
     }
-
-    message.warning(t("terminal.clipboardEmpty"));
+    await gate.paste(async () => {
+      const clipboard = content ?? await readTerminalClipboard(navigator.clipboard);
+      if (clipboard.kind === "empty") {
+        message.warning(t("terminal.clipboardEmpty"));
+        return "";
+      }
+      let text: string;
+      if (clipboard.kind === "text") {
+        text = clipboard.text;
+      } else {
+        if (!isAiAgentId(session.agentId)) throw new Error("terminal.clipboardImageAgentOnly");
+        const loadingKey = `clipboard-image-${crypto.randomUUID()}`;
+        message.info({ key: loadingKey, content: t("terminal.clipboardImagePreparing"), duration: 0 });
+        try {
+          const dataBase64 = await encodeClipboardImage(clipboard.blob);
+          const saved = await saveTerminalClipboardImage(sessionId, dataBase64, clipboard.blob.type);
+          const latest = useAppStore.getState().sessions.find((item) => item.id === sessionId);
+          if (pasteGateRef.current !== gate || !latest?.active || latest.status === "starting"
+            || latest.agentId !== session.agentId) throw new Error("terminal.clipboardSessionChanged");
+          // 写入前持久化保护；IPC 交付不确定时保留引用，避免误回收。
+          await retainClipboardImage(sessionId, saved.referenceId);
+          text = formatClipboardImageReference(session.agentId, saved.path);
+        } finally {
+          message.destroy(loadingKey);
+        }
+      }
+      const latest = useAppStore.getState().sessions.find((item) => item.id === sessionId);
+      if (pasteGateRef.current !== gate || !latest?.active || latest.status === "starting"
+        || latest.agentId !== session.agentId) {
+        throw new Error("terminal.clipboardSessionChanged");
+      }
+      return text;
+    });
   }, [sessionId, t]);
 
 
@@ -781,6 +828,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
 
   useEffect(() => {
     if (!containerRef.current) return;
+    const container = containerRef.current;
 
     const term = new XTerm({
       fontFamily: "'Cascadia Code', 'Fira Code', Consolas, monospace",
@@ -1001,10 +1049,11 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       return inputQueue;
     };
     enqueueInputRef.current = enqueueInput;
+    let processingClipboardPaste = false;
 
     // Send user input to PTY as-is. Control keys like Backspace may repeat rapidly,
     // so deduplicating identical payloads here will make deletion feel laggy.
-    term.onData((data) => {
+    const handleTerminalData = (data: string) => {
       // xterm may emit focus-reporting sequences when tabs switch and we move focus
       // between mounted terminals. Those should not be forwarded into the PTY.
       if (
@@ -1097,12 +1146,41 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
         return;
       }
       captureInputForAutoTitleRef.current?.(data);
-      if (queuedInputOperations > 0) {
+      if (processingClipboardPaste) {
+        void enqueueInput(() => ptyInput(sessionId, data)).catch(reportPasteError);
+      } else if (queuedInputOperations > 0) {
         enqueueInput(() => ptyInput(sessionId, data));
       } else {
         ptyInput(sessionId, data).catch(console.error);
       }
+    };
+    const pasteGate = createTerminalPasteGate({
+      input: handleTerminalData,
+      paste: (text) => {
+        const latest = useAppStore.getState().sessions.find((item) => item.id === sessionId);
+        if (!latest?.active || latest.status === "starting") {
+          throw new Error("terminal.clipboardSessionChanged");
+        }
+        // 粘贴写入也进入 PTY 队列，后续回车须等待后端确认写入。
+        processingClipboardPaste = true;
+        try { term.paste(text); }
+        finally { processingClipboardPaste = false; }
+      },
+      error: reportPasteError,
     });
+    pasteGateRef.current = pasteGate;
+    const inputDisposable = term.onData((data) => pasteGate.input(data));
+    const handleNativePaste = (event: ClipboardEvent) => {
+      if (!event.clipboardData) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      try {
+        void pasteIntoTerminal(term, readTerminalPasteEvent(event.clipboardData)).catch(reportPasteError);
+      } catch (error) {
+        reportPasteError(error);
+      }
+    };
+    container.addEventListener("paste", handleNativePaste, true);
 
     // Smart Ctrl+C / Ctrl+V / Ctrl+L handling
     term.attachCustomKeyEventHandler((event) => {
@@ -1135,9 +1213,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
           return false;
         }
         lastPasteTriggerAtRef.current = now;
-        pasteIntoTerminal(term).catch(() => {
-          message.error(t("terminal.clipboardReadFailed"));
-        });
+        void pasteIntoTerminal(term).catch(reportPasteError);
         return false; // don't send raw \x16 to PTY
       }
 
@@ -1324,6 +1400,10 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
         textarea.removeEventListener("compositionend", onCompositionEnd);
       }
       imeOutputGate.dispose();
+      pasteGate.dispose();
+      inputDisposable.dispose();
+      container.removeEventListener("paste", handleNativePaste, true);
+      if (pasteGateRef.current === pasteGate) pasteGateRef.current = null;
       filePathDisposable.dispose();
       voiceInputPromise.then((unlisten) => unlisten());
       cursorStyleDisposable?.dispose();
@@ -1356,6 +1436,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
     showLocalImagePreview,
     scheduleImagePreviewDismissal,
     pasteIntoTerminal,
+    reportPasteError,
   ]);
 
   useEffect(() => {

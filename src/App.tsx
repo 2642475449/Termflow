@@ -23,6 +23,7 @@ import {
 } from "./lib/api";
 import i18n, { toI18nLanguage } from "./i18n";
 import { useRecentProjectSync } from "./hooks/useRecentProjectSync";
+import { startClipboardSessionSync } from "./store/slices/clipboardCache";
 import { message, TOAST_NOTIFICATION_CONFIG, ToastHost } from "./lib/toast";
 
 const THEME_COLORS: Record<ThemeMode, string> = {
@@ -253,6 +254,11 @@ function App() {
     new URLSearchParams(window.location.search).get("worker") === "voice";
 
   useRecentProjectSync(!isVoiceOverlayWindow && !isVoiceWorkerWindow);
+
+  useEffect(() => {
+    if (isVoiceOverlayWindow || isVoiceWorkerWindow || !persistentSettingsReady) return;
+    return startClipboardSessionSync();
+  }, [isVoiceOverlayWindow, isVoiceWorkerWindow, persistentSettingsReady]);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", currentTheme);

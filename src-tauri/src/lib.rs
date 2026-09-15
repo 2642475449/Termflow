@@ -173,6 +173,9 @@ pub fn run() {
             if let Err(error) = commands::image::cleanup_retired_clipboard_image_cache(&app.handle()) {
                 eprintln!("Failed to clean retired clipboard image cache: {error}");
             }
+            if let Err(error) = commands::image::initialize_terminal_image_cache(app.handle(), database.inner().clone()) {
+                log::warn!("Failed to initialize screenshot cache: {error}");
+            }
             // The installer enables the menu by default. Only apply an
             // existing opt-out here so development launches never write global
             // Explorer registry state merely because the default is true.
@@ -318,6 +321,11 @@ pub fn run() {
             commands::remote_notification::clear_remote_notification_credentials,
             commands::remote_notification::send_remote_notification,
             commands::image::read_image_preview,
+            commands::image::save_terminal_clipboard_image,
+            commands::image::retain_clipboard_image,
+            commands::image::sync_clipboard_sessions,
+            commands::image::get_clipboard_cache_status,
+            commands::image::cleanup_clipboard_cache,
             commands::system_input::send_text_to_focused_window,
             commands::voice::transcribe_audio,
             commands::voice::start_live_asr,

@@ -1,4 +1,5 @@
 pub mod schema;
+pub mod clipboard;
 
 use parking_lot::Mutex;
 use rusqlite::{params, Connection, OptionalExtension};

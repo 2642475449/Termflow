@@ -1329,6 +1329,38 @@ export async function readImagePreview(path: string): Promise<ImagePreviewPayloa
   return await invoke("read_image_preview", { path });
 }
 
+export interface ClipboardCacheStatus {
+  cachePath: string;
+  totalBytes: number;
+  protectedBytes: number;
+  reclaimableBytes: number;
+  legacyBytes: number;
+  imageCount: number;
+  limitBytes: number;
+  retentionDays: number;
+  pendingHours: number;
+}
+
+export async function saveTerminalClipboardImage(sessionId: string, dataBase64: string, mimeType: string): Promise<{ path: string; referenceId: string }> {
+  return await invoke("save_terminal_clipboard_image", { sessionId, dataBase64, mimeType });
+}
+
+export async function retainClipboardImage(sessionId: string, referenceId: string): Promise<void> {
+  return await invoke("retain_clipboard_image", { sessionId, referenceId });
+}
+
+export async function syncClipboardSessions(present: string[], removed: string[]): Promise<void> {
+  return await invoke("sync_clipboard_sessions", { present, removed });
+}
+
+export async function getClipboardCacheStatus(): Promise<ClipboardCacheStatus> {
+  return await invoke("get_clipboard_cache_status");
+}
+
+export async function cleanupClipboardCache(): Promise<ClipboardCacheStatus> {
+  return await invoke("cleanup_clipboard_cache");
+}
+
 export async function gitCloneRepository(options: {
   remoteUrl: string;
   parentDirectory: string;

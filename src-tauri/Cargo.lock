@@ -4956,6 +4956,7 @@ dependencies = [
 name = "termflow"
 version = "1.8.31"
 dependencies = [
+ "base64 0.22.1",
  "chrono",
  "chrono-tz",
  "dirs-next",

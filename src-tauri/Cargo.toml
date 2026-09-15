@@ -50,6 +50,7 @@ tauri-plugin-fs = "2"
 tauri-plugin-global-shortcut = "2.3.2"
 log = "0.4"
 sha2 = "0.10"
+base64 = "0.22"
 rusqlite = { version = "0.31", features = ["bundled"] }
 notify = "7"
 notify-debouncer-mini = "0.5"
