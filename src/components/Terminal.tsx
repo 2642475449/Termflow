@@ -61,6 +61,7 @@ import {
 } from "@/lib/agentUserResponse";
 import { createPtyResizeGate } from "@/lib/terminalResize";
 import { createTerminalImeOutputGate } from "@/lib/terminalImeOutput";
+import { createTerminalInputQueue } from "@/lib/terminalInputQueue";
 import { createTerminalCommandWatcher } from "@/lib/terminalCommandWatcher";
 import {
   createTerminalPasteGate,
@@ -1040,17 +1041,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
 
     activateWebglRenderer();
 
-    let queuedInputOperations = 0;
-    let inputQueue: Promise<void> = Promise.resolve();
-    const enqueueInput = (operation: () => Promise<void>) => {
-      queuedInputOperations += 1;
-      inputQueue = inputQueue
-        .then(operation, operation)
-        .finally(() => {
-          queuedInputOperations -= 1;
-        });
-      return inputQueue;
-    };
+    const enqueueInput = createTerminalInputQueue();
     enqueueInputRef.current = enqueueInput;
     let processingClipboardPaste = false;
 
@@ -1117,15 +1108,11 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
               });
             }
           };
-          enqueueInput(sendInput);
+          void enqueueInput(sendInput).catch(console.error);
           return;
         }
         if (!hasTerminalPromptText(submissionCapture.submittedText)) {
-          if (queuedInputOperations > 0) {
-            enqueueInput(() => ptyInput(sessionId, data));
-          } else {
-            ptyInput(sessionId, data).catch(console.error);
-          }
+          void enqueueInput(() => ptyInput(sessionId, data)).catch(console.error);
           return;
         }
 
@@ -1151,10 +1138,9 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       captureInputForAutoTitleRef.current?.(data);
       if (processingClipboardPaste) {
         void enqueueInput(() => ptyInput(sessionId, data)).catch(reportPasteError);
-      } else if (queuedInputOperations > 0) {
-        enqueueInput(() => ptyInput(sessionId, data));
       } else {
-        ptyInput(sessionId, data).catch(console.error);
+        // 系统语音会连续触发逐字输入；即使队列空闲也必须排队，避免并发 IPC 写入乱序。
+        void enqueueInput(() => ptyInput(sessionId, data)).catch(console.error);
       }
     };
     const pasteGate = createTerminalPasteGate({
@@ -1332,7 +1318,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
         pendingSubmissionEscapeSequenceRef.current = inputCapture.pendingSequence;
         captureInputForAutoTitleRef.current?.(event.payload.text);
 
-        enqueueInput(() => ptyInput(sessionId, event.payload.text));
+        void enqueueInput(() => ptyInput(sessionId, event.payload.text)).catch(console.error);
       },
     );
     // Listen for PTY exit
