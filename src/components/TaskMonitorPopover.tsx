@@ -1,13 +1,18 @@
 import { useEffect, useState } from "react";
 import { Popover, Tooltip, message } from "antd";
-import { FileSearchOutlined, FolderOpenOutlined } from "@ant-design/icons";
+import { CloseOutlined, FileSearchOutlined, FolderOpenOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "@/store";
 import { focusProjectWindow } from "@/lib/api";
 import { collectOpenProjects, projectPathKey } from "@/lib/openProjects";
 import { collectTaskMonitorTabs, type TaskMonitorTab } from "@/lib/taskMonitor";
 import { useOpenProjectsStore } from "@/store/slices/openProjects";
-import { requestTaskMonitorSnapshots, startTaskMonitorSync, useTaskMonitorStore } from "@/store/slices/taskMonitor";
+import {
+  requestTaskMonitorSnapshots,
+  requestTaskMonitorTabClose,
+  startTaskMonitorSync,
+  useTaskMonitorStore,
+} from "@/store/slices/taskMonitor";
 
 export function TaskMonitorPopover() {
   const { t } = useTranslation();
@@ -18,6 +23,7 @@ export function TaskMonitorPopover() {
   const panes = useAppStore((s) => s.panesById);
   const tabs = useAppStore((s) => s.tabsById);
   const focusedTabId = useAppStore((s) => s.focusedTabId);
+  const windowLabel = useAppStore((s) => s.windowLabel);
   const windows = useOpenProjectsStore((s) => s.windows);
   const refreshWindows = useOpenProjectsStore((s) => s.setOpenProjectWindows);
   const snapshots = useTaskMonitorStore((s) => s.snapshots);
@@ -51,6 +57,15 @@ export function TaskMonitorPopover() {
     }
   }
 
+  async function closeTask(targetWindowLabel: string, tabId: string) {
+    try {
+      await requestTaskMonitorTabClose({ windowLabel: targetWindowLabel, tabId });
+    } catch (error) {
+      console.error("Failed to close monitored task:", error);
+      message.error(t("taskMonitor.closeFailed"));
+    }
+  }
+
   const content = (
     <div className="app-task-monitor">
       <div className="app-task-monitor-header">
@@ -62,6 +77,7 @@ export function TaskMonitorPopover() {
           const key = projectPathKey(project.path);
           const isCurrent = !!currentProject && projectPathKey(currentProject.path) === key;
           const projectWindow = windows.find((item) => item.projectPath && projectPathKey(item.projectPath) === key);
+          const targetWindowLabel = isCurrent ? windowLabel : projectWindow?.windowLabel;
           const snapshot = projectWindow ? snapshots[projectWindow.windowLabel] : undefined;
           const projectTabs = isCurrent ? collectTaskMonitorTabs(sessions, panes, tabs)
             : snapshot && projectPathKey(snapshot.projectPath) === key ? snapshot.tabs : null;
@@ -75,15 +91,26 @@ export function TaskMonitorPopover() {
                 <p className="app-task-monitor-empty">{t(projectTabs ? "taskMonitor.noTabs" : "taskMonitor.loading")}</p>
               )}
               {projectTabs?.map((tab) => (
-                <button key={tab.id} type="button" className="app-task-monitor-row"
-                  data-active={isCurrent && focusedTabId === tab.id ? "true" : "false"}
-                  onClick={() => void navigate(project.path, tab)} title={tab.name}>
-                  <span className="min-w-0 flex-1 truncate text-left">{tab.name}</span>
-                  <Tooltip title={t(`taskMonitor.status.${tab.status}`)}>
-                    <span className="app-task-monitor-dot" data-status={tab.status}
-                      role="img" aria-label={t(`taskMonitor.status.${tab.status}`)} />
-                  </Tooltip>
-                </button>
+                <div key={tab.id} className="app-task-monitor-row"
+                  data-active={isCurrent && focusedTabId === tab.id ? "true" : "false"}>
+                  <button type="button" className="app-task-monitor-row-main"
+                    onClick={() => void navigate(project.path, tab)} title={tab.name}>
+                    <span className="min-w-0 flex-1 truncate text-left">{tab.name}</span>
+                    <Tooltip title={t(`taskMonitor.status.${tab.status}`)}>
+                      <span className="app-task-monitor-dot" data-status={tab.status}
+                        role="img" aria-label={t(`taskMonitor.status.${tab.status}`)} />
+                    </Tooltip>
+                  </button>
+                  {targetWindowLabel && (
+                    <Tooltip title={t("taskMonitor.closeTask")}>
+                      <button type="button" className="app-task-monitor-close"
+                        aria-label={t("taskMonitor.closeTask")}
+                        onClick={() => void closeTask(targetWindowLabel, tab.id)}>
+                        <CloseOutlined />
+                      </button>
+                    </Tooltip>
+                  )}
+                </div>
               ))}
             </section>
           );

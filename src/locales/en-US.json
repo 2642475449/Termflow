@@ -8,6 +8,8 @@
     "noTabs": "No open agent tabs",
     "loading": "Syncing tabs…",
     "navigateFailed": "Unable to navigate. The project window may have closed.",
+    "closeTask": "Close task",
+    "closeFailed": "Unable to close task",
     "status": {
       "starting": "Starting",
       "running": "Running",
@@ -111,6 +113,7 @@
     "pausedHint": "Paused tasks do not run",
     "finishedHint": "This one-time task has finished",
     "runNow": "Run Now",
+    "runAgain": "Run Again",
     "runStarted": "Task added to the run queue",
     "recentRuns": "Recent Runs",
     "viewAllRuns": "View All",
@@ -385,6 +388,8 @@
     }
   },
   "home": {
+    "antigravityEstimatedUsage": "Some Antigravity sessions lack readable generation counts; these totals include local estimates.",
+    "antigravityIncompleteUsage": "Some Antigravity usage records could not be read; these totals may be incomplete.",
     "projectReady": "Project {{name}} is ready. Create a session to get started.",
     "launcherSubtitle": "Agent session manager, embedded terminal, and multi-session workflow",
     "projectWindow": "Current Project Window",

@@ -107,6 +107,9 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       // Ctrl+,: Open settings
       if (hasPrimaryModifier && e.key === "," && !e.shiftKey && !e.altKey) {
         consumeShortcut(e);
+        if (useAppStore.getState().activeSidebarSection === "schedules") {
+          useAppStore.getState().setActiveSidebarSection("sessions");
+        }
         openTab(SETTINGS_ID);
         return;
       }

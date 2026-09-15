@@ -562,6 +562,24 @@ function AppLayout() {
 
   useEffect(() => startScheduledTaskSync(), []);
 
+  useEffect(() => {
+    // 清理旧版本任务标签，任务页面改由侧边栏控制。
+    for (const tab of Object.values(tabsById)) {
+      if (tab.id === SCHEDULED_TASKS_TAB_ID || tab.kind === "scheduled-tasks") {
+        closeTab(tab.id);
+      }
+    }
+  }, [tabsById, closeTab]);
+
+  useEffect(() => useAppStore.subscribe((state, previous) => {
+    if (
+      state.activeSidebarSection === "schedules"
+      && state.activeSessionId !== previous.activeSessionId
+    ) {
+      state.setActiveSidebarSection("sessions");
+    }
+  }), []);
+
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const visibleTerminalSessionKey = Object.values(panesById)
     .map((pane) => pane.activeTabId)
@@ -1880,22 +1898,29 @@ function AppLayout() {
         <Content className="app-main-content flex flex-col">
           <div className="app-main-stage flex min-h-0 flex-1 flex-row">
             <div className="app-main-stage-body relative min-h-0 min-w-0 flex-1">
-              {windowMode === "project" && hasTabs ? (
-                <WorkspaceLayoutNode node={workspaceLayout.root} />
-              ) : windowMode === "project" && activeSession && activeSession.active ? (
+              {activeSidebarSection === "schedules" && (
                 <Suspense fallback={<WorkspaceContentFallback />}>
-                  <Terminal
-                    sessionId={activeSession.id}
-                    onExit={() => handleExit(activeSession.id)}
-                  />
+                  <ScheduledTasksPanel />
                 </Suspense>
-              ) : windowMode === "project" && currentProject ? (
-                <HomePage />
-              ) : (
-                <HomePage />
               )}
+              <div className={activeSidebarSection === "schedules" ? "hidden" : "h-full min-h-0"}>
+                {windowMode === "project" && hasTabs ? (
+                  <WorkspaceLayoutNode node={workspaceLayout.root} />
+                ) : windowMode === "project" && activeSession && activeSession.active ? (
+                  <Suspense fallback={<WorkspaceContentFallback />}>
+                    <Terminal
+                      sessionId={activeSession.id}
+                      onExit={() => handleExit(activeSession.id)}
+                    />
+                  </Suspense>
+                ) : windowMode === "project" && currentProject ? (
+                  <HomePage />
+                ) : (
+                  <HomePage />
+                )}
+              </div>
               <VoiceTrigger
-                visible={voiceTriggerVisible && !settingsVisible}
+                visible={voiceTriggerVisible && !settingsVisible && activeSidebarSection !== "schedules"}
                 onClick={handleVoiceTrigger}
                 onHide={handleHideVoiceTrigger}
                 shortcutLabel={voiceShortcut}

@@ -8,6 +8,8 @@
     "noTabs": "暂无智能体标签",
     "loading": "正在同步标签…",
     "navigateFailed": "无法跳转，项目窗口可能已关闭",
+    "closeTask": "关闭任务",
+    "closeFailed": "无法关闭任务",
     "status": {
       "starting": "正在启动",
       "running": "运行中",
@@ -111,6 +113,7 @@
     "pausedHint": "暂停期间不执行",
     "finishedHint": "一次性任务已完成",
     "runNow": "立即运行",
+    "runAgain": "重新运行",
     "runStarted": "已加入运行队列",
     "recentRuns": "最近运行",
     "viewAllRuns": "查看全部",
@@ -385,6 +388,8 @@
     }
   },
   "home": {
+    "antigravityEstimatedUsage": "Antigravity 部分会话缺少可读取的生成计数，当前统计包含本地估算。",
+    "antigravityIncompleteUsage": "Antigravity 部分用量记录无法读取，当前统计可能不完整。",
     "projectReady": "当前项目 {{name}} 已就绪，可创建会话开始工作",
     "launcherSubtitle": "智能体会话管理器 · 嵌入式终端 · 多会话管理",
     "projectWindow": "当前项目窗口",

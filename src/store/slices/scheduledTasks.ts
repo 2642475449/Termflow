@@ -1,6 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
 import { create } from "zustand";
-import { listScheduledTaskRuns, listScheduledTasks } from "@/lib/api";
+import { listScheduledTaskRuns, listScheduledTasks, runScheduledTaskNow } from "@/lib/api";
 import { SCHEDULED_TASKS_CHANGED_EVENT } from "@/lib/scheduledTasks";
 import type { ScheduledTask, ScheduledTaskRun } from "@/types";
 
@@ -16,6 +16,11 @@ interface ScheduledTaskState {
   scope: ScheduledTaskScope;
   selectedRunId: string | null;
   editor: ScheduledTaskEditor;
+  showAllRuns: boolean;
+  pendingRunTaskIds: string[];
+  listScrollPositions: Record<string, number>;
+  setShowAllRuns: (visible: boolean) => void;
+  setListScrollPosition: (scopeKey: string, position: number) => void;
   setScope: (scope: ScheduledTaskScope) => void;
   setSelectedRunId: (runId: string | null) => void;
   setEditor: (editor: ScheduledTaskEditor) => void;
@@ -33,6 +38,13 @@ export const useScheduledTaskStore = create<ScheduledTaskState>((set) => ({
   scope: "current",
   selectedRunId: null,
   editor: null,
+  showAllRuns: false,
+  pendingRunTaskIds: [],
+  listScrollPositions: {},
+  setShowAllRuns: (showAllRuns) => set({ showAllRuns }),
+  setListScrollPosition: (scopeKey, position) => set((state) => ({
+    listScrollPositions: { ...state.listScrollPositions, [scopeKey]: position },
+  })),
   setScope: (scope) => set({ scope, selectedRunId: null }),
   setSelectedRunId: (selectedRunId) => set({ selectedRunId }),
   setEditor: (editor) => set({ editor }),
@@ -42,6 +54,24 @@ export const useScheduledTaskStore = create<ScheduledTaskState>((set) => ({
 }));
 
 let refreshRequest: Promise<void> | null = null;
+
+export async function startScheduledTaskRun(taskId: string): Promise<void> {
+  const state = useScheduledTaskStore.getState();
+  if (state.pendingRunTaskIds.includes(taskId)) return;
+  useScheduledTaskStore.setState({ pendingRunTaskIds: [...state.pendingRunTaskIds, taskId] });
+  try {
+    const run = await runScheduledTaskNow(taskId);
+    useScheduledTaskStore.setState((current) => ({
+      runs: [run, ...current.runs.filter((item) => item.id !== run.id)],
+      selectedRunId: run.id,
+    }));
+    await refreshScheduledTasks();
+  } finally {
+    useScheduledTaskStore.setState((current) => ({
+      pendingRunTaskIds: current.pendingRunTaskIds.filter((id) => id !== taskId),
+    }));
+  }
+}
 
 export async function refreshScheduledTasks(): Promise<void> {
   if (refreshRequest) return refreshRequest;

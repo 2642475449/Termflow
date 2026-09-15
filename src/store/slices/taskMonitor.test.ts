@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { emit, listen } from "@tauri-apps/api/event";
-import { startTaskMonitorSync, useTaskMonitorStore } from "./taskMonitor";
+import { requestTaskMonitorTabClose, startTaskMonitorSync, useTaskMonitorStore } from "./taskMonitor";
 
 const mocks = vi.hoisted(() => ({
-  state: { windowLabel: "project-a", currentProject: { path: "/a" }, sessions: [], panesById: {}, tabsById: {} },
+  state: { windowLabel: "project-a", currentProject: { path: "/a" }, sessions: [], panesById: {}, tabsById: {}, closeTab: vi.fn() },
   unsubscribe: vi.fn(),
 }));
 vi.mock("@/store", () => ({ useAppStore: {
@@ -31,7 +31,7 @@ it("publishes current project metadata and receives remote window snapshots", as
   handler({ event: "snapshot", id: 1, payload: { windowLabel: "project-b", projectPath: "/b", tabs: [] } });
   expect(useTaskMonitorStore.getState().snapshots["project-b"].projectPath).toBe("/b");
   stop();
-  expect(unlisten).toHaveBeenCalledTimes(2);
+  expect(unlisten).toHaveBeenCalledTimes(3);
   expect(mocks.unsubscribe).toHaveBeenCalledOnce();
 });
 
@@ -45,6 +45,13 @@ it("cleans up listeners that finish registering after unmount", async () => {
   const stop = startTaskMonitorSync();
   stop();
   resolveListener(unlisten);
-  await vi.waitFor(() => expect(unlisten).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() => expect(unlisten).toHaveBeenCalledTimes(3));
   expect(emit).not.toHaveBeenCalled();
+});
+
+it("sends close requests to the target project window", async () => {
+  await requestTaskMonitorTabClose({ windowLabel: "project-b", tabId: "session-1" });
+  expect(emit).toHaveBeenCalledWith("termflow-task-monitor-close-request", {
+    windowLabel: "project-b", tabId: "session-1",
+  });
 });

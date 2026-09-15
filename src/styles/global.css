@@ -2389,9 +2389,13 @@ html, body, #root {
 .app-task-monitor-project + .app-task-monitor-project { margin-top: 12px; }
 .app-task-monitor-project-name { display: flex; align-items: center; gap: 9px; min-height: 32px; padding: 5px 8px; color: var(--cs-text-secondary); }
 .app-task-monitor-project-name > .anticon { flex-shrink: 0; font-size: 14px; }
-.app-task-monitor-row { display: flex; align-items: center; gap: 10px; width: calc(100% - 23px); min-height: 32px; margin-left: 23px; padding: 5px 8px; border: 0; border-radius: 5px; background: transparent; color: var(--cs-text-secondary); cursor: pointer; }
+.app-task-monitor-row { display: flex; align-items: center; width: calc(100% - 23px); min-height: 32px; margin-left: 23px; border-radius: 5px; color: var(--cs-text-secondary); }
 .app-task-monitor-row:hover, .app-task-monitor-row[data-active="true"] { background: var(--cs-bg-hover); color: var(--cs-text-primary); }
-.app-task-monitor-row:focus-visible { outline: 2px solid var(--cs-primary); outline-offset: -2px; }
+.app-task-monitor-row-main { display: flex; min-width: 0; flex: 1; align-items: center; gap: 10px; align-self: stretch; padding: 5px 8px; border: 0; border-radius: 5px; background: transparent; color: inherit; cursor: pointer; }
+.app-task-monitor-row-main:focus-visible, .app-task-monitor-close:focus-visible { outline: 2px solid var(--cs-primary); outline-offset: -2px; }
+.app-task-monitor-close { display: flex; width: 24px; align-self: stretch; flex-shrink: 0; align-items: center; justify-content: center; border: 0; border-radius: 5px; background: transparent; color: var(--cs-text-tertiary); cursor: pointer; opacity: 0; pointer-events: none; transition: opacity 120ms ease, color 120ms ease; }
+.app-task-monitor-close:hover { color: var(--cs-text-primary); background: var(--cs-bg-hover); }
+.app-task-monitor-row:hover .app-task-monitor-close, .app-task-monitor-row:focus-within .app-task-monitor-close { opacity: 1; pointer-events: auto; }
 .app-task-monitor-dot { width: 8px; height: 8px; flex-shrink: 0; border-radius: 50%; background: var(--cs-text-tertiary); }
 .app-task-monitor-dot[data-status="starting"], .app-task-monitor-dot[data-status="running"] { background: transparent; border: 1.5px solid var(--cs-text-tertiary); border-top-color: transparent; }
 .app-task-monitor-dot[data-status="running"], .app-task-monitor-dot[data-status="starting"] { animation: app-task-monitor-spin 1s linear infinite; }
@@ -2614,7 +2618,8 @@ html, body, #root {
 
 .app-scheduled-task-next {
   margin-top: 6px;
-  color: var(--cs-text-tertiary);
+  color: var(--cs-text-secondary);
+  font-weight: 500;
   font-size: 12px;
 }
 

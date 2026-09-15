@@ -1224,7 +1224,7 @@ function RateLimitUsageStatus({
 
   const popoverContent = (
     <div
-      className="w-[286px] overflow-hidden rounded-[8px] border"
+      className="w-[300px] overflow-hidden rounded-[8px] border"
       style={{
         background: "var(--cs-bg-elevated, var(--cs-bg-sidebar))",
         borderColor: "var(--cs-border-sidebar)",
@@ -1296,41 +1296,43 @@ function RateLimitUsageStatus({
           </div>
         )}
 
-        {resetCredits != null ? (
+        {(resetCredits != null || agentId === "codex" || (statusError && hasData)) ? (
           <div
-            className="border-y py-2 text-[11px] font-medium"
-            style={{
-              color: "var(--cs-text-secondary)",
-              borderColor: "color-mix(in srgb, var(--cs-border-sidebar) 76%, transparent)",
-            }}
+            className="space-y-1.5 border-t pt-2 text-[11px]"
+            style={{ borderColor: "color-mix(in srgb, var(--cs-border-sidebar) 76%, transparent)" }}
           >
-            {t("statusBar.codexUsage.resetCredits", { count: resetCredits })}
+            {resetCredits != null ? (
+              <div
+                className="font-medium"
+                style={{ color: "var(--cs-text-secondary)" }}
+              >
+                {t("statusBar.codexUsage.resetCredits", { count: resetCredits })}
+              </div>
+            ) : null}
+
+            {agentId === "codex" ? (
+              <div className="flex items-center justify-between gap-3">
+                <span style={{ color: "var(--cs-text-tertiary)" }}>{t("statusBar.codexUsage.account")}</span>
+                <span
+                  className="min-w-0 truncate text-right"
+                  style={{ color: "var(--cs-text-secondary)" }}
+                  title={codexLimits?.accountLabel ?? undefined}
+                >
+                  {codexLimits?.accountLabel ?? t("statusBar.codexUsage.systemDefault")}
+                </span>
+              </div>
+            ) : null}
+
+            {statusError && hasData ? (
+              <div className="flex items-start gap-1.5" style={{ color: "var(--cs-text-tertiary)" }}>
+                <WarningOutlined style={{ fontSize: 11, marginTop: 2 }} />
+                <span className="min-w-0 max-h-[96px] flex-1 overflow-y-auto whitespace-pre-wrap break-all">
+                  {statusError}
+                </span>
+              </div>
+            ) : null}
           </div>
         ) : null}
-
-        {agentId === "codex" ? <div
-          className="space-y-1 border-t pt-2 text-[11px]"
-          style={{ borderColor: "color-mix(in srgb, var(--cs-border-sidebar) 76%, transparent)" }}
-        >
-          <div className="flex items-center justify-between gap-3">
-            <span style={{ color: "var(--cs-text-tertiary)" }}>{t("statusBar.codexUsage.account")}</span>
-            <span
-              className="min-w-0 truncate text-right"
-              style={{ color: "var(--cs-text-secondary)" }}
-              title={codexLimits?.accountLabel ?? undefined}
-            >
-              {codexLimits?.accountLabel ?? t("statusBar.codexUsage.systemDefault")}
-            </span>
-          </div>
-          {statusError && hasData ? (
-            <div className="flex items-start gap-1.5" style={{ color: "var(--cs-text-tertiary)" }}>
-              <WarningOutlined style={{ fontSize: 11, marginTop: 2 }} />
-              <span className="min-w-0 max-h-[96px] flex-1 overflow-y-auto whitespace-pre-wrap break-all">
-                {statusError}
-              </span>
-            </div>
-          ) : null}
-        </div> : null}
       </div>
     </div>
   );

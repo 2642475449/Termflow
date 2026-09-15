@@ -1,3 +1,4 @@
+pub(crate) mod antigravity;
 pub mod schema;
 pub mod clipboard;
 

@@ -1943,23 +1943,31 @@ fn antigravity_gemini_home() -> Option<PathBuf> {
     dirs_next::home_dir().map(|home_dir| home_dir.join(".gemini"))
 }
 
-fn collect_antigravity_transcript_files() -> Vec<PathBuf> {
-    let Some(gemini_home) = antigravity_gemini_home() else {
+fn collect_antigravity_transcript_files(home: &Path) -> Vec<PathBuf> {
+    let mut paths = BTreeMap::<String, PathBuf>::new();
+    let Ok(variants) = fs::read_dir(home) else {
         return Vec::new();
     };
-    let mut paths = BTreeMap::<String, PathBuf>::new();
-    for variant in ["antigravity", "antigravity-ide", "antigravity-cli"] {
-        let brain_directory = gemini_home.join(variant).join("brain");
-        let Ok(entries) = fs::read_dir(brain_directory) else {
+    for variant in variants.flatten() {
+        if !variant
+            .file_name()
+            .to_string_lossy()
+            .starts_with("antigravity")
+        {
+            continue;
+        }
+        let Ok(entries) = fs::read_dir(variant.path().join("brain")) else {
             continue;
         };
         for entry in entries.flatten() {
-            let transcript = entry
-                .path()
-                .join(".system_generated")
-                .join("logs")
-                .join("transcript.jsonl");
-            if transcript.is_file() {
+            let logs = entry.path().join(".system_generated").join("logs");
+            let full = logs.join("transcript_full.jsonl");
+            let transcript = if full.is_file() {
+                full
+            } else {
+                logs.join("transcript.jsonl")
+            };
+            if let Ok(transcript) = transcript.canonicalize() {
                 paths.insert(local_path_key(&transcript), transcript);
             }
         }
@@ -2157,8 +2165,73 @@ fn build_antigravity_usage_stats_from_files(
     Ok(aggregate)
 }
 
-fn build_antigravity_usage_stats() -> Result<AggregatedTranscriptStats, String> {
-    build_antigravity_usage_stats_from_files(collect_antigravity_transcript_files())
+fn build_antigravity_usage_stats() -> Result<(AggregatedTranscriptStats, bool, bool), String> {
+    let Some(home) = antigravity_gemini_home() else {
+        return Ok((AggregatedTranscriptStats::default(), false, false));
+    };
+    build_antigravity_usage_stats_at(&home)
+}
+
+fn build_antigravity_usage_stats_at(
+    home: &Path,
+) -> Result<(AggregatedTranscriptStats, bool, bool), String> {
+    let scan = crate::database::antigravity::scan(home);
+    let mut aggregate = AggregatedTranscriptStats::default();
+    let mut sessions = BTreeMap::new();
+    let mut covered = BTreeSet::new();
+    for (path, conversation) in scan.conversations {
+        if conversation.events.is_empty() {
+            continue;
+        }
+        covered.insert(local_path_key(&path));
+        for event in conversation.events {
+            let Some(timestamp) = DateTime::from_timestamp(event.timestamp, 0) else {
+                continue;
+            };
+            let total_tokens = event.input + event.output + event.cache;
+            record_generic_usage_event(
+                &mut aggregate,
+                &mut sessions,
+                ParsedAgentUsageEvent {
+                    session_id: local_path_key(&path),
+                    timestamp,
+                    model: normalize_antigravity_model(&event.model).unwrap_or(event.model),
+                    total_tokens,
+                    token_breakdown: AgentUsageTokenBreakdown {
+                        input_tokens: event.input,
+                        output_tokens: event.output,
+                        cache_read_tokens: event.cache,
+                        total_tokens,
+                        ..AgentUsageTokenBreakdown::default()
+                    },
+                },
+            );
+        }
+    }
+    finalize_generic_sessions(&mut aggregate, sessions);
+    let mut estimated = false;
+    let mut incomplete = scan.incomplete;
+    for transcript in collect_antigravity_transcript_files(home) {
+        let variant = transcript.ancestors().nth(5);
+        let database = variant.map(|root| {
+            root.join("conversations")
+                .join(format!("{}.db", antigravity_session_id(&transcript)))
+        });
+        if database
+            .and_then(|path| path.canonicalize().ok())
+            .is_some_and(|path| covered.contains(&local_path_key(&path)))
+        {
+            continue;
+        }
+        match build_antigravity_usage_stats_from_files(vec![transcript]) {
+            Ok(stats) => {
+                estimated |= stats.total_tokens() > 0;
+                merge_aggregated_stats(&mut aggregate, stats);
+            }
+            Err(_) => incomplete = true,
+        }
+    }
+    Ok((aggregate, estimated, incomplete))
 }
 
 #[derive(Debug, Clone)]
@@ -2641,14 +2714,22 @@ pub(crate) fn build_agent_usage_overview(
     }
 
     match build_antigravity_usage_stats() {
-        Ok(stats) => {
+        Ok((stats, estimated, incomplete)) => {
             providers.push(build_provider_summary(
                 "antigravity",
                 "Antigravity CLI",
-                "partial",
-                "~/.gemini/{antigravity,antigravity-ide,antigravity-cli}/brain/**/transcript.jsonl (local estimate)",
+                if estimated || incomplete {
+                    "partial"
+                } else {
+                    "full"
+                },
+                if estimated {
+                    "~/.gemini/antigravity*/conversations/*.db + transcript (local estimate)"
+                } else {
+                    "~/.gemini/antigravity*/conversations/*.db (generation token records)"
+                },
                 &stats,
-                None,
+                incomplete.then(|| "antigravity_usage_incomplete".to_string()),
             ));
             merge_aggregated_stats(&mut aggregate, stats);
         }
@@ -2656,7 +2737,7 @@ pub(crate) fn build_agent_usage_overview(
             "antigravity",
             "Antigravity CLI",
             "partial",
-            "~/.gemini/{antigravity,antigravity-ide,antigravity-cli}/brain/**/transcript.jsonl (local estimate)",
+            "~/.gemini/antigravity*/conversations/*.db",
             Some(error),
         )),
     }
@@ -4442,5 +4523,57 @@ mod tests {
                 .and_then(|models| models.get("gemini-2.5-pro")),
             Some(&4)
         );
+    }
+    #[test]
+    fn antigravity_database_replaces_transcript_and_preserves_legacy_fallback() {
+        let home = tempfile::tempdir().expect("home");
+        let variant = home.path().join("antigravity-cli");
+        let db_path = variant.join("conversations/session.db");
+        let _db = crate::database::antigravity::tests::create_database(&db_path);
+        fs::write(
+            variant.join("settings.json"),
+            r#"{"model":"Gemini 3.8 Flash"}"#,
+        )
+        .expect("settings");
+        let transcript = |id: &str| {
+            let logs = variant
+                .join("brain")
+                .join(id)
+                .join(".system_generated/logs");
+            fs::create_dir_all(&logs).expect("logs");
+            fs::write(logs.join("transcript_full.jsonl"), concat!(
+                r#"{"type":"USER_INPUT","content":"abcdefgh","created_at":"2026-09-15T00:00:00Z"}"#, "\n",
+                r#"{"type":"PLANNER_RESPONSE","content":"abcd","created_at":"2026-09-15T00:01:00Z"}"#, "\n"
+            )).expect("transcript");
+        };
+        transcript("session");
+        let (stats, estimated, _) = build_antigravity_usage_stats_at(home.path()).expect("stats");
+        assert_eq!(stats.total_tokens(), 1130);
+        assert_eq!(stats.total_sessions, 1);
+        assert_eq!(stats.token_breakdown.cache_read_tokens, 1000);
+        assert!(!estimated);
+        transcript("legacy");
+        let (stats, estimated, _) = build_antigravity_usage_stats_at(home.path()).expect("stats");
+        assert_eq!(stats.total_tokens(), 1133);
+        assert_eq!(stats.total_sessions, 2);
+        assert!(estimated);
+        assert_eq!(
+            stats
+                .daily_model_tokens
+                .values()
+                .flat_map(|models| models.values())
+                .sum::<u64>(),
+            1133
+        );
+    }
+
+    #[test]
+    #[ignore = "Manually reads local Antigravity usage; prints aggregate counts only"]
+    fn antigravity_local_database_diagnostic() {
+        let (stats, estimated, incomplete) = build_antigravity_usage_stats().expect("local usage");
+        println!("Antigravity: tokens={}, cache={}, sessions={}, generations={}, estimated={}, incomplete={}",
+            stats.total_tokens(), stats.token_breakdown.cache_read_tokens, stats.total_sessions,
+            stats.total_messages(), estimated, incomplete);
+        assert_eq!(stats.total_tokens(), stats.token_breakdown.total_tokens);
     }
 }

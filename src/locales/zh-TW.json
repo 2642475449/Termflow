@@ -8,6 +8,8 @@
     "noTabs": "暫無智慧體分頁",
     "loading": "正在同步分頁…",
     "navigateFailed": "無法跳轉，專案視窗可能已關閉",
+    "closeTask": "關閉任務",
+    "closeFailed": "無法關閉任務",
     "status": {
       "starting": "正在啟動",
       "running": "執行中",
@@ -111,6 +113,7 @@
     "pausedHint": "暫停期間不執行",
     "finishedHint": "一次性任務已完成",
     "runNow": "立即執行",
+    "runAgain": "重新執行",
     "runStarted": "已加入執行佇列",
     "recentRuns": "最近執行",
     "viewAllRuns": "查看全部",
@@ -385,6 +388,8 @@
     }
   },
   "home": {
+    "antigravityEstimatedUsage": "Antigravity 部分工作階段缺少可讀取的生成計數，目前統計包含本機估算。",
+    "antigravityIncompleteUsage": "Antigravity 部分用量記錄無法讀取，目前統計可能不完整。",
     "projectReady": "目前專案 {{name}} 已就緒，可建立工作階段開始工作",
     "launcherSubtitle": "智慧體工作階段管理器 · 內嵌終端機 · 多工作階段管理",
     "projectWindow": "目前專案視窗",

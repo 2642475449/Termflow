@@ -24,7 +24,7 @@ import {
   ReloadOutlined,
   StopOutlined,
 } from "@ant-design/icons";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import {
@@ -32,7 +32,6 @@ import {
   deleteScheduledTask,
   getScheduledTaskRun,
   getScheduledTaskRunLog,
-  runScheduledTaskNow,
   setScheduledTaskEnabled,
 } from "@/lib/api";
 import {
@@ -44,6 +43,7 @@ import {
 import { useAppStore } from "@/store";
 import {
   refreshScheduledTasks,
+  startScheduledTaskRun,
   useScheduledTaskStore,
 } from "@/store/slices/scheduledTasks";
 import type {
@@ -104,9 +104,16 @@ function ScheduledTaskRunDetail({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const tasks = useScheduledTaskStore((state) => state.tasks);
+  const runs = useScheduledTaskStore((state) => state.runs);
+  const pendingRunTaskIds = useScheduledTaskStore((state) => state.pendingRunTaskIds);
+  const canRunAgain = tasks.some((task) => task.id === run.taskId)
+    && !runs.some((item) => item.taskId === run.taskId && isScheduledTaskRunActive(item.status));
 
   useEffect(() => {
     let disposed = false;
+    setLoading(true);
+    setLoadError(null);
     void Promise.all([
       getScheduledTaskRun(run.id),
       run.logAvailable ? getScheduledTaskRunLog(run.id) : Promise.resolve(""),
@@ -126,7 +133,7 @@ function ScheduledTaskRunDetail({
     return () => {
       disposed = true;
     };
-  }, [run.id, run.logAvailable]);
+  }, [run.id, run.logAvailable, run.status, run.completedAtMs]);
 
   async function handleCancel() {
     setCancelling(true);
@@ -151,6 +158,18 @@ function ScheduledTaskRunDetail({
     <section className="app-scheduled-run-detail">
       <div className="app-scheduled-detail-header">
         <Button type="text" icon={<LeftOutlined />} onClick={onBack}>{t("scheduledTasks.backToList")}</Button>
+        {!isScheduledTaskRunActive(detail.status) && (
+          <Button
+            icon={<ReloadOutlined />}
+            disabled={!canRunAgain}
+            loading={pendingRunTaskIds.includes(run.taskId)}
+            onClick={() => void startScheduledTaskRun(run.taskId).catch((error: unknown) => {
+              message.error(error instanceof Error ? error.message : String(error));
+            })}
+          >
+            {t("scheduledTasks.runAgain")}
+          </Button>
+        )}
         {isScheduledTaskRunActive(detail.status) && (
           <Button danger icon={<StopOutlined />} loading={cancelling} onClick={() => void handleCancel()}>
             {t("scheduledTasks.cancelRun")}
@@ -164,6 +183,7 @@ function ScheduledTaskRunDetail({
           <p>{t(statusKey)}</p>
         </div>
       </div>
+      {detail.error && <Alert className="mb-4" type="error" showIcon message={detail.error} />}
       {loadError && <Alert className="mb-4" type="error" showIcon message={loadError} />}
       {loading ? <div className="app-scheduled-loading"><Spin /></div> : (
         <>
@@ -214,7 +234,18 @@ export default function ScheduledTasksPanel() {
   const setSelectedRunId = useScheduledTaskStore((state) => state.setSelectedRunId);
   const editor = useScheduledTaskStore((state) => state.editor);
   const setEditor = useScheduledTaskStore((state) => state.setEditor);
-  const [showAllRuns, setShowAllRuns] = useState(false);
+  const showAllRuns = useScheduledTaskStore((state) => state.showAllRuns);
+  const setShowAllRuns = useScheduledTaskStore((state) => state.setShowAllRuns);
+  const pendingRunTaskIds = useScheduledTaskStore((state) => state.pendingRunTaskIds);
+  const setListScrollPosition = useScheduledTaskStore((state) => state.setListScrollPosition);
+  const listRef = useRef<HTMLElement>(null);
+  const scrollKey = JSON.stringify([scope, scope === "current" ? currentProject?.path : null]);
+
+  useLayoutEffect(() => {
+    if (listRef.current) {
+      listRef.current.scrollTop = useScheduledTaskStore.getState().listScrollPositions[scrollKey] ?? 0;
+    }
+  }, [scrollKey, selectedRunId, editor]);
 
   const scopeProjectPath = scope === "all"
     ? null
@@ -278,8 +309,7 @@ export default function ScheduledTasksPanel() {
 
   async function handleRun(task: ScheduledTask) {
     try {
-      await runScheduledTaskNow(task.id);
-      await refreshScheduledTasks();
+      await startScheduledTaskRun(task.id);
       message.success(t("scheduledTasks.runStarted"));
     } catch (error: unknown) {
       message.error(error instanceof Error ? error.message : String(error));
@@ -297,7 +327,7 @@ export default function ScheduledTasksPanel() {
   }
 
   if (selectedRun) {
-    return <ScheduledTaskRunDetail run={selectedRun} onBack={() => setSelectedRunId(null)} />;
+    return <ScheduledTaskRunDetail key={selectedRun.id} run={selectedRun} onBack={() => setSelectedRunId(null)} />;
   }
 
   const editingTask = editor && editor !== "create"
@@ -320,7 +350,11 @@ export default function ScheduledTasksPanel() {
   }
 
   return (
-    <section className="app-scheduled-tasks h-full overflow-y-auto">
+    <section
+      ref={listRef}
+      className="app-scheduled-tasks h-full overflow-y-auto"
+      onScroll={(event) => setListScrollPosition(scrollKey, event.currentTarget.scrollTop)}
+    >
       <div className="app-scheduled-content">
         <div className="app-scheduled-page-header">
           <div>
@@ -377,15 +411,21 @@ export default function ScheduledTasksPanel() {
                       <span>{getScheduleSummary(task)}</span>
                       {scope === "all" && <span>{task.projectName}</span>}
                     </div>
-                    <div className="app-scheduled-task-next">
-                      {task.nextRunAtMs !== null
+                    <div className="app-scheduled-task-next" title={task.timezone}>
+                      <ClockCircleOutlined aria-hidden="true" />{" "}
+                      {task.enabled && task.nextRunAtMs !== null
                         ? t("scheduledTasks.nextRun", { time: formatDateTime(task.nextRunAtMs, i18n.language, task.timezone) })
                         : finished ? t("scheduledTasks.finishedHint") : t("scheduledTasks.pausedHint")}
                     </div>
+                    {latestRun?.error && (
+                      <div className="app-scheduled-status-error mt-1 truncate text-xs" title={latestRun.error}>
+                        {latestRun.error}
+                      </div>
+                    )}
                   </div>
                   <div className="app-scheduled-task-actions">
                     <Tooltip title={t("scheduledTasks.runNow")}>
-                      <Button type="text" shape="circle" icon={<PlayCircleOutlined />} disabled={active} onClick={() => void handleRun(task)} />
+                      <Button type="text" shape="circle" icon={<PlayCircleOutlined />} disabled={active} loading={pendingRunTaskIds.includes(task.id)} aria-label={t("scheduledTasks.runNow")} onClick={() => void handleRun(task)} />
                     </Tooltip>
                     <Tooltip title={t("scheduledTasks.editTask")}>
                       <Button type="text" shape="circle" icon={<EditOutlined />} onClick={() => setEditor(task.id)} />
@@ -411,7 +451,7 @@ export default function ScheduledTasksPanel() {
           <h2>{t("scheduledTasks.recentRuns")}</h2>
           <div className="app-scheduled-runs-actions">
             {matchingRuns.length > 5 && (
-              <Button type="text" onClick={() => setShowAllRuns((visible) => !visible)}>
+              <Button type="text" onClick={() => setShowAllRuns(!showAllRuns)}>
                 {t(showAllRuns ? "scheduledTasks.showRecentRuns" : "scheduledTasks.viewAllRuns")}
               </Button>
             )}
@@ -425,7 +465,10 @@ export default function ScheduledTasksPanel() {
             {scopedRuns.map((run) => (
               <button key={run.id} type="button" className="app-scheduled-run-row" onClick={() => setSelectedRunId(run.id)}>
                 <RunStatusIcon status={run.status} />
-                <span className="min-w-0 flex-1 truncate text-left">{run.taskName}</span>
+                <span className="min-w-0 flex-1 text-left">
+                  <span className="block truncate">{run.taskName}</span>
+                  {run.error && <span className="app-scheduled-status-error block truncate text-xs" title={run.error}>{run.error}</span>}
+                </span>
                 <span>{formatDateTime(run.startedAtMs ?? run.createdAtMs, i18n.language)}</span>
                 <span>{formatDuration(run.startedAtMs, run.completedAtMs, t) ?? t(`scheduledTasks.runStatus.${run.status}`)}</span>
               </button>

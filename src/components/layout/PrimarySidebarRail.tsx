@@ -9,7 +9,6 @@ import { useAppStore, type Language, type SidebarSection, type ThemeCategory } f
 import { setClaudeTheme } from "@/lib/api";
 import { checkForApplicationUpdate } from "@/lib/applicationUpdater";
 import { useApplicationUpdateStore } from "@/store/slices/applicationUpdate";
-import { SCHEDULED_TASKS_TAB_ID } from "@/lib/scheduledTasks";
 import i18n, { toI18nLanguage } from "@/i18n";
 
 interface RailButtonProps {
@@ -99,6 +98,9 @@ function SettingsMenu({
   const settingsShortcut = getKeysForAction("openSettings");
 
   const handleOpenSettings = () => {
+    if (useAppStore.getState().activeSidebarSection === "schedules") {
+      useAppStore.getState().setActiveSidebarSection("sessions");
+    }
     openTab(SETTINGS_ID);
     onClose();
   };
@@ -302,7 +304,6 @@ function PrimarySidebarRail() {
   const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed);
   const setActiveSidebarSection = useAppStore((s) => s.setActiveSidebarSection);
   const setSidebarCollapsed = useAppStore((s) => s.setSidebarCollapsed);
-  const openTab = useAppStore((s) => s.openTab);
   const gitChangeCount = useAppStore((s) => s.gitChangeCount);
   const gitAheadCount = useAppStore((s) => s.gitAheadCount);
   const gitBehindCount = useAppStore((s) => s.gitBehindCount);
@@ -377,8 +378,7 @@ function PrimarySidebarRail() {
   const handleOpenScheduledTasks = useCallback(() => {
     setActiveSidebarSection("schedules");
     setSidebarCollapsed(false);
-    openTab(SCHEDULED_TASKS_TAB_ID);
-  }, [openTab, setActiveSidebarSection, setSidebarCollapsed]);
+  }, [setActiveSidebarSection, setSidebarCollapsed]);
 
   const gitTooltip = (
     <div className="flex flex-col gap-1 text-xs leading-5">

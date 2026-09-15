@@ -243,6 +243,9 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
   const openFileTab = useAppStore((s) => s.openFileTab);
   const setSidebarCollapsed = useAppStore((s) => s.setSidebarCollapsed);
   const setActiveSidebarSection = useAppStore((s) => s.setActiveSidebarSection);
+  const isFocusedWorkspaceSession = useAppStore((s) =>
+    s.activeSidebarSection !== "schedules" && s.activeSessionId === sessionId
+  );
   const setTerminalCompletionIntegration = useAppStore(
     (s) => s.setTerminalCompletionIntegration,
   );
@@ -1456,8 +1459,9 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
     const term = terminalRef.current;
     if (!container || !term) return;
 
-    const shouldFocus = currentSession?.active && currentSession?.status !== "starting";
+    const shouldFocus = isFocusedWorkspaceSession && currentSession?.active && currentSession?.status !== "starting";
     const focusTerminal = () => {
+      if (container.getClientRects().length === 0) return;
       const textarea = container.querySelector("textarea");
       const isTerminalFocused = textarea instanceof HTMLTextAreaElement && document.activeElement === textarea;
       if (isTerminalFocused) return;
@@ -1484,7 +1488,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       suppressedFocusSequenceUntilRef.current = Date.now() + 300;
       textarea.blur();
     }
-  }, [currentSession?.active, currentSession?.status, sessionId]);
+  }, [currentSession?.active, currentSession?.status, sessionId, isFocusedWorkspaceSession]);
 
   return (
     <>
@@ -1532,7 +1536,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
           ) : null}
           {imagePreview ? (
             <div
-              className="xterm-hover absolute z-20 overflow-hidden rounded border p-1 shadow-lg"
+              className="xterm-hover pointer-events-none absolute z-20 overflow-hidden rounded border p-1 shadow-lg"
               style={{
                 left: imagePreview.x,
                 top: imagePreview.y,
@@ -1541,8 +1545,6 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
                 borderColor: "var(--cs-border)",
                 background: "var(--cs-bg-card-solid, rgba(255,255,255,0.98))",
               }}
-              onMouseEnter={cancelImagePreviewDismissal}
-              onMouseLeave={scheduleImagePreviewDismissal}
             >
               <img
                 src={imagePreview.src}
