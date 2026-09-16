@@ -1594,6 +1594,8 @@ function SidebarProjectPanel({
                     void handleConfirmRename();
                   }}
                   onKeyDown={(event) => {
+                    // 重命名输入框中的按键不应触发文件树快捷键（如 Delete 删除文件）。
+                    event.stopPropagation();
                     if (event.key === "Escape") {
                       event.preventDefault();
                       handleCancelRename();
