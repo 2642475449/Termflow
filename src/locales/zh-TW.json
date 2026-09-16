@@ -389,7 +389,6 @@
   },
   "home": {
     "antigravityEstimatedUsage": "Antigravity 部分工作階段缺少可讀取的生成計數，目前統計包含本機估算。",
-    "antigravityIncompleteUsage": "Antigravity 部分用量記錄無法讀取，目前統計可能不完整。",
     "projectReady": "目前專案 {{name}} 已就緒，可建立工作階段開始工作",
     "launcherSubtitle": "智慧體工作階段管理器 · 內嵌終端機 · 多工作階段管理",
     "projectWindow": "目前專案視窗",

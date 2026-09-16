@@ -1,5 +1,6 @@
 export type MarkdownSourceBlockKind =
   | "code"
+  | "footnotes"
   | "heading"
   | "html"
   | "list"
@@ -51,6 +52,10 @@ function isRule(line: string) {
 
 function isList(line: string) {
   return /^\s*(?:[-*+]\s+|\d+[.)]\s+)/.test(line);
+}
+
+function isFootnoteDefinition(line: string) {
+  return /^\[\^[^\]]+\]:\s+/.test(line);
 }
 
 function isQuote(line: string) {
@@ -166,6 +171,30 @@ export function getMarkdownSourceBlocks(content: string): MarkdownSourceBlock[] 
         }
       }
       pushBlock(startLine, index - 1, "html");
+      continue;
+    }
+
+    if (isFootnoteDefinition(line)) {
+      index += 1;
+      while (index < lines.length) {
+        const nextLine = lines[index].text;
+        if (isFootnoteDefinition(nextLine) || /^\s{2,}\S/.test(nextLine)) {
+          index += 1;
+          continue;
+        }
+        if (!nextLine.trim()) {
+          let nextDefinition = index + 1;
+          while (nextDefinition < lines.length && !lines[nextDefinition].text.trim()) {
+            nextDefinition += 1;
+          }
+          if (nextDefinition < lines.length && isFootnoteDefinition(lines[nextDefinition].text)) {
+            index = nextDefinition;
+            continue;
+          }
+        }
+        break;
+      }
+      pushBlock(startLine, index - 1, "footnotes");
       continue;
     }
 

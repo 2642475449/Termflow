@@ -69,6 +69,7 @@ import {
   type OpenGlobalTextSearchDetail,
 } from "@/lib/globalSearch";
 import { getNotificationSuppressionReason } from "@/lib/attentionDiagnostics";
+import { getAgentCompletionUpdates } from "@/lib/agentCompletion";
 import {
   getTerminalCompletionDeliverySuppressionReason,
   getTerminalCompletionIngestSuppressionReason,
@@ -1590,6 +1591,13 @@ function AppLayout() {
         foreground,
       });
       if (ingestResult !== "accepted") return;
+      const completionUpdates = getAgentCompletionUpdates(
+        useAppStore.getState().sessions.find((item) => item.id === normalized.sessionId),
+        normalized,
+      );
+      if (completionUpdates) {
+        useAppStore.getState().updateSession(normalized.sessionId, completionUpdates);
+      }
       if (!normalized.requiresAttention) return;
       if (normalized.eventType === "process_exit") return;
       const projectFolder = normalized.projectPath

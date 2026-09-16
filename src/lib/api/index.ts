@@ -854,6 +854,18 @@ export async function copyProjectEntries(
   });
 }
 
+export async function moveProjectEntries(
+  projectPath: string,
+  sourcePaths: string[],
+  destinationDirectory: string
+): Promise<string[]> {
+  return await invoke("move_project_entries", {
+    projectPath,
+    sourcePaths,
+    destinationDirectory,
+  });
+}
+
 // Skills API
 export async function listSkills(projectPath?: string | null): Promise<SkillCatalog> {
   return await invoke("list_skills", { projectPath: projectPath ?? null });

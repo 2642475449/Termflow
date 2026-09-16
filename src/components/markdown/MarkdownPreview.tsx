@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { Dropdown, Empty, type MenuProps } from "antd";
 import {
   CheckOutlined,
@@ -35,6 +35,18 @@ type ListItem = {
   text: string;
   checked: boolean | null;
   ordered: boolean;
+  indent: number;
+};
+
+type ListTreeNode = {
+  item: ListItem;
+  children: ListTreeNode[];
+};
+
+type TableOfContentsEntry = {
+  id: string;
+  level: number;
+  text: string;
 };
 
 type ResolvedMarkdownLink = {
@@ -939,6 +951,96 @@ function parseTableAlignment(line: string): TableAlignment[] {
   });
 }
 
+function getListIndentation(prefix: string) {
+  return Array.from(prefix).reduce((indent, character) => indent + (character === "\t" ? 4 : 1), 0);
+}
+
+function isListItemLine(line: string | undefined) {
+  return Boolean(line && /^\s*(?:[-*+]\s+(?:\[[ xX]\]\s+)?|\d+\.\s+)/.test(line));
+}
+
+function getFootnoteIndices(content: string) {
+  const indices = new Map<string, number>();
+  let inCodeBlock = false;
+  for (const line of content.replace(/\r\n/g, "\n").split("\n")) {
+    if (/^\s*```/.test(line)) {
+      inCodeBlock = !inCodeBlock;
+      continue;
+    }
+    if (inCodeBlock || /^\[\^[^\]]+\]:\s+/.test(line)) continue;
+    const inlineCodeRemoved = line.replace(/`[^`]*`/g, "");
+    for (const match of inlineCodeRemoved.matchAll(/\[\^([^\]]+)\](?!:)/g)) {
+      if (!indices.has(match[1])) {
+        indices.set(match[1], indices.size + 1);
+      }
+    }
+  }
+  return indices;
+}
+
+function getTableOfContentsEntries(lines: string[]): TableOfContentsEntry[] {
+  const entries: TableOfContentsEntry[] = [];
+  let inCodeBlock = false;
+
+  for (const line of lines) {
+    if (/^\s*```/.test(line)) {
+      inCodeBlock = !inCodeBlock;
+      continue;
+    }
+    if (inCodeBlock) continue;
+
+    const headingMatch = line.match(/^\s*(#{1,6})\s+(.*)$/);
+    if (!headingMatch) continue;
+
+    const text = headingMatch[2];
+    entries.push({
+      id: createHeadingAnchorId(text),
+      level: headingMatch[1].length,
+      text,
+    });
+  }
+
+  return entries;
+}
+
+function MarkdownTableOfContents({
+  entries,
+  filePath,
+  projectPath,
+  getFootnoteIndex,
+  enableImagePreview,
+  keyPrefix,
+}: {
+  entries: TableOfContentsEntry[];
+  filePath?: string;
+  projectPath?: string;
+  getFootnoteIndex: (id: string) => number;
+  enableImagePreview: boolean;
+  keyPrefix: string;
+}) {
+  if (entries.length === 0) return null;
+
+  return (
+    <nav className="app-markdown-toc">
+      <ol className="app-markdown-toc-list">
+        {entries.map((entry, index) => (
+          <li key={`${entry.id}-${index}`} className={`app-markdown-toc-level-${entry.level}`}>
+            <a href={`#${entry.id}`}>
+              {renderInlineMarkdown(entry.text, {
+                filePath,
+                projectPath,
+                getFootnoteIndex,
+                keyPrefix: `${keyPrefix}-${index}`,
+                enableImagePreview,
+              })}
+            </a>
+          </li>
+        ))}
+      </ol>
+    </nav>
+  );
+}
+
 export interface MarkdownPreviewProps {
   content: string;
   emptyText: string;
@@ -960,6 +1062,9 @@ export interface MarkdownPreviewProps {
   linkLabel?: string;
   bulletListLabel?: string;
   orderedListLabel?: string;
+  footnoteIndices?: ReadonlyMap<string, number>;
+  renderFootnotes?: boolean;
+  showFootnoteDefinitions?: boolean;
 }
 
 function MarkdownPreviewRenderer({
@@ -971,6 +1076,9 @@ function MarkdownPreviewRenderer({
   enableImagePreview = true,
   onOpenExternalLink,
   onOpenProjectPath,
+  footnoteIndices,
+  renderFootnotes = true,
+  showFootnoteDefinitions = false,
 }: MarkdownPreviewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const { lines, footnotes } = useMemo(() => {
@@ -999,6 +1107,7 @@ function MarkdownPreviewRenderer({
     }
     return { lines: remainingLines, footnotes: parsedFootnotes };
   }, [content]);
+  const tableOfContentsEntries = useMemo(() => getTableOfContentsEntries(lines), [lines]);
 
   const isReadmeDocument = useMemo(() => {
     const fileName = filePath?.split(/[\\/]/).filter(Boolean).pop()?.toLowerCase() ?? "";
@@ -1014,6 +1123,8 @@ function MarkdownPreviewRenderer({
   const footnoteOrder: string[] = [];
 
   const getFootnoteIndex = (id: string) => {
+    const globalIndex = footnoteIndices?.get(id);
+    if (globalIndex) return globalIndex;
     const existingIndex = footnoteOrder.indexOf(id);
     if (existingIndex >= 0) return existingIndex + 1;
     footnoteOrder.push(id);
@@ -1042,34 +1153,83 @@ function MarkdownPreviewRenderer({
 
   const flushList = () => {
     if (listItems.length === 0) return;
-    const ordered = listItems[0]?.ordered ?? false;
-    const ListTag = ordered ? "ol" : "ul";
+    const roots: ListTreeNode[] = [];
+    const stack: ListTreeNode[] = [];
+    for (const item of listItems) {
+      const node: ListTreeNode = { item, children: [] };
+      while ((stack[stack.length - 1]?.item.indent ?? -1) >= item.indent) {
+        stack.pop();
+      }
+      const parent = stack[stack.length - 1];
+      if (parent) {
+        parent.children.push(node);
+      } else {
+        roots.push(node);
+      }
+      stack.push(node);
+    }
+
+    const renderList = (nodes: ListTreeNode[], keyPrefix: string): ReactNode[] => {
+      const groups: ReactNode[] = [];
+      let groupStart = 0;
+
+      while (groupStart < nodes.length) {
+        const firstNode = nodes[groupStart];
+        const ordered = firstNode.item.ordered;
+        let groupEnd = groupStart + 1;
+        while (groupEnd < nodes.length && nodes[groupEnd].item.ordered === ordered) {
+          groupEnd += 1;
+        }
+        const group = nodes.slice(groupStart, groupEnd);
+        const isTaskList = group.some((node) => node.item.checked !== null);
+        const ListTag = ordered ? "ol" : "ul";
+        const listClassName = [
+          "app-markdown-list",
+          ordered ? "app-markdown-list--ordered" : "app-markdown-list--unordered",
+          isTaskList ? "app-markdown-list--task" : "",
+          "m-0 pl-5 space-y-1 text-sm leading-6",
+        ].filter(Boolean).join(" ");
+
+        groups.push(
+          <ListTag
+            key={`${keyPrefix}-group-${groupStart}`}
+            className={listClassName}
+            style={{ color: "var(--cs-text-secondary)" }}
+          >
+            {group.map((node, index) => (
+              <li key={`${keyPrefix}-${groupStart + index}`} className="leading-6">
+                {node.item.checked === null ? null : (
+                  <input
+                    type="checkbox"
+                    checked={node.item.checked}
+                    readOnly
+                    className="mr-2 align-middle accent-[var(--cs-primary)]"
+                  />
+                )}
+                {renderInlineMarkdown(node.item.text, {
+                  filePath,
+                  projectPath,
+                  getFootnoteIndex,
+                  keyPrefix: `${keyPrefix}-${groupStart + index}`,
+                  enableImagePreview,
+                })}
+                {node.children.length > 0
+                  ? renderList(node.children, `${keyPrefix}-${groupStart + index}-children`)
+                  : null}
+              </li>
+            ))}
+          </ListTag>,
+        );
+        groupStart = groupEnd;
+      }
+
+      return groups;
+    };
+
     blocks.push(
-      <ListTag
-        key={`ul-${blocks.length}`}
-        className="m-0 pl-5 space-y-1 text-sm leading-6"
-        style={{ color: "var(--cs-text-secondary)" }}
-      >
-        {listItems.map((item, index) => (
-          <li key={`${item.text}-${index}`} className="leading-6">
-            {item.checked === null ? null : (
-              <input
-                type="checkbox"
-                checked={item.checked}
-                readOnly
-                className="mr-2 align-middle accent-[var(--cs-primary)]"
-              />
-            )}
-            {renderInlineMarkdown(item.text, {
-              filePath,
-              projectPath,
-              getFootnoteIndex,
-              keyPrefix: `li-${blocks.length}-${index}`,
-              enableImagePreview,
-            })}
-          </li>
-        ))}
-      </ListTag>
+      <Fragment key={`list-${blocks.length}`}>
+        {renderList(roots, `list-${blocks.length}`)}
+      </Fragment>,
     );
     listItems = [];
   };
@@ -1370,9 +1530,30 @@ function MarkdownPreviewRenderer({
 
     const trimmed = line.trim();
     if (!trimmed) {
+      if (listItems.length > 0 && isListItemLine(lines[index + 1])) {
+        continue;
+      }
       flushParagraph();
       flushList();
       flushQuote();
+      continue;
+    }
+
+    if (/^\[toc\]$/i.test(trimmed)) {
+      flushParagraph();
+      flushList();
+      flushQuote();
+      blocks.push(
+        <MarkdownTableOfContents
+          key={`toc-${blocks.length}`}
+          entries={tableOfContentsEntries}
+          filePath={filePath}
+          projectPath={projectPath}
+          getFootnoteIndex={getFootnoteIndex}
+          enableImagePreview={enableImagePreview}
+          keyPrefix={`toc-${blocks.length}`}
+        />,
+      );
       continue;
     }
 
@@ -1475,38 +1656,41 @@ function MarkdownPreviewRenderer({
       continue;
     }
 
-    const taskListMatch = line.match(/^\s*[-*+]\s+\[([ xX])\]\s+(.*)$/);
+    const taskListMatch = line.match(/^(\s*)[-*+]\s+\[([ xX])\]\s+(.*)$/);
     if (taskListMatch) {
       flushParagraph();
       flushQuote();
       listItems.push({
-        text: taskListMatch[2],
-        checked: taskListMatch[1].toLowerCase() === "x",
+        text: taskListMatch[3],
+        checked: taskListMatch[2].toLowerCase() === "x",
         ordered: false,
+        indent: getListIndentation(taskListMatch[1]),
       });
       continue;
     }
 
-    const orderedListMatch = line.match(/^\s*\d+\.\s+(.*)$/);
+    const orderedListMatch = line.match(/^(\s*)\d+\.\s+(.*)$/);
     if (orderedListMatch) {
       flushParagraph();
       flushQuote();
       listItems.push({
-        text: orderedListMatch[1],
+        text: orderedListMatch[2],
         checked: null,
         ordered: true,
+        indent: getListIndentation(orderedListMatch[1]),
       });
       continue;
     }
 
-    const listMatch = line.match(/^\s*[-*+]\s+(.*)$/);
+    const listMatch = line.match(/^(\s*)[-*+]\s+(.*)$/);
     if (listMatch) {
       flushParagraph();
       flushQuote();
       listItems.push({
-        text: listMatch[1],
+        text: listMatch[2],
         checked: null,
         ordered: false,
+        indent: getListIndentation(listMatch[1]),
       });
       continue;
     }
@@ -1529,7 +1713,13 @@ function MarkdownPreviewRenderer({
     flushCode();
   }
 
-  if (footnoteOrder.length > 0) {
+  const displayedFootnoteIds = footnoteOrder.length > 0
+    ? footnoteOrder
+    : showFootnoteDefinitions
+      ? Array.from(footnotes.keys())
+      : [];
+
+  if (renderFootnotes && displayedFootnoteIds.length > 0) {
     blocks.push(
       <div
         key={`footnotes-${blocks.length}`}
@@ -1540,7 +1730,7 @@ function MarkdownPreviewRenderer({
           Footnotes
         </div>
         <ol className="m-0 pl-5 space-y-2 text-sm">
-          {footnoteOrder.map((id, index) => (
+          {displayedFootnoteIds.map((id, index) => (
             <li key={id} id={`markdown-footnote-${id}`} style={{ color: "var(--cs-text-secondary)" }}>
               {renderInlineMarkdown(footnotes.get(id) ?? "", {
                 filePath,
@@ -1563,7 +1753,8 @@ function MarkdownPreviewRenderer({
     if (!rawHref) return;
     if (rawHref.startsWith("#")) {
       event.preventDefault();
-      const target = containerRef.current?.querySelector(rawHref);
+      const target = containerRef.current?.querySelector(rawHref)
+        ?? containerRef.current?.closest(".app-markdown-editable-preview")?.querySelector(rawHref);
       if (target instanceof HTMLElement) {
         // 平滑滚动到目标位置
         target.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1794,6 +1985,8 @@ function EditableMarkdownBlock({
         content={block.source}
         className="app-markdown-block-renderer"
         onEditBlock={undefined}
+        renderFootnotes={block.kind === "footnotes"}
+        showFootnoteDefinitions={block.kind === "footnotes"}
       />
       <button
         type="button"
@@ -1810,14 +2003,8 @@ function EditableMarkdownBlock({
 
 function EditableMarkdownPreview(props: MarkdownPreviewProps) {
   const { content, onEditBlock } = props;
-  const blocks = useMemo(() => {
-    if (/^\[\^[^\]]+\]:/m.test(content)) {
-      return content
-        ? [{ id: `0:${content.length}`, kind: "paragraph" as const, start: 0, end: content.length, source: content }]
-        : [];
-    }
-    return getMarkdownSourceBlocks(content);
-  }, [content]);
+  const blocks = useMemo(() => getMarkdownSourceBlocks(content), [content]);
+  const footnoteIndices = useMemo(() => getFootnoteIndices(content), [content]);
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
 
@@ -1841,7 +2028,7 @@ function EditableMarkdownPreview(props: MarkdownPreviewProps) {
           block={block}
           active={activeBlockId === block.id}
           draft={activeBlockId === block.id ? draft : block.source}
-          previewProps={props}
+          previewProps={{ ...props, footnoteIndices }}
           onBegin={() => {
             setActiveBlockId(block.id);
             setDraft(block.source);

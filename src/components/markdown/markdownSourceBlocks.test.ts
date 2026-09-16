@@ -58,6 +58,24 @@ describe("getMarkdownSourceBlocks", () => {
       '<p align="center">\n  简体中文 | <a href="README.en-US.md">English</a>\n</p>',
     ]);
   });
+
+  it("groups footnote definitions into one editable block", () => {
+    const content = [
+      "正文[^first]。",
+      "",
+      "[^first]: 第一条脚注",
+      "  延续内容",
+      "",
+      "[^second]: 第二条脚注",
+      "",
+      "## 后续章节",
+    ].join("\n");
+
+    const blocks = getMarkdownSourceBlocks(content);
+
+    expect(blocks.map((block) => block.kind)).toEqual(["paragraph", "footnotes", "heading"]);
+    expect(blocks[1]?.source).toBe("[^first]: 第一条脚注\n  延续内容\n\n[^second]: 第二条脚注");
+  });
 });
 
 describe("replaceMarkdownSourceBlock", () => {

@@ -249,6 +249,7 @@ pub fn run() {
             commands::search_index::clear_search_index_cache,
             commands::file_tree::copy_external_entry,
             commands::file_tree::copy_project_entries,
+            commands::file_tree::move_project_entries,
             commands::skills::list_skills,
             commands::skills::get_skill_detail,
             commands::skills::set_skill_enabled,

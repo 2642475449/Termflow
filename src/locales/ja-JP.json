@@ -389,7 +389,6 @@
   },
   "home": {
     "antigravityEstimatedUsage": "一部の Antigravity セッションには読み取り可能な生成トークン数がないため、集計にはローカル推定値が含まれます。",
-    "antigravityIncompleteUsage": "一部の Antigravity 使用記録を読み取れなかったため、集計が不完全な可能性があります。",
     "projectReady": "プロジェクト {{name}} の準備ができました。セッションを作成して開始してください。",
     "launcherSubtitle": "エージェントセッション管理、組み込みターミナル、複数セッションのワークフロー",
     "projectWindow": "現在のプロジェクトウィンドウ",

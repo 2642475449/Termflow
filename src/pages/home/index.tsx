@@ -1032,9 +1032,6 @@ function HomePage() {
               {overview?.providers.some((provider) => provider.agent === "antigravity" && provider.source.includes("local estimate")) && (
                 <p className="mt-2 text-xs text-[var(--cs-text-secondary)]">{t("home.antigravityEstimatedUsage")}</p>
               )}
-              {overview?.providers.some((provider) => provider.agent === "antigravity" && provider.lastError) && (
-                <p className="mt-2 text-xs text-[var(--cs-text-secondary)]">{t("home.antigravityIncompleteUsage")}</p>
-              )}
               <div
                 className="mt-2 flex items-center gap-2 text-[13px]"
                 style={{ color: "var(--cs-text-secondary)" }}

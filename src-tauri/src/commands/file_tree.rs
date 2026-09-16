@@ -527,6 +527,26 @@ pub fn copy_project_entries(
     copy_entries_into_directory(&normalized_sources, &dest_dir, None)
 }
 
+#[tauri::command]
+pub fn move_project_entries(
+    project_path: String,
+    source_paths: Vec<String>,
+    destination_directory: String,
+) -> Result<Vec<String>, String> {
+    let root_path = normalize_input_path(&project_path);
+    if !root_path.exists() {
+        return Err("项目目录不存在".to_string());
+    }
+
+    let dest_dir = resolve_create_parent_path(&root_path, &destination_directory)?;
+    let normalized_sources = source_paths
+        .iter()
+        .map(|path| resolve_entry_path(&root_path, path))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    move_entries_into_directory(&normalized_sources, &dest_dir)
+}
+
 fn build_unique_copy_path(
     dest_dir: &Path,
     file_name: &str,
@@ -630,6 +650,60 @@ fn copy_entries_into_directory(
     }
 
     Ok(copied_paths)
+}
+
+fn move_entries_into_directory(
+    source_paths: &[PathBuf],
+    dest_dir: &Path,
+) -> Result<Vec<String>, String> {
+    let mut unique_sources = Vec::new();
+    for source_path in source_paths {
+        if !unique_sources.contains(source_path) {
+            unique_sources.push(source_path.clone());
+        }
+    }
+
+    let sources = unique_sources
+        .into_iter()
+        .filter(|source_path| {
+            !source_paths
+                .iter()
+                .any(|candidate| candidate != source_path && source_path.starts_with(candidate))
+        })
+        .collect::<Vec<_>>();
+
+    for source_path in &sources {
+        if !source_path.exists() {
+            return Err(format!("要移动的项目不存在: {}", display_path(source_path)));
+        }
+        if source_path
+            .parent()
+            .is_some_and(|parent| parent == dest_dir)
+        {
+            return Err("不能移动到当前文件夹".to_string());
+        }
+        if source_path.is_dir() && dest_dir.starts_with(source_path) {
+            return Err("不能移动文件夹到其自身或子目录".to_string());
+        }
+    }
+
+    let mut moved_paths = Vec::new();
+    for source_path in sources {
+        let file_name = source_path
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string())
+            .unwrap_or_default();
+        if file_name.is_empty() {
+            return Err("无法确定要移动项目的名称".to_string());
+        }
+
+        let target_path = build_unique_copy_path(dest_dir, &file_name, &source_path)?;
+        fs::rename(&source_path, &target_path)
+            .map_err(|error| format!("移动项目失败: {}", error))?;
+        moved_paths.push(display_path(&target_path));
+    }
+
+    Ok(moved_paths)
 }
 
 fn resolve_target_path(root_path: &Path, requested: Option<&str>) -> Result<PathBuf, String> {
@@ -1159,6 +1233,76 @@ mod tests {
         let result = build_child_path(&parent, "main.ts").unwrap();
 
         assert_eq!(result, PathBuf::from("D:/demo/src/main.ts"));
+    }
+
+    #[test]
+    fn move_entries_moves_files_and_directories_and_skips_selected_descendants() {
+        let root = std::env::temp_dir().join(format!(
+            "termflow-move-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let source_directory = root.join("source");
+        let destination_directory = root.join("destination");
+        let nested_directory = source_directory.join("nested");
+        let file = source_directory.join("note.txt");
+
+        fs::create_dir_all(&nested_directory).unwrap();
+        fs::create_dir_all(&destination_directory).unwrap();
+        fs::write(&file, "content").unwrap();
+        fs::write(nested_directory.join("child.txt"), "child").unwrap();
+
+        let moved = move_entries_into_directory(
+            &[source_directory.clone(), nested_directory],
+            &destination_directory,
+        )
+        .unwrap();
+
+        assert_eq!(
+            moved,
+            vec![display_path(destination_directory.join("source"))]
+        );
+        assert!(!source_directory.exists());
+        assert_eq!(
+            fs::read_to_string(destination_directory.join("source/note.txt")).unwrap(),
+            "content"
+        );
+        assert_eq!(
+            fs::read_to_string(destination_directory.join("source/nested/child.txt")).unwrap(),
+            "child"
+        );
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn move_entries_rejects_current_directory_and_descendant_destinations() {
+        let root = std::env::temp_dir().join(format!(
+            "termflow-move-invalid-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let source_directory = root.join("source");
+        let child_directory = source_directory.join("child");
+        let file = source_directory.join("note.txt");
+
+        fs::create_dir_all(&child_directory).unwrap();
+        fs::write(&file, "content").unwrap();
+
+        assert!(move_entries_into_directory(&[file.clone()], &source_directory).is_err());
+        assert!(
+            move_entries_into_directory(&[source_directory.clone()], &child_directory).is_err()
+        );
+        assert!(file.exists());
+        assert!(source_directory.exists());
+
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

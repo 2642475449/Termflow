@@ -769,6 +769,10 @@ html, body, #root {
   color: var(--cs-text-primary);
 }
 
+.app-file-tree-row[data-cut="true"] {
+  opacity: 0.52;
+}
+
 .app-file-tree-row[data-drag-over="true"] {
   background: color-mix(in srgb, var(--cs-accent) 18%, transparent);
   outline: 1px dashed var(--cs-accent);
@@ -1465,6 +1469,72 @@ html, body, #root {
 
 .app-markdown-preview li > p {
   margin-bottom: 0;
+}
+
+.app-markdown-preview .app-markdown-list--unordered {
+  list-style-type: disc;
+}
+
+.app-markdown-preview .app-markdown-list--unordered .app-markdown-list--unordered {
+  list-style-type: circle;
+}
+
+.app-markdown-preview .app-markdown-list--unordered .app-markdown-list--unordered .app-markdown-list--unordered {
+  list-style-type: square;
+}
+
+.app-markdown-preview .app-markdown-list--ordered {
+  list-style-type: decimal;
+}
+
+.app-markdown-preview .app-markdown-list--ordered .app-markdown-list--ordered {
+  list-style-type: lower-alpha;
+}
+
+.app-markdown-preview .app-markdown-list--ordered .app-markdown-list--ordered .app-markdown-list--ordered {
+  list-style-type: lower-roman;
+}
+
+.app-markdown-preview .app-markdown-list--task {
+  padding-left: 0;
+  list-style: none;
+}
+
+.app-markdown-preview .app-markdown-toc {
+  margin: 0 0 0.75rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--cs-border-card);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--cs-bg-hover) 60%, transparent);
+}
+
+.app-markdown-preview .app-markdown-toc-list {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.app-markdown-preview .app-markdown-toc-list li {
+  margin: 0.18rem 0;
+}
+
+.app-markdown-preview .app-markdown-toc-level-2 {
+  margin-left: 0.8rem;
+}
+
+.app-markdown-preview .app-markdown-toc-level-3 {
+  margin-left: 1.6rem;
+}
+
+.app-markdown-preview .app-markdown-toc-level-4 {
+  margin-left: 2.4rem;
+}
+
+.app-markdown-preview .app-markdown-toc-level-5 {
+  margin-left: 3.2rem;
+}
+
+.app-markdown-preview .app-markdown-toc-level-6 {
+  margin-left: 4rem;
 }
 
 .app-markdown-preview hr {
@@ -2495,7 +2565,7 @@ html, body, #root {
 
 .app-scheduled-tasks {
   color: var(--cs-text-primary);
-  background: var(--cs-bg-content);
+  background: var(--cs-bg-card-solid, var(--cs-bg-card));
 }
 
 .app-scheduled-content,

@@ -117,6 +117,56 @@ describe("Markdown rendering", () => {
     expect(markup).toContain('<h2 id="安装"');
   });
 
+  it("replaces a TOC directive with links to document headings", () => {
+    const markup = renderToStaticMarkup(
+      createElement(MarkdownPreview, {
+        content: [
+          "[TOC]",
+          "",
+          "# 概览",
+          "## 安装",
+          "### Windows",
+          "",
+          "```md",
+          "# 不应出现在目录中",
+          "```",
+        ].join("\n"),
+        emptyText: "empty",
+      }),
+    );
+
+    expect(markup).toContain('class="app-markdown-toc"');
+    expect(markup).toContain('href="#概览"');
+    expect(markup).toContain('href="#安装"');
+    expect(markup).toContain('href="#windows"');
+    expect(markup).toContain('class="app-markdown-toc-level-3"');
+    expect(markup).not.toContain("[TOC]");
+    expect(markup).not.toContain('href="#不应出现在目录中"');
+  });
+
+  it("keeps ordinary content editable by block when footnotes are present", () => {
+    const markup = renderToStaticMarkup(
+      createElement(MarkdownPreview, {
+        content: [
+          "正文先引用[^second]，再引用[^first]。",
+          "",
+          "[^first]: 第一条脚注",
+          "",
+          "[^second]: 第二条脚注",
+        ].join("\n"),
+        emptyText: "empty",
+        onEditBlock: () => undefined,
+      }),
+    );
+
+    expect(markup.match(/class="app-markdown-editable-block"/g)).toHaveLength(2);
+    expect(markup).toContain('data-markdown-block-kind="footnotes"');
+    expect(markup).toMatch(/href="#markdown-footnote-second"[^>]*>\[1\]/);
+    expect(markup).toMatch(/href="#markdown-footnote-first"[^>]*>\[2\]/);
+    expect(markup).toContain("第一条脚注");
+    expect(markup).toContain("第二条脚注");
+  });
+
   it("renders compact two-dash table separators", () => {
     const markup = renderToStaticMarkup(
       createElement(MarkdownPreview, {
@@ -128,6 +178,44 @@ describe("Markdown rendering", () => {
     expect(markup).toContain("<table");
     expect(markup).toContain("多会话管理");
     expect(markup).not.toContain("| :-- | :-- |");
+  });
+
+  it("preserves indentation and markers for nested ordered and unordered lists", () => {
+    const markup = renderToStaticMarkup(
+      createElement(MarkdownPreview, {
+        content: [
+          "- 第一项",
+          "",
+          "- 第二项",
+          "",
+          "  - 嵌套子项 A",
+          "",
+          "  - 嵌套子项 B",
+          "",
+          "    - 更深层嵌套",
+          "",
+          "- 第三项",
+          "",
+          "1. 首先做这件事情",
+          "",
+          "2. 然后做那件事情",
+          "",
+          "   1. 子步骤一",
+          "",
+          "   2. 子步骤二",
+          "",
+          "3. 最后检查结果",
+        ].join("\n"),
+        emptyText: "empty",
+      }),
+    );
+
+    expect(markup.match(/<ul/g)).toHaveLength(3);
+    expect(markup.match(/<ol/g)).toHaveLength(2);
+    expect(markup).toMatch(/第二项[\s\S]*?<ul[\s\S]*?嵌套子项 A/);
+    expect(markup).toMatch(/然后做那件事情[\s\S]*?<ol[\s\S]*?子步骤一/);
+    expect(markup).toContain("app-markdown-list--unordered");
+    expect(markup).toContain("app-markdown-list--ordered");
   });
 
   it("keeps multiline HTML headers together so README links render as links", () => {

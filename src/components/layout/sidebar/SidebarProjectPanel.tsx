@@ -14,6 +14,7 @@ import {
   ReloadOutlined,
   RightOutlined,
   SearchOutlined,
+  ScissorOutlined,
   SnippetsOutlined,
 } from "@ant-design/icons";
 import { open as openDirectoryDialog } from "@tauri-apps/plugin-dialog";
@@ -27,6 +28,7 @@ import {
   createProjectFile,
   deleteProjectEntry,
   listProjectDirectory,
+  moveProjectEntries,
   renameProjectEntry,
   searchProjectEntries,
 } from "@/lib/api";
@@ -93,6 +95,8 @@ interface PendingExternalCopy {
   newName: string;
   openAfterCopy: boolean;
 }
+
+type ResourceClipboardOperation = "copy" | "cut";
 
 function normalizePath(path: string): string {
   return path.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/$/, "");
@@ -411,6 +415,7 @@ function SidebarProjectPanel({
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [pasteSubmitting, setPasteSubmitting] = useState(false);
   const [clipboardPaths, setClipboardPaths] = useState<string[]>([]);
+  const [clipboardOperation, setClipboardOperation] = useState<ResourceClipboardOperation>("copy");
   const [pendingCreatedResource, setPendingCreatedResource] = useState<PendingCreatedResource | null>(null);
   const [pendingExternalCopy, setPendingExternalCopy] = useState<PendingExternalCopy | null>(null);
   const [externalCopySubmitting, setExternalCopySubmitting] = useState(false);
@@ -775,6 +780,7 @@ function SidebarProjectPanel({
     [backgroundSelectedPath, projectRootPath, selectedEntryKind]
   );
   const canCopySelection = actionableSelectedEntries.length > 0 && !renameSubmitting;
+  const canCutSelection = canCopySelection;
   const canDeleteSelection = actionableSelectedEntries.length > 0 && !deleteSubmitting && !renameSubmitting;
   const canPasteEntries = hasClipboardEntries && !pasteSubmitting && !renameSubmitting;
 
@@ -948,14 +954,29 @@ function SidebarProjectPanel({
     setDeletingEntries(entries);
   }, []);
 
-  const handleCopyEntries = useCallback(
-    (entries: FileTreeEntry[]) => {
+  const handleSetClipboardEntries = useCallback(
+    (entries: FileTreeEntry[], operation: ResourceClipboardOperation) => {
       const nextPaths = Array.from(new Set(entries.map((entry) => entry.path)));
       if (nextPaths.length === 0) return;
       setClipboardPaths(nextPaths);
-      message.success(t("sidebar.selectionCopied", { count: nextPaths.length }));
+      setClipboardOperation(operation);
+      message.success(
+        t(operation === "cut" ? "sidebar.selectionCut" : "sidebar.selectionCopied", {
+          count: nextPaths.length,
+        })
+      );
     },
     [t]
+  );
+
+  const handleCopyEntries = useCallback(
+    (entries: FileTreeEntry[]) => handleSetClipboardEntries(entries, "copy"),
+    [handleSetClipboardEntries]
+  );
+
+  const handleCutEntries = useCallback(
+    (entries: FileTreeEntry[]) => handleSetClipboardEntries(entries, "cut"),
+    [handleSetClipboardEntries]
   );
 
   const handleStartResourceDrag = useCallback(
@@ -1053,7 +1074,9 @@ function SidebarProjectPanel({
 
       setPasteSubmitting(true);
       try {
-        const pastedPaths = await copyProjectEntries(currentProject.path, clipboardPaths, destinationDirectory);
+        const pastedPaths = clipboardOperation === "cut"
+          ? await moveProjectEntries(currentProject.path, clipboardPaths, destinationDirectory)
+          : await copyProjectEntries(currentProject.path, clipboardPaths, destinationDirectory);
         await refreshProjectView(destinationDirectory, true);
         if (pastedPaths.length > 0) {
           setSelectedPaths(pastedPaths);
@@ -1061,16 +1084,26 @@ function SidebarProjectPanel({
         } else {
           selectOnlyPath(destinationDirectory);
         }
-        message.success(t("sidebar.resourcePasteSuccess", { count: pastedPaths.length }));
+        if (clipboardOperation === "cut") {
+          setClipboardPaths([]);
+          setClipboardOperation("copy");
+        }
+        message.success(
+          t(clipboardOperation === "cut" ? "sidebar.resourceMoveSuccess" : "sidebar.resourcePasteSuccess", {
+            count: pastedPaths.length,
+          })
+        );
       } catch (nextError) {
         message.error(
-          nextError instanceof Error ? nextError.message : t("sidebar.resourcePasteFailed")
+          nextError instanceof Error
+            ? nextError.message
+            : t(clipboardOperation === "cut" ? "sidebar.resourceMoveFailed" : "sidebar.resourcePasteFailed")
         );
       } finally {
         setPasteSubmitting(false);
       }
     },
-    [clipboardPaths, currentProject, pasteSubmitting, refreshProjectView, selectOnlyPath, t]
+    [clipboardOperation, clipboardPaths, currentProject, pasteSubmitting, refreshProjectView, selectOnlyPath, t]
   );
 
   const handleChooseExternalCopyDirectory = useCallback(async () => {
@@ -1374,7 +1407,12 @@ function SidebarProjectPanel({
           }
 
           if (key === "copy") {
-            handleCopyEntries([entry]);
+            handleCopyEntries(isSelected && selectionCount > 1 ? actionableSelectedEntries : [entry]);
+            return;
+          }
+
+          if (key === "cut") {
+            handleCutEntries(isSelected && selectionCount > 1 ? actionableSelectedEntries : [entry]);
             return;
           }
 
@@ -1480,6 +1518,11 @@ function SidebarProjectPanel({
             icon: <CopyOutlined />,
             label: t("common.copy"),
           },
+          {
+            key: "cut",
+            icon: <ScissorOutlined />,
+            label: t("common.cut"),
+          },
           ...(isDirectory
             ? [
               {
@@ -1567,6 +1610,9 @@ function SidebarProjectPanel({
                   className="app-file-tree-row w-full text-left"
                   data-active={isActive ? "true" : "false"}
                   data-selected={isSelected ? "true" : "false"}
+                  data-cut={clipboardOperation === "cut" && clipboardPaths.some(
+                    (path) => normalizePath(path) === normalizePath(entry.path)
+                  ) ? "true" : "false"}
                   data-path={entry.path}
                   data-drag-over={isDirectory && dragOverPath === entry.path ? "true" : "false"}
                   style={{ paddingLeft: 8 + depth * 16 }}
@@ -1648,6 +1694,7 @@ function SidebarProjectPanel({
       handleCancelRename,
       actionableSelectedEntries,
       handleCopyEntries,
+      handleCutEntries,
       handlePasteEntries,
       handleRequestDeleteEntries,
       handleCreateResource,
@@ -1663,6 +1710,8 @@ function SidebarProjectPanel({
       openInManagerText,
       onOpenFile,
       pasteSubmitting,
+      clipboardOperation,
+      clipboardPaths,
       projectRootPath,
       selectedPath,
       selectOnlyPath,
@@ -1681,6 +1730,14 @@ function SidebarProjectPanel({
         event.preventDefault();
         event.stopPropagation();
         handleCopyEntries(actionableSelectedEntries);
+        return;
+      }
+
+      if (hasPrimaryModifier && !event.shiftKey && !event.altKey && lowerKey === "x") {
+        if (!canCutSelection) return;
+        event.preventDefault();
+        event.stopPropagation();
+        handleCutEntries(actionableSelectedEntries);
         return;
       }
 
@@ -1710,9 +1767,11 @@ function SidebarProjectPanel({
       actionableSelectedEntries,
       backgroundCreateTargetPath,
       canCopySelection,
+      canCutSelection,
       canDeleteSelection,
       canPasteEntries,
       handleCopyEntries,
+      handleCutEntries,
       handlePasteEntries,
       handleRequestDeleteEntries,
       selectOnlyPath,
