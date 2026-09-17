@@ -162,6 +162,23 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
     ),
   });
 
+  const notifiedStatusErrorRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!currentProject || !statusError) {
+      notifiedStatusErrorRef.current = null;
+      return;
+    }
+    const errorKey = `${currentProject.path}:${statusError}`;
+    if (notifiedStatusErrorRef.current === errorKey) return;
+    notifiedStatusErrorRef.current = errorKey;
+    // 后台轮询持续失败时只提示一次，恢复后再次失败才重新通知。
+    message.error({
+      key: `git-status-error:${currentProject.path}`,
+      title: currentProject.name,
+      content: t("sidebar.gitRefreshFailed", { detail: statusError }),
+    });
+  }, [currentProject?.path, currentProject?.name, statusError, t]);
+
   // 处理 detached HEAD 状态
   const branchName = rawBranchName || t("sidebar.gitDetached");
   const operationState = branchInfo?.operationState ?? "clean";
@@ -704,10 +721,6 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
         />
       </div>
 
-      {statusError && <div role="alert" className="px-3 py-2 text-xs text-[var(--cs-error)]">
-        <span>{t("sidebar.gitRefreshFailed", { detail: statusError })}</span>
-        <Button type="link" size="small" onClick={() => void loadGitData()}>{t("sidebar.remoteActions.retry")}</Button>
-      </div>}
       {/* Branch panel (collapsible) */}
       {showBranchPanel && (
         <GitBranchPanel

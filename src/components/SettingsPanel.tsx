@@ -21,15 +21,13 @@ import {
   InboxOutlined,
   FileMarkdownOutlined,
   CloudServerOutlined,
-  EditOutlined,
-  NodeIndexOutlined,
   RobotOutlined,
   GlobalOutlined,
   GithubOutlined,
   SafetyCertificateOutlined,
   DatabaseOutlined,
 } from "@ant-design/icons";
-import { Segmented, Typography, Tag, Select, Spin, Empty, Button, message, Switch, Input, Drawer, Modal, Popconfirm, Tooltip, Popover } from "antd";
+import { Segmented, Typography, Tag, Select, Spin, Empty, Button, message, Switch, Input, Drawer, Modal, Tooltip, Popover } from "antd";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useTranslation } from "react-i18next";
@@ -109,6 +107,7 @@ import { GitSettingsPage } from "@/components/settings/GitSettingsPage";
 import { ArchivedSessionsPage } from "@/components/settings/ArchivedSessionsPage";
 import { DataPrivacyPage } from "@/components/settings/DataPrivacyPage";
 import { SearchIndexPage } from "@/components/settings/SearchIndexPage";
+import { McpServersView } from "@/components/settings/McpServersView";
 import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
 import { NotificationsPage } from "@/components/settings/NotificationsPage";
 import { NetworkSettingsPage } from "@/components/settings/NetworkSettingsPage";
@@ -3709,12 +3708,12 @@ function McpServerTypePicker({
   options: Array<{ value: McpServerType; label: string }>;
   onChange: (value: McpServerType) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div
-      className="flex flex-wrap gap-1 rounded-lg p-1"
+      className="app-mcp-type-picker"
       role="radiogroup"
-      aria-label="MCP server type"
-      style={{ background: "var(--cs-bg-hover)" }}
+      aria-label={t("settings.mcpServers.serverType")}
     >
       {options.map((option) => {
         const active = option.value === value;
@@ -3725,12 +3724,7 @@ function McpServerTypePicker({
             role="radio"
             aria-checked={active}
             onClick={() => onChange(option.value)}
-            className="min-h-8 max-w-full rounded-md px-3 py-1 text-left text-sm leading-5 transition-colors"
-            style={{
-              background: active ? "var(--cs-bg-card)" : "transparent",
-              color: active ? "var(--cs-text-primary)" : "var(--cs-text-secondary)",
-              boxShadow: active ? "0 1px 2px rgba(0,0,0,0.08)" : "none",
-            }}
+            className="app-mcp-type-option"
           >
             {option.label}
           </button>
@@ -3740,7 +3734,7 @@ function McpServerTypePicker({
   );
 }
 
-function McpServersPage() {
+export function McpServersPage() {
   const { t } = useTranslation();
   const currentProject = useAppStore((s) => s.currentProject);
   const projectPath = currentProject?.path ?? null;
@@ -3752,7 +3746,7 @@ function McpServersPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
   const [activeScope, setActiveScope] = useState<McpServerInfo["scope"]>(
-    projectPath ? "workspace" : "user"
+    projectPath ? "local" : "user"
   );
   const [showForm, setShowForm] = useState(false);
   const [editingServer, setEditingServer] = useState<McpServerInfo | null>(null);
@@ -3763,14 +3757,20 @@ function McpServersPage() {
   const [testingName, setTestingName] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{ name: string; success: boolean; message: string } | null>(null);
 
+  const catalogRequestRef = useRef(0);
+  const testRequestRef = useRef(0);
+
   const loadCatalog = useCallback(
     async (silent = false) => {
+      const request = ++catalogRequestRef.current;
       if (silent) setRefreshing(true);
-      else setLoading(true);
+      else { setLoading(true); setCatalog(null); }
       try {
         const next = await listMcpServers(activeAgent, projectPath);
+        if (request !== catalogRequestRef.current) return;
         setCatalog(next);
       } catch (error) {
+        if (request !== catalogRequestRef.current) return;
         console.error("Failed to load MCP servers:", error);
         message.error({
           content: t("settings.mcpServers.loadFailed"),
@@ -3778,8 +3778,10 @@ function McpServersPage() {
           key: "mcp-server-catalog-load-failed",
         });
       } finally {
-        if (silent) setRefreshing(false);
-        else setLoading(false);
+        if (request === catalogRequestRef.current) {
+          setRefreshing(false);
+          setLoading(false);
+        }
       }
     },
     [activeAgent, projectPath, t]
@@ -3798,10 +3800,16 @@ function McpServersPage() {
   useEffect(() => {
     closeForm();
     setSearch("");
-  }, [activeAgent]);
+    setDeleteTarget(null);
+    setTestResult(null);
+    setTestingName(null);
+    testRequestRef.current += 1;
+    return () => { testRequestRef.current += 1; };
+  }, [activeAgent, projectPath]);
 
   useEffect(() => {
-    loadCatalog();
+    void loadCatalog();
+    return () => { catalogRequestRef.current += 1; };
   }, [loadCatalog]);
 
   const filteredServers = useMemo(() => {
@@ -3816,11 +3824,6 @@ function McpServersPage() {
         .includes(keyword);
     });
   }, [catalog?.servers, activeScope, search]);
-
-  const localCount = (catalog?.servers ?? []).filter((s) => s.scope === "local").length;
-  const projectCount = (catalog?.servers ?? []).filter((s) => s.scope === "project").length;
-  const workspaceCount = (catalog?.servers ?? []).filter((s) => s.scope === "workspace").length;
-  const userCount = (catalog?.servers ?? []).filter((s) => s.scope === "user").length;
 
   function openAddForm() {
     setEditingServer(null);
@@ -3912,6 +3915,9 @@ function McpServersPage() {
         );
         message.success(t("settings.mcpServers.addSuccess", { name }));
       }
+      testRequestRef.current += 1;
+      setTestingName(null);
+      setTestResult(null);
       closeForm();
     } catch (error) {
       console.error("Failed to save MCP server:", error);
@@ -3941,6 +3947,9 @@ function McpServersPage() {
           : prev
       );
       message.success(t("settings.mcpServers.deleteSuccess", { name: deleteTarget.name }));
+      testRequestRef.current += 1;
+      setTestingName(null);
+      setTestResult(null);
       setDeleteTarget(null);
     } catch (error) {
       console.error("Failed to delete MCP server:", error);
@@ -3951,24 +3960,28 @@ function McpServersPage() {
   }
 
   async function handleTest(server: McpServerInfo) {
-    setTestingName(server.name);
+    const request = ++testRequestRef.current;
+    const testKey = `${server.scope}:${server.name}`;
+    setTestingName(testKey);
     setTestResult(null);
     try {
       const result = await testMcpServer(activeAgent, server.scope, server.name, projectPath);
+      if (request !== testRequestRef.current) return;
       setTestResult({
-        name: server.name,
+        name: testKey,
         success: result.success,
         message: stripAnsiEscapeSequences(result.message),
       });
     } catch (error) {
       console.error("Failed to test MCP server:", error);
+      if (request !== testRequestRef.current) return;
       setTestResult({
-        name: server.name,
+        name: testKey,
         success: false,
         message: stripAnsiEscapeSequences(String(error)),
       });
     } finally {
-      setTestingName(null);
+      if (request === testRequestRef.current) setTestingName(null);
     }
   }
 
@@ -4028,234 +4041,41 @@ function McpServersPage() {
         ]),
   ];
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Spin />
-      </div>
-    );
-  }
-
   return (
     <>
-      <SettingsPageHeader
-        title={t("settings.mcpServers.title")}
-        description={t("settings.mcpServers.headerDesc", { agent: AGENT_DEFINITIONS[activeAgent].displayName })}
-        actions={
-          <>
-            <Button
-              size="small"
-              icon={<ReloadOutlined />}
-              onClick={() => loadCatalog(true)}
-              loading={refreshing}
-            />
-            <Button
-              size="small"
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={openAddForm}
-            >
-              {t("settings.mcpServers.addServer")}
-            </Button>
-          </>
-        }
-      >
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex flex-wrap items-center gap-3">
-            <Select
-              value={activeAgent}
-              onChange={(agent) => setActiveAgent(agent as AiAgentId)}
-              options={mcpAgents.map((agent) => ({
-                value: agent,
-                label: (
-                  <span className="flex items-center gap-2">
-                    <AgentIcon agentId={agent} size={16} />
-                    {AGENT_DEFINITIONS[agent].displayName}
-                  </span>
-                ),
-              }))}
-              className="min-w-40"
-              size="small"
-            />
-            <Segmented
-              value={activeScope}
-              onChange={(val) => setActiveScope(val as McpServerInfo["scope"])}
-              options={
-                usesThreeMcpScopes
-                  ? [
-                      {
-                        value: "local",
-                        label: `${t("settings.mcpServers.localServers")} (${localCount})`,
-                        disabled: !projectPath,
-                      },
-                      {
-                        value: "project",
-                        label: `${t("settings.mcpServers.projectServers")} (${projectCount})`,
-                        disabled: !projectPath,
-                      },
-                      {
-                        value: "user",
-                        label: `${t("settings.mcpServers.userServers")} (${userCount})`,
-                      },
-                    ]
-                  : [
-                      {
-                        value: "workspace",
-                        label: `${t("settings.mcpServers.workspaceServers")} (${workspaceCount})`,
-                        disabled: !projectPath,
-                      },
-                      {
-                        value: "user",
-                        label: `${t("settings.mcpServers.userServers")} (${userCount})`,
-                      },
-                    ]
-              }
-            />
-          </div>
-          <div className="flex w-full min-w-0 items-center gap-2 lg:w-auto lg:max-w-[50%]">
-            <span className="min-w-0 flex-1 text-[11px] break-all" style={{ color: "var(--cs-text-tertiary)" }}>
-              {configPath || ((activeScope === "workspace" || activeScope === "local" || activeScope === "project")
-                ? t("settings.mcpServers.workspaceConfigUnavailable")
-                : "")}
-            </span>
-            {configPath && (
-              <Button
-                type="link"
-                size="small"
-                icon={<FolderOpenOutlined />}
-                onClick={() => openInFileManager(configPath)}
-              />
-            )}
-          </div>
-        </div>
-        <Input
-          prefix={<SearchOutlined style={{ color: "var(--cs-text-tertiary)" }} />}
-          placeholder={t("settings.mcpServers.searchPlaceholder")}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          allowClear
-          size="small"
-        />
-      </SettingsPageHeader>
-
-      {/* Server list */}
-      {filteredServers.length === 0 ? (
-        <div className="px-4 py-8">
-          <Empty
-            description={
-              search
-                ? t("settings.mcpServers.emptyFiltered")
-                : t("settings.mcpServers.emptyInitial")
-            }
-          >
-            <div className="text-xs mt-1" style={{ color: "var(--cs-text-tertiary)" }}>
-              {search
-                ? t("settings.mcpServers.emptyFilteredDetail")
-                : t("settings.mcpServers.emptyInitialDetail")}
-            </div>
-          </Empty>
-        </div>
-      ) : (
-        <div className="px-4 space-y-2 pb-4">
-          {filteredServers.map((server) => {
-            const isRemote = server.serverType !== "stdio";
-            const preview = isRemote
-              ? server.url
-              : [server.command, ...(server.args ?? [])].filter(Boolean).join(" ");
-            const isTesting = testingName === server.name;
-            const hasTestResult = testResult?.name === server.name;
-
-            return (
-              <div
-                key={`${server.scope}:${server.name}`}
-                className="rounded-lg px-4 py-3 transition-colors"
-                style={{
-                  background: "var(--cs-bg-card)",
-                  border: "1px solid var(--cs-border-card)",
-                }}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span
-                        className="min-w-0 text-sm font-medium truncate"
-                        style={{ color: "var(--cs-text-primary)" }}
-                      >
-                        {server.name}
-                      </span>
-                      <Tag
-                        color={isRemote ? "cyan" : "blue"}
-                        className="!m-0 shrink-0 !text-[10px]"
-                      >
-                        {server.serverType === "stdio" ? "Stdio" : server.serverType.toUpperCase()}
-                      </Tag>
-                    </div>
-                    {preview && (
-                      <div
-                        className="text-xs mt-1 truncate font-mono"
-                        style={{ color: "var(--cs-text-tertiary)" }}
-                      >
-                        {preview}
-                      </div>
-                    )}
-                    {Object.keys(server.env ?? {}).length > 0 && (
-                      <div className="text-[10px] mt-1" style={{ color: "var(--cs-text-tertiary)" }}>
-                        env: {Object.keys(server.env).join(", ")}
-                      </div>
-                    )}
-                    {/* Test result */}
-                    {hasTestResult && (
-                      <div
-                        className="text-xs mt-1.5 flex items-start gap-1.5 break-words"
-                        style={{ color: testResult!.success ? "var(--cs-success)" : "var(--cs-error)" }}
-                      >
-                        {testResult!.success ? <CheckOutlined /> : <DeleteOutlined />}
-                        {testResult!.message}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Tooltip title={t("settings.mcpServers.testServer")}>
-                      <Button
-                        type="text"
-                        size="small"
-                        icon={<NodeIndexOutlined />}
-                        loading={isTesting}
-                        onClick={() => handleTest(server)}
-                      />
-                    </Tooltip>
-                    <Tooltip title={t("settings.mcpServers.editServer")}>
-                      <Button
-                        type="text"
-                        size="small"
-                        icon={<EditOutlined />}
-                        onClick={() => openEditForm(server)}
-                      />
-                    </Tooltip>
-                    <Tooltip title={t("settings.mcpServers.deleteServer")}>
-                      <Popconfirm
-                        title={t("settings.mcpServers.confirmDeleteTitle")}
-                        description={t("settings.mcpServers.confirmDeleteDesc", { agent: AGENT_DEFINITIONS[activeAgent].displayName })}
-                        onConfirm={() => setDeleteTarget(server)}
-                        okText={t("settings.mcpServers.confirmDelete")}
-                        cancelText={t("settings.mcpServers.cancel")}
-                        okButtonProps={{ danger: true }}
-                      >
-                        <Button
-                          type="text"
-                          size="small"
-                          danger
-                          icon={<DeleteOutlined />}
-                        />
-                      </Popconfirm>
-                    </Tooltip>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      <McpServersView
+        agents={mcpAgents}
+        agent={activeAgent}
+        scope={activeScope}
+        servers={catalog?.servers ?? []}
+        filteredServers={filteredServers}
+        projectName={currentProject?.name}
+        configPath={configPath}
+        search={search}
+        loading={loading}
+        refreshing={refreshing}
+        available={catalog !== null}
+        testingKey={testingName}
+        testResult={testResult}
+        onAgent={setActiveAgent}
+        onScope={(scope) => {
+          testRequestRef.current += 1;
+          setTestingName(null);
+          setActiveScope(scope);
+          closeForm();
+          setDeleteTarget(null);
+          setTestResult(null);
+        }}
+        onSearch={setSearch}
+        onRefresh={() => void loadCatalog(true)}
+        onAdd={openAddForm}
+        onEdit={openEditForm}
+        onDelete={setDeleteTarget}
+        onTest={(server) => void handleTest(server)}
+        onOpenConfig={() => {
+          if (configPath) void openInFileManager(configPath).catch(() => message.error(t("settings.mcpServers.openConfigFailed")));
+        }}
+      />
 
       {/* Add/Edit Form Modal */}
       <Modal
@@ -4265,18 +4085,28 @@ function McpServersPage() {
             ? t("settings.mcpServers.editServer")
             : t("settings.mcpServers.addServer")
         }
-        onCancel={closeForm}
+        onCancel={() => { if (!saving) closeForm(); }}
+        closable={!saving}
+        maskClosable={!saving}
+        cancelButtonProps={{ disabled: saving }}
         onOk={handleSave}
         confirmLoading={saving}
         okText={t("settings.mcpServers.save")}
         cancelText={t("settings.mcpServers.cancel")}
         centered
-        width={520}
+        width={620}
+        className="app-mcp-form"
       >
+        <div className="app-mcp-form-context">
+          <AgentIcon agentId={activeAgent} size={18} />
+          <span>{AGENT_DEFINITIONS[activeAgent].displayName}</span>
+          <span>·</span>
+          <span>{t(`settings.mcpServers.${activeScope}Servers`)}</span>
+        </div>
         <div className="space-y-4 py-2">
           {/* Name */}
           <div>
-            <label className="text-sm mb-1.5 block" style={{ color: "var(--cs-text-primary)" }}>
+            <label className="text-sm mb-1.5 block" >
               {t("settings.mcpServers.serverName")}
             </label>
             <Input
@@ -4289,7 +4119,7 @@ function McpServersPage() {
 
           {/* Type */}
           <div>
-            <label className="text-sm mb-1.5 block" style={{ color: "var(--cs-text-primary)" }}>
+            <label className="text-sm mb-1.5 block" >
               {t("settings.mcpServers.serverType")}
             </label>
             <McpServerTypePicker
@@ -4303,7 +4133,7 @@ function McpServersPage() {
           {formData.serverType === "stdio" && (
             <>
               <div>
-                <label className="text-sm mb-1.5 block" style={{ color: "var(--cs-text-primary)" }}>
+                <label className="text-sm mb-1.5 block" >
                   {t("settings.mcpServers.command")}
                 </label>
                 <Input
@@ -4313,7 +4143,7 @@ function McpServersPage() {
                 />
               </div>
               <div>
-                <label className="text-sm mb-1.5 block" style={{ color: "var(--cs-text-primary)" }}>
+                <label className="text-sm mb-1.5 block" >
                   {t("settings.mcpServers.args")}
                 </label>
                 <Input.TextArea
@@ -4324,7 +4154,7 @@ function McpServersPage() {
                 />
               </div>
               <div>
-                <label className="text-sm mb-1.5 block" style={{ color: "var(--cs-text-primary)" }}>
+                <label className="text-sm mb-1.5 block" >
                   {t("settings.mcpServers.cwd")}
                 </label>
                 <Input
@@ -4339,7 +4169,7 @@ function McpServersPage() {
           {/* Remote transport fields */}
           {formData.serverType !== "stdio" && (
             <div>
-              <label className="text-sm mb-1.5 block" style={{ color: "var(--cs-text-primary)" }}>
+              <label className="text-sm mb-1.5 block" >
                 {t("settings.mcpServers.url")}
               </label>
               <Input
@@ -4353,7 +4183,7 @@ function McpServersPage() {
           {formData.serverType !== "stdio" && (
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="text-sm" style={{ color: "var(--cs-text-primary)" }}>
+                <label className="text-sm" >
                   {t("settings.mcpServers.headers")}
                 </label>
                 <Button type="link" size="small" icon={<PlusOutlined />} onClick={addHeaderRow}>
@@ -4365,7 +4195,7 @@ function McpServersPage() {
                   {formData.headers.map((item, index) => (
                     <div key={index} className="flex items-center gap-2">
                       <Input size="small" value={item.key} onChange={(e) => updateHeaderRow(index, "key", e.target.value)} placeholder={t("settings.mcpServers.headerKey")} className="flex-1" />
-                      <Input size="small" value={item.value} onChange={(e) => updateHeaderRow(index, "value", e.target.value)} placeholder={t("settings.mcpServers.headerValue")} className="flex-1" />
+                      <Input.Password size="small" value={item.value} onChange={(e) => updateHeaderRow(index, "value", e.target.value)} placeholder={t("settings.mcpServers.headerValue")} className="flex-1" />
                       <Button type="text" size="small" danger icon={<DeleteOutlined />} onClick={() => removeHeaderRow(index)} />
                     </div>
                   ))}
@@ -4377,7 +4207,7 @@ function McpServersPage() {
           {/* Environment Variables */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-sm" style={{ color: "var(--cs-text-primary)" }}>
+              <label className="text-sm" >
                 {t("settings.mcpServers.env")}
               </label>
               <Button
@@ -4400,7 +4230,7 @@ function McpServersPage() {
                       placeholder={t("settings.mcpServers.envKey")}
                       className="flex-1"
                     />
-                    <Input
+                    <Input.Password
                       size="small"
                       value={item.value}
                       onChange={(e) => updateEnvRow(index, "value", e.target.value)}
@@ -4426,7 +4256,10 @@ function McpServersPage() {
       <Modal
         open={!!deleteTarget}
         title={t("settings.mcpServers.confirmDeleteTitle")}
-        onCancel={() => setDeleteTarget(null)}
+        onCancel={() => { if (!deleting) setDeleteTarget(null); }}
+        closable={!deleting}
+        maskClosable={!deleting}
+        cancelButtonProps={{ disabled: deleting }}
         onOk={handleDelete}
         confirmLoading={deleting}
         okText={t("settings.mcpServers.confirmDelete")}
@@ -4434,7 +4267,7 @@ function McpServersPage() {
         cancelText={t("settings.mcpServers.cancel")}
         centered
       >
-        <div className="text-sm leading-6" style={{ color: "var(--cs-text-secondary)" }}>
+        <div className="app-mcp-delete-description text-sm leading-6">
           {t("settings.mcpServers.confirmDeleteDesc", { agent: AGENT_DEFINITIONS[activeAgent].displayName })}
         </div>
       </Modal>
