@@ -41,7 +41,7 @@ import {
   DEFAULT_VOICE_SHORTCUT,
 } from "@/store";
 import { createSilentWavDataUrl, type MimoAuthMode } from "@/lib/mimoAsr";
-import { captureShortcutFromEvent, formatShortcutDisplay } from "@/lib/shortcut";
+import { captureShortcutFromEvent, formatShortcutDisplay, toTauriShortcut } from "@/lib/shortcut";
 import { stripAnsiEscapeSequences } from "@/lib/textContent";
 import { TERMINAL_SCROLLBACK_OPTIONS } from "@/lib/terminalSettings";
 import {
@@ -69,6 +69,7 @@ import {
   deleteMcpServer,
   testMcpServer,
   setExplorerContextMenuEnabled,
+  configureVoiceGlobalShortcut,
   startLiveAsr,
   finishLiveAsr,
 } from "@/lib/api";
@@ -755,6 +756,8 @@ function VoiceRecognitionPage() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [testing, setTesting] = useState(false);
   const [isRecordingShortcut, setIsRecordingShortcut] = useState(false);
+  const [isPreparingShortcutRecording, setIsPreparingShortcutRecording] = useState(false);
+  const previousShortcutRef = useRef<string | null>(null);
   const asrProvider: AsrProvider =
     asrModel.startsWith("fun-asr-flash") || asrModel.startsWith("qwen3-asr-flash") || asrModel.startsWith("qwen-audio-3.0-asr")
       ? "dashscope"
@@ -798,6 +801,62 @@ function VoiceRecognitionPage() {
     }
     setAsrModel(DEFAULT_ASR_MODEL);
   };
+
+  const restoreGlobalVoiceShortcut = useCallback(async (shortcut: string) => {
+    try {
+      await configureVoiceGlobalShortcut(
+        toTauriShortcut(shortcut),
+        Boolean(shortcut.trim()),
+      );
+    } catch (error) {
+      console.warn("failed to restore voice global shortcut:", error);
+    }
+  }, []);
+
+  const startShortcutRecording = useCallback(async () => {
+    if (isRecordingShortcut || isPreparingShortcutRecording) {
+      return;
+    }
+
+    setIsPreparingShortcutRecording(true);
+    try {
+      // 系统级快捷键会在 WebView 收到 keydown 前截获按键，因此录制前必须先注销旧键。
+      await configureVoiceGlobalShortcut(null, false);
+      previousShortcutRef.current = voiceShortcut;
+      setIsRecordingShortcut(true);
+    } catch (error) {
+      console.warn("failed to suspend voice global shortcut for recording:", error);
+      message.error(
+        t("settings.voiceRecognition.shortcutRecordFailed", {
+          defaultValue: "无法暂停当前语音快捷键，请重试",
+        }),
+      );
+    } finally {
+      setIsPreparingShortcutRecording(false);
+    }
+  }, [isPreparingShortcutRecording, isRecordingShortcut, t, voiceShortcut]);
+
+  const cancelShortcutRecording = useCallback(() => {
+    const previousShortcut = previousShortcutRef.current;
+    previousShortcutRef.current = null;
+    setIsRecordingShortcut(false);
+
+    if (previousShortcut !== null) {
+      void restoreGlobalVoiceShortcut(previousShortcut);
+    }
+  }, [restoreGlobalVoiceShortcut]);
+
+  const applyRecordedShortcut = useCallback((shortcut: string) => {
+    const previousShortcut = previousShortcutRef.current;
+    previousShortcutRef.current = null;
+    setVoiceShortcut(shortcut);
+    setIsRecordingShortcut(false);
+
+    // 相同的快捷键不会触发 AppLayout 的配置 effect，需要在此重新注册。
+    if (previousShortcut === shortcut) {
+      void restoreGlobalVoiceShortcut(shortcut);
+    }
+  }, [restoreGlobalVoiceShortcut, setVoiceShortcut]);
 
   const handleTest = async () => {
     if (!asrApiKey.trim()) {
@@ -886,7 +945,7 @@ function VoiceRecognitionPage() {
       event.stopPropagation();
 
       if (event.key === "Escape") {
-        setIsRecordingShortcut(false);
+        cancelShortcutRecording();
         message.info(
           t("settings.voiceRecognition.shortcutRecordCancelled", {
             defaultValue: "已取消快捷键录制",
@@ -900,8 +959,7 @@ function VoiceRecognitionPage() {
         return;
       }
 
-      setVoiceShortcut(nextShortcut);
-      setIsRecordingShortcut(false);
+      applyRecordedShortcut(nextShortcut);
       message.success(
         t("settings.voiceRecognition.shortcutSaved", {
           defaultValue: "语音快捷键已更新",
@@ -913,7 +971,14 @@ function VoiceRecognitionPage() {
     return () => {
       window.removeEventListener("keydown", handleKeyDown, true);
     };
-  }, [isRecordingShortcut, setVoiceShortcut, t]);
+  }, [applyRecordedShortcut, cancelShortcutRecording, isRecordingShortcut, t]);
+
+  useEffect(() => () => {
+    const previousShortcut = previousShortcutRef.current;
+    if (previousShortcut !== null) {
+      void restoreGlobalVoiceShortcut(previousShortcut);
+    }
+  }, [restoreGlobalVoiceShortcut]);
 
   return (
     <>
@@ -1027,13 +1092,21 @@ function VoiceRecognitionPage() {
               value={currentShortcutLabel}
               size="middle"
               placeholder={shortcutPlaceholder}
-              onClick={() => setIsRecordingShortcut(true)}
+              onClick={() => void startShortcutRecording()}
+              disabled={isPreparingShortcutRecording}
               className="w-[220px] cursor-pointer"
             />
             <Button
               type={isRecordingShortcut ? "primary" : "default"}
               size="middle"
-              onClick={() => setIsRecordingShortcut((current) => !current)}
+              loading={isPreparingShortcutRecording}
+              onClick={() => {
+                if (isRecordingShortcut) {
+                  cancelShortcutRecording();
+                  return;
+                }
+                void startShortcutRecording();
+              }}
             >
               {isRecordingShortcut
                 ? t("settings.voiceRecognition.shortcutRecording", {
@@ -1045,9 +1118,9 @@ function VoiceRecognitionPage() {
             </Button>
             <Button
               size="middle"
+              disabled={isPreparingShortcutRecording}
               onClick={() => {
-                setVoiceShortcut(DEFAULT_VOICE_SHORTCUT);
-                setIsRecordingShortcut(false);
+                applyRecordedShortcut(DEFAULT_VOICE_SHORTCUT);
               }}
             >
               {t("settings.voiceRecognition.shortcutReset", { defaultValue: "恢复默认" })}
@@ -1055,10 +1128,9 @@ function VoiceRecognitionPage() {
             <Button
               size="middle"
               icon={<DeleteOutlined />}
-              disabled={!voiceShortcut.trim()}
+              disabled={!voiceShortcut.trim() || isPreparingShortcutRecording}
               onClick={() => {
-                setVoiceShortcut("");
-                setIsRecordingShortcut(false);
+                applyRecordedShortcut("");
               }}
             >
               {t("settings.voiceRecognition.shortcutClear", { defaultValue: "清除" })}

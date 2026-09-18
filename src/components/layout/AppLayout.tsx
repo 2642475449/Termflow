@@ -1927,13 +1927,6 @@ function AppLayout() {
                   <HomePage />
                 )}
               </div>
-              <VoiceTrigger
-                visible={voiceTriggerVisible && !settingsVisible && activeSidebarSection !== "schedules"}
-                onClick={handleVoiceTrigger}
-                onHide={handleHideVoiceTrigger}
-                shortcutLabel={voiceShortcut}
-                phase={displayVoiceState.phase}
-              />
             </div>
             {windowMode === "project" && currentProject ? (
               <AuxiliaryDock
@@ -1946,6 +1939,13 @@ function AppLayout() {
                 }}
               />
             ) : null}
+            <VoiceTrigger
+              visible={voiceTriggerVisible && !settingsVisible && activeSidebarSection !== "schedules"}
+              onClick={handleVoiceTrigger}
+              onHide={handleHideVoiceTrigger}
+              shortcutLabel={voiceShortcut}
+              phase={displayVoiceState.phase}
+            />
           </div>
         </Content>
       </Layout>

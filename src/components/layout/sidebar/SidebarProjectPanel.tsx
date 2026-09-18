@@ -42,7 +42,7 @@ import { getFileIcon } from "@/lib/fileIcon";
 import { openGlobalTextSearch } from "@/lib/globalSearch";
 import { dispatchGitFileHistoryOpen } from "@/lib/gitGraphEvents";
 import { useAppStore } from "@/store";
-import type { FileTreeEntry, FileTreeEntryKind } from "@/types";
+import type { FileTreeEntry, FileTreeEntryKind, FileTreeListing } from "@/types";
 import { useTranslation } from "react-i18next";
 
 interface ProjectRef {
@@ -439,8 +439,8 @@ function SidebarProjectPanel({
   }, []);
 
   const loadDirectory = useCallback(
-    async (directoryPath?: string | null) => {
-      if (!currentProject) return;
+    async (directoryPath?: string | null): Promise<FileTreeListing | null> => {
+      if (!currentProject) return null;
       const requestPath = directoryPath ?? currentProject.path;
 
       if (directoryPath) {
@@ -468,8 +468,10 @@ function SidebarProjectPanel({
           }));
           setSelectedPath((prev) => prev ?? listing.rootPath);
         }
+        return listing;
       } catch (nextError) {
         setError(nextError instanceof Error ? nextError.message : String(nextError));
+        return null;
       } finally {
         if (directoryPath) {
           setLoadingDirectories((prev) => ({ ...prev, [requestPath]: false }));
@@ -649,9 +651,37 @@ function SidebarProjectPanel({
 
   const handleRefresh = useCallback(() => {
     if (!currentProject) return;
-    setExpandedPaths({});
-    void loadDirectory(null);
-  }, [currentProject, loadDirectory]);
+    // 已展开的目录此前会命中 loadedDirectories 缓存，导致刷新后仍显示磁盘修改前的内容。
+    // 按层级重读当前可见的目录，既更新内容也保留用户展开的位置。
+    const expandedDirectoryPaths = Object.keys(loadedDirectories)
+      .filter((path) => expandedPaths[path])
+      .sort((left, right) => normalizePath(left).split("/").length - normalizePath(right).split("/").length);
+
+    void (async () => {
+      const rootListing = await loadDirectory(null);
+      if (!rootListing) return;
+
+      const availableDirectoryPaths = new Set(
+        rootListing.entries
+          .filter((entry) => entry.kind === "directory")
+          .map((entry) => entry.path)
+      );
+
+      for (const directoryPath of expandedDirectoryPaths) {
+        // 若目录已在外部被移动或删除，则其父目录的最新结果中不会再包含它。
+        if (!availableDirectoryPaths.has(directoryPath)) continue;
+
+        const listing = await loadDirectory(directoryPath);
+        if (!listing) continue;
+
+        for (const entry of listing.entries) {
+          if (entry.kind === "directory") {
+            availableDirectoryPaths.add(entry.path);
+          }
+        }
+      }
+    })();
+  }, [currentProject, expandedPaths, loadedDirectories, loadDirectory]);
 
   const handleCollapseAll = useCallback(() => {
     setExpandedPaths({});

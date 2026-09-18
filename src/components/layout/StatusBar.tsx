@@ -1069,15 +1069,24 @@ function AntigravityUsageStatus({
 }) {
   const { t } = useTranslation();
   const hasData = usage?.status === "ok" && usage.windows.length > 0;
-  const minimum = hasData
-    ? Math.min(...usage.windows.map((window) => Math.max(0, Math.min(100, Math.round(window.remainingPercent)))))
-    : null;
-  const color = minimum == null ? "var(--cs-text-tertiary)" : codexUsageBarColor(minimum);
-  const summary = minimum == null
-    ? isLoading
-      ? t("statusBar.antigravityUsage.loading")
-      : t("statusBar.antigravityUsage.unavailableShort")
-    : t("statusBar.codexUsage.remaining", { value: minimum });
+  const compactGroups = hasData ? ["Gemini", "Claude and GPT"].map((scope) => ({
+    scope,
+    label: t(scope === "Gemini" ? "settings.agents.quota.gemini" : "settings.agents.quota.claudeGpt"),
+    periods: ["session", "weekly"].map((period) => {
+      const window = usage.windows.find((item) => item.scope === scope && item.window === period);
+      return {
+        period,
+        label: t(period === "session" ? "settings.agents.quota.sessionShort" : "settings.agents.quota.weeklyShort"),
+        remaining: window ? Math.max(0, Math.min(100, Math.round(window.remainingPercent))) : null,
+      };
+    }),
+  })) : [];
+  const summary = isLoading
+    ? t("statusBar.antigravityUsage.loading")
+    : t("statusBar.antigravityUsage.unavailableShort");
+  const accessibleSummary = compactGroups.map((group) => `${group.label} · ${group.periods.map((period) =>
+    `${period.label} ${period.remaining == null ? t("statusBar.antigravityUsage.unavailableShort") : t("statusBar.codexUsage.remaining", { value: period.remaining })}`,
+  ).join(" · ")}`).join("; ");
   const statusError = error ?? usage?.error;
 
   const content = (
@@ -1120,6 +1129,7 @@ function AntigravityUsageStatus({
         </button>
       </div>
       <div className="space-y-3 px-3 py-3">
+        {hasData && <p className="m-0 text-[11px] text-[var(--cs-text-tertiary)]">{t("statusBar.antigravityUsage.summaryHint")}</p>}
         {hasData ? usage.windows.map((window) => (
           <AntigravityUsageWindowRow key={window.id} window={window} />
         )) : (
@@ -1134,7 +1144,7 @@ function AntigravityUsageStatus({
 
   return (
     <Popover
-      trigger={["click"]}
+      trigger={["hover", "click"]}
       placement="topLeft"
       content={content}
       arrow={false}
@@ -1145,16 +1155,21 @@ function AntigravityUsageStatus({
       <button
         type="button"
         className="flex h-7 min-w-[154px] shrink-0 items-center justify-start gap-2 rounded-[5px] px-2 text-left text-[13px] font-medium leading-none"
+        aria-label={`${t("statusBar.antigravityUsage.title")} · ${accessibleSummary || summary}`}
         style={{ background: "transparent", border: 0, color: hasData ? "var(--cs-text-secondary)" : "var(--cs-text-tertiary)" }}
       >
         <AgentIcon agentId="antigravity" size={15} />
-        <div
-          className="h-[6px] w-14 shrink-0 overflow-hidden rounded-full"
-          style={{ background: "color-mix(in srgb, var(--cs-text-tertiary) 24%, transparent)" }}
-        >
-          <div className="h-full rounded-full" style={{ width: `${minimum ?? 0}%`, background: color }} />
-        </div>
-        <span className="truncate tabular-nums">{summary}</span>
+        {hasData ? compactGroups.map((group) => (
+          <span key={group.scope} className="flex shrink-0 items-center gap-2 whitespace-nowrap border-l border-[var(--cs-border-sidebar)] pl-2 first-of-type:border-0 first-of-type:pl-0">
+            <span>{group.label}</span>
+            {group.periods.map((period) => (
+              <span key={period.period} className="flex items-center gap-1 text-[12px]">
+                <span className="text-[var(--cs-text-tertiary)]">{period.label}</span>
+                <span className="tabular-nums">{period.remaining == null ? "—" : `${period.remaining}%`}</span>
+              </span>
+            ))}
+          </span>
+        )) : <span className="truncate">{summary}</span>}
         {isLoading ? <LoadingOutlined /> : statusError ? <WarningOutlined /> : null}
       </button>
     </Popover>

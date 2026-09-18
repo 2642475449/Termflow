@@ -2015,13 +2015,16 @@ html, body, #root {
 
 .app-global-search-modal .ant-modal-header {
   margin: 0;
-  padding: 14px 18px;
+  padding: 10px 16px;
   border-bottom: 1px solid var(--cs-border-sidebar);
   background: transparent;
 }
 
-.app-global-search-modal .ant-modal-close {
-  top: 10px;
+.app-global-search-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .app-global-search-modal .ant-modal-body {
@@ -2030,7 +2033,8 @@ html, body, #root {
 }
 
 .app-global-search-shortcut {
-  margin-left: 6px;
+  margin-left: auto;
+  flex-shrink: 0;
   color: var(--cs-text-tertiary);
   font-size: 11px;
   font-weight: 400;
@@ -2053,7 +2057,7 @@ html, body, #root {
 
 .app-global-search-options {
   display: grid;
-  grid-template-columns: minmax(170px, 0.8fr) minmax(180px, 1fr) auto;
+  grid-template-columns: minmax(170px, 0.8fr) minmax(180px, 1fr);
   gap: 8px;
 }
 
@@ -2063,14 +2067,15 @@ html, body, #root {
 
 .app-global-search-toggles {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 4px;
 }
 
 .app-global-search-toggles button {
-  width: 32px;
-  height: 32px;
-  border: 1px solid var(--cs-border-sidebar);
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
   color: var(--cs-text-secondary);
@@ -2309,14 +2314,13 @@ html, body, #root {
 
 .app-global-search-status {
   display: flex;
-  min-height: 34px;
+  min-width: 0;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 7px 14px;
-  border-top: 1px solid var(--cs-border-sidebar);
+  gap: 8px;
+  margin-left: 6px;
   color: var(--cs-text-tertiary);
   font-size: 11px;
+  font-weight: 400;
 }
 
 .app-global-search-status[data-error="true"] {
@@ -2329,7 +2333,7 @@ html, body, #root {
   }
 
   .app-global-search-options {
-    grid-template-columns: 1fr 1fr auto;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .app-global-search-scope {

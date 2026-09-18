@@ -1,5 +1,4 @@
 import {
-  CloseOutlined,
   FileSearchOutlined,
   LoadingOutlined,
   SearchOutlined,
@@ -357,15 +356,8 @@ function GlobalTextSearchDialog({
         ? t("globalSearch.summary", {
             matches: summary.matchCount,
             files: summary.matchedFiles,
-            scanned: summary.scannedFiles,
-            seconds: (summary.durationMs / 1000).toFixed(2),
-            backend: t(
-              summary.backend === "index"
-                ? "globalSearch.indexBackend"
-                : "globalSearch.scanBackend"
-            ),
           })
-        : t("globalSearch.ready");
+        : "";
 
   return (
     <Modal
@@ -377,13 +369,21 @@ function GlobalTextSearchDialog({
       keyboard
       centered
       title={
-        <div className="flex items-center gap-2">
+        <div className="app-global-search-header">
           <FileSearchOutlined />
-          <span>{t("globalSearch.title")}</span>
+          <span className="shrink-0">{t("globalSearch.title")}</span>
+          <div
+            className="app-global-search-status"
+            data-error={error ? "true" : "false"}
+            role="status"
+            title={summary?.truncated ? `${statusText} · ${t("globalSearch.truncated")}` : statusText}
+          >
+            <span className="min-w-0 truncate">{statusText}</span>
+          </div>
           <span className="app-global-search-shortcut">Ctrl+Shift+F</span>
         </div>
       }
-      closeIcon={<CloseOutlined />}
+      closable={false}
     >
       <div className="app-global-search-shell">
         <div className="app-global-search-controls">
@@ -393,7 +393,43 @@ function GlobalTextSearchDialog({
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={handleSearchKeyDown}
             prefix={<SearchOutlined />}
-            suffix={searching ? <Spin indicator={<LoadingOutlined spin />} size="small" /> : null}
+            suffix={
+              <>
+                {searching ? <Spin indicator={<LoadingOutlined spin />} size="small" /> : null}
+                <div className="app-global-search-toggles">
+                  <Tooltip title={t("globalSearch.caseSensitive")}>
+                    <button
+                      type="button"
+                      aria-label={t("globalSearch.caseSensitive")}
+                      aria-pressed={caseSensitive}
+                      onClick={() => setCaseSensitive((value) => !value)}
+                    >
+                      Aa
+                    </button>
+                  </Tooltip>
+                  <Tooltip title={t("globalSearch.wholeWord")}>
+                    <button
+                      type="button"
+                      aria-label={t("globalSearch.wholeWord")}
+                      aria-pressed={wholeWord}
+                      onClick={() => setWholeWord((value) => !value)}
+                    >
+                      W
+                    </button>
+                  </Tooltip>
+                  <Tooltip title={t("globalSearch.regex")}>
+                    <button
+                      type="button"
+                      aria-label={t("globalSearch.regex")}
+                      aria-pressed={useRegex}
+                      onClick={() => setUseRegex((value) => !value)}
+                    >
+                      .*
+                    </button>
+                  </Tooltip>
+                </div>
+              </>
+            }
             placeholder={t("globalSearch.placeholder")}
             allowClear
             size="large"
@@ -421,35 +457,7 @@ function GlobalTextSearchDialog({
               onChange={(event) => setIncludePatterns(event.target.value)}
               placeholder={t("globalSearch.includePlaceholder")}
             />
-            <div className="app-global-search-toggles">
-              <Tooltip title={t("globalSearch.caseSensitive")}>
-                <button
-                  type="button"
-                  aria-pressed={caseSensitive}
-                  onClick={() => setCaseSensitive((value) => !value)}
-                >
-                  Aa
-                </button>
-              </Tooltip>
-              <Tooltip title={t("globalSearch.wholeWord")}>
-                <button
-                  type="button"
-                  aria-pressed={wholeWord}
-                  onClick={() => setWholeWord((value) => !value)}
-                >
-                  W
-                </button>
-              </Tooltip>
-              <Tooltip title={t("globalSearch.regex")}>
-                <button
-                  type="button"
-                  aria-pressed={useRegex}
-                  onClick={() => setUseRegex((value) => !value)}
-                >
-                  .*
-                </button>
-              </Tooltip>
-            </div>
+
           </div>
         </div>
 
@@ -568,11 +576,6 @@ function GlobalTextSearchDialog({
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("globalSearch.selectResult")} />
             )}
           </div>
-        </div>
-
-        <div className="app-global-search-status" data-error={error ? "true" : "false"}>
-          <span>{statusText}</span>
-          {summary?.truncated ? <span>{t("globalSearch.truncated")}</span> : null}
         </div>
       </div>
     </Modal>

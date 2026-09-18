@@ -166,6 +166,7 @@
     "recent": "Recent",
     "confirm": "Confirm",
     "cancel": "Cancel",
+    "cut": "Cut",
     "copy": "Copy",
     "copied": "Copied",
     "expand": "Expand",
@@ -230,7 +231,7 @@
     "line": "Line {{line}}",
     "open": "Open",
     "openHint": "Enter to open · Ctrl+Enter to open and keep this window",
-    "summary": "{{matches}} matches · {{files}} files · {{scanned}} scanned · {{seconds}}s · {{backend}}",
+    "summary": "{{matches}} matches in {{files}} files",
     "indexBackend": "FTS5 index",
     "scanBackend": "Fast scan",
     "truncated": "Too many matches; showing the first 5,000",
@@ -291,6 +292,7 @@
       "modelLabel": "Current model"
     },
     "antigravityUsage": {
+      "summaryHint": "Remaining quotas are shown in fixed positions by model group, with separate 5-hour and weekly limits.",
       "title": "Antigravity usage",
       "loading": "Antigravity usage…",
       "pending": "Waiting for the first quota snapshot",
@@ -1981,6 +1983,7 @@
       "shortcutRecordCancelled": "Shortcut recording cancelled",
       "shortcutModifierRequired": "Please include at least one modifier key, such as Ctrl, Alt, Shift, or Cmd",
       "shortcutSaved": "Voice shortcut updated",
+      "shortcutRecordFailed": "Could not pause the current voice shortcut. Please try again.",
       "triggerButton": "Microphone icon",
       "triggerButtonDesc": "Control whether the microphone icon appears in the lower-right corner.",
       "hideTrigger": "Hide voice input",

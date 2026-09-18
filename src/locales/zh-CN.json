@@ -166,6 +166,7 @@
     "recent": "最近",
     "confirm": "确认",
     "cancel": "取消",
+    "cut": "剪切",
     "copy": "复制",
     "copied": "已复制",
     "expand": "展开",
@@ -230,7 +231,7 @@
     "line": "第 {{line}} 行",
     "open": "打开",
     "openHint": "Enter 打开 · Ctrl+Enter 打开并保留搜索窗口",
-    "summary": "{{matches}} 个结果 · {{files}} 个文件 · 已扫描 {{scanned}} 个文件 · {{seconds}} 秒 · {{backend}}",
+    "summary": "在 {{files}} 个文件中有 {{matches}} 个匹配项",
     "indexBackend": "FTS5 索引",
     "scanBackend": "快速扫描",
     "truncated": "结果过多，仅显示前 5000 项",
@@ -291,6 +292,7 @@
       "modelLabel": "当前模型"
     },
     "antigravityUsage": {
+      "summaryHint": "按模型组分别显示 5 小时和每周的剩余额度，位置固定；各周期独立计算。",
       "title": "Antigravity 用量",
       "loading": "Antigravity 用量…",
       "pending": "等待首次额度快照",
@@ -1981,6 +1983,7 @@
       "shortcutRecordCancelled": "已取消快捷键录制",
       "shortcutModifierRequired": "请至少包含一个修饰键，例如 Ctrl、Alt、Shift 或 Cmd",
       "shortcutSaved": "语音快捷键已更新",
+      "shortcutRecordFailed": "无法暂停当前语音快捷键，请重试",
       "triggerButton": "麦克风图标",
       "triggerButtonDesc": "控制右下角麦克风图标是否显示。",
       "hideTrigger": "隐藏语音输入",
