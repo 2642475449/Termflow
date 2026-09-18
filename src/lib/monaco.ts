@@ -17,15 +17,16 @@ export function getMonacoLanguage(filePath: string): string {
 
   const extensionMap: Record<string, string> = {
     ts: "typescript",
-    tsx: "typescript",
+    tsx: "tsx",
     js: "javascript",
-    jsx: "javascript",
+    jsx: "jsx",
     json: "json",
     md: "markdown",
     rs: "rust",
     py: "python",
     go: "go",
     java: "java",
+    vue: "vue",
     c: "c",
     h: "cpp",
     cpp: "cpp",
@@ -38,7 +39,7 @@ export function getMonacoLanguage(filePath: string): string {
     xml: "xml",
     yml: "yaml",
     yaml: "yaml",
-    toml: "ini",
+    toml: "toml",
     sh: "shell",
     bash: "shell",
     zsh: "shell",
@@ -68,6 +69,8 @@ export function getMonacoThemeName(isDark: boolean): string {
     rules: [
       ...["keyword", "string", "number", "type", "function", "annotation"].map((token) => ({ token, foreground: color(token) })),
       { token: "comment", foreground: color("comment"), fontStyle: "italic" },
+      { token: "constant", foreground: color("number") },
+      { token: "property", foreground: color("annotation") },
       { token: "type.identifier", foreground: color("type") },
       { token: "tag", foreground: color("keyword") },
       { token: "attribute.name", foreground: color("annotation") },
@@ -102,22 +105,9 @@ export function getMonacoTypography(fontSize: number) {
 }
 
 let richTokensRegistered = false;
-/** 保留内置词法状态，补充函数调用名称的颜色区分。 */
 export function registerRichCodeTokens() {
   if (richTokensRegistered) return;
   richTokensRegistered = true;
-  for (const id of ["typescript", "javascript"]) {
-    monaco.languages.onLanguage(id, async () => {
-      const { language } = id === "typescript"
-        ? await import("monaco-editor/esm/vs/basic-languages/typescript/typescript")
-        : await import("monaco-editor/esm/vs/basic-languages/javascript/javascript");
-      monaco.languages.setMonarchTokensProvider(id, {
-        ...language,
-        tokenizer: { ...language.tokenizer, common: [
-          [/[a-zA-Z_$][\w$]*(?=\s*\()/, { cases: { "@keywords": "keyword", "@default": "function" } }],
-          ...language.tokenizer.common,
-        ] },
-      });
-    });
-  }
+  void import("./textmate").then(({ installTextmate }) => installTextmate(monaco))
+    .catch((error: unknown) => { console.error("TextMate initialization failed", error); });
 }

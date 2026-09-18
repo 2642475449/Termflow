@@ -375,11 +375,13 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
 
     if (session || isFile || isDiff) {
       items.push({ type: "divider" });
-      items.push({
-        key: "open-folder",
-        label: t("common.openInFileManager"),
-        icon: <FolderOpenFilled />,
-      });
+      if (session || isFile) {
+        items.push({
+          key: "open-folder",
+          label: t("common.openInFileManager"),
+          icon: <FolderOpenFilled />,
+        });
+      }
       items.push({
         key: "copy-path",
         label: t("common.copyPath"),

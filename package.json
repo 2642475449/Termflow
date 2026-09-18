@@ -20,6 +20,9 @@
                     "docs:check": "pnpm --dir website check"
                 },
     "dependencies":  {
+                         "@shikijs/core":  "^4.4.3",
+                         "@shikijs/engine-oniguruma":  "^4.4.3",
+                         "@shikijs/langs":  "^4.4.3",
                          "@ant-design/icons":  "^5.6.1",
                          "@file-viewer/react":  "3.0.0",
                          "@file-viewer/renderer-presentation":  "3.0.0",

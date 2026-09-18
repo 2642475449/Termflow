@@ -1144,7 +1144,7 @@ function AntigravityUsageStatus({
 
   return (
     <Popover
-      trigger={["hover", "click"]}
+      trigger={["click"]}
       placement="topLeft"
       content={content}
       arrow={false}

@@ -20,7 +20,12 @@ import {
 import { open as openDirectoryDialog } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
+import type {
+  KeyboardEvent as ReactKeyboardEvent,
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+  ReactNode,
+} from "react";
 import {
   copyExternalEntry,
   copyProjectEntries,
@@ -400,6 +405,7 @@ function SidebarProjectPanel({
   const [expandedPaths, setExpandedPaths] = useState<Record<string, boolean>>({});
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
+  const [selectionAnchorPath, setSelectionAnchorPath] = useState<string | null>(null);
   const [loadingRoot, setLoadingRoot] = useState(false);
   const [loadingDirectories, setLoadingDirectories] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
@@ -436,6 +442,7 @@ function SidebarProjectPanel({
   const selectOnlyPath = useCallback((path: string | null) => {
     setSelectedPath(path);
     setSelectedPaths(path ? [path] : []);
+    setSelectionAnchorPath(path);
   }, []);
 
   const loadDirectory = useCallback(
@@ -490,6 +497,7 @@ function SidebarProjectPanel({
     setRootEntries([]);
     setSelectedPaths([currentProject.path]);
     setSelectedPath(currentProject.path);
+    setSelectionAnchorPath(currentProject.path);
     setFilterValue("");
     setSearchResults([]);
     void loadDirectory(null);
@@ -567,9 +575,9 @@ function SidebarProjectPanel({
         }
         return next;
       });
-      setSelectedPath(targetPath);
+      selectOnlyPath(targetPath);
     },
-    [currentProject, loadedDirectories, loadDirectory]
+    [currentProject, loadedDirectories, loadDirectory, selectOnlyPath]
   );
 
   const refreshProjectView = useCallback(
@@ -593,9 +601,9 @@ function SidebarProjectPanel({
           }
           return next;
         });
-        setSelectedPath(targetPath);
+        selectOnlyPath(targetPath);
       } else {
-        setSelectedPath(currentProject.path);
+        selectOnlyPath(currentProject.path);
       }
 
       const query = filterValue.trim();
@@ -617,7 +625,7 @@ function SidebarProjectPanel({
         setSearchLoading(false);
       }
     },
-    [currentProject, filterValue, loadDirectory]
+    [currentProject, filterValue, loadDirectory, selectOnlyPath]
   );
 
   useEffect(() => {
@@ -690,14 +698,14 @@ function SidebarProjectPanel({
   const handleToggleDirectory = useCallback(
     async (entry: FileTreeEntry) => {
       if (!!expandedPaths[entry.path]) {
-        setSelectedPath(entry.path);
+        selectOnlyPath(entry.path);
         setExpandedPaths((prev) => ({ ...prev, [entry.path]: false }));
         return;
       }
 
       await revealPath(entry.path, true);
     },
-    [expandedPaths, revealPath]
+    [expandedPaths, revealPath, selectOnlyPath]
   );
 
   const buildVisibleTree = useCallback(
@@ -814,6 +822,73 @@ function SidebarProjectPanel({
   const canDeleteSelection = actionableSelectedEntries.length > 0 && !deleteSubmitting && !renameSubmitting;
   const canPasteEntries = hasClipboardEntries && !pasteSubmitting && !renameSubmitting;
 
+  const handleSelectEntry = useCallback(
+    (entry: FileTreeEntry, event: ReactMouseEvent<HTMLButtonElement>) => {
+      const hasPrimaryModifier = event.ctrlKey || event.metaKey;
+      const hasRangeModifier = event.shiftKey;
+      const targetPath = entry.path;
+
+      if (!hasPrimaryModifier && !hasRangeModifier) {
+        selectOnlyPath(targetPath);
+        return false;
+      }
+
+      if (hasRangeModifier) {
+        const anchorPath = selectionAnchorPath ?? selectedPath ?? targetPath;
+        const anchorIndex = visibleSelectablePaths.findIndex(
+          (path) => normalizePath(path) === normalizePath(anchorPath)
+        );
+        const targetIndex = visibleSelectablePaths.findIndex(
+          (path) => normalizePath(path) === normalizePath(targetPath)
+        );
+        const rangePaths =
+          anchorIndex >= 0 && targetIndex >= 0
+            ? visibleSelectablePaths.slice(Math.min(anchorIndex, targetIndex), Math.max(anchorIndex, targetIndex) + 1)
+            : [targetPath];
+
+        setSelectedPaths((previousPaths) => {
+          if (!hasPrimaryModifier) {
+            return rangePaths;
+          }
+
+          const nextPaths = [...previousPaths];
+          for (const path of rangePaths) {
+            if (!nextPaths.some((selected) => normalizePath(selected) === normalizePath(path))) {
+              nextPaths.push(path);
+            }
+          }
+          return nextPaths;
+        });
+        setSelectedPath(targetPath);
+        if (!selectionAnchorPath) {
+          setSelectionAnchorPath(anchorPath);
+        }
+        return true;
+      }
+
+      const targetIsSelected = normalizedSelectedPaths.has(normalizePath(targetPath));
+      setSelectedPaths((previousPaths) => {
+        return targetIsSelected
+          ? previousPaths.filter((path) => normalizePath(path) !== normalizePath(targetPath))
+          : [...previousPaths, targetPath];
+      });
+      const remainingPaths = selectedPaths.filter(
+        (path) => normalizePath(path) !== normalizePath(targetPath)
+      );
+      setSelectedPath(targetIsSelected ? remainingPaths[remainingPaths.length - 1] ?? null : targetPath);
+      setSelectionAnchorPath(targetPath);
+      return true;
+    },
+    [
+      normalizedSelectedPaths,
+      selectOnlyPath,
+      selectedPath,
+      selectedPaths,
+      selectionAnchorPath,
+      visibleSelectablePaths,
+    ]
+  );
+
   const handleSelectAllVisible = useCallback(() => {
     const treeContainer = treeContainerRef.current;
     const activeElement = document.activeElement;
@@ -832,6 +907,12 @@ function SidebarProjectPanel({
         return prev;
       }
       return visibleSelectablePaths[0] ?? prev;
+    });
+    setSelectionAnchorPath((previousAnchor) => {
+      if (previousAnchor && visibleSelectablePaths.some((path) => normalizePath(path) === normalizePath(previousAnchor))) {
+        return previousAnchor;
+      }
+      return visibleSelectablePaths[0] ?? null;
     });
   }, [visibleSelectablePaths]);
 
@@ -938,10 +1019,10 @@ function SidebarProjectPanel({
 
   const handleOpenRename = useCallback((entry: FileTreeEntry) => {
     setPendingCreatedResource(null);
-    setSelectedPath(entry.path);
+    selectOnlyPath(entry.path);
     setRenamingEntry(entry);
     setRenameValue(entry.name);
-  }, []);
+  }, [selectOnlyPath]);
 
   const handleCancelRename = useCallback(() => {
     if (renameSubmitting) return;
@@ -1111,6 +1192,7 @@ function SidebarProjectPanel({
         if (pastedPaths.length > 0) {
           setSelectedPaths(pastedPaths);
           setSelectedPath(pastedPaths[0] ?? destinationDirectory);
+          setSelectionAnchorPath(pastedPaths[0] ?? destinationDirectory);
         } else {
           selectOnlyPath(destinationDirectory);
         }
@@ -1655,12 +1737,15 @@ function SidebarProjectPanel({
                     }
                   }}
                   onPointerDown={(event) => handleStartResourceDrag(event, entry)}
-                  onClick={() => {
+                  onClick={(event) => {
                     if (suppressNextClickPathRef.current === entry.path) {
                       suppressNextClickPathRef.current = null;
                       return;
                     }
-                    selectOnlyPath(entry.path);
+                    const isMultiSelectGesture = handleSelectEntry(entry, event);
+                    if (isMultiSelectGesture) {
+                      return;
+                    }
                     if (isDirectory) {
                       if (searchMode) {
                         return;
@@ -1731,6 +1816,7 @@ function SidebarProjectPanel({
       handleRequestDeleteEntries,
       handleCreateResource,
       handleConfirmRename,
+      handleSelectEntry,
       handleStartResourceDrag,
       handleOpenRename,
       handleToggleDirectory,
