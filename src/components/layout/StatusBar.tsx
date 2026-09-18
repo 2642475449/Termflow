@@ -1069,9 +1069,9 @@ function AntigravityUsageStatus({
 }) {
   const { t } = useTranslation();
   const hasData = usage?.status === "ok" && usage.windows.length > 0;
-  const compactGroups = hasData ? ["Gemini", "Claude and GPT"].map((scope) => ({
+  const compactGroups = hasData ? ["Gemini"].map((scope) => ({
     scope,
-    label: t(scope === "Gemini" ? "settings.agents.quota.gemini" : "settings.agents.quota.claudeGpt"),
+    label: t("settings.agents.quota.gemini"),
     periods: ["session", "weekly"].map((period) => {
       const window = usage.windows.find((item) => item.scope === scope && item.window === period);
       return {
@@ -1160,11 +1160,18 @@ function AntigravityUsageStatus({
       >
         <AgentIcon agentId="antigravity" size={15} />
         {hasData ? compactGroups.map((group) => (
-          <span key={group.scope} className="flex shrink-0 items-center gap-2 whitespace-nowrap border-l border-[var(--cs-border-sidebar)] pl-2 first-of-type:border-0 first-of-type:pl-0">
-            <span>{group.label}</span>
+          <span key={group.scope} className="flex shrink-0 items-center gap-2 whitespace-nowrap">
             {group.periods.map((period) => (
               <span key={period.period} className="flex items-center gap-1 text-[12px]">
                 <span className="text-[var(--cs-text-tertiary)]">{period.label}</span>
+                {period.remaining != null && (
+                  <progress
+                    aria-hidden="true"
+                    className={`app-agent-quota-progress h-[6px] w-14 shrink-0 overflow-hidden rounded-full ${period.remaining <= 15 ? "text-[var(--cs-error)]" : period.remaining <= 35 ? "text-[var(--cs-warning)]" : "text-[var(--cs-success)]"}`}
+                    max={100}
+                    value={period.remaining}
+                  />
+                )}
                 <span className="tabular-nums">{period.remaining == null ? "—" : `${period.remaining}%`}</span>
               </span>
             ))}

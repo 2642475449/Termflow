@@ -1,9 +1,10 @@
+import MonacoTextEditor from "@/components/editors/MonacoTextEditor";
 import {
   FileSearchOutlined,
   LoadingOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
-import { Button, Empty, Input, Modal, Select, Spin, Tooltip, type InputRef } from "antd";
+import { Button, Input, Modal, Select, Spin, Tooltip, type InputRef } from "antd";
 import {
   startTransition,
   useCallback,
@@ -15,9 +16,11 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
-import { cancelContentSearch, searchProjectText } from "@/lib/api";
+import { cancelContentSearch, readProjectFile, searchProjectText } from "@/lib/api";
 import { requestFileNavigation } from "@/lib/fileNavigation";
 import {
+  adjustSearchWindow,
+  type SearchWindowBounds,
   DEFAULT_GLOBAL_SEARCH_SPLIT_RATIO,
   MAX_GLOBAL_SEARCH_SPLIT_RATIO,
   MIN_GLOBAL_SEARCH_SPLIT_RATIO,
@@ -112,6 +115,37 @@ function GlobalTextSearchDialog({
   const searchInFlightRef = useRef(false);
   const pendingMatchesRef = useRef<ContentSearchMatch[]>([]);
   const resultFlushTimerRef = useRef<number | null>(null);
+
+  const [windowBounds, setWindowBounds] = useState<SearchWindowBounds | null>(null);
+  const windowGesture = useRef<{ x: number; y: number; direction: string; bounds: SearchWindowBounds } | null>(null);
+  const windowSurface = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const fit = () => setWindowBounds((bounds) => bounds
+      ? adjustSearchWindow(bounds, "move", 0, 0, window.innerWidth, window.innerHeight) : null);
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, []);
+
+  const startWindowGesture = (event: React.PointerEvent<HTMLDivElement>, direction: string) => {
+    if (event.button !== 0 || !windowSurface.current) return;
+    event.preventDefault();
+    const rect = windowSurface.current.getBoundingClientRect();
+    const bounds = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+    setWindowBounds(bounds);
+    windowGesture.current = { x: event.clientX, y: event.clientY, direction, bounds };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const moveWindowGesture = (event: React.PointerEvent<HTMLDivElement>) => {
+    const gesture = windowGesture.current;
+    if (!gesture) return;
+    setWindowBounds(adjustSearchWindow(gesture.bounds, gesture.direction,
+      event.clientX - gesture.x, event.clientY - gesture.y, window.innerWidth, window.innerHeight));
+  };
+  const stopWindowGesture = (event: React.PointerEvent<HTMLDivElement>) => {
+    windowGesture.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
 
   const deferredMatches = useDeferredValue(matches);
 
@@ -295,11 +329,11 @@ function GlobalTextSearchDialog({
     [matches, selectedIndex]
   );
 
-  const updateSplitFromPointer = useCallback((clientY: number) => {
+  const updateSplitFromPointer = useCallback((clientX: number) => {
     const content = searchContentRef.current;
     if (!content) return;
     const bounds = content.getBoundingClientRect();
-    setSplitRatio(globalSearchSplitRatioFromPointer(clientY, bounds.top, bounds.height));
+    setSplitRatio(globalSearchSplitRatioFromPointer(clientX, bounds.left, bounds.width));
   }, []);
 
   const finishSplitDrag = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
@@ -312,7 +346,12 @@ function GlobalTextSearchDialog({
 
   const handleSearchKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLInputElement>) => {
-      if (event.key === "ArrowDown") {
+      if (event.altKey && ["c", "w", "r"].includes(event.key.toLowerCase())) {
+        event.preventDefault();
+        if (event.key.toLowerCase() === "c") setCaseSensitive((value) => !value);
+        if (event.key.toLowerCase() === "w") setWholeWord((value) => !value);
+        if (event.key.toLowerCase() === "r") setUseRegex((value) => !value);
+      } else if (event.key === "ArrowDown") {
         event.preventDefault();
         moveSelection(1);
       } else if (event.key === "ArrowUp") {
@@ -326,27 +365,31 @@ function GlobalTextSearchDialog({
     [handleOpenMatch, moveSelection, selectedMatch]
   );
 
-  const previewLines = useMemo(() => {
-    if (!selectedMatch) return [];
-    const firstLine = selectedMatch.lineNumber - selectedMatch.contextBefore.length;
-    return [
-      ...selectedMatch.contextBefore.map((text, index) => ({
-        lineNumber: firstLine + index,
-        text,
-        matched: false,
-      })),
-      {
-        lineNumber: selectedMatch.lineNumber,
-        text: selectedMatch.lineText,
-        matched: true,
-      },
-      ...selectedMatch.contextAfter.map((text, index) => ({
-        lineNumber: selectedMatch.lineNumber + index + 1,
-        text,
-        matched: false,
-      })),
-    ];
-  }, [selectedMatch]);
+  const previewPath = selectedMatch?.path;
+  const [preview, setPreview] = useState<{ path: string; content: string; error: string | null } | null>(null);
+  useEffect(() => {
+    if (!open || !previewPath || !currentProject) {
+      setPreview(null);
+      return;
+    }
+    let disposed = false;
+    setPreview(null);
+    void readProjectFile(currentProject.path, previewPath).then((file) => {
+      if (disposed) return;
+      setPreview({ path: previewPath, content: file.content,
+        error: file.kind === "text" ? null : t("globalSearch.previewUnavailable") });
+    }).catch((reason: unknown) => {
+      if (disposed) return;
+      setPreview({ path: previewPath, content: "", error: String(reason) });
+    });
+    return () => { disposed = true; };
+  }, [open, previewPath, currentProject?.path, t]);
+  const previewTarget = useMemo(() => selectedMatch ? {
+    lineNumber: selectedMatch.lineNumber,
+    startColumn: selectedMatch.startColumn,
+    endColumn: selectedMatch.endColumn,
+    requestId: matchKey(selectedMatch),
+  } : null, [selectedMatch]);
 
   const statusText = searching
     ? t("globalSearch.searching")
@@ -363,31 +406,31 @@ function GlobalTextSearchDialog({
     <Modal
       className="app-global-search-modal"
       open={open}
-      width="min(1100px, 82vw)"
+      width={windowBounds?.width ?? "min(1280px, 92vw)"}
+      style={windowBounds ? { position: "fixed", left: windowBounds.left, top: windowBounds.top, margin: 0, paddingBottom: 0 } : undefined}
+      styles={{ body: windowBounds ? { height: windowBounds.height, minHeight: 0 } : undefined }}
       footer={null}
       onCancel={onClose}
       keyboard
-      centered
-      title={
-        <div className="app-global-search-header">
-          <FileSearchOutlined />
-          <span className="shrink-0">{t("globalSearch.title")}</span>
-          <div
-            className="app-global-search-status"
-            data-error={error ? "true" : "false"}
-            role="status"
-            title={summary?.truncated ? `${statusText} · ${t("globalSearch.truncated")}` : statusText}
-          >
-            <span className="min-w-0 truncate">{statusText}</span>
-          </div>
-          <span className="app-global-search-shortcut">Ctrl+Shift+F</span>
-        </div>
-      }
+      centered={!windowBounds}
       closable={false}
     >
-      <div className="app-global-search-shell">
+      <div ref={windowSurface} className="app-global-search-shell" aria-label={t("globalSearch.title")}>
+        <div className="app-global-search-drag" title={t("globalSearch.moveWindow")}
+          onPointerDown={(event) => startWindowGesture(event, "move")}
+          onPointerMove={moveWindowGesture} onPointerUp={stopWindowGesture}
+          onPointerCancel={stopWindowGesture} onLostPointerCapture={() => { windowGesture.current = null; }} />
+        {["n", "s", "e", "w", "ne", "nw", "se", "sw"].map((direction) => (
+          <div key={direction} className={`app-global-search-resize app-global-search-resize-${direction}`}
+            title={t("globalSearch.resizeWindow")}
+            onPointerDown={(event) => startWindowGesture(event, direction)}
+            onPointerMove={moveWindowGesture} onPointerUp={stopWindowGesture}
+            onPointerCancel={stopWindowGesture} onLostPointerCapture={() => { windowGesture.current = null; }} />
+        ))}
         <div className="app-global-search-controls">
           <Input
+            className="app-global-search-query"
+            aria-label={t("globalSearch.title")}
             ref={inputRef}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -397,7 +440,7 @@ function GlobalTextSearchDialog({
               <>
                 {searching ? <Spin indicator={<LoadingOutlined spin />} size="small" /> : null}
                 <div className="app-global-search-toggles">
-                  <Tooltip title={t("globalSearch.caseSensitive")}>
+                  <Tooltip title={<>{t("globalSearch.caseSensitive")} <kbd>Alt+C</kbd></>}>
                     <button
                       type="button"
                       aria-label={t("globalSearch.caseSensitive")}
@@ -407,7 +450,7 @@ function GlobalTextSearchDialog({
                       Aa
                     </button>
                   </Tooltip>
-                  <Tooltip title={t("globalSearch.wholeWord")}>
+                  <Tooltip title={<>{t("globalSearch.wholeWord")} <kbd>Alt+W</kbd></>}>
                     <button
                       type="button"
                       aria-label={t("globalSearch.wholeWord")}
@@ -417,7 +460,7 @@ function GlobalTextSearchDialog({
                       W
                     </button>
                   </Tooltip>
-                  <Tooltip title={t("globalSearch.regex")}>
+                  <Tooltip title={<>{t("globalSearch.regex")} <kbd>Alt+R</kbd></>}>
                     <button
                       type="button"
                       aria-label={t("globalSearch.regex")}
@@ -453,28 +496,37 @@ function GlobalTextSearchDialog({
               ]}
             />
             <Input
+              className="app-global-search-filter"
               value={includePatterns}
+              allowClear
+              aria-label={t("globalSearch.fileFilter")}
               onChange={(event) => setIncludePatterns(event.target.value)}
               placeholder={t("globalSearch.includePlaceholder")}
             />
-
           </div>
         </div>
 
+        {matches.length === 0 ? (
+          <div className="app-global-search-empty">
+            {error ? <p role="alert">{error}</p> : searching ? <Spin /> : query.trim() && summary ? (
+              <><SearchOutlined /><strong>{t("globalSearch.noResults")}</strong><p>{t("globalSearch.noResultsHint")}</p></>
+            ) : <div className="app-global-search-guide">
+              <span><kbd>*.ts</kbd> {t("globalSearch.fileFilter")}</span>
+              <span><kbd>Alt+C</kbd> {t("globalSearch.caseSensitive")}</span>
+              <span><kbd>Alt+R</kbd> {t("globalSearch.regex")}</span>
+            </div>}
+          </div>
+        ) : (
         <div
           ref={searchContentRef}
           className="app-global-search-content"
           data-resizing={splitDragging ? "true" : "false"}
           style={{
-            gridTemplateRows: `minmax(0, ${splitRatio}fr) 8px minmax(0, ${100 - splitRatio}fr)`,
+            gridTemplateColumns: `minmax(0, ${splitRatio}fr) 8px minmax(0, ${100 - splitRatio}fr)`,
           }}
         >
           <div className="app-global-search-results">
-            {!query.trim() ? (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("globalSearch.enterQuery")} />
-            ) : !searching && !error && matches.length === 0 ? (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("globalSearch.noResults")} />
-            ) : (
+            {
               groups.map((group) => (
                 <section key={group.path} className="app-global-search-group">
                   <div className="app-global-search-group-title" title={group.relativePath}>
@@ -501,14 +553,20 @@ function GlobalTextSearchDialog({
                   })}
                 </section>
               ))
-            )}
+            }
           </div>
 
           <div
             className="app-global-search-splitter"
             data-dragging={splitDragging ? "true" : "false"}
             role="separator"
-            aria-orientation="horizontal"
+            aria-orientation="vertical"
+            tabIndex={0}
+            onKeyDown={(event) => {
+              if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+              event.preventDefault();
+              setSplitRatio((value) => Math.max(MIN_GLOBAL_SEARCH_SPLIT_RATIO, Math.min(MAX_GLOBAL_SEARCH_SPLIT_RATIO, value + (event.key === "ArrowRight" ? 2 : -2))));
+            }}
             aria-label={t("globalSearch.splitterLabel")}
             aria-valuemin={MIN_GLOBAL_SEARCH_SPLIT_RATIO}
             aria-valuemax={MAX_GLOBAL_SEARCH_SPLIT_RATIO}
@@ -520,12 +578,12 @@ function GlobalTextSearchDialog({
               splitDraggingRef.current = true;
               setSplitDragging(true);
               event.currentTarget.setPointerCapture(event.pointerId);
-              updateSplitFromPointer(event.clientY);
+              updateSplitFromPointer(event.clientX);
             }}
             onPointerMove={(event) => {
               if (!splitDraggingRef.current) return;
               event.preventDefault();
-              updateSplitFromPointer(event.clientY);
+              updateSplitFromPointer(event.clientX);
             }}
             onPointerUp={finishSplitDrag}
             onPointerCancel={finishSplitDrag}
@@ -540,9 +598,9 @@ function GlobalTextSearchDialog({
             {selectedMatch ? (
               <>
                 <div className="app-global-search-preview-title">
-                  <span title={selectedMatch.relativePath}>{selectedMatch.relativePath}</span>
+                  <span title={selectedMatch.relativePath}><FileSearchOutlined /> {selectedMatch.relativePath}</span>
                   <div className="app-global-search-preview-actions">
-                    <span>{t("globalSearch.line", { line: selectedMatch.lineNumber })}</span>
+                    <span>{t("globalSearch.position", { line: selectedMatch.lineNumber, column: selectedMatch.startColumn })}</span>
                     <Button
                       type="primary"
                       size="small"
@@ -552,29 +610,36 @@ function GlobalTextSearchDialog({
                     </Button>
                   </div>
                 </div>
-                <div className="app-global-search-preview-code">
-                  {previewLines.map((line) => (
-                    <div
-                      key={line.lineNumber}
-                      className="app-global-search-preview-line"
-                      data-matched={line.matched ? "true" : "false"}
-                    >
-                      <span>{line.lineNumber}</span>
-                      <code>
-                        {line.matched && selectedMatch
-                          ? <HighlightedLine match={selectedMatch} />
-                          : line.text || " "}
-                      </code>
-                    </div>
-                  ))}
+                <div className="flex min-h-0 flex-1 flex-col">
+                  {!preview || preview.path !== selectedMatch.path ? (
+                    <div className="app-global-search-empty"><Spin /></div>
+                  ) : preview.error ? (
+                    <div className="app-global-search-empty" role="alert">{preview.error}</div>
+                  ) : (
+                    <MonacoTextEditor
+                      key={selectedMatch.path}
+                      filePath={`search-preview:///${selectedMatch.path.replace(/\\/g, "/")}`}
+                      value={preview.content}
+                      readOnly
+                      onChange={() => {}}
+                      revealTarget={previewTarget}
+                      focusOnReveal={false}
+                    />
+                  )}
                 </div>
-                <div className="app-global-search-preview-hint">
-                  {t("globalSearch.openHint")}
-                </div>
+
               </>
-            ) : (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("globalSearch.selectResult")} />
-            )}
+            ) : null}
+          </div>
+        </div>
+        )}
+        <div className="app-global-search-footer">
+          <span className="app-global-search-status" data-error={error ? "true" : "false"} role="status" title={summary?.truncated ? t("globalSearch.truncated") : statusText}>{statusText}</span>
+          <div className="app-global-search-keys">
+            <span><kbd>↑</kbd><kbd>↓</kbd> {t("globalSearch.navigate")}</span>
+            <span><kbd>↵</kbd> {t("globalSearch.open")}</span>
+            <span><kbd>Ctrl+↵</kbd> {t("globalSearch.keepOpen")}</span>
+            <span><kbd>Esc</kbd> {t("globalSearch.close")}</span>
           </div>
         </div>
       </div>

@@ -1,3 +1,4 @@
+import { registerRichCodeTokens } from "@/lib/monaco";
 import Editor, { loader, type OnMount } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
 import { useEffect, useMemo, useRef } from "react";
@@ -12,6 +13,7 @@ import { useAppStore } from "@/store";
 import type { FileRevealTarget } from "@/lib/fileNavigation";
 
 loader.config({ monaco });
+registerRichCodeTokens();
 
 interface MonacoTextEditorProps {
   filePath: string;
@@ -23,6 +25,7 @@ interface MonacoTextEditorProps {
   /** Receives a 0-1 scroll ratio whenever the editor scrolls. */
   onScroll?: (ratio: number) => void;
   revealTarget?: FileRevealTarget | null;
+  focusOnReveal?: boolean;
 }
 
 function MonacoTextEditor({
@@ -34,6 +37,7 @@ function MonacoTextEditor({
   saveEnabled = false,
   onScroll,
   revealTarget,
+  focusOnReveal = true,
 }: MonacoTextEditorProps) {
   const lightTheme = useAppStore((s) => s.lightTheme);
   const darkTheme = useAppStore((s) => s.darkTheme);
@@ -58,14 +62,14 @@ function MonacoTextEditor({
     );
     editorInstance.setSelection(range);
     editorInstance.revealRangeInCenter(range, monaco.editor.ScrollType.Smooth);
-    editorInstance.focus();
+    if (focusOnReveal) editorInstance.focus();
   };
 
   useEffect(() => {
     if (editorRef.current && revealTarget) {
       revealLocation(editorRef.current, revealTarget);
     }
-  }, [revealTarget]);
+  }, [revealTarget, focusOnReveal]);
 
   const isDark = useMemo(() => {
     if (themeCategory === "system") return systemPrefersDark;

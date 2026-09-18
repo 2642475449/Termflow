@@ -1,3 +1,4 @@
+import { registerRichCodeTokens } from "@/lib/monaco";
 import { DiffEditor, loader } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
 import { Alert, Button, Empty } from "antd";
@@ -28,6 +29,7 @@ import MonacoContextMenu from "@/components/editors/MonacoContextMenu";
 import { GitConflictTabView } from "@/components/GitConflictTabView";
 
 loader.config({ monaco });
+registerRichCodeTokens();
 
 interface GitDiffTabViewProps {
   tabId: string;

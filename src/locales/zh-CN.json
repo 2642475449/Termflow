@@ -214,6 +214,16 @@
     "quickSearchKeyboardHint": "↑↓ 选择  Enter 打开/定位"
   },
   "globalSearch": {
+    "previewUnavailable": "该文件无法作为文本预览",
+    "moveWindow": "拖动以移动窗口",
+    "resizeWindow": "拖动以调整窗口大小",
+    "fileFilter": "文件过滤",
+    "noResultsHint": "未找到匹配项，请尝试关闭全词匹配或检查文件过滤规则。",
+    "position": "行 {{line}}，列 {{column}}",
+    "navigate": "切换",
+    "keepOpen": "保持窗口",
+    "close": "关闭",
+
     "title": "在文件中查找",
     "placeholder": "输入要在项目中查找的文字",
     "entireProject": "整个项目 · {{name}}",
@@ -236,7 +246,7 @@
     "scanBackend": "快速扫描",
     "truncated": "结果过多，仅显示前 5000 项",
     "splitterLabel": "调整搜索结果与代码预览的高度",
-    "splitterHint": "上下拖动调整比例；双击恢复默认布局"
+    "splitterHint": "左右拖动调整宽度；双击重置"
   },
   "statusBar": {
     "noDefaultAgent": "未设置默认智能体",

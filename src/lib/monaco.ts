@@ -59,7 +59,21 @@ export function getMonacoLanguage(filePath: string): string {
 }
 
 export function getMonacoThemeName(isDark: boolean): string {
-  return isDark ? "vs-dark" : "vs";
+  if (typeof document === "undefined") return isDark ? "vs-dark" : "vs";
+  const styles = getComputedStyle(document.documentElement);
+  const color = (key: string) => styles.getPropertyValue(`--cs-code-${key}`).trim().replace(/^#/, "");
+  const name = isDark ? "termflow-dark" : "termflow-light";
+  monaco.editor.defineTheme(name, {
+    base: isDark ? "vs-dark" : "vs", inherit: true,
+    rules: [
+      ...["keyword", "string", "number", "type", "function", "annotation"].map((token) => ({ token, foreground: color(token) })),
+      { token: "comment", foreground: color("comment"), fontStyle: "italic" },
+      { token: "type.identifier", foreground: color("type") },
+      { token: "tag", foreground: color("keyword") },
+      { token: "attribute.name", foreground: color("annotation") },
+    ], colors: {},
+  });
+  return name;
 }
 
 /**
@@ -85,4 +99,25 @@ export function getMonacoTypography(fontSize: number) {
     // Keep the source operators as individual glyphs for stable rendering.
     fontLigatures: false,
   };
+}
+
+let richTokensRegistered = false;
+/** 保留内置词法状态，补充函数调用名称的颜色区分。 */
+export function registerRichCodeTokens() {
+  if (richTokensRegistered) return;
+  richTokensRegistered = true;
+  for (const id of ["typescript", "javascript"]) {
+    monaco.languages.onLanguage(id, async () => {
+      const { language } = id === "typescript"
+        ? await import("monaco-editor/esm/vs/basic-languages/typescript/typescript")
+        : await import("monaco-editor/esm/vs/basic-languages/javascript/javascript");
+      monaco.languages.setMonarchTokensProvider(id, {
+        ...language,
+        tokenizer: { ...language.tokenizer, common: [
+          [/[a-zA-Z_$][\w$]*(?=\s*\()/, { cases: { "@keywords": "keyword", "@default": "function" } }],
+          ...language.tokenizer.common,
+        ] },
+      });
+    });
+  }
 }

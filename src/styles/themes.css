@@ -4,6 +4,13 @@
 
 /* ─── 亮色 A：清朗蓝白 ──────────────────────────────────── */
 [data-theme="light-glass"] {
+  --cs-code-keyword: #3156B8;
+  --cs-code-string: #287D3C;
+  --cs-code-number: #9650A0;
+  --cs-code-comment: #77818C;
+  --cs-code-type: #167C80;
+  --cs-code-function: #986322;
+  --cs-code-annotation: #987512;
   --cs-bg-app: #f4f6fa;
   --cs-bg-card: #ffffff;
   --cs-bg-card-solid: #ffffff;
@@ -63,6 +70,13 @@
 
 /* ─── 亮色 B：暖木书房 ──────────────────────────────────── */
 [data-theme="light-warm"] {
+  --cs-code-keyword: #3156B8;
+  --cs-code-string: #287D3C;
+  --cs-code-number: #9650A0;
+  --cs-code-comment: #77818C;
+  --cs-code-type: #167C80;
+  --cs-code-function: #986322;
+  --cs-code-annotation: #987512;
   --cs-bg-app: #faf8f5;
   --cs-bg-card: #ffffff;
   --cs-bg-card-solid: #ffffff;
@@ -118,6 +132,13 @@
 
 /* ─── 暗色 A：星空沉浸 ──────────────────────────────────── */
 [data-theme="dark-starry"] {
+  --cs-code-keyword: #A5B4FC;
+  --cs-code-string: #A6D189;
+  --cs-code-number: #D5A4E6;
+  --cs-code-comment: #929AA8;
+  --cs-code-type: #81C8BE;
+  --cs-code-function: #E5C890;
+  --cs-code-annotation: #E8B783;
   --cs-bg-app: #0b1016;
   --cs-bg-card: #131a23;
   --cs-bg-card-solid: #131a23;
@@ -173,6 +194,13 @@
 
 /* ─── 暗色 B：摩卡棕夜 ──────────────────────────────────── */
 [data-theme="dark-mocha"] {
+  --cs-code-keyword: #A5B4FC;
+  --cs-code-string: #A6D189;
+  --cs-code-number: #D5A4E6;
+  --cs-code-comment: #929AA8;
+  --cs-code-type: #81C8BE;
+  --cs-code-function: #E5C890;
+  --cs-code-annotation: #E8B783;
   --cs-bg-app: #1e1e2e;
   --cs-bg-card: #24243a;
   --cs-bg-card-solid: #24243a;

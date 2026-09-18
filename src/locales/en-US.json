@@ -214,6 +214,16 @@
     "quickSearchKeyboardHint": "↑↓ Select  Enter Open/Reveal"
   },
   "globalSearch": {
+    "previewUnavailable": "This file cannot be previewed as text",
+    "moveWindow": "Drag to move window",
+    "resizeWindow": "Drag to resize window",
+    "fileFilter": "File filter",
+    "noResultsHint": "No matches. Try disabling whole-word matching or checking the file filters.",
+    "position": "Ln {{line}}, Col {{column}}",
+    "navigate": "Navigate",
+    "keepOpen": "Keep open",
+    "close": "Close",
+
     "title": "Find in Files",
     "placeholder": "Search text across the project",
     "entireProject": "Entire project · {{name}}",
@@ -236,7 +246,7 @@
     "scanBackend": "Fast scan",
     "truncated": "Too many matches; showing the first 5,000",
     "splitterLabel": "Resize search results and code preview",
-    "splitterHint": "Drag vertically to resize; double-click to reset"
+    "splitterHint": "Drag horizontally to resize; double-click to reset"
   },
   "statusBar": {
     "noDefaultAgent": "No default agent",

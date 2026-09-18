@@ -214,6 +214,16 @@
     "quickSearchKeyboardHint": "↑↓ 選択  Enter 開く/表示"
   },
   "globalSearch": {
+    "previewUnavailable": "このファイルはテキストとしてプレビューできません",
+    "moveWindow": "ドラッグしてウィンドウを移動",
+    "resizeWindow": "ドラッグしてウィンドウのサイズを変更",
+    "fileFilter": "ファイルフィルター",
+    "noResultsHint": "一致がありません。単語単位の検索をオフにするか、ファイルフィルターを確認してください。",
+    "position": "{{line}} 行、{{column}} 列",
+    "navigate": "移動",
+    "keepOpen": "ウィンドウを保持",
+    "close": "閉じる",
+
     "title": "ファイル内検索",
     "placeholder": "プロジェクト内で検索するテキストを入力",
     "entireProject": "プロジェクト全体 · {{name}}",
@@ -236,7 +246,7 @@
     "scanBackend": "高速スキャン",
     "truncated": "結果が多すぎるため、先頭 5000 件を表示しています",
     "splitterLabel": "検索結果とコードプレビューの高さを調整",
-    "splitterHint": "上下にドラッグして調整、ダブルクリックで初期状態に戻す"
+    "splitterHint": "左右にドラッグして幅を変更、ダブルクリックでリセット"
   },
   "statusBar": {
     "noDefaultAgent": "デフォルトエージェント未設定",

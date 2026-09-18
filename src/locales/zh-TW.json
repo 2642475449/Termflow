@@ -214,6 +214,16 @@
     "quickSearchKeyboardHint": "↑↓ 選擇  Enter 開啟/定位"
   },
   "globalSearch": {
+    "previewUnavailable": "此檔案無法以文字預覽",
+    "moveWindow": "拖曳以移動視窗",
+    "resizeWindow": "拖曳以調整視窗大小",
+    "fileFilter": "檔案篩選",
+    "noResultsHint": "找不到符合項目，請嘗試關閉全字匹配或檢查檔案篩選規則。",
+    "position": "行 {{line}}，欄 {{column}}",
+    "navigate": "切換",
+    "keepOpen": "保留視窗",
+    "close": "關閉",
+
     "title": "在檔案中尋找",
     "placeholder": "輸入要在專案中尋找的文字",
     "entireProject": "整個專案 · {{name}}",
@@ -236,7 +246,7 @@
     "scanBackend": "快速掃描",
     "truncated": "結果過多，僅顯示前 5000 項",
     "splitterLabel": "調整搜尋結果與程式碼預覽的高度",
-    "splitterHint": "上下拖曳調整比例；按兩下恢復預設配置"
+    "splitterHint": "左右拖曳調整寬度；按兩下重設"
   },
   "statusBar": {
     "noDefaultAgent": "未設定預設智慧體",

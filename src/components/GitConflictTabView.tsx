@@ -1,3 +1,4 @@
+import { registerRichCodeTokens } from "@/lib/monaco";
 import { CheckOutlined, CopyOutlined, ReloadOutlined, WarningOutlined } from "@ant-design/icons";
 import { Editor, loader } from "@monaco-editor/react";
 import { Alert, Button, Empty, Spin, Tag, message } from "antd";
@@ -13,6 +14,7 @@ import { useGitStatusStore } from "@/store/slices/gitStatus";
 import type { GitConflictDetail } from "@/types";
 
 loader.config({ monaco });
+registerRichCodeTokens();
 
 type ConflictSource = "base" | "ours" | "theirs";
 

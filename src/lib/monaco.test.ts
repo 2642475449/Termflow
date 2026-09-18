@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { getMonacoTypography } from "./monaco";
+import { describe, expect, it, vi } from "vitest";
+vi.mock("monaco-editor", () => ({
+  editor: { defineTheme: vi.fn() },
+  languages: { onLanguage: vi.fn(), setMonarchTokensProvider: vi.fn() },
+}));
+
+import { getMonacoThemeName, getMonacoTypography, registerRichCodeTokens } from "./monaco";
 
 describe("getMonacoTypography", () => {
   it("disables programming ligatures to avoid WebView2 operator rendering artifacts", () => {
@@ -8,4 +13,16 @@ describe("getMonacoTypography", () => {
       fontLigatures: false,
     });
   });
+});
+
+it("keeps theme lookup safe without a browser", () => {
+  expect(getMonacoThemeName(false)).toBe("vs");
+  expect(getMonacoThemeName(true)).toBe("vs-dark");
+});
+
+it("registers rich language hooks only once across editor instances", async () => {
+  const monaco = await import("monaco-editor");
+  registerRichCodeTokens();
+  registerRichCodeTokens();
+  expect(monaco.languages.onLanguage).toHaveBeenCalledTimes(2);
 });
