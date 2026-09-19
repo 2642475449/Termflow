@@ -34,6 +34,7 @@ import {
   deleteProjectEntry,
   listProjectDirectory,
   moveProjectEntries,
+  readClipboardFilePaths,
   renameProjectEntry,
   searchProjectEntries,
 } from "@/lib/api";
@@ -420,6 +421,7 @@ function SidebarProjectPanel({
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [pasteSubmitting, setPasteSubmitting] = useState(false);
+  const [clipboardReadSubmitting, setClipboardReadSubmitting] = useState(false);
   const [clipboardPaths, setClipboardPaths] = useState<string[]>([]);
   const [clipboardOperation, setClipboardOperation] = useState<ResourceClipboardOperation>("copy");
   const [pendingCreatedResource, setPendingCreatedResource] = useState<PendingCreatedResource | null>(null);
@@ -820,7 +822,12 @@ function SidebarProjectPanel({
   const canCopySelection = actionableSelectedEntries.length > 0 && !renameSubmitting;
   const canCutSelection = canCopySelection;
   const canDeleteSelection = actionableSelectedEntries.length > 0 && !deleteSubmitting && !renameSubmitting;
-  const canPasteEntries = hasClipboardEntries && !pasteSubmitting && !renameSubmitting;
+  const canPaste =
+    !pasteSubmitting
+    && !clipboardReadSubmitting
+    && !externalCopySubmitting
+    && !pendingExternalCopy
+    && !renameSubmitting;
 
   const handleSelectEntry = useCallback(
     (entry: FileTreeEntry, event: ReactMouseEvent<HTMLButtonElement>) => {
@@ -1218,6 +1225,41 @@ function SidebarProjectPanel({
     [clipboardOperation, clipboardPaths, currentProject, pasteSubmitting, refreshProjectView, selectOnlyPath, t]
   );
 
+  const handlePasteFromClipboard = useCallback(
+    async (destinationDirectory: string) => {
+      if (!currentProject || !canPaste) return;
+
+      if (hasClipboardEntries) {
+        await handlePasteEntries(destinationDirectory);
+        return;
+      }
+
+      setClipboardReadSubmitting(true);
+      try {
+        const sourcePaths = await readClipboardFilePaths();
+        if (sourcePaths.length === 0) {
+          message.warning(t("sidebar.clipboardFilesEmpty"));
+          return;
+        }
+
+        const firstName = getBaseName(sourcePaths[0] ?? "");
+        setPendingExternalCopy({
+          sourcePaths,
+          destinationDirectory,
+          newName: firstName,
+          openAfterCopy: sourcePaths.length === 1 && isProbablyFilePath(firstName),
+        });
+      } catch (nextError) {
+        message.error(
+          nextError instanceof Error ? nextError.message : t("sidebar.clipboardFilesReadFailed")
+        );
+      } finally {
+        setClipboardReadSubmitting(false);
+      }
+    },
+    [canPaste, currentProject, handlePasteEntries, hasClipboardEntries, t]
+  );
+
   const handleChooseExternalCopyDirectory = useCallback(async () => {
     if (!pendingExternalCopy) return;
 
@@ -1428,7 +1470,7 @@ function SidebarProjectPanel({
       }
 
       if (key === "paste") {
-        void handlePasteEntries(backgroundCreateTargetPath);
+        void handlePasteFromClipboard(backgroundCreateTargetPath);
         return;
       }
 
@@ -1446,7 +1488,7 @@ function SidebarProjectPanel({
         openGlobalTextSearch(backgroundCreateTargetPath);
       }
     },
-    [backgroundCreateTargetPath, handleCreateResource, handlePasteEntries, handleRefresh, onOpenInFileManager, selectOnlyPath]
+    [backgroundCreateTargetPath, handleCreateResource, handlePasteFromClipboard, handleRefresh, onOpenInFileManager, selectOnlyPath]
   );
 
   const backgroundMenuItems = useMemo<MenuProps["items"]>(
@@ -1465,7 +1507,7 @@ function SidebarProjectPanel({
         key: "paste",
         icon: <SnippetsOutlined />,
         label: t("common.paste"),
-        disabled: !hasClipboardEntries || pasteSubmitting,
+        disabled: !canPaste,
       },
       { type: "divider" },
       {
@@ -1484,7 +1526,7 @@ function SidebarProjectPanel({
         label: t("sidebar.openCurrentDirectoryInManager"),
       },
     ],
-    [hasClipboardEntries, pasteSubmitting, refreshText, t]
+    [canPaste, refreshText, t]
   );
 
   const renderNodes = useCallback(
@@ -1529,7 +1571,7 @@ function SidebarProjectPanel({
           }
 
           if (key === "paste") {
-            void handlePasteEntries(getCreateTargetDirectory(projectRootPath, entry));
+            void handlePasteFromClipboard(getCreateTargetDirectory(projectRootPath, entry));
             return;
           }
 
@@ -1641,7 +1683,7 @@ function SidebarProjectPanel({
                 key: "paste",
                 icon: <SnippetsOutlined />,
                 label: t("common.paste"),
-                disabled: !hasClipboardEntries || pasteSubmitting,
+                disabled: !canPaste,
               },
             ]
             : []),
@@ -1812,7 +1854,7 @@ function SidebarProjectPanel({
       actionableSelectedEntries,
       handleCopyEntries,
       handleCutEntries,
-      handlePasteEntries,
+      handlePasteFromClipboard,
       handleRequestDeleteEntries,
       handleCreateResource,
       handleConfirmRename,
@@ -1820,14 +1862,13 @@ function SidebarProjectPanel({
       handleStartResourceDrag,
       handleOpenRename,
       handleToggleDirectory,
-      hasClipboardEntries,
+      canPaste,
       loadingText,
       normalizedSelectedPaths,
       onOpenInAssociatedApp,
       onOpenInFileManager,
       openInManagerText,
       onOpenFile,
-      pasteSubmitting,
       clipboardOperation,
       clipboardPaths,
       projectRootPath,
@@ -1860,10 +1901,10 @@ function SidebarProjectPanel({
       }
 
       if (hasPrimaryModifier && !event.shiftKey && !event.altKey && lowerKey === "v") {
-        if (!canPasteEntries) return;
+        if (!canPaste) return;
         event.preventDefault();
         event.stopPropagation();
-        void handlePasteEntries(backgroundCreateTargetPath);
+        void handlePasteFromClipboard(backgroundCreateTargetPath);
         return;
       }
 
@@ -1887,10 +1928,10 @@ function SidebarProjectPanel({
       canCopySelection,
       canCutSelection,
       canDeleteSelection,
-      canPasteEntries,
+      canPaste,
       handleCopyEntries,
       handleCutEntries,
-      handlePasteEntries,
+      handlePasteFromClipboard,
       handleRequestDeleteEntries,
       selectOnlyPath,
       selectedPath,

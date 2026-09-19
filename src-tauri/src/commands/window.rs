@@ -450,7 +450,7 @@ pub async fn open_project_window(
         if let Some(existing_window) = app.get_webview_window(&existing_label) {
             focus_window(&existing_window);
             if launched_from_launcher && existing_label != window.label() {
-                let _ = window.close();
+                let _ = window.destroy();
             }
             return Ok(registry.get_context(&existing_label));
         }
@@ -475,7 +475,7 @@ pub async fn open_project_window(
     if let Some(existing_window) = app.get_webview_window(&label) {
         focus_window(&existing_window);
         if close_secondary_launcher {
-            let _ = window.close();
+            let _ = window.destroy();
         }
         return Ok(registry.get_context(&label));
     }
@@ -493,7 +493,7 @@ pub async fn open_project_window(
             .map_err(|e| format!("创建项目窗口失败: {}", e))?;
     let _ = app.emit_to(project_window.label(), "window-context-updated", &context);
     if close_secondary_launcher {
-        let _ = window.close();
+        let _ = window.destroy();
     }
     focus_window(&project_window);
     Ok(context)

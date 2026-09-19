@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow, type CloseRequestedEvent } from "@tauri-apps/api/window";
 import type { UnlistenFn } from "@tauri-apps/api/event";
+import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   check as checkForUpdate,
@@ -832,6 +833,10 @@ export async function copyExternalEntry(
   });
 }
 
+export async function readClipboardFilePaths(): Promise<string[]> {
+  return await invoke("read_clipboard_file_paths");
+}
+
 export async function searchProjectText(
   request: ContentSearchRequest
 ): Promise<ContentSearchSummary> {
@@ -1339,6 +1344,35 @@ export async function gitGenerateCommitMessage(
 
 export async function readImagePreview(path: string): Promise<ImagePreviewPayload> {
   return await invoke("read_image_preview", { path });
+}
+
+export interface BackgroundSettings {
+  runInBackground: boolean;
+  askBeforeClose: boolean;
+}
+
+export async function getBackgroundSettings(): Promise<BackgroundSettings> {
+  return invoke("get_background_settings");
+}
+
+export async function setBackgroundSettings(settings: BackgroundSettings): Promise<void> {
+  await invoke("set_background_settings", { settings });
+}
+
+export async function completeWorkspaceClose(background: boolean): Promise<void> {
+  await invoke("complete_workspace_close", { background });
+}
+
+export async function exitBackgroundApplication(): Promise<void> {
+  await invoke("exit_background_application");
+}
+
+export async function onWorkspaceCloseRequested(handler: (exit: boolean) => void): Promise<UnlistenFn> {
+  return getCurrentWindow().listen<boolean>("termflow:workspace-close-requested", (event) => handler(event.payload));
+}
+
+export async function onBackgroundSettingsChanged(handler: (settings: BackgroundSettings) => void): Promise<UnlistenFn> {
+  return listen<BackgroundSettings>("termflow:background-settings-changed", (event) => handler(event.payload));
 }
 
 export interface ClipboardCacheStatus {

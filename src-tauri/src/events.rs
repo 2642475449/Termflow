@@ -3,6 +3,8 @@ use serde_json::Value;
 use tauri::{AppHandle, Emitter};
 
 pub const SCHEDULED_TASKS_CHANGED_EVENT: &str = "termflow:scheduled-tasks-changed";
+pub const WORKSPACE_CLOSE_REQUESTED_EVENT: &str = "termflow:workspace-close-requested";
+pub const BACKGROUND_SETTINGS_CHANGED_EVENT: &str = "termflow:background-settings-changed";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

@@ -14,6 +14,24 @@ const PREVIEWABLE_OFFICE_EXTENSIONS: [&str; 16] = [
     "pptx", "ppsx", "odp",
 ];
 
+#[cfg(target_os = "windows")]
+const CF_HDROP: u32 = 15;
+
+#[cfg(target_os = "windows")]
+#[link(name = "user32")]
+unsafe extern "system" {
+    fn OpenClipboard(new_owner: isize) -> i32;
+    fn CloseClipboard() -> i32;
+    fn GetClipboardData(format: u32) -> isize;
+}
+
+#[cfg(target_os = "windows")]
+#[link(name = "shell32")]
+unsafe extern "system" {
+    fn DragQueryFileW(drop_handle: isize, file_index: u32, file_name: *mut u16, length: u32)
+        -> u32;
+}
+
 #[derive(Serialize, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct FileTreeEntry {
@@ -505,6 +523,62 @@ pub fn copy_external_entry(
         .map(|path| normalize_input_path(path))
         .collect::<Vec<_>>();
     copy_entries_into_directory(&normalized_sources, &dest_dir, new_name.as_deref())
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub fn read_clipboard_file_paths() -> Result<Vec<String>, String> {
+    unsafe {
+        if OpenClipboard(0) == 0 {
+            return Err(format!(
+                "无法读取系统剪贴板: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+
+        struct ClipboardGuard;
+
+        impl Drop for ClipboardGuard {
+            fn drop(&mut self) {
+                unsafe {
+                    CloseClipboard();
+                }
+            }
+        }
+
+        let _clipboard_guard = ClipboardGuard;
+        let drop_handle = GetClipboardData(CF_HDROP);
+        if drop_handle == 0 {
+            return Ok(Vec::new());
+        }
+
+        let count = DragQueryFileW(drop_handle, u32::MAX, std::ptr::null_mut(), 0);
+        let mut paths = Vec::with_capacity(count as usize);
+
+        for index in 0..count {
+            let length = DragQueryFileW(drop_handle, index, std::ptr::null_mut(), 0);
+            if length == 0 {
+                continue;
+            }
+
+            let mut buffer = vec![0_u16; length as usize + 1];
+            let written =
+                DragQueryFileW(drop_handle, index, buffer.as_mut_ptr(), buffer.len() as u32);
+            if written != length {
+                return Err("读取系统剪贴板中的文件路径失败".to_string());
+            }
+
+            paths.push(String::from_utf16_lossy(&buffer[..written as usize]));
+        }
+
+        Ok(paths)
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+pub fn read_clipboard_file_paths() -> Result<Vec<String>, String> {
+    Ok(Vec::new())
 }
 
 #[tauri::command]

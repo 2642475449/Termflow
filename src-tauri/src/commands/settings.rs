@@ -58,6 +58,9 @@ pub fn save_persistent_settings(
     app: AppHandle,
 ) -> Result<(), String> {
     database.save_general_persistent_settings(&settings)?;
+    if let Err(error) = crate::commands::background::update_tray_language(&app, &settings.language) {
+        log::warn!("Failed to update tray language: {error}");
+    }
     let _ = app.emit(
         PERSISTENT_THEME_UPDATED_EVENT,
         PersistentThemeUpdate {

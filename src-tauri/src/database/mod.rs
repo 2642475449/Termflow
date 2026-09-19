@@ -1,6 +1,7 @@
 pub(crate) mod antigravity;
 pub mod schema;
 pub mod clipboard;
+pub mod background;
 
 use parking_lot::Mutex;
 use rusqlite::{params, Connection, OptionalExtension};

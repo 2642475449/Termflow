@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { BackgroundSettings } from "./settings/BackgroundSettings";
 import {
   SettingOutlined,
   CodeOutlined,
@@ -569,6 +570,7 @@ function GeneralPage() {
       </SettingSection>
 
       <SettingSection title={t("settings.general.startupSection")}>
+        <BackgroundSettings />
         <SettingRow
           label={t("settings.general.restoreLastProject")}
           desc={t("settings.general.restoreLastProjectDesc")}

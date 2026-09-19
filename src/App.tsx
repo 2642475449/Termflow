@@ -7,6 +7,7 @@ import enUS from "antd/locale/en_US";
 import jaJP from "antd/locale/ja_JP";
 import AppLayout from "./components/layout/AppLayout";
 import VoiceOverlayWindow from "./components/VoiceOverlayWindow";
+import { BackgroundCloseController } from "./components/BackgroundCloseController";
 import VoiceWorkerWindow from "./components/VoiceWorkerWindow";
 import {
   applyPersistentSettingsToStore,
@@ -505,7 +506,7 @@ function App() {
         ) : isVoiceWorkerWindow ? (
           <VoiceWorkerWindow />
         ) : (
-          <AppLayout />
+          <><BackgroundCloseController /><AppLayout /></>
         )}
       </AntdApp>
     </ConfigProvider>

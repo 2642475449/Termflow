@@ -1,4 +1,19 @@
 {
+  "background": {
+    "runInBackground": "ウィンドウを閉じても実行を続ける",
+    "runInBackgroundDescription": "システムトレイに格納し、セッションと定期タスクを継続します。この設定を変更すると終了時の確認は無効になります。",
+    "askBeforeClose": "ウィンドウを閉じるときに確認する",
+    "askBeforeCloseDescription": "閉じるボタンで、終了するかバックグラウンド実行を続けるか選択します。",
+    "closeTitle": "閉じますか？バックグラウンドで実行しますか？",
+    "closeNow": "ウィンドウを閉じる",
+    "keepRunning": "実行を続ける",
+    "closeDescription": "バックグラウンド実行ではウィンドウを隠し、ターミナル、エージェントのセッション、定期タスクを継続します。トレイアイコンからウィンドウを再表示したり、メニューから Termflow を終了できます。閉じると現在のウィンドウのセッションが終了し、最後のワークスペースを閉じるとアプリが終了します。",
+    "sleepHint": "バックグラウンド実行には、コンピューターの電源が入り、スリープしていない必要があります。",
+    "remember": "選択を記憶する（設定 → 一般で変更できます）",
+    "actionFailed": "操作を完了できません：{{error}}",
+    "trayShow": "ウィンドウを表示",
+    "trayQuit": "Termflow を終了"
+  },
   "taskMonitor": {
     "title": "タスク監視",
     "overview": "{{count}} プロジェクト · ウィンドウ全体",
@@ -670,6 +685,8 @@
     "resourcePasteFailed": "貼り付けに失敗しました",
     "copyExternalSuccess": "{{count}} 件をコピーしました",
     "copyExternalFailed": "ファイルのコピーに失敗しました",
+    "clipboardFilesEmpty": "クリップボードに貼り付け可能なファイルまたはフォルダーがありません",
+    "clipboardFilesReadFailed": "クリップボードのファイルを読み取れませんでした",
     "gitPanelTitle": "ソース管理",
     "gitNoRepo": "このプロジェクトは Git リポジトリではありません",
     "gitInitTitle": "ソース管理を開始",

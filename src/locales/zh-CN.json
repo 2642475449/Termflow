@@ -1,4 +1,19 @@
 {
+  "background": {
+    "runInBackground": "关闭窗口后在后台运行",
+    "runInBackgroundDescription": "关闭窗口时隐藏到系统托盘，保留会话并继续执行定时任务。更改此开关后不再询问。",
+    "askBeforeClose": "关闭窗口时询问",
+    "askBeforeCloseDescription": "点击关闭按钮时，选择直接关闭或在后台运行。",
+    "closeTitle": "关闭窗口还是在后台运行？",
+    "closeNow": "直接关闭",
+    "keepRunning": "后台运行",
+    "closeDescription": "后台运行会隐藏当前窗口，并保留终端、智能体会话和定时任务。点击系统托盘图标可以重新打开窗口，也可以从托盘菜单退出 Termflow。直接关闭会结束当前窗口的会话；关闭最后一个工作区窗口时退出应用。",
+    "sleepHint": "后台运行期间仍需保持电脑开机且未休眠。",
+    "remember": "记住我的选择（可在设置 → 通用中修改）",
+    "actionFailed": "无法完成操作：{{error}}",
+    "trayShow": "显示窗口",
+    "trayQuit": "退出 Termflow"
+  },
   "taskMonitor": {
     "title": "任务监控",
     "overview": "{{count}} 个项目 · 跨窗口概览",
@@ -598,6 +613,8 @@
     "resourceMoveFailed": "移动失败",
     "copyExternalSuccess": "已复制 {{count}} 个项目",
     "copyExternalFailed": "复制文件失败",
+    "clipboardFilesEmpty": "剪贴板中没有可粘贴的文件或文件夹",
+    "clipboardFilesReadFailed": "读取剪贴板中的文件失败",
     "pinSession": "置顶会话",
     "unpinSession": "取消置顶",
     "pinnedSection": "置顶",

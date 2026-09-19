@@ -2,7 +2,6 @@ import { message } from "antd";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import packageJson from "../../package.json";
-import { onCurrentWindowCloseRequested } from "@/lib/api";
 import {
   checkForApplicationUpdate,
   consumeInstalledUpdateVersion,
@@ -36,24 +35,4 @@ export function useApplicationUpdater(automaticEnabled: boolean): void {
       window.clearInterval(interval);
     };
   }, [automaticEnabled, t]);
-
-  useEffect(() => {
-    let disposed = false;
-    let unlisten: (() => void) | undefined;
-    void onCurrentWindowCloseRequested((event) => {
-      if (useApplicationUpdateStore.getState().phase !== "downloading") return;
-      event.preventDefault();
-      message.warning(t("updater.keepOpenDuringDownload"));
-    }).then((cleanup) => {
-      if (disposed) cleanup();
-      else unlisten = cleanup;
-    }).catch((error) => {
-      console.error("Failed to register application update close guard:", error);
-    });
-
-    return () => {
-      disposed = true;
-      unlisten?.();
-    };
-  }, [t]);
 }

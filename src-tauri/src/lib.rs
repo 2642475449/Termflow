@@ -27,7 +27,7 @@ use hook_ingest::{create_ingest_config, start_ingest_server, HookStatusRuntime};
 use pty::PtyManager;
 use scheduled_tasks::ScheduledTaskScheduler;
 use std::sync::Arc;
-use tauri::{Manager, WindowEvent};
+use tauri::{Emitter, Manager, WindowEvent};
 
 fn clear_inherited_proxy_environment() {
     // Termflow、更新器与其启动的 CLI 都不应继承启动器临时注入的本地代理。
@@ -117,6 +117,14 @@ pub fn run() {
         .manage(ContentSearchState::default())
         .manage(SearchIndexState::default())
         .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                if commands::background::is_workspace(window.label()) {
+                    api.prevent_close();
+                    if let Err(error) = window.emit_to(window.label(), events::WORKSPACE_CLOSE_REQUESTED_EVENT, false) {
+                        log::error!("Failed to request workspace close: {error}");
+                    }
+                }
+            }
             if matches!(event, WindowEvent::Destroyed) {
                 let registry = window.state::<Arc<WindowRegistry>>();
                 let manager = window.state::<Arc<PtyManager>>();
@@ -168,6 +176,7 @@ pub fn run() {
                 ScheduledTaskScheduler::start(app.handle().clone(), database.clone())?;
             app.manage(database);
             app.manage(scheduled_task_scheduler);
+            commands::background::setup_tray(app.handle())?;
             let registry = app.state::<Arc<WindowRegistry>>();
             let database = app.state::<Arc<Database>>();
             if let Err(error) = commands::image::cleanup_retired_clipboard_image_cache(&app.handle()) {
@@ -205,6 +214,10 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::background::get_background_settings,
+            commands::background::set_background_settings,
+            commands::background::complete_workspace_close,
+            commands::background::exit_background_application,
             commands::agents::inspect_agent_clis,
             commands::agent_versions::check_agent_latest_version,
             commands::session::check_claude_ready,
@@ -248,6 +261,7 @@ pub fn run() {
             commands::search_index::set_search_index_storage,
             commands::search_index::clear_search_index_cache,
             commands::file_tree::copy_external_entry,
+            commands::file_tree::read_clipboard_file_paths,
             commands::file_tree::copy_project_entries,
             commands::file_tree::move_project_entries,
             commands::skills::list_skills,
