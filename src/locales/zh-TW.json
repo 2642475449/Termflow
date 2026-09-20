@@ -7,9 +7,9 @@
     "closeTitle": "關閉視窗還是在背景執行？",
     "closeNow": "直接關閉",
     "keepRunning": "背景執行",
-    "closeDescription": "背景執行會隱藏目前視窗，並保留終端機、智慧體工作階段與排程工作。按一下系統匣圖示可重新開啟視窗，也可從系統匣選單退出 Termflow。直接關閉會結束目前視窗的工作階段；關閉最後一個工作區視窗時退出應用程式。",
+    "closeDescription": "背景執行可保留工作階段與排程工作，按一下系統匣圖示即可恢復視窗。",
     "sleepHint": "背景執行期間電腦仍須保持開機且未休眠。",
-    "remember": "記住我的選擇（可在設定 → 一般中修改）",
+    "remember": "記住我的選擇",
     "actionFailed": "無法完成操作：{{error}}",
     "trayShow": "顯示視窗",
     "trayQuit": "退出 Termflow"

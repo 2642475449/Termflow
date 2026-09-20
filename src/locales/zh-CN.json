@@ -7,9 +7,9 @@
     "closeTitle": "关闭窗口还是在后台运行？",
     "closeNow": "直接关闭",
     "keepRunning": "后台运行",
-    "closeDescription": "后台运行会隐藏当前窗口，并保留终端、智能体会话和定时任务。点击系统托盘图标可以重新打开窗口，也可以从托盘菜单退出 Termflow。直接关闭会结束当前窗口的会话；关闭最后一个工作区窗口时退出应用。",
+    "closeDescription": "后台运行可保留会话和定时任务，点击托盘图标即可恢复窗口。",
     "sleepHint": "后台运行期间仍需保持电脑开机且未休眠。",
-    "remember": "记住我的选择（可在设置 → 通用中修改）",
+    "remember": "记住我的选择",
     "actionFailed": "无法完成操作：{{error}}",
     "trayShow": "显示窗口",
     "trayQuit": "退出 Termflow"

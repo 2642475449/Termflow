@@ -7,9 +7,9 @@
     "closeTitle": "Close the window or keep running?",
     "closeNow": "Close window",
     "keepRunning": "Keep running",
-    "closeDescription": "Background mode hides this window while keeping terminals, agent sessions and scheduled tasks running. Click the system tray icon to restore windows, or quit Termflow from its menu. Closing ends this window’s sessions; closing the last workspace window quits the app.",
+    "closeDescription": "Keep sessions and scheduled tasks running. Restore the window from the system tray.",
     "sleepHint": "Your computer must remain powered on and awake for background tasks to run.",
-    "remember": "Remember my choice (change it in Settings → General)",
+    "remember": "Remember my choice",
     "actionFailed": "Unable to complete the action: {{error}}",
     "trayShow": "Show windows",
     "trayQuit": "Quit Termflow"

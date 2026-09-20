@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { BackgroundSettings } from "./settings/BackgroundSettings";
+import { SettingRow } from "./settings/SettingRow";
 import {
   SettingOutlined,
   CodeOutlined,
@@ -351,30 +352,6 @@ function ThemeCard({ opt, isActive, onClick, tabIndex, onKeyDown }: {
     </button>
   );
 }
-function SettingRow({ label, desc, children }: {
-  label: string;
-  desc?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col items-stretch gap-3 px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
-      <div className="min-w-0 flex-1 xl:mr-4">
-        <div className="text-sm" style={{ color: "var(--cs-text-primary)" }}>
-          {label}
-        </div>
-        {desc && (
-          <div className="text-[11px] mt-0.5" style={{ color: "var(--cs-text-tertiary)" }}>
-            {desc}
-          </div>
-        )}
-      </div>
-      <div className="min-w-0 xl:w-auto xl:max-w-[70%] xl:flex-shrink-0">
-        {children}
-      </div>
-    </div>
-  );
-}
-
 /* ────────────── Setting Section ────────────── */
 function SettingSection({ title, children }: {
   title: string;

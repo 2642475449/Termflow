@@ -40,8 +40,7 @@ export function BackgroundCloseController() {
         <Button key="close" disabled={busy} onClick={() => void chooseWorkspaceClose(false).catch(reportError)}>{t("background.closeNow")}</Button>,
         <Button key="background" type="primary" loading={busy} onClick={() => void chooseWorkspaceClose(true).catch(reportError)}>{t("background.keepRunning")}</Button>,
       ]}>
-      <p className="mb-3">{t("background.closeDescription")}</p>
-      <p className="mb-4 text-xs text-[var(--cs-text-secondary)]">{t("background.sleepHint")}</p>
+      <p className="mb-4">{t("background.closeDescription")}</p>
       <Checkbox checked={remember} disabled={busy} onChange={(event) => setRemember(event.target.checked)}>{t("background.remember")}</Checkbox>
     </Modal>
   );
