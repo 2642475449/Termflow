@@ -598,17 +598,7 @@ fn system_time_to_ms(value: Option<SystemTime>) -> i64 {
 
 fn run_ai_title_generation(prompt: &str, path: &str) -> Result<String, String> {
     let claude_path = find_claude_exe()?;
-    let title_prompt = format!(
-        "请根据下面这段用户首条输入，提炼一个简短自然的中文会话标题。\n\
-要求：\n\
-1. 输出 8-16 个字，最多不超过 24 个字符\n\
-2. 不要使用书名号、方括号、引号、emoji 或特殊符号\n\
-3. 不要出现“请帮我”“我想”“怎么”“为什么”等口语前缀\n\
-4. 尽量保留任务主题和核心对象\n\
-5. 只输出标题本身，不要解释，不要换行前后附加内容\n\n\
-用户输入：\n{}",
-        prompt.trim()
-    );
+    let title_prompt = build_session_title_prompt(prompt);
 
     let mut command = build_claude_print_command(&claude_path, &title_prompt);
     if !path.trim().is_empty() {
@@ -631,6 +621,23 @@ fn run_ai_title_generation(prompt: &str, path: &str) -> Result<String, String> {
     }
 
     Ok(stdout)
+}
+
+/// 构造会话标题提示词。标题应概括任务，而非直接截取或重排用户原话。
+fn build_session_title_prompt(prompt: &str) -> String {
+    format!(
+        "请根据下面这段用户首条输入，生成一个简短自然的中文会话标题。\n\
+标题必须是对任务意图的语义概括，不是用户原话的节选、复制或简单调换词序。\n\
+要求：\n\
+1. 输出 8-16 个字，最多不超过 24 个字符\n\
+2. 用一个清晰的任务短语概括用户要做什么；保留任务主题和核心对象\n\
+3. 不要直接截取、拼接或重排原句；例如“帮我看看开发、调试、代码修改”应概括为“开发调试与代码修改”\n\
+4. 不要使用书名号、方括号、引号、emoji 或特殊符号\n\
+5. 不要出现“请帮我”“我想”“怎么”“为什么”等口语前缀\n\
+6. 只输出标题本身，不要解释，不要换行前后附加内容\n\n\
+用户输入：\n{}",
+        prompt.trim()
+    )
 }
 
 fn run_claude_version_command() -> Result<String, String> {
@@ -1459,6 +1466,15 @@ mod tests {
             super::resolve_generated_session_title(Ok("标题：登录流程修复".into())),
             Ok("登录流程修复".into())
         );
+    }
+
+    #[test]
+    fn title_generation_prompt_requires_a_semantic_summary() {
+        let prompt = super::build_session_title_prompt("帮我看看开发、调试、代码修改");
+
+        assert!(prompt.contains("语义概括"));
+        assert!(prompt.contains("不是用户原话的节选、复制或简单调换词序"));
+        assert!(prompt.contains("开发调试与代码修改"));
     }
     use super::*;
 
