@@ -1,4 +1,5 @@
 use crate::path_utils::normalize_input_path;
+use base64::{engine::general_purpose::STANDARD, Engine};
 use git2::{Repository, RepositoryState};
 use parking_lot::{Mutex, RwLock};
 use std::collections::HashMap;
@@ -455,6 +456,40 @@ fn is_symbolic_remote_head(shorthand: Option<&str>) -> bool {
 /// Decode bytes to UTF-8 text.
 pub fn decode_text_content(bytes: Vec<u8>) -> Result<String, ()> {
     String::from_utf8(bytes).map_err(|_| ())
+}
+
+const MAX_GIT_IMAGE_PREVIEW_BYTES: usize = 10 * 1024 * 1024;
+
+/// 将 Git Blob 中受支持的小图片转换为供 WebView 显示的 data URL。
+///
+/// Git 历史中的文件不一定存在于当前工作树，因此不能复用文件树的读取命令。
+pub fn git_image_data_url(file_path: &str, bytes: &[u8]) -> Option<String> {
+    let mime_type = git_image_mime_type(file_path)?;
+    if bytes.is_empty() || bytes.len() > MAX_GIT_IMAGE_PREVIEW_BYTES {
+        return None;
+    }
+    Some(format!(
+        "data:{mime_type};base64,{}",
+        STANDARD.encode(bytes)
+    ))
+}
+
+fn git_image_mime_type(file_path: &str) -> Option<&'static str> {
+    let extension = Path::new(file_path)
+        .extension()?
+        .to_str()?
+        .to_ascii_lowercase();
+    match extension.as_str() {
+        "png" => Some("image/png"),
+        "jpg" | "jpeg" => Some("image/jpeg"),
+        "gif" => Some("image/gif"),
+        "webp" => Some("image/webp"),
+        "svg" => Some("image/svg+xml"),
+        "bmp" => Some("image/bmp"),
+        "ico" => Some("image/x-icon"),
+        "avif" => Some("image/avif"),
+        _ => None,
+    }
 }
 
 #[cfg(test)]

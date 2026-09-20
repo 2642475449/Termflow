@@ -63,6 +63,7 @@ pub struct ContentSearchMatch {
     pub relative_path: String,
     pub line_number: usize,
     pub start_column: usize,
+    pub end_line_number: usize,
     pub end_column: usize,
     pub line_text: String,
     pub context_before: Vec<String>,
@@ -546,7 +547,13 @@ fn build_pattern(request: &ContentSearchRequest) -> Result<String, String> {
     let base_pattern = if request.use_regex {
         query.to_string()
     } else {
-        regex::escape(query)
+        // 文本框中的换行会标准化为 LF，而 Windows 文件通常使用 CRLF。
+        // 将字面量换行编译为兼容两种格式的模式，避免复制多行代码时漏匹配。
+        query
+            .split('\n')
+            .map(|line| regex::escape(line.trim_end_matches('\r')))
+            .collect::<Vec<_>>()
+            .join(r"\r?\n")
     };
     Ok(if request.whole_word {
         format!(r"\b(?:{base_pattern})\b")
@@ -564,6 +571,7 @@ fn build_matcher(request: &ContentSearchRequest) -> Result<Regex, String> {
 fn build_exact_matcher(request: &ContentSearchRequest, pattern: &str) -> Result<Regex, String> {
     RegexBuilder::new(&pattern)
         .case_insensitive(!request.case_sensitive)
+        .crlf(true)
         .unicode(true)
         .build()
         .map_err(|error| format!("Invalid regular expression: {error}"))
@@ -603,6 +611,7 @@ fn build_file_searcher() -> Searcher {
     let mut builder = SearcherBuilder::new();
     builder
         .line_number(true)
+        .multi_line(true)
         .before_context(CONTEXT_LINE_COUNT)
         .after_context(CONTEXT_LINE_COUNT)
         .binary_detection(BinaryDetection::quit(0));
@@ -723,25 +732,44 @@ where
         let Some(context_before) = self.prepare_line(line_number, &line) else {
             return true;
         };
+        let line_text = line
+            .split('\n')
+            .next()
+            .unwrap_or_default()
+            .trim_end_matches('\r');
         for found in self.matcher.find_iter(&line) {
             if self.outcome.matches.len() >= self.match_limit {
                 self.outcome.truncated = true;
                 return false;
             }
+            let end_offset = usize::min(found.end(), line_text.len());
+            let matched_text = &line[..found.end()];
+            let end_line_number =
+                line_number + matched_text.bytes().filter(|byte| *byte == b'\n').count();
+            let end_line_text = matched_text
+                .rsplit('\n')
+                .next()
+                .unwrap_or_default()
+                .trim_end_matches('\r');
             let match_index = self.outcome.matches.len();
             self.outcome.matches.push(ContentSearchMatch {
                 path: display_path(self.path),
                 relative_path: self.relative_path.to_string(),
                 line_number,
-                start_column: utf16_column(&line, found.start()),
-                end_column: utf16_column(&line, found.end()),
-                line_text: line.clone(),
+                start_column: utf16_column(line_text, found.start()),
+                end_line_number,
+                end_column: if end_line_number == line_number {
+                    utf16_column(line_text, end_offset)
+                } else {
+                    utf16_column(end_line_text, end_line_text.len())
+                },
+                line_text: line_text.to_string(),
                 context_before: context_before.clone(),
                 context_after: Vec::with_capacity(CONTEXT_LINE_COUNT),
             });
             self.pending_after.push_back(match_index);
         }
-        self.finish_line(line_number, line);
+        self.finish_line(line_number, line_text.to_string());
         true
     }
 }
@@ -1204,6 +1232,56 @@ mod tests {
         assert_eq!(outcome.matches[0].line_text, "needle");
         assert_eq!(outcome.matches[0].context_before, ["before"]);
         assert_eq!(outcome.matches[0].context_after, ["after"]);
+    }
+
+    #[test]
+    fn file_search_matches_literal_text_across_lines() {
+        let fixture = tempdir().unwrap();
+        let file = fixture.path().join("multiline.json");
+        fs::write(
+            &file,
+            "before\n\"scripts\": {\n  \"test\": \"node test.js\"\n}\nafter\n",
+        )
+        .unwrap();
+
+        let outcome = search_test_file(
+            &file,
+            "multiline.json",
+            &request("\"scripts\": {\n  \"test\": \"node test.js\"\n}"),
+            MAX_MATCHES,
+            || false,
+        );
+
+        assert_eq!(outcome.matches.len(), 1);
+        let found = &outcome.matches[0];
+        assert_eq!(found.line_number, 2);
+        assert_eq!(found.start_column, 1);
+        assert_eq!(found.end_line_number, 4);
+        assert_eq!(found.end_column, 2);
+        assert_eq!(found.line_text, "\"scripts\": {");
+    }
+
+    #[test]
+    fn file_search_matches_lf_query_against_crlf_content() {
+        let fixture = tempdir().unwrap();
+        let file = fixture.path().join("windows-multiline.json");
+        fs::write(
+            &file,
+            b"before\r\n\"loading\": \"syncing\",\r\n\"navigateFailed\": \"failed\"\r\nafter\r\n",
+        )
+        .unwrap();
+
+        let outcome = search_test_file(
+            &file,
+            "windows-multiline.json",
+            &request("\"loading\": \"syncing\",\n\"navigateFailed\": \"failed\""),
+            MAX_MATCHES,
+            || false,
+        );
+
+        assert_eq!(outcome.matches.len(), 1);
+        assert_eq!(outcome.matches[0].line_number, 2);
+        assert_eq!(outcome.matches[0].end_line_number, 3);
     }
 
     #[test]

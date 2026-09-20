@@ -1,4 +1,4 @@
-import { AppstoreOutlined, ClockCircleOutlined, FolderOutlined } from "@ant-design/icons";
+import { AppstoreOutlined, ClockCircleOutlined, FolderOutlined, RightOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { useScheduledTaskStore } from "@/store/slices/scheduledTasks";
 
@@ -13,6 +13,9 @@ export default function SidebarScheduledTasksPanel({
   const tasks = useScheduledTaskStore((state) => state.tasks);
   const scope = useScheduledTaskStore((state) => state.scope);
   const setScope = useScheduledTaskStore((state) => state.setScope);
+  const setEditor = useScheduledTaskStore((state) => state.setEditor);
+  const expandedProjectPaths = useScheduledTaskStore((state) => state.expandedProjectPaths);
+  const toggleProjectExpanded = useScheduledTaskStore((state) => state.toggleProjectExpanded);
   const currentProjectCount = currentProject
     ? tasks.filter((task) => task.projectPath === currentProject.path).length
     : 0;
@@ -64,20 +67,57 @@ export default function SidebarScheduledTasksPanel({
         {t("scheduledTasks.projects")}
       </div>
       <div className="mt-1 flex min-h-0 flex-col gap-1 overflow-y-auto">
-        {projectEntries.map((project) => (
-          <button
-            key={project.path}
-            type="button"
-            data-active={scope === project.path}
-            className="app-scheduled-sidebar-item"
-            title={project.path}
-            onClick={() => setScope(project.path)}
-          >
-            <FolderOutlined />
-            <span className="min-w-0 flex-1 truncate text-left">{project.name}</span>
-            <span className="app-scheduled-sidebar-count">{project.count}</span>
-          </button>
-        ))}
+        {projectEntries.map((project) => {
+          const projectTasks = tasks.filter((task) => task.projectPath === project.path);
+          const expanded = expandedProjectPaths.includes(project.path);
+          return (
+            <div key={project.path} className="app-scheduled-sidebar-project">
+              <button
+                type="button"
+                data-active={scope === project.path}
+                data-expanded={expanded}
+                className="app-scheduled-sidebar-item"
+                title={project.path}
+                aria-expanded={projectTasks.length > 0 ? expanded : undefined}
+                onClick={() => {
+                  setScope(project.path);
+                  if (projectTasks.length > 0) toggleProjectExpanded(project.path);
+                }}
+              >
+                <span
+                  className="app-scheduled-sidebar-disclosure"
+                  data-expanded={expanded}
+                  data-visible={projectTasks.length > 0}
+                  aria-hidden="true"
+                >
+                  <RightOutlined />
+                </span>
+                <FolderOutlined />
+                <span className="min-w-0 flex-1 truncate text-left">{project.name}</span>
+                <span className="app-scheduled-sidebar-count">{project.count}</span>
+              </button>
+              {expanded && projectTasks.map((task) => (
+                <button
+                  key={task.id}
+                  type="button"
+                  className="app-scheduled-sidebar-task"
+                  title={task.name}
+                  onClick={() => {
+                    setScope(project.path);
+                    setEditor(task.id);
+                  }}
+                >
+                  <span
+                    className="app-scheduled-sidebar-task-status"
+                    data-enabled={task.enabled}
+                    aria-label={t(task.enabled ? "scheduledTasks.enabled" : "scheduledTasks.paused")}
+                  />
+                  <span className="min-w-0 flex-1 truncate text-left">{task.name}</span>
+                </button>
+              ))}
+            </div>
+          );
+        })}
       </div>
       <div className="app-scheduled-sidebar-status mt-4 px-2.5 pt-3 text-xs">
         <span aria-hidden="true">●</span>

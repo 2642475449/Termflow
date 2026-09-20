@@ -19,8 +19,8 @@ use claude_rate_limits::ClaudeRateLimitStore;
 use commands::content_search::ContentSearchState;
 use commands::git::GitWatcher;
 use commands::search_index::SearchIndexState;
-use commands::voice_shortcut::VoiceShortcutState;
 use commands::voice::LiveAsrSessions;
+use commands::voice_shortcut::VoiceShortcutState;
 use commands::window::{VoiceOverlayState, WindowMode, WindowRegistry};
 use database::Database;
 use hook_ingest::{create_ingest_config, start_ingest_server, HookStatusRuntime};
@@ -120,7 +120,11 @@ pub fn run() {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 if commands::background::is_workspace(window.label()) {
                     api.prevent_close();
-                    if let Err(error) = window.emit_to(window.label(), events::WORKSPACE_CLOSE_REQUESTED_EVENT, false) {
+                    if let Err(error) = window.emit_to(
+                        window.label(),
+                        events::WORKSPACE_CLOSE_REQUESTED_EVENT,
+                        false,
+                    ) {
                         log::error!("Failed to request workspace close: {error}");
                     }
                 }
@@ -179,10 +183,15 @@ pub fn run() {
             commands::background::setup_tray(app.handle())?;
             let registry = app.state::<Arc<WindowRegistry>>();
             let database = app.state::<Arc<Database>>();
-            if let Err(error) = commands::image::cleanup_retired_clipboard_image_cache(&app.handle()) {
+            if let Err(error) =
+                commands::image::cleanup_retired_clipboard_image_cache(&app.handle())
+            {
                 eprintln!("Failed to clean retired clipboard image cache: {error}");
             }
-            if let Err(error) = commands::image::initialize_terminal_image_cache(app.handle(), database.inner().clone()) {
+            if let Err(error) = commands::image::initialize_terminal_image_cache(
+                app.handle(),
+                database.inner().clone(),
+            ) {
                 log::warn!("Failed to initialize screenshot cache: {error}");
             }
             // The installer enables the menu by default. Only apply an

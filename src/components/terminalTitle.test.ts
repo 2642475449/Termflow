@@ -84,4 +84,74 @@ describe("terminalTitle", () => {
       shouldCommit: true,
     });
   });
+
+  it("rejects pure resource addresses as agent session titles", () => {
+    expect(sanitizeSessionTitle("C:\\Users\\26424\\AppData\\Local\\Temp\\screenshot.png")).toBeNull();
+    expect(sanitizeSessionTitle('"C:\\Users\\Some User\\My Project\\src\\App.tsx"')).toBeNull();
+    expect(sanitizeSessionTitle("https://github.com/example/Termflow")).toBeNull();
+    expect(sanitizeSessionTitle("/var/log/syslog")).toBeNull();
+    expect(sanitizeSessionTitle("\\\\server\\share\\report.pdf")).toBeNull();
+    expect(sanitizeSessionTitle("./scripts/build.sh")).toBeNull();
+  });
+
+  it("keeps task semantics around paths and urls", () => {
+    expect(sanitizeSessionTitle("修复 src/components/Terminal.tsx 的粘贴问题")).toBe(
+      "修复 Terminal.tsx 的粘贴问题"
+    );
+    expect(sanitizeSessionTitle("检查 https://github.com/example/Termflow 的构建配置")).toBe(
+      "检查 Termflow 的构建配置"
+    );
+    expect(sanitizeSessionTitle('看看 "C:\\Users\\Some User\\proj\\App.tsx" 的问题')).toBe(
+      "看看 App.tsx 的问题"
+    );
+  });
+
+  it("keeps command tasks and drops standalone flags", () => {
+    expect(sanitizeSessionTitle("git rebase 冲突怎么解决")).toBe("git rebase 冲突怎么解决");
+    expect(sanitizeSessionTitle("npm install --legacy-peer-deps 为什么失败")).toBe(
+      "npm install 为什么失败"
+    );
+  });
+
+  it("rejects pure code blocks but keeps surrounding description", () => {
+    expect(sanitizeSessionTitle("```ts")).toBeNull();
+    expect(sanitizeSessionTitle("修复这个 ```x=1``` 的问题")).toBe("修复这个 的问题");
+  });
+
+  it("truncates at natural boundaries without splitting unicode", () => {
+    expect(sanitizeSessionTitle("repair terminal paste issue for windows session")).toBe(
+      "repair terminal paste"
+    );
+    const long = "这是一段非常长的中文标题没有任何标点符号需要被截断处理";
+    expect(sanitizeSessionTitle(long)).toBe(long.slice(0, 24));
+  });
+
+  it("keeps terminal session naming behavior for resource-only input", () => {
+    const title = sanitizeSessionTitle("C:\\Users\\26424\\x.log", false, "terminal");
+    expect(title).not.toBeNull();
+    expect(title?.startsWith("C:")).toBe(true);
+  });
+
+  it("clears buffered title input on line-discard keys", () => {
+    expect(consumeTerminalTitleInput("draft", "\x15\r")).toEqual({
+      nextValue: "",
+      pendingSequence: "",
+      shouldCommit: true,
+    });
+    expect(consumeTerminalTitleInput("draft", "\x03\r")).toEqual({
+      nextValue: "",
+      pendingSequence: "",
+      shouldCommit: true,
+    });
+  });
+
+  it("still names session from later input after invalid first input", () => {
+    const first = consumeTerminalTitleInput("", "C:\\tmp\\screenshot.png\r");
+    expect(first.shouldCommit).toBe(true);
+    expect(sanitizeSessionTitle(first.nextValue)).toBeNull();
+
+    const second = consumeTerminalTitleInput("", "修复登录流程\r");
+    expect(second.shouldCommit).toBe(true);
+    expect(sanitizeSessionTitle(second.nextValue)).toBe("修复登录流程");
+  });
 });

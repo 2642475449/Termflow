@@ -236,6 +236,7 @@
     "noResultsHint": "未找到匹配项，请尝试关闭全词匹配或检查文件过滤规则。",
     "position": "行 {{line}}，列 {{column}}",
     "navigate": "切换",
+    "newLine": "换行",
     "keepOpen": "保持窗口",
     "close": "关闭",
 
@@ -546,6 +547,11 @@
     }
   },
   "sidebar": {
+    "titleInvalidResponse": "模型返回了空白或无效标题",
+    "titleRetryScheduled": "标题生成失败，等待重试",
+    "titleRetryFailed": "标题生成失败，点击重试",
+    "retryTitle": "重新生成标题",
+    "titleGenerating": "正在生成标题",
     "launcherTitle": "打开项目开始工作",
     "selectProjectTitle": "选择项目文件夹",
     "projectWindowOpenFailed": "无法打开项目窗口",
@@ -837,6 +843,7 @@
     "gitDiscardFailed": "丢弃更改失败",
     "gitNoChanges": "没有更改",
     "gitClickToViewDiff": "点击查看差异",
+    "gitImageVersionUnavailable": "此版本没有可预览的图片",
     "gitPreviousChange": "上一处更改",
     "gitNextChange": "下一处更改",
     "gitSection": "Git",
@@ -1990,6 +1997,14 @@
       "model": "模型",
       "modelDesc": "可选择预设模型，也可手动填写其他模型名",
       "modelPlaceholder": "例如 mimo-v2.5-asr 或 qwen3-asr-flash",
+      "modelOptions": {
+        "cloud": "云端",
+        "realtime": "实时",
+        "nonRealtime": "非实时",
+        "mimoDescription": "MiMo 云端语音识别，支持 Token Plan 和 API Key。",
+        "qwenStreamingDescription": "低延迟流式识别，适合连续语音输入。",
+        "qwenFlashDescription": "单段音频识别，适合完成录音后转写。"
+      },
       "resetModel": "恢复默认",
       "defaultModelHint": "默认模型：mimo-v2.5-asr",
       "region": "区域",

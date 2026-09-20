@@ -128,6 +128,7 @@ fn sync_codex_usage_files_unlocked(
         .map(|session| (session.session_key.clone(), session))
         .collect::<BTreeMap<_, _>>();
     let mut warnings = Vec::new();
+    let mut regression_count = 0u64;
     let now_ms = Utc::now().timestamp_millis();
 
     for path in files {
@@ -159,11 +160,34 @@ fn sync_codex_usage_files_unlocked(
         let total_tokens = stats.total_tokens();
         let total_messages = stats.total_messages();
 
-        if stored_by_key.get(&session_key).is_some_and(|stored| {
-            stored.parser_version == CODEX_USAGE_PARSER_VERSION
-                && (total_tokens < stored.total_tokens || total_messages < stored.total_messages)
-        }) {
-            warnings.push("Codex 用量日志出现回退，已保留上次成功快照".to_string());
+        if let Some(stored) = stored_by_key
+            .get(&session_key)
+            .filter(|stored| {
+                stored.parser_version == CODEX_USAGE_PARSER_VERSION
+                    && (total_tokens < stored.total_tokens
+                        || total_messages < stored.total_messages)
+            })
+            .cloned()
+        {
+            regression_count += 1;
+            // 保留较大快照的同时刷新指纹，避免未变更的日志每次同步都重复告警
+            database.upsert_agent_usage_session(
+                CODEX_AGENT_ID,
+                &session_key,
+                &fingerprint,
+                CODEX_USAGE_PARSER_VERSION,
+                &stored.snapshot_json,
+                stored.total_tokens,
+                stored.total_messages,
+                now_ms,
+            )?;
+            stored_by_key.insert(
+                session_key.clone(),
+                AgentUsageStoredSession {
+                    source_fingerprint: fingerprint,
+                    ..stored
+                },
+            );
             continue;
         }
 
@@ -192,15 +216,44 @@ fn sync_codex_usage_files_unlocked(
         );
     }
 
+    if regression_count > 0 {
+        warnings.push(format!(
+            "Codex 用量日志出现回退，已保留上次成功快照（共 {regression_count} 个会话）"
+        ));
+    }
     let (aggregate, stored_warnings) = load_persisted_codex_stats(database)?;
     warnings.extend(stored_warnings);
-    let warning = if warnings.is_empty() {
+    let collapsed = collapse_duplicate_warnings(warnings);
+    let warning = if collapsed.is_empty() {
         None
     } else {
-        Some(warnings.join("；"))
+        Some(collapsed.join("；"))
     };
     database.mark_agent_usage_sync(CODEX_AGENT_ID, now_ms, warning.as_deref())?;
     Ok(aggregate)
+}
+
+fn collapse_duplicate_warnings(warnings: Vec<String>) -> Vec<String> {
+    let mut collapsed: Vec<(String, usize)> = Vec::new();
+    for warning in warnings {
+        match collapsed
+            .iter_mut()
+            .find(|(message, _)| *message == warning)
+        {
+            Some((_, count)) => *count += 1,
+            None => collapsed.push((warning, 1)),
+        }
+    }
+    collapsed
+        .into_iter()
+        .map(|(message, count)| {
+            if count > 1 {
+                format!("{message}（×{count}）")
+            } else {
+                message
+            }
+        })
+        .collect()
 }
 
 fn collect_jsonl_files(root: &Path, output: &mut Vec<PathBuf>) {
@@ -569,5 +622,54 @@ mod tests {
 
         let control = database.load_agent_usage_control(CODEX_AGENT_ID).unwrap();
         assert_eq!(control.cleared_at_ms, Some(123_456));
+    }
+
+    #[test]
+    fn regression_warning_reports_session_count_once_and_clears_on_next_sync() {
+        let directory = test_directory("regression-warning");
+        let path = directory
+            .join("sessions")
+            .join("rollout-regression-warning.jsonl");
+        write_usage_rollout(
+            &path,
+            "regression-warning-session",
+            &[("2026-07-20T00:01:00Z", 100, 100)],
+        );
+        let database = Database::open_in_memory();
+
+        sync_codex_usage_files(&database, vec![path.clone()]).unwrap();
+        assert_eq!(
+            database
+                .get_agent_usage_storage_status(CODEX_AGENT_ID)
+                .unwrap()
+                .last_error,
+            None
+        );
+
+        write_usage_rollout(
+            &path,
+            "regression-warning-session",
+            &[("2026-07-20T00:01:00Z", 40, 40)],
+        );
+        let retained = sync_codex_usage_files(&database, vec![path.clone()]).unwrap();
+        let warned = database
+            .get_agent_usage_storage_status(CODEX_AGENT_ID)
+            .unwrap();
+
+        assert_eq!(retained.total_tokens(), 100);
+        assert_eq!(
+            warned.last_error.as_deref(),
+            Some("Codex 用量日志出现回退，已保留上次成功快照（共 1 个会话）")
+        );
+
+        let repeated = sync_codex_usage_files(&database, vec![path]).unwrap();
+        let cleared = database
+            .get_agent_usage_storage_status(CODEX_AGENT_ID)
+            .unwrap();
+
+        assert_eq!(repeated.total_tokens(), 100);
+        assert_eq!(cleared.last_error, None);
+
+        fs::remove_dir_all(directory).unwrap();
     }
 }

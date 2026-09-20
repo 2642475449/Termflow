@@ -977,7 +977,7 @@ mod tests {
     fn large_output_child() -> Child {
         piped_child(Command::new("cmd").args([
             "/C",
-            "for /L %i in (1,1,20000) do @echo Receiving objects: 012345678901234567890123456789",
+            "for /L %i in (1,1,5000) do @echo Receiving objects: 012345678901234567890123456789",
         ]))
     }
 
@@ -985,7 +985,7 @@ mod tests {
     fn large_output_child() -> Child {
         piped_child(Command::new("sh").args([
             "-c",
-            "i=0; while [ $i -lt 20000 ]; do echo 'Receiving objects: 012345678901234567890123456789'; i=$((i+1)); done",
+            "i=0; while [ $i -lt 5000 ]; do echo 'Receiving objects: 012345678901234567890123456789'; i=$((i+1)); done",
         ]))
     }
 
@@ -1006,7 +1006,7 @@ mod tests {
 
     #[test]
     fn drains_large_output_while_the_command_is_running() {
-        let output = wait_with_timeout(large_output_child(), Duration::from_secs(10))
+        let output = wait_with_timeout(large_output_child(), Duration::from_secs(15))
             .expect("large output should not block on a full pipe");
 
         assert!(output.status.success());

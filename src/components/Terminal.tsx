@@ -35,9 +35,9 @@ import {
 } from "@/components/terminal/FilePathLinkProvider";
 import {
   consumeTerminalTitleInput,
-  sanitizeSessionTitle,
 } from "@/components/terminalTitle";
 import { useAppStore, type TerminalRenderer } from "@/store";
+import { setSessionTitlePrompt } from "@/store/slices/sessionTitleSlice";
 import { revealExplorerPath } from "@/lib/explorer";
 import { openAuxiliaryFile, openAuxiliaryQuestion } from "@/lib/auxiliaryDock";
 import {
@@ -207,7 +207,6 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
   const pendingSubmissionInputRef = useRef("");
   const pendingSubmissionEscapeSequenceRef = useRef("");
   const enqueueInputRef = useRef<((operation: () => Promise<void>) => Promise<void>) | null>(null);
-  const titleRequestStartedRef = useRef(false);
   const sideQuestionSubmittingRef = useRef(false);
   const hideCursorWhileRunningRef = useRef(false);
   const suppressedFocusSequenceUntilRef = useRef(0);
@@ -387,39 +386,18 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
   }, []);
 
   const commitAutoTitle = useCallback(() => {
-    if (
-      !currentSession ||
-      currentSession.titleSource === "manual" ||
-      currentSession.firstPromptTitle ||
-      titleRequestStartedRef.current
-    ) {
-      pendingTitleInputRef.current = "";
-      pendingTitleEscapeSequenceRef.current = "";
-      return;
-    }
-
     const prompt = pendingTitleInputRef.current;
     pendingTitleInputRef.current = "";
     pendingTitleEscapeSequenceRef.current = "";
-    const fallbackTitle = sanitizeSessionTitle(prompt);
-    if (!fallbackTitle) return;
-
-    titleRequestStartedRef.current = true;
-
-    updateSession(sessionId, {
-      name: fallbackTitle,
-      firstPromptTitle: fallbackTitle,
-      titleSource: "auto",
-    });
-  }, [currentSession, sessionId, updateSession]);
+    setSessionTitlePrompt(sessionId, prompt);
+  }, [sessionId]);
 
   const captureInputForAutoTitle = useCallback(
     (data: string) => {
       if (
         !currentSession ||
         currentSession.titleSource === "manual" ||
-        currentSession.firstPromptTitle ||
-        titleRequestStartedRef.current
+        currentSession.generatedTitle
       ) {
         return;
       }
@@ -481,7 +459,6 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
   useEffect(() => {
     pendingTitleInputRef.current = "";
     pendingTitleEscapeSequenceRef.current = "";
-    titleRequestStartedRef.current = false;
   }, [sessionId]);
 
   const handleContextMenuClick = useCallback(

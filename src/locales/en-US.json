@@ -236,6 +236,7 @@
     "noResultsHint": "No matches. Try disabling whole-word matching or checking the file filters.",
     "position": "Ln {{line}}, Col {{column}}",
     "navigate": "Navigate",
+    "newLine": "New line",
     "keepOpen": "Keep open",
     "close": "Close",
 
@@ -546,6 +547,11 @@
     }
   },
   "sidebar": {
+    "titleInvalidResponse": "The model returned an empty or invalid title",
+    "titleRetryScheduled": "Title generation failed; retry scheduled",
+    "titleRetryFailed": "Title generation failed; retry now",
+    "retryTitle": "Regenerate title",
+    "titleGenerating": "Generating title",
     "launcherTitle": "Open a project to start working",
     "selectProjectTitle": "Choose Project Folder",
     "projectWindowOpenFailed": "Failed to open the project window",
@@ -837,6 +843,7 @@
     "gitDiscardFailed": "Failed to discard changes",
     "gitNoChanges": "No changes",
     "gitClickToViewDiff": "Click to view diff",
+    "gitImageVersionUnavailable": "No previewable image in this version",
     "gitPreviousChange": "Previous change",
     "gitNextChange": "Next change",
     "gitSection": "Git",
@@ -1990,6 +1997,14 @@
       "model": "Model",
       "modelDesc": "Choose a preset model or enter a custom model name",
       "modelPlaceholder": "e.g. mimo-v2.5-asr or qwen3-asr-flash",
+      "modelOptions": {
+        "cloud": "Cloud",
+        "realtime": "Real-time",
+        "nonRealtime": "Non-real-time",
+        "mimoDescription": "MiMo cloud transcription with Token Plan and API Key support.",
+        "qwenStreamingDescription": "Low-latency streaming transcription for continuous voice input.",
+        "qwenFlashDescription": "Single-clip transcription for audio recorded before processing."
+      },
       "resetModel": "Reset Default",
       "defaultModelHint": "Default model: mimo-v2.5-asr",
       "region": "Region",

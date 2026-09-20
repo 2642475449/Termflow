@@ -1,8 +1,9 @@
 pub mod agent_hooks;
 pub(crate) mod agent_runner;
 pub mod agent_usage;
-pub mod agents;
 pub mod agent_versions;
+pub mod agents;
+pub mod background;
 pub mod claude_config;
 pub mod command_library;
 pub mod content_search;
@@ -24,4 +25,3 @@ pub mod system_input;
 pub mod voice;
 pub mod voice_shortcut;
 pub mod window;
-pub mod background;

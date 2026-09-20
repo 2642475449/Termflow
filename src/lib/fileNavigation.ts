@@ -1,6 +1,7 @@
 export interface FileRevealTarget {
   lineNumber: number;
   startColumn: number;
+  endLineNumber?: number;
   endColumn: number;
   requestId: string;
 }

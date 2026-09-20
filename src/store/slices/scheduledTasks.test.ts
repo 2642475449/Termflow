@@ -20,7 +20,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   useScheduledTaskStore.setState({
     tasks: [], runs: [], loading: false, initialized: false, error: null, scope: "current", selectedRunId: null, editor: null,
-    pendingRunTaskIds: [], listScrollPositions: {}, showAllRuns: false,
+    pendingRunTaskIds: [], listScrollPositions: {}, showAllRuns: false, expandedProjectPaths: [],
   });
   vi.mocked(listScheduledTasks).mockResolvedValue([]);
   vi.mocked(listScheduledTaskRuns).mockResolvedValue([]);
@@ -39,6 +39,21 @@ it("preserves list position and expansion while visiting a run and another scope
     scope: "project-a", selectedRunId: null, showAllRuns: true,
     listScrollPositions: { "project-a": 320, all: 80 },
   });
+});
+
+it("toggles a project's expanded task list without changing the selected scope", () => {
+  const state = useScheduledTaskStore.getState();
+  state.setScope("project-a");
+  state.toggleProjectExpanded("project-a");
+  state.toggleProjectExpanded("project-b");
+
+  expect(useScheduledTaskStore.getState()).toMatchObject({
+    scope: "project-a",
+    expandedProjectPaths: ["project-a", "project-b"],
+  });
+
+  useScheduledTaskStore.getState().toggleProjectExpanded("project-a");
+  expect(useScheduledTaskStore.getState().expandedProjectPaths).toEqual(["project-b"]);
 });
 
 it("blocks duplicate run submissions and selects the new run", async () => {

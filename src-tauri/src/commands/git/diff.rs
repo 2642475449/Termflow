@@ -5,8 +5,8 @@ use super::types::{
     GitDiffContentResult, GitDiffHunk, GitDiffHunkResult, GitDiffLine, GitDiffResult,
 };
 use super::utils::{
-    decode_text_content, ensure_repository_allows_normal_commit, git_command, open_repo,
-    resolve_worktree_file_path, with_git_repository_access, GitRepositoryAccess,
+    decode_text_content, ensure_repository_allows_normal_commit, git_command, git_image_data_url,
+    open_repo, resolve_worktree_file_path, with_git_repository_access, GitRepositoryAccess,
 };
 
 const BINARY_CONTENT_ERROR: &str = "__TERMFLOW_BINARY_GIT_CONTENT__";
@@ -67,6 +67,107 @@ fn read_worktree_content(
         .map_err(|_| BINARY_CONTENT_ERROR.to_string())
 }
 
+fn read_head_bytes(repo: &git2::Repository, file_path: &str) -> Result<Option<Vec<u8>>, String> {
+    let head = match repo.head() {
+        Ok(head) => head,
+        Err(_) => return Ok(None),
+    };
+    let commit = head
+        .peel_to_commit()
+        .map_err(|e| format!("获取 HEAD 提交失败: {}", e))?;
+    let tree = commit
+        .tree()
+        .map_err(|e| format!("读取 HEAD 树失败: {}", e))?;
+    let entry = match tree.get_path(Path::new(file_path)) {
+        Ok(entry) => entry,
+        Err(_) => return Ok(None),
+    };
+    let object = entry
+        .to_object(repo)
+        .map_err(|e| format!("读取 HEAD 对象失败: {}", e))?;
+    let blob = object
+        .as_blob()
+        .ok_or_else(|| format!("HEAD 文件内容不可读取: {}", file_path))?;
+    Ok(Some(blob.content().to_vec()))
+}
+
+fn read_index_bytes(repo: &git2::Repository, file_path: &str) -> Result<Option<Vec<u8>>, String> {
+    let index = repo.index().map_err(|e| format!("读取索引失败: {}", e))?;
+    let Some(entry) = index.get_path(Path::new(file_path), 0) else {
+        return Ok(None);
+    };
+    let blob = repo
+        .find_blob(entry.id)
+        .map_err(|e| format!("读取索引 Blob 失败: {}", e))?;
+    Ok(Some(blob.content().to_vec()))
+}
+
+fn read_worktree_bytes(
+    repo: &git2::Repository,
+    file_path: &str,
+) -> Result<Option<Vec<u8>>, String> {
+    let absolute_path = resolve_worktree_file_path(repo, file_path)?;
+    if !absolute_path.exists() {
+        return Ok(None);
+    }
+    std::fs::read(&absolute_path)
+        .map(Some)
+        .map_err(|e| format!("读取工作树文件失败: {}", e))
+}
+
+fn read_image_diff_content(
+    repo: &git2::Repository,
+    file_path: &str,
+    old_file_path: Option<&str>,
+    staged: bool,
+) -> Result<Option<GitDiffContentResult>, String> {
+    let original_path = old_file_path.unwrap_or(file_path);
+    let (original_bytes, modified_bytes, original_label, modified_label) = if staged {
+        (
+            read_head_bytes(repo, original_path)?,
+            read_index_bytes(repo, file_path)?,
+            "HEAD".to_string(),
+            "索引".to_string(),
+        )
+    } else {
+        let index_bytes = read_index_bytes(repo, original_path)?;
+        let has_index_content = index_bytes.is_some();
+        let original_bytes = match index_bytes {
+            Some(bytes) => Some(bytes),
+            None => read_head_bytes(repo, original_path)?,
+        };
+        (
+            original_bytes,
+            read_worktree_bytes(repo, file_path)?,
+            if has_index_content { "索引" } else { "HEAD" }.to_string(),
+            "工作树".to_string(),
+        )
+    };
+
+    let original_image = original_bytes
+        .as_deref()
+        .and_then(|bytes| git_image_data_url(original_path, bytes));
+    let modified_image = modified_bytes
+        .as_deref()
+        .and_then(|bytes| git_image_data_url(file_path, bytes));
+
+    if original_image.is_none() && modified_image.is_none() {
+        return Ok(None);
+    }
+
+    Ok(Some(GitDiffContentResult {
+        file_path: file_path.to_string(),
+        original_content: String::new(),
+        modified_content: String::new(),
+        is_binary: true,
+        content_kind: Some("image".to_string()),
+        original_image,
+        modified_image,
+        original_label,
+        modified_label,
+    }))
+}
+
 fn binary_diff_content(file_path: String, staged: bool) -> GitDiffContentResult {
     let (original_label, modified_label) = if staged {
         ("HEAD".to_string(), "Index".to_string())
@@ -80,6 +181,8 @@ fn binary_diff_content(file_path: String, staged: bool) -> GitDiffContentResult 
         modified_content: String::new(),
         is_binary: true,
         content_kind: Some("binary".to_string()),
+        original_image: None,
+        modified_image: None,
         original_label,
         modified_label,
     }
@@ -169,6 +272,12 @@ pub fn git_diff_content(
         }
         let original_path = old_file_path.as_deref().unwrap_or(&file_path);
 
+        if let Some(image_diff) =
+            read_image_diff_content(&repo, &file_path, old_file_path.as_deref(), staged)?
+        {
+            return Ok(image_diff);
+        }
+
         let content_result = (|| {
             if staged {
                 Ok((
@@ -201,6 +310,8 @@ pub fn git_diff_content(
                     modified_content,
                     is_binary: false,
                     content_kind: Some("text".to_string()),
+                    original_image: None,
+                    modified_image: None,
                     original_label,
                     modified_label,
                 })
@@ -694,6 +805,11 @@ mod tests {
         .expect("binary content should not be an error");
 
         assert!(result.is_binary);
+        assert_eq!(result.content_kind.as_deref(), Some("image"));
+        assert!(result
+            .modified_image
+            .as_deref()
+            .is_some_and(|image| image.starts_with("data:image/png;base64,")));
         drop(repo);
         fs::remove_dir_all(root).unwrap();
     }
@@ -715,6 +831,7 @@ mod tests {
         )
         .expect("unstaged binary content should not be an error");
         assert!(unstaged.is_binary);
+        assert_eq!(unstaged.content_kind.as_deref(), Some("image"));
 
         add_to_index(&repo, file_name);
         let staged = git_diff_content(
@@ -725,6 +842,7 @@ mod tests {
         )
         .expect("staged binary content should not be an error");
         assert!(staged.is_binary);
+        assert_eq!(staged.content_kind.as_deref(), Some("image"));
 
         drop(repo);
         fs::remove_dir_all(root).unwrap();

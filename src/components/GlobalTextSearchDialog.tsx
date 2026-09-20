@@ -4,7 +4,8 @@ import {
   LoadingOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
-import { Button, Input, Modal, Select, Spin, Tooltip, type InputRef } from "antd";
+import { Button, Input, Modal, Select, Spin, Tooltip } from "antd";
+import type { TextAreaRef } from "antd/es/input/TextArea";
 import {
   startTransition,
   useCallback,
@@ -55,7 +56,7 @@ function parsePatterns(value: string): string[] {
 }
 
 function matchKey(match: ContentSearchMatch): string {
-  return `${match.path}:${match.lineNumber}:${match.startColumn}:${match.endColumn}`;
+  return `${match.path}:${match.lineNumber}:${match.startColumn}:${match.endLineNumber}:${match.endColumn}`;
 }
 
 function buildGroups(matches: ContentSearchMatch[]): SearchResultGroup[] {
@@ -108,7 +109,7 @@ function GlobalTextSearchDialog({
   const [error, setError] = useState<string | null>(null);
   const [splitRatio, setSplitRatio] = useState(DEFAULT_GLOBAL_SEARCH_SPLIT_RATIO);
   const [splitDragging, setSplitDragging] = useState(false);
-  const inputRef = useRef<InputRef | null>(null);
+  const inputRef = useRef<TextAreaRef | null>(null);
   const searchContentRef = useRef<HTMLDivElement | null>(null);
   const splitDraggingRef = useRef(false);
   const activeSearchIdRef = useRef<string | null>(null);
@@ -306,6 +307,7 @@ function GlobalTextSearchDialog({
         path: match.path,
         lineNumber: match.lineNumber,
         startColumn: match.startColumn,
+        endLineNumber: match.endLineNumber,
         endColumn: match.endColumn,
         requestId: crypto.randomUUID(),
       });
@@ -345,7 +347,8 @@ function GlobalTextSearchDialog({
   }, []);
 
   const handleSearchKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLInputElement>) => {
+    (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (event.key === "Enter" && event.shiftKey) return;
       if (event.altKey && ["c", "w", "r"].includes(event.key.toLowerCase())) {
         event.preventDefault();
         if (event.key.toLowerCase() === "c") setCaseSensitive((value) => !value);
@@ -387,6 +390,7 @@ function GlobalTextSearchDialog({
   const previewTarget = useMemo(() => selectedMatch ? {
     lineNumber: selectedMatch.lineNumber,
     startColumn: selectedMatch.startColumn,
+    endLineNumber: selectedMatch.endLineNumber,
     endColumn: selectedMatch.endColumn,
     requestId: matchKey(selectedMatch),
   } : null, [selectedMatch]);
@@ -428,55 +432,53 @@ function GlobalTextSearchDialog({
             onPointerCancel={stopWindowGesture} onLostPointerCapture={() => { windowGesture.current = null; }} />
         ))}
         <div className="app-global-search-controls">
-          <Input
-            className="app-global-search-query"
-            aria-label={t("globalSearch.title")}
-            ref={inputRef}
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={handleSearchKeyDown}
-            prefix={<SearchOutlined />}
-            suffix={
-              <>
-                {searching ? <Spin indicator={<LoadingOutlined spin />} size="small" /> : null}
-                <div className="app-global-search-toggles">
-                  <Tooltip title={<>{t("globalSearch.caseSensitive")} <kbd>Alt+C</kbd></>}>
-                    <button
-                      type="button"
-                      aria-label={t("globalSearch.caseSensitive")}
-                      aria-pressed={caseSensitive}
-                      onClick={() => setCaseSensitive((value) => !value)}
-                    >
-                      Aa
-                    </button>
-                  </Tooltip>
-                  <Tooltip title={<>{t("globalSearch.wholeWord")} <kbd>Alt+W</kbd></>}>
-                    <button
-                      type="button"
-                      aria-label={t("globalSearch.wholeWord")}
-                      aria-pressed={wholeWord}
-                      onClick={() => setWholeWord((value) => !value)}
-                    >
-                      W
-                    </button>
-                  </Tooltip>
-                  <Tooltip title={<>{t("globalSearch.regex")} <kbd>Alt+R</kbd></>}>
-                    <button
-                      type="button"
-                      aria-label={t("globalSearch.regex")}
-                      aria-pressed={useRegex}
-                      onClick={() => setUseRegex((value) => !value)}
-                    >
-                      .*
-                    </button>
-                  </Tooltip>
-                </div>
-              </>
-            }
-            placeholder={t("globalSearch.placeholder")}
-            allowClear
-            size="large"
-          />
+          <div className="app-global-search-query">
+            <SearchOutlined />
+            <Input.TextArea
+              className="app-global-search-query-input"
+              aria-label={t("globalSearch.title")}
+              ref={inputRef}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              placeholder={t("globalSearch.placeholder")}
+              allowClear
+              autoSize={{ minRows: 1, maxRows: 4 }}
+            />
+            {searching ? <Spin indicator={<LoadingOutlined spin />} size="small" /> : null}
+            <div className="app-global-search-toggles">
+              <Tooltip title={<>{t("globalSearch.caseSensitive")} <kbd>Alt+C</kbd></>}>
+                <button
+                  type="button"
+                  aria-label={t("globalSearch.caseSensitive")}
+                  aria-pressed={caseSensitive}
+                  onClick={() => setCaseSensitive((value) => !value)}
+                >
+                  Aa
+                </button>
+              </Tooltip>
+              <Tooltip title={<>{t("globalSearch.wholeWord")} <kbd>Alt+W</kbd></>}>
+                <button
+                  type="button"
+                  aria-label={t("globalSearch.wholeWord")}
+                  aria-pressed={wholeWord}
+                  onClick={() => setWholeWord((value) => !value)}
+                >
+                  W
+                </button>
+              </Tooltip>
+              <Tooltip title={<>{t("globalSearch.regex")} <kbd>Alt+R</kbd></>}>
+                <button
+                  type="button"
+                  aria-label={t("globalSearch.regex")}
+                  aria-pressed={useRegex}
+                  onClick={() => setUseRegex((value) => !value)}
+                >
+                  .*
+                </button>
+              </Tooltip>
+            </div>
+          </div>
           <div className="app-global-search-options">
             <Select
               className="app-global-search-scope"
@@ -638,6 +640,7 @@ function GlobalTextSearchDialog({
           <div className="app-global-search-keys">
             <span><kbd>↑</kbd><kbd>↓</kbd> {t("globalSearch.navigate")}</span>
             <span><kbd>↵</kbd> {t("globalSearch.open")}</span>
+            <span><kbd>Shift</kbd><kbd>↵</kbd> {t("globalSearch.newLine")}</span>
             <span><kbd>Ctrl+↵</kbd> {t("globalSearch.keepOpen")}</span>
             <span><kbd>Esc</kbd> {t("globalSearch.close")}</span>
           </div>

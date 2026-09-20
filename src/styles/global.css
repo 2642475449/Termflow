@@ -139,6 +139,21 @@ html, body, #root {
   overflow: hidden;
 }
 
+/* 语音模型下拉菜单需要容纳模型简介，避免与触发器同宽而截断信息。 */
+.app-asr-model-select-dropdown {
+  min-width: min(440px, calc(100vw - 32px)) !important;
+  padding: 4px;
+}
+
+.app-asr-model-select-dropdown .ant-select-item {
+  height: auto;
+  padding: 8px 10px;
+}
+
+.app-asr-model-select-dropdown .ant-select-item-option-content {
+  white-space: normal;
+}
+
 [data-overlay="voice"],
 [data-overlay="voice"] body,
 [data-overlay="voice"] #root {
@@ -2397,16 +2412,33 @@ html, body, #root {
   box-shadow: 0 24px 80px color-mix(in srgb, var(--cs-text-primary) 24%, transparent);
 }
 
-.app-global-search-query.ant-input-affix-wrapper {
+.app-global-search-query {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   border-radius: 0;
   border-color: transparent;
   background: transparent;
-  box-shadow: none;
   padding: 6px 0;
+  border-bottom: 1px solid transparent;
 }
 
-.app-global-search-query.ant-input-affix-wrapper-focused {
+.app-global-search-query:focus-within {
   border-bottom-color: var(--cs-primary);
+}
+
+.app-global-search-query > .anticon {
+  margin-top: 5px;
+}
+
+.app-global-search-query .app-global-search-query-input.ant-input {
+  flex: 1;
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  resize: none;
 }
 
 .app-global-search-filter {
@@ -2673,6 +2705,77 @@ html, body, #root {
   color: var(--cs-text-tertiary);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
+}
+
+.app-scheduled-sidebar-project {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.app-scheduled-sidebar-disclosure {
+  display: flex;
+  width: 10px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  color: var(--cs-text-tertiary);
+}
+
+.app-scheduled-sidebar-disclosure[data-visible="false"] {
+  visibility: hidden;
+}
+
+.app-scheduled-sidebar-disclosure > .anticon {
+  font-size: 9px;
+  transition: transform 150ms ease;
+}
+
+.app-scheduled-sidebar-disclosure[data-expanded="true"] > .anticon {
+  transform: rotate(90deg);
+}
+
+.app-scheduled-sidebar-item[data-expanded="true"] {
+  color: var(--cs-text-primary);
+}
+
+.app-scheduled-sidebar-task {
+  display: flex;
+  width: 100%;
+  min-height: 28px;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 6px;
+  padding: 4px 9px 4px 31px;
+  background: transparent;
+  color: var(--cs-text-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.app-scheduled-sidebar-task:hover,
+.app-scheduled-sidebar-task:focus-visible {
+  background: var(--cs-bg-hover);
+  color: var(--cs-text-primary);
+}
+
+.app-scheduled-sidebar-task:focus-visible {
+  outline: 2px solid var(--cs-primary);
+  outline-offset: -2px;
+}
+
+.app-scheduled-sidebar-task-status {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--cs-text-tertiary);
+}
+
+.app-scheduled-sidebar-task-status[data-enabled="true"] {
+  background: var(--cs-success);
 }
 
 .app-scheduled-sidebar-label {

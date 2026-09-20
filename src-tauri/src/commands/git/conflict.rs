@@ -110,7 +110,10 @@ fn contains_unresolved_conflict_markers(content: &str) -> bool {
         if !matches!(first, '<' | '=' | '>') {
             return false;
         }
-        let marker_length = marker.chars().take_while(|character| *character == first).count();
+        let marker_length = marker
+            .chars()
+            .take_while(|character| *character == first)
+            .count();
         marker_length >= 7
             && marker
                 .chars()

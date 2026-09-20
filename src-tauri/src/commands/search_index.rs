@@ -1799,9 +1799,14 @@ pub(crate) fn lookup_index_candidates(
     use_regex: bool,
 ) -> IndexCandidateLookup {
     let query = query.trim();
-    if use_regex {
+    if use_regex || query.contains('\n') || query.contains('\r') {
         return IndexCandidateLookup::Fallback {
-            reason: "regex_query".to_string(),
+            reason: if use_regex {
+                "regex_query"
+            } else {
+                "multiline_query"
+            }
+            .to_string(),
             index_state: "not_applicable".to_string(),
         };
     }

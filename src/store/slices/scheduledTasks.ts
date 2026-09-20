@@ -19,8 +19,10 @@ interface ScheduledTaskState {
   showAllRuns: boolean;
   pendingRunTaskIds: string[];
   listScrollPositions: Record<string, number>;
+  expandedProjectPaths: string[];
   setShowAllRuns: (visible: boolean) => void;
   setListScrollPosition: (scopeKey: string, position: number) => void;
+  toggleProjectExpanded: (projectPath: string) => void;
   setScope: (scope: ScheduledTaskScope) => void;
   setSelectedRunId: (runId: string | null) => void;
   setEditor: (editor: ScheduledTaskEditor) => void;
@@ -41,9 +43,15 @@ export const useScheduledTaskStore = create<ScheduledTaskState>((set) => ({
   showAllRuns: false,
   pendingRunTaskIds: [],
   listScrollPositions: {},
+  expandedProjectPaths: [],
   setShowAllRuns: (showAllRuns) => set({ showAllRuns }),
   setListScrollPosition: (scopeKey, position) => set((state) => ({
     listScrollPositions: { ...state.listScrollPositions, [scopeKey]: position },
+  })),
+  toggleProjectExpanded: (projectPath) => set((state) => ({
+    expandedProjectPaths: state.expandedProjectPaths.includes(projectPath)
+      ? state.expandedProjectPaths.filter((path) => path !== projectPath)
+      : [...state.expandedProjectPaths, projectPath],
   })),
   setScope: (scope) => set({ scope, selectedRunId: null }),
   setSelectedRunId: (selectedRunId) => set({ selectedRunId }),

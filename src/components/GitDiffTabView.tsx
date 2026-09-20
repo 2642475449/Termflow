@@ -1,7 +1,7 @@
 import { registerRichCodeTokens } from "@/lib/monaco";
 import { DiffEditor, loader } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
-import { Alert, Button, Empty } from "antd";
+import { Alert, Button, Empty, Image } from "antd";
 import {
   DownOutlined,
   ExportOutlined,
@@ -146,6 +146,55 @@ function GitDiffTabView({ tabId }: GitDiffTabViewProps) {
         filePath={document.path}
         isBinary={document.isBinary}
       />
+    );
+  }
+
+  if (document.contentKind === "image") {
+    const imageVersions = [
+      { label: document.originalLabel, src: document.originalImage },
+      { label: document.modifiedLabel, src: document.modifiedImage },
+    ];
+
+    return (
+      <div className="flex h-full min-h-0 flex-col">
+        <div
+          className="flex min-h-[36px] items-center justify-between gap-3 border-b border-[var(--cs-border-sidebar)] px-3 py-2 text-[11px]"
+        >
+          <span className="min-w-0 truncate text-[var(--cs-text-primary)]">
+            {document.name}
+          </span>
+          <span className="max-w-[38vw] truncate text-[var(--cs-text-tertiary)]">
+            {document.path}
+          </span>
+        </div>
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-px overflow-auto bg-[var(--cs-border-sidebar)] md:grid-cols-2">
+          {imageVersions.map((version) => (
+            <section
+              key={version.label}
+              className="flex min-h-[240px] min-w-0 flex-col bg-[var(--cs-bg-app)]"
+            >
+              <div className="shrink-0 border-b border-[var(--cs-border-sidebar)] px-3 py-2 text-[11px] font-medium text-[var(--cs-text-secondary)]">
+                {version.label}
+              </div>
+              <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-4">
+                {version.src ? (
+                  <Image
+                    src={version.src}
+                    alt={`${document.name} (${version.label})`}
+                    className="max-h-full max-w-full object-contain"
+                    wrapperClassName="flex h-full min-h-0 w-full items-center justify-center"
+                  />
+                ) : (
+                  <Empty
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                    description={t("sidebar.gitImageVersionUnavailable")}
+                  />
+                )}
+              </div>
+            </section>
+          ))}
+        </div>
+      </div>
     );
   }
 

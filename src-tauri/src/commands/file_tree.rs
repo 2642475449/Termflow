@@ -994,9 +994,17 @@ fn matches_text_extension(path: &Path) -> bool {
             .map(|extension| extension.to_ascii_lowercase()),
         Some(extension)
             if [
-                "txt", "md", "json", "js", "jsx", "ts", "tsx", "rs", "css", "scss", "html", "htm",
-                "xml", "yml", "yaml", "toml", "sh", "ps1", "bat", "env", "log", "csv", "sql", "py",
-                "java", "go", "c", "cpp", "h", "hpp", "ini", "conf", "cfg", "lock"
+                "txt", "md", "markdown", "rst", "adoc", "json", "jsonc", "json5", "ndjson", "js",
+                "mjs", "cjs", "jsx", "ts", "mts", "cts", "tsx", "vue", "svelte", "astro", "rs",
+                "css", "scss", "sass", "less", "styl", "html", "htm", "xhtml", "xml", "xsd", "xsl",
+                "xslt", "jsp", "jspf", "tag", "tagx", "tld", "ftl", "vm", "ejs", "erb", "hbs",
+                "handlebars", "mustache", "twig", "liquid", "php", "phtml", "asp", "aspx", "cshtml",
+                "razor", "yml", "yaml", "toml", "properties", "ini", "conf", "cfg", "env", "sh", "bash",
+                "zsh", "fish", "ps1", "psm1", "psd1", "bat", "cmd", "log", "csv", "tsv", "sql", "py",
+                "pyw", "pyi", "java", "kt", "kts", "groovy", "gradle", "scala", "go", "c", "cc", "cp",
+                "cpp", "cxx", "h", "hh", "hpp", "hxx", "cs", "fs", "fsx", "vb", "swift", "m", "mm",
+                "rb", "rake", "gemspec", "pl", "pm", "lua", "r", "dart", "ex", "exs", "erl", "hrl",
+                "clj", "cljs", "cljc", "edn", "hs", "lhs", "jl", "nim", "zig", "sol", "lock"
             ]
             .contains(&extension.as_str())
     )
@@ -1389,6 +1397,49 @@ mod tests {
     fn pdf_signature_rejects_non_pdf_content() {
         assert!(!matches_pdf_signature(b"not a pdf"));
         assert!(!matches_pdf_signature(b"%PD"));
+    }
+
+    #[test]
+    fn text_extension_detection_supports_jsp_and_common_source_templates() {
+        for file_name in [
+            "top.jsp",
+            "header.jspf",
+            "card.tag",
+            "layout.tagx",
+            "view.ftl",
+            "template.vm",
+            "component.vue",
+            "page.svelte",
+            "service.kt",
+            "build.gradle",
+            "settings.properties",
+        ] {
+            assert!(
+                matches_text_extension(Path::new(file_name)),
+                "{file_name} should be recognized as text"
+            );
+        }
+    }
+
+    #[test]
+    fn file_kind_detection_accepts_utf8_text_with_an_unknown_extension() {
+        let directory = tempfile::tempdir().unwrap();
+        let file_path = directory.path().join("notes.custom-template");
+        fs::write(&file_path, "plain UTF-8 text").unwrap();
+
+        assert_eq!(detect_file_kind(&file_path).unwrap(), ProjectFileKind::Text);
+    }
+
+    #[test]
+    fn file_kind_detection_rejects_unknown_binary_content() {
+        let directory = tempfile::tempdir().unwrap();
+        let file_path = directory.path().join("asset.unknown");
+        fs::write(&file_path, [0_u8, 1, 2]).unwrap();
+
+        assert_eq!(
+            detect_file_kind(&file_path).unwrap(),
+            ProjectFileKind::Binary
+        );
     }
 
     #[test]

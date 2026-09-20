@@ -5,7 +5,9 @@ use git2::{Commit, Delta, DiffOptions, ErrorCode, Oid, Repository, Tree};
 use super::types::{
     GitDiffContentResult, GitGraphChangedFile, GitGraphCommit, GitGraphCommitDetail,
 };
-use super::utils::{collect_commit_refs, decode_text_content, open_repo, run_git_read};
+use super::utils::{
+    collect_commit_refs, decode_text_content, git_image_data_url, open_repo, run_git_read,
+};
 
 /// 默认分页大小
 const DEFAULT_HISTORY_PAGE_SIZE: usize = 100;
@@ -319,12 +321,19 @@ fn git_graph_file_diff_sync(
         })
         .unwrap_or_else(|| "empty".to_string());
 
-    let (original_content, modified_content, is_binary) = match (
-        decode_text_content(original_bytes),
-        decode_text_content(modified_bytes),
-    ) {
-        (Ok(original), Ok(modified)) => (original, modified, false),
-        _ => (String::new(), String::new(), true),
+    let original_image = git_image_data_url(original_path, &original_bytes);
+    let modified_image = git_image_data_url(&file_path, &modified_bytes);
+    let has_image_preview = original_image.is_some() || modified_image.is_some();
+    let (original_content, modified_content, is_binary, content_kind) = if has_image_preview {
+        (String::new(), String::new(), true, "image")
+    } else {
+        match (
+            decode_text_content(original_bytes),
+            decode_text_content(modified_bytes),
+        ) {
+            (Ok(original), Ok(modified)) => (original, modified, false, "text"),
+            _ => (String::new(), String::new(), true, "binary"),
+        }
     };
 
     Ok(GitDiffContentResult {
@@ -332,14 +341,16 @@ fn git_graph_file_diff_sync(
         original_content,
         modified_content,
         is_binary,
-        content_kind: Some(if is_binary { "binary" } else { "text" }.to_string()),
+        content_kind: Some(content_kind.to_string()),
+        original_image,
+        modified_image,
         original_label: parent_label,
         modified_label: short_oid,
     })
 }
 #[cfg(test)]
 mod tests {
-    use super::git_graph_history_sync;
+    use super::{git_graph_file_diff_sync, git_graph_history_sync};
     use git2::{Oid, Repository, Signature};
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -391,6 +402,85 @@ mod tests {
                 .commit(Some("HEAD"), signature, signature, message, &tree, &[])
                 .unwrap(),
         }
+    }
+
+    fn commit_binary_file(
+        repo: &Repository,
+        signature: &Signature<'_>,
+        file_path: &str,
+        content: &[u8],
+        message: &str,
+    ) -> Oid {
+        fs::write(repo.workdir().unwrap().join(file_path), content).unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new(file_path)).unwrap();
+        index.write().unwrap();
+        let tree_oid = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_oid).unwrap();
+        let parent = repo
+            .head()
+            .ok()
+            .and_then(|head| head.target())
+            .map(|oid| repo.find_commit(oid).unwrap());
+
+        match parent.as_ref() {
+            Some(parent) => repo
+                .commit(
+                    Some("HEAD"),
+                    signature,
+                    signature,
+                    message,
+                    &tree,
+                    &[parent],
+                )
+                .unwrap(),
+            None => repo
+                .commit(Some("HEAD"), signature, signature, message, &tree, &[])
+                .unwrap(),
+        }
+    }
+
+    #[test]
+    fn graph_file_diff_returns_preview_data_for_committed_images() {
+        let repo_path = test_repo_path("termflow-graph-image-preview");
+        let repo = Repository::init(&repo_path).unwrap();
+        let signature = Signature::now("Termflow Test", "termflow@example.com").unwrap();
+        commit_binary_file(
+            &repo,
+            &signature,
+            "image.png",
+            &[0, 159, 146, 150, 1],
+            "add image",
+        );
+        let updated_oid = commit_binary_file(
+            &repo,
+            &signature,
+            "image.png",
+            &[0, 159, 146, 150, 2],
+            "update image",
+        );
+        drop(repo);
+
+        let result = git_graph_file_diff_sync(
+            repo_path.to_string_lossy().into_owned(),
+            updated_oid.to_string(),
+            "image.png".to_string(),
+            None,
+        )
+        .unwrap();
+
+        assert!(result.is_binary);
+        assert_eq!(result.content_kind.as_deref(), Some("image"));
+        assert!(result
+            .original_image
+            .as_deref()
+            .is_some_and(|image| image.starts_with("data:image/png;base64,")));
+        assert!(result
+            .modified_image
+            .as_deref()
+            .is_some_and(|image| image.starts_with("data:image/png;base64,")));
+
+        fs::remove_dir_all(repo_path).unwrap();
     }
 
     #[test]

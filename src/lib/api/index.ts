@@ -142,6 +142,7 @@ export async function getClaudeCliInfo(): Promise<ClaudeCliInfo> {
 }
 
 const AGENT_CLI_CACHE_KEY = "termflow.agent-cli-inspection.v2";
+const AGENT_CLI_INSPECTION_MAX_AGE_MS = 5 * 60 * 60 * 1000;
 
 export async function checkAgentLatestVersion(agentId: AiAgentId): Promise<string> {
   return invoke<string>("check_agent_latest_version", { agentId });
@@ -181,6 +182,15 @@ function readPersistedAgentCliInspection(): AgentCliInfo[] | null {
   }
 }
 
+/**
+ * 立即返回最后一次检测结果，即使缓存已经过期；需要保持可交互的界面可在
+ * 后台刷新期间先使用该结果。
+ */
+export function getCachedAgentClis(): AgentCliInfo[] | null {
+  agentCliInspectionCache ??= readPersistedAgentCliInspection();
+  return agentCliInspectionCache;
+}
+
 function persistAgentCliInspection(agents: AgentCliInfo[]) {
   if (!isCompleteAgentCliInspection(agents)) return;
   agentCliInspectionCache = agents;
@@ -192,16 +202,24 @@ function persistAgentCliInspection(agents: AgentCliInfo[]) {
   }
 }
 
+function isFreshAgentCliInspection(agents: AgentCliInfo[]): boolean {
+  const checkedAt = Math.min(...agents.map((agent) => agent.checkedAt));
+  const ageMs = Date.now() - checkedAt;
+  return Number.isFinite(checkedAt) && ageMs >= 0 && ageMs < AGENT_CLI_INSPECTION_MAX_AGE_MS;
+}
+
 /**
- * Return the last successful inspection across pages and app restarts.
- * Only an explicit force refresh starts the CLI processes again.
+ * Return the last successful inspection across pages and app restarts for up
+ * to five hours. An explicit force refresh always starts the CLI processes.
  */
 export async function inspectAgentClis(options?: {
   forceRefresh?: boolean;
 }): Promise<AgentCliInfo[]> {
   if (!options?.forceRefresh) {
-    agentCliInspectionCache ??= readPersistedAgentCliInspection();
-    if (agentCliInspectionCache) return agentCliInspectionCache;
+    const cachedAgents = getCachedAgentClis();
+    if (cachedAgents && isFreshAgentCliInspection(cachedAgents)) {
+      return cachedAgents;
+    }
   }
 
   // Page transitions can mount multiple consumers at once. Share one native
@@ -607,8 +625,12 @@ export async function inferAgentUserResponse(
   });
 }
 
-export async function generateSessionTitle(prompt: string, path: string): Promise<string> {
-  return await invoke("generate_session_title", { prompt, path });
+export async function generateSessionTitle(
+  prompt: string,
+  path: string,
+  sessionKind: "agent" | "terminal" = "agent"
+): Promise<string> {
+  return await invoke("generate_session_title", { prompt, path, sessionKind });
 }
 
 export async function submitAgentTurnInput(

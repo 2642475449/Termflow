@@ -39,6 +39,12 @@ pub struct GitDiffContentResult {
     pub is_binary: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content_kind: Option<String>,
+    /// 图片差异的前一版本，使用浏览器可直接显示的 data URL。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_image: Option<String>,
+    /// 图片差异的后一版本，使用浏览器可直接显示的 data URL。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub modified_image: Option<String>,
     pub original_label: String,
     pub modified_label: String,
 }

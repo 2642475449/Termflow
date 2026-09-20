@@ -209,7 +209,8 @@ mod tests {
     }
 
     #[test]
-    fn upgrades_version_six_with_clipboard_reference_tables() -> Result<(), Box<dyn std::error::Error>> {
+    fn upgrades_version_six_with_clipboard_reference_tables(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let connection = Connection::open_in_memory()?;
         connection.pragma_update(None, "user_version", 6)?;
         migrate(&connection)?;

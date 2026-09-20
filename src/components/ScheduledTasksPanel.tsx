@@ -381,9 +381,7 @@ export default function ScheduledTasksPanel() {
             <Empty
               image={Empty.PRESENTED_IMAGE_SIMPLE}
               description={scope === "current" && !currentProject ? t("scheduledTasks.noProject") : t("scheduledTasks.emptyDescription")}
-            >
-              {currentProject && <Button type="primary" onClick={() => setEditor("create")}>{t("scheduledTasks.createTask")}</Button>}
-            </Empty>
+            />
           </div>
         ) : (
           <div className="app-scheduled-task-list">

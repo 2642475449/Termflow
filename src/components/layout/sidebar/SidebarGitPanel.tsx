@@ -291,7 +291,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
       try {
         const diffDocument = await gitDiffContent(currentProject.path, filePath, staged, oldFilePath);
         if (requestId !== diffOpenRequestRef.current) return;
-        if (diffDocument.isBinary) return;
+        if (diffDocument.isBinary && diffDocument.contentKind !== "image") return;
         openGitDiffTab({
           path: diffDocument.filePath,
           oldPath: oldFilePath,
@@ -304,6 +304,9 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
           originalLabel: diffDocument.originalLabel,
           modifiedLabel: diffDocument.modifiedLabel,
           isBinary: diffDocument.isBinary,
+          contentKind: diffDocument.contentKind,
+          originalImage: diffDocument.originalImage,
+          modifiedImage: diffDocument.modifiedImage,
         }, { preview });
       } catch (error) {
         if (requestId !== diffOpenRequestRef.current) return;

@@ -1,4 +1,5 @@
 import type { Session } from "@/types";
+import { normalizeSessionTitles } from "@/lib/sessionTitles";
 import type { SessionEventType, SessionRuntimeStatus } from "../types";
 
 export function updateSessionCollection(
@@ -7,7 +8,11 @@ export function updateSessionCollection(
   updates: Partial<Session>
 ) {
   return sessions.map((session) =>
-    session.id === sessionId ? { ...session, ...updates } : session
+    session.id === sessionId ? normalizeSessionTitles({
+      ...session, ...updates,
+      ...(updates.titleSource === "manual" && updates.name
+        ? { manualTitle: updates.name } : {}),
+    }) : session
   );
 }
 

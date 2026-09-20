@@ -541,6 +541,9 @@ export interface GitDiffDocumentState {
   originalLabel: string;
   modifiedLabel: string;
   isBinary: boolean;
+  contentKind?: "text" | "binary" | "gitlink" | "image";
+  originalImage?: string | null;
+  modifiedImage?: string | null;
 }
 
 export interface PaneState {

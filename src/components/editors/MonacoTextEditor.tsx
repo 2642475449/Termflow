@@ -63,15 +63,31 @@ function MonacoTextEditor({
     editorInstance: monaco.editor.IStandaloneCodeEditor,
     target: FileRevealTarget
   ) => {
+    const endLineNumber = target.endLineNumber ?? target.lineNumber;
     const range = new monaco.Range(
       target.lineNumber,
       target.startColumn,
-      target.lineNumber,
-      Math.max(target.startColumn, target.endColumn)
+      endLineNumber,
+      endLineNumber === target.lineNumber
+        ? Math.max(target.startColumn, target.endColumn)
+        : Math.max(1, target.endColumn)
     );
     editorInstance.setSelection(range);
     editorInstance.revealRangeInCenter(range, monaco.editor.ScrollType.Smooth);
     if (focusOnReveal) editorInstance.focus();
+  };
+
+  const revealLocationAfterLayout = (
+    editorInstance: monaco.editor.IStandaloneCodeEditor,
+    target: FileRevealTarget
+  ) => {
+    // Monaco 首次挂载时可能尚未完成布局，导致定位请求被后续的首轮布局覆盖。
+    // 下一帧重新布局后再定位，确保搜索预览和文件跳转都落在目标行。
+    window.requestAnimationFrame(() => {
+      if (editorRef.current !== editorInstance) return;
+      editorInstance.layout();
+      revealLocation(editorInstance, target);
+    });
   };
 
   useEffect(() => {
@@ -131,9 +147,7 @@ function MonacoTextEditor({
       });
     }
 
-    if (revealTarget) {
-      revealLocation(editor, revealTarget);
-    }
+    if (revealTarget) revealLocationAfterLayout(editor, revealTarget);
   };
 
   return (

@@ -762,7 +762,9 @@ mod tests {
             ("Stop", "{\"decision\":\"\"}"),
         ] {
             let command = super::antigravity_hook_command(&script, event);
-            assert!(super::value_contains_owned_command(&json!({"command": command})));
+            assert!(super::value_contains_owned_command(
+                &json!({"command": command})
+            ));
             let mut args = command.split_whitespace();
             let output = std::process::Command::new(args.next().unwrap())
                 .args(args)
@@ -770,7 +772,11 @@ mod tests {
                 .stdin(std::process::Stdio::null())
                 .output()
                 .unwrap();
-            assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
             assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), expected);
         }
     }

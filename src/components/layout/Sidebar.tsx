@@ -1,3 +1,4 @@
+import { retrySessionTitle } from "@/store/slices/sessionTitleSlice";
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Layout, Button, message, Modal, Input, Tooltip } from "antd";
 import type { MenuProps } from "antd";
@@ -263,6 +264,21 @@ function Sidebar({ collapsed, section }: SidebarProps) {
         icon: <EditOutlined />,
         onClick: () => handleOpenRename(session.id, session.name),
       },
+      ...(session.titleSource !== "manual" && !session.manualTitle &&
+        (session.titleGeneration || session.firstPromptTitle || session.temporaryTitle)
+        ? [{
+            key: "retry-title",
+            label: <span title={session.titleGeneration?.error === "invalid-title"
+              ? t("sidebar.titleInvalidResponse") : session.titleGeneration?.error}>
+              {t(session.titleGeneration?.status === "generating" || session.titleGeneration?.status === "pending"
+                ? "sidebar.titleGenerating" : session.titleGeneration?.status === "failed"
+                  ? session.titleGeneration.nextRetryAt ? "sidebar.titleRetryScheduled" : "sidebar.titleRetryFailed"
+                  : "sidebar.retryTitle")}
+            </span>,
+            disabled: session.titleGeneration?.status === "generating" || session.titleGeneration?.status === "pending",
+            onClick: () => retrySessionTitle(session.id),
+          }]
+        : []),
       {
         key: "pin",
         label: isPinned ? t("sidebar.unpinSession") : t("sidebar.pinSession"),

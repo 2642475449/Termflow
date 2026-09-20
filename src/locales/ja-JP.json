@@ -236,6 +236,7 @@
     "noResultsHint": "一致がありません。単語単位の検索をオフにするか、ファイルフィルターを確認してください。",
     "position": "{{line}} 行、{{column}} 列",
     "navigate": "移動",
+    "newLine": "改行",
     "keepOpen": "ウィンドウを保持",
     "close": "閉じる",
 
@@ -546,6 +547,11 @@
     }
   },
   "sidebar": {
+    "titleInvalidResponse": "モデルが空または無効なタイトルを返しました",
+    "titleRetryScheduled": "タイトル生成に失敗・再試行待ち",
+    "titleRetryFailed": "タイトル生成に失敗・再試行",
+    "retryTitle": "タイトルを再生成",
+    "titleGenerating": "タイトルを生成中",
     "launcherTitle": "プロジェクトを開いて作業を開始",
     "selectProjectTitle": "プロジェクトフォルダーを選択",
     "projectWindowOpenFailed": "プロジェクトウィンドウを開けませんでした",
@@ -837,6 +843,7 @@
     "gitDiscardFailed": "変更の破棄に失敗しました",
     "gitNoChanges": "変更はありません",
     "gitClickToViewDiff": "クリックして差分を表示",
+    "gitImageVersionUnavailable": "このバージョンにはプレビュー可能な画像がありません",
     "gitPreviousChange": "前の変更",
     "gitNextChange": "次の変更",
     "gitSection": "Git",
@@ -1985,6 +1992,14 @@
       "model": "モデル",
       "modelDesc": "プリセットモデルを選択するか、カスタムモデル名を入力できます",
       "modelPlaceholder": "例: mimo-v2.5-asr または qwen3-asr-flash",
+      "modelOptions": {
+        "cloud": "クラウド",
+        "realtime": "リアルタイム",
+        "nonRealtime": "バッチ",
+        "mimoDescription": "MiMo クラウド音声認識、Token Plan および API Key に対応。",
+        "qwenStreamingDescription": "連続音声入力に適した低遅延ストリーミング認識。",
+        "qwenFlashDescription": "録音完了後の書き起こしに適した単一クリップ音声認識。"
+      },
       "resetModel": "デフォルトに戻す",
       "defaultModelHint": "デフォルトモデル: mimo-v2.5-asr",
       "region": "リージョン",

@@ -844,6 +844,8 @@ fn checkpoint_file_diff_sync(
         modified_content,
         is_binary,
         content_kind: Some(content_kind.to_string()),
+        original_image: None,
+        modified_image: None,
         original_label: format!("Turn {} start", &turn.id[..8]),
         modified_label: format!("Turn {} result", &turn.id[..8]),
     })

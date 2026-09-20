@@ -1,0 +1,3 @@
+# The previous version contained a literal NUL byte in a regular expression.
+# Force a textual diff while transitioning it to escaped control characters.
+src/components/terminalTitle.ts text diff

@@ -3,7 +3,7 @@ import { Alert, Input, Modal, Select, Spin, Switch, type InputRef } from "antd";
 import { EnterOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { useTranslation } from "react-i18next";
-import { getClaudeEffortInfo, inspectAgentClis } from "@/lib/api";
+import { getCachedAgentClis, getClaudeEffortInfo, inspectAgentClis } from "@/lib/api";
 import { formatAgentVersion, getDefaultAgentLaunchOptions, supportsAgentCapability } from "@/lib/agents";
 import type {
   AgentCliInfo,
@@ -113,6 +113,19 @@ export function NewSessionDialog({
     setAntigravityMode(antigravityDefaults.mode);
     setQoderPermissionMode(qoderDefaults.permissionMode);
 
+    // 缓存过期时仍先让用户选择智能体，版本检测转为后台刷新，避免新建会话
+    // 弹窗被慢速或异常的 CLI 检测阻塞。
+    const cachedAgents = getCachedAgentClis();
+    const hasCachedAgents = cachedAgents !== null;
+    if (cachedAgents) {
+      setAgents(cachedAgents.filter(
+        (agent) =>
+          agent.installed &&
+          supportsAgentCapability(agent.id, "interactiveTerminal"),
+      ));
+      setDetecting(false);
+    }
+
     void inspectAgentClis()
       .then((result) => {
         if (disposed) return;
@@ -126,13 +139,16 @@ export function NewSessionDialog({
       .catch((error) => {
         console.error("Failed to inspect agents for new session:", error);
         if (!disposed) {
-          setAgents([]);
-          setAgentId(null);
-          setDetectionFailed(true);
+          // 已有缓存时保留可用的旧检测结果，用户仍可继续创建会话。
+          if (!hasCachedAgents) {
+            setAgents([]);
+            setAgentId(null);
+            setDetectionFailed(true);
+          }
         }
       })
       .finally(() => {
-        if (!disposed) setDetecting(false);
+        if (!disposed && !hasCachedAgents) setDetecting(false);
       });
 
     return () => {

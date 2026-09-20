@@ -28,9 +28,9 @@ pub fn should_exit_after_window_destroyed<'a>(
 ) -> bool {
     let is_workspace = |label: &str| label != VOICE_OVERLAY_LABEL && label != VOICE_WORKER_LABEL;
     is_workspace(destroyed_label)
-        && !remaining_labels.into_iter().any(|label| {
-            label != destroyed_label && is_workspace(label)
-        })
+        && !remaining_labels
+            .into_iter()
+            .any(|label| label != destroyed_label && is_workspace(label))
 }
 
 #[derive(Serialize, Clone, PartialEq, Eq)]
@@ -113,9 +113,13 @@ impl WindowRegistry {
     }
 
     pub fn project_contexts(&self) -> Vec<WindowProjectContext> {
-        let mut contexts: Vec<_> = self.contexts_by_label.lock().values()
+        let mut contexts: Vec<_> = self
+            .contexts_by_label
+            .lock()
+            .values()
             .filter(|context| context.mode == WindowMode::Project && context.project_path.is_some())
-            .cloned().collect();
+            .cloned()
+            .collect();
         contexts.sort_by(|left, right| left.project_path.cmp(&right.project_path));
         contexts
     }
@@ -223,8 +227,14 @@ pub fn allow_existing_instance_foreground(identifier: &str) {
     };
 
     // 与 tauri-plugin-single-instance 2 的消息窗口命名保持一致（未启用 semver）。
-    let class: Vec<u16> = format!("{identifier}-sic").encode_utf16().chain(Some(0)).collect();
-    let title: Vec<u16> = format!("{identifier}-siw").encode_utf16().chain(Some(0)).collect();
+    let class: Vec<u16> = format!("{identifier}-sic")
+        .encode_utf16()
+        .chain(Some(0))
+        .collect();
+    let title: Vec<u16> = format!("{identifier}-siw")
+        .encode_utf16()
+        .chain(Some(0))
+        .collect();
     unsafe {
         if let Ok(hwnd) = FindWindowW(PCWSTR(class.as_ptr()), PCWSTR(title.as_ptr())) {
             let mut process_id = 0;
@@ -391,7 +401,8 @@ pub fn handle_second_instance(app: &tauri::AppHandle, args: Vec<String>, cwd: St
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let path = match resolve_project_path_from_launch_arguments(
-            args.get(1..).unwrap_or_default(), &cwd,
+            args.get(1..).unwrap_or_default(),
+            &cwd,
         ) {
             Ok(path) => path,
             Err(error) => {
@@ -411,9 +422,10 @@ pub fn handle_second_instance(app: &tauri::AppHandle, args: Vec<String>, cwd: St
         if let Some(path) = path {
             let registry = app.state::<Arc<WindowRegistry>>();
             let manager = app.state::<Arc<PtyManager>>();
-            if let Err(error) = open_project_window(
-                path, "auto".into(), app.clone(), window, registry, manager,
-            ).await {
+            if let Err(error) =
+                open_project_window(path, "auto".into(), app.clone(), window, registry, manager)
+                    .await
+            {
                 eprintln!("Failed to open second-instance project: {error}");
             }
         } else {
@@ -541,7 +553,9 @@ pub fn list_open_project_windows(
     registry: State<'_, Arc<WindowRegistry>>,
 ) -> Vec<WindowProjectContext> {
     // 以存活的 WebView 为准，排除创建失败或正在关闭的窗口登记。
-    registry.project_contexts().into_iter()
+    registry
+        .project_contexts()
+        .into_iter()
         .filter(|context| app.get_webview_window(&context.window_label).is_some())
         .collect()
 }
@@ -811,10 +825,12 @@ mod tests {
     #[test]
     fn closing_last_workspace_exits_even_with_hidden_voice_windows() {
         assert!(should_exit_after_window_destroyed(
-            "main", ["main", VOICE_OVERLAY_LABEL, VOICE_WORKER_LABEL],
+            "main",
+            ["main", VOICE_OVERLAY_LABEL, VOICE_WORKER_LABEL],
         ));
         assert!(should_exit_after_window_destroyed(
-            "project:1", [VOICE_OVERLAY_LABEL, VOICE_WORKER_LABEL],
+            "project:1",
+            [VOICE_OVERLAY_LABEL, VOICE_WORKER_LABEL],
         ));
         assert!(should_exit_after_window_destroyed("main", []));
     }
@@ -822,7 +838,8 @@ mod tests {
     #[test]
     fn closing_workspace_preserves_other_workspaces() {
         assert!(!should_exit_after_window_destroyed(
-            "main", ["project:1", VOICE_WORKER_LABEL],
+            "main",
+            ["project:1", VOICE_WORKER_LABEL],
         ));
         assert!(!should_exit_after_window_destroyed("project:1", ["main"]));
     }
@@ -830,7 +847,10 @@ mod tests {
     #[test]
     fn closing_voice_windows_does_not_exit_the_app() {
         assert!(!should_exit_after_window_destroyed(VOICE_OVERLAY_LABEL, []));
-        assert!(!should_exit_after_window_destroyed(VOICE_WORKER_LABEL, ["main"]));
+        assert!(!should_exit_after_window_destroyed(
+            VOICE_WORKER_LABEL,
+            ["main"]
+        ));
     }
 
     fn temporary_project(name: &str) -> std::path::PathBuf {
@@ -1098,7 +1118,10 @@ mod tests {
         registry.bind_project("b", "/chat".into(), "chat".into());
         assert_eq!(registry.project_contexts().len(), 2);
         registry.bind_project("a", "/new".into(), "new".into());
-        assert!(!registry.project_contexts().iter().any(|item| item.project_path.as_deref() == Some("/orca")));
+        assert!(!registry
+            .project_contexts()
+            .iter()
+            .any(|item| item.project_path.as_deref() == Some("/orca")));
         registry.release_window("b");
         let contexts = registry.project_contexts();
         assert_eq!(contexts.len(), 1);

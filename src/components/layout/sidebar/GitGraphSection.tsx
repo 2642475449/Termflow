@@ -589,6 +589,9 @@ export function GitGraphSection({
             originalLabel: diffDocument.originalLabel,
             modifiedLabel: diffDocument.modifiedLabel,
             isBinary: diffDocument.isBinary,
+            contentKind: diffDocument.contentKind,
+            originalImage: diffDocument.originalImage,
+            modifiedImage: diffDocument.modifiedImage,
           },
           { preview: true },
         );

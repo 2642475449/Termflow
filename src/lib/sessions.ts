@@ -1,4 +1,5 @@
 import type { Session } from "@/types";
+import { normalizeSessionTitles } from "./sessionTitles";
 
 /**
  * Terminal tabs have no resumable agent conversation behind them. The legacy
@@ -32,7 +33,7 @@ export function toPersistedSession(session: Session): Session {
     : session.status;
 
   return {
-    ...session,
+    ...normalizeSessionTitles(session),
     active: false,
     status,
   };

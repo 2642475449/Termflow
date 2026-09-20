@@ -305,17 +305,27 @@ pub async fn complete_agent_turn(
     Ok(review)
 }
 
-/// 使用 Claude Code 提炼会话标题；失败时返回安全的本地兜底标题
+/// 只返回真实模型结果；失败原因交给前端保存和重试，禁止把兜底冒充成功。
 #[tauri::command]
-pub fn generate_session_title(prompt: String, path: String) -> Result<String, String> {
-    let fallback = sanitize_fallback_session_title(&prompt)
-        .ok_or_else(|| "无法从当前输入提炼标题".to_string())?;
+pub async fn generate_session_title(
+    prompt: String,
+    path: String,
+    session_kind: Option<String>,
+) -> Result<String, String> {
+    if session_kind.as_deref() == Some("terminal") {
+        return sanitize_fallback_session_title(&prompt, false)
+            .ok_or_else(|| "无法从当前输入提炼标题".to_string());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        resolve_generated_session_title(run_ai_title_generation(&prompt, &path))
+    })
+    .await
+    .map_err(|error| format!("标题生成任务失败: {error}"))?
+}
 
-    let ai_title = run_ai_title_generation(&prompt, &path)
-        .ok()
-        .and_then(|output| sanitize_ai_session_title(&output));
-
-    Ok(ai_title.unwrap_or(fallback))
+fn resolve_generated_session_title(result: Result<String, String>) -> Result<String, String> {
+    let output = result?;
+    sanitize_ai_session_title(&output).ok_or_else(|| "Claude 返回了无效标题".to_string())
 }
 
 /// 调整 PTY 大小
@@ -605,7 +615,7 @@ fn run_ai_title_generation(prompt: &str, path: &str) -> Result<String, String> {
         command.current_dir(path.trim());
     }
 
-    let output = run_command_with_timeout(command, Duration::from_secs(12))?;
+    let output = run_command_with_timeout(command, Duration::from_secs(60))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         return Err(if stderr.is_empty() {
@@ -662,6 +672,7 @@ fn build_claude_print_command(claude_path: &str, prompt: &str) -> Command {
         .arg("text")
         .arg("--max-turns")
         .arg("1")
+        .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
@@ -732,7 +743,7 @@ fn run_command_with_timeout(mut command: Command, timeout: Duration) -> Result<O
 }
 
 fn sanitize_ai_session_title(input: &str) -> Option<String> {
-    let title = sanitize_session_title(input, true)?;
+    let title = sanitize_session_title(input, true, true)?;
     if is_invalid_generated_title(&title) {
         None
     } else {
@@ -740,11 +751,15 @@ fn sanitize_ai_session_title(input: &str) -> Option<String> {
     }
 }
 
-fn sanitize_fallback_session_title(input: &str) -> Option<String> {
-    sanitize_session_title(input, false)
+fn sanitize_fallback_session_title(input: &str, is_agent_session: bool) -> Option<String> {
+    sanitize_session_title(input, false, is_agent_session)
 }
 
-fn sanitize_session_title(input: &str, is_ai_result: bool) -> Option<String> {
+fn sanitize_session_title(
+    input: &str,
+    is_ai_result: bool,
+    is_agent_session: bool,
+) -> Option<String> {
     let source = if is_ai_result {
         input.lines().next().unwrap_or(input)
     } else {
@@ -757,9 +772,26 @@ fn sanitize_session_title(input: &str, is_ai_result: bool) -> Option<String> {
     // Remove ANSI escape sequences (CSI and SS3)
     let ansi_cleaned = strip_ansi_sequences(source);
 
+    let collapsed = collapse_whitespace(ansi_cleaned.trim());
+    let compressed = if is_agent_session || is_ai_result {
+        // 与前端 terminalTitle.ts 保持一致：普通终端保留命令和路径标题，
+        // 智能体会话移除纯资源地址、代码块和独立命令参数。
+        let outside_code = extract_text_outside_code_fences(&collapsed)?;
+        if is_resource_only_text(&outside_code) {
+            return None;
+        }
+        let compressed = drop_command_flag_tokens(&compress_resource_tokens(&outside_code));
+        if compressed.trim().is_empty() {
+            return None;
+        }
+        compressed
+    } else {
+        collapsed
+    };
+
     let mut cleaned = String::new();
     let mut previous_space = false;
-    for ch in ansi_cleaned.chars() {
+    for ch in compressed.chars() {
         if is_allowed_title_char(ch) {
             if ch.is_whitespace() {
                 if !previous_space {
@@ -800,7 +832,7 @@ fn sanitize_session_title(input: &str, is_ai_result: bool) -> Option<String> {
         return None;
     }
 
-    let truncated = truncate_chars(&title, 24);
+    let truncated = truncate_title_at_boundary(&title, 24);
     if truncated.is_empty() {
         None
     } else {
@@ -937,15 +969,329 @@ fn is_han_char(ch: char) -> bool {
         || ('\u{F900}'..='\u{FAFF}').contains(&ch)
 }
 
-fn truncate_chars(input: &str, max_chars: usize) -> String {
-    let mut output = String::new();
-    for (index, ch) in input.chars().enumerate() {
-        if index >= max_chars {
+fn collapse_whitespace(input: &str) -> String {
+    input.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+const TITLE_BOUNDARY_CHARS: [char; 12] = [
+    ' ', ',', '，', '、', ';', '；', ':', '：', '!', '！', '?', '？',
+];
+
+fn truncate_title_at_boundary(title: &str, max_chars: usize) -> String {
+    let chars: Vec<char> = title.chars().collect();
+    if chars.len() <= max_chars {
+        return title.to_string();
+    }
+
+    let min_cut = max_chars / 2;
+    let mut index = max_chars - 1;
+    loop {
+        if TITLE_BOUNDARY_CHARS.contains(&chars[index]) {
+            let cut = chars[..index].iter().collect::<String>();
+            let cut = cut.trim();
+            if !cut.is_empty() {
+                return cut.to_string();
+            }
+        }
+        if index <= min_cut {
             break;
         }
-        output.push(ch);
+        index -= 1;
     }
-    output
+
+    chars[..max_chars]
+        .iter()
+        .collect::<String>()
+        .trim()
+        .to_string()
+}
+
+fn find_fence_marker(input: &str) -> Option<(usize, usize)> {
+    for (index, ch) in input.char_indices() {
+        if ch != '`' && ch != '~' {
+            continue;
+        }
+        let marker = ch.to_string().repeat(3);
+        if input[index..].starts_with(marker.as_str()) {
+            return Some((index, marker.len()));
+        }
+    }
+    None
+}
+
+/// 代码块之外的描述文本；返回 None 表示整段输入只有代码块。
+fn extract_text_outside_code_fences(source: &str) -> Option<String> {
+    if !source.contains("```") && !source.contains("~~~") {
+        return Some(source.to_string());
+    }
+
+    let mut outside = String::new();
+    let mut rest = source;
+    let mut in_outside = true;
+    loop {
+        match find_fence_marker(rest) {
+            Some((index, len)) => {
+                if in_outside {
+                    outside.push_str(&rest[..index]);
+                    outside.push(' ');
+                }
+                rest = &rest[index + len..];
+                in_outside = !in_outside;
+            }
+            None => {
+                if in_outside {
+                    outside.push_str(rest);
+                }
+                break;
+            }
+        }
+    }
+
+    let collapsed = collapse_whitespace(outside.trim());
+    if collapsed.is_empty() {
+        None
+    } else {
+        Some(collapsed)
+    }
+}
+
+fn strip_surrounding_quotes(value: &str) -> &str {
+    let trimmed = value.trim();
+    for (open, close) in [('"', '"'), ('\'', '\''), ('“', '”'), ('‘', '’')] {
+        if trimmed.starts_with(open) && trimmed.ends_with(close) && trimmed.chars().count() >= 2 {
+            let inner = &trimmed[open.len_utf8()..trimmed.len() - close.len_utf8()];
+            if !inner.is_empty() && !inner.contains('\r') && !inner.contains('\n') {
+                return inner.trim();
+            }
+        }
+    }
+    trimmed
+}
+
+fn contains_forbidden_path_chars(value: &str) -> bool {
+    value
+        .chars()
+        .any(|ch| matches!(ch, ':' | '*' | '?' | '"' | '<' | '>' | '|'))
+}
+
+fn has_windows_path_prefix(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    if bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && (bytes[2] == b'\\' || bytes[2] == b'/')
+    {
+        return !contains_forbidden_path_chars(&value[2..]);
+    }
+    value.starts_with("\\\\") && !contains_forbidden_path_chars(value)
+}
+
+fn has_root_like_prefix(value: &str) -> bool {
+    ["/", "~/", "~\\", "./", ".\\", "../", "..\\"]
+        .into_iter()
+        .any(|prefix| {
+            value
+                .strip_prefix(prefix)
+                .map_or(false, |rest| !rest.is_empty())
+        })
+}
+
+fn is_bare_relative_path(value: &str) -> bool {
+    let segments: Vec<&str> = value.split(['/', '\\']).collect();
+    if segments.len() < 2 {
+        return false;
+    }
+    if !segments.iter().all(|segment| {
+        !segment.is_empty()
+            && segment.chars().all(|ch| {
+                ch.is_ascii_alphanumeric() || matches!(ch, ' ' | '.' | '&' | '+' | '-' | '_')
+            })
+    }) {
+        return false;
+    }
+    let last = segments[segments.len() - 1];
+    last.contains('.') || segments.len() >= 3
+}
+
+fn is_path_like_text(value: &str) -> bool {
+    let unquoted = strip_surrounding_quotes(value);
+    if unquoted.is_empty() {
+        return false;
+    }
+    has_windows_path_prefix(unquoted)
+        || has_root_like_prefix(unquoted)
+        || is_bare_relative_path(unquoted)
+}
+
+fn is_url_token(token: &str) -> bool {
+    let lowered = token.to_ascii_lowercase();
+    let rest = if let Some(rest) = lowered.strip_prefix("https://") {
+        rest
+    } else if let Some(rest) = lowered.strip_prefix("http://") {
+        rest
+    } else if let Some(rest) = lowered.strip_prefix("www.") {
+        rest
+    } else {
+        return false;
+    };
+    !rest.is_empty() && !token.chars().any(char::is_whitespace)
+}
+
+fn is_resource_only_text(text: &str) -> bool {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    if is_url_token(trimmed) || is_path_like_text(trimmed) {
+        return true;
+    }
+    trimmed
+        .split_whitespace()
+        .all(|token| is_url_token(token) || is_path_like_text(token))
+}
+
+fn trim_trailing_punct(value: &str) -> &str {
+    value.trim_end_matches(|ch| {
+        matches!(
+            ch,
+            ')' | ']' | '.' | ',' | ';' | ':' | '!' | '?' | '"' | '\'' | '”' | '’'
+        )
+    })
+}
+
+fn trim_leading_openers(value: &str) -> &str {
+    value.trim_start_matches(|ch| matches!(ch, '(' | '[' | '"' | '\'' | '“' | '‘'))
+}
+
+fn summarize_url(url: &str) -> String {
+    let cleaned = trim_trailing_punct(url);
+    let without_scheme = match cleaned.find("://") {
+        Some(index) => &cleaned[index + 3..],
+        None => cleaned,
+    };
+    let without_www = if without_scheme.to_ascii_lowercase().starts_with("www.") {
+        &without_scheme[4..]
+    } else {
+        without_scheme
+    };
+    let host_and_path = without_www.split(['?', '#']).next().unwrap_or(without_www);
+    let segments: Vec<&str> = host_and_path
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect();
+    if segments.is_empty() {
+        return host_and_path.trim_end_matches('/').to_string();
+    }
+    if segments.len() == 1 {
+        return segments[0].to_string();
+    }
+    let last = segments[segments.len() - 1];
+    let repo = last.strip_suffix(".git").unwrap_or(last);
+    if !repo.is_empty() {
+        return repo.to_string();
+    }
+    segments[segments.len() - 2].to_string()
+}
+
+fn summarize_path(path: &str) -> String {
+    let cleaned = strip_surrounding_quotes(path);
+    let trimmed_sep = cleaned.trim_end_matches(['/', '\\']);
+    let bytes = trimmed_sep.as_bytes();
+    if trimmed_sep.is_empty()
+        || (bytes.len() == 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':')
+    {
+        return String::new();
+    }
+    trimmed_sep
+        .split(['/', '\\'])
+        .filter(|segment| !segment.is_empty())
+        .last()
+        .unwrap_or("")
+        .to_string()
+}
+
+fn summarize_resource(value: &str) -> String {
+    if is_url_token(value) {
+        summarize_url(value)
+    } else {
+        summarize_path(value)
+    }
+}
+
+fn find_quoted_span(input: &str) -> Option<(usize, usize, usize, usize)> {
+    for (index, ch) in input.char_indices() {
+        let close = match ch {
+            '"' => '"',
+            '\'' => '\'',
+            '“' => '”',
+            '‘' => '’',
+            _ => continue,
+        };
+        let inner_start = index + ch.len_utf8();
+        if let Some(relative) = input[inner_start..].find(close) {
+            let inner_end = inner_start + relative;
+            if inner_end > inner_start {
+                let end = inner_end + close.len_utf8();
+                return Some((index, end, ch.len_utf8(), close.len_utf8()));
+            }
+        }
+    }
+    None
+}
+
+/// 把路径/URL 压缩为文件名、仓库名等有意义片段，保留周围自然语言。
+fn compress_resource_tokens(text: &str) -> String {
+    let mut result = String::new();
+    let mut rest = text;
+    while let Some((start, end, open_len, close_len)) = find_quoted_span(rest) {
+        result.push_str(&rest[..start]);
+        let inner = &rest[start + open_len..end - close_len];
+        if is_url_token(inner) || is_path_like_text(inner) {
+            result.push_str(&summarize_resource(inner));
+        } else {
+            result.push_str(&rest[start..end]);
+        }
+        rest = &rest[end..];
+    }
+    result.push_str(rest);
+
+    collapse_whitespace(
+        &result
+            .split_whitespace()
+            .map(|token| {
+                let core = trim_leading_openers(trim_trailing_punct(token));
+                if !core.is_empty() && (is_url_token(core) || is_path_like_text(core)) {
+                    return summarize_resource(core);
+                }
+                token.to_string()
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
+    )
+}
+
+fn is_command_flag_token(token: &str) -> bool {
+    let rest = if let Some(rest) = token.strip_prefix("--") {
+        rest
+    } else if let Some(rest) = token.strip_prefix('-') {
+        rest
+    } else {
+        return false;
+    };
+    let mut chars = rest.chars();
+    match chars.next() {
+        Some(first) if first.is_ascii_alphabetic() => {
+            chars.all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '.' | '-'))
+        }
+        _ => false,
+    }
+}
+
+fn drop_command_flag_tokens(text: &str) -> String {
+    text.split_whitespace()
+        .filter(|token| !is_command_flag_token(token))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn is_invalid_generated_title(title: &str) -> bool {
@@ -1097,33 +1443,50 @@ fn looks_like_explanatory_sentence(title: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn title_generation_preserves_cli_failure_instead_of_returning_fallback() {
+        assert_eq!(
+            super::resolve_generated_session_title(Err("Claude 标题提炼超时".into())),
+            Err("Claude 标题提炼超时".into())
+        );
+    }
+
+    #[test]
+    fn title_generation_rejects_invalid_output_and_accepts_real_title() {
+        assert!(super::resolve_generated_session_title(Ok(String::new())).is_err());
+        assert_eq!(
+            super::resolve_generated_session_title(Ok("标题：登录流程修复".into())),
+            Ok("登录流程修复".into())
+        );
+    }
     use super::*;
 
-    // ── truncate_chars ──
+    // ── truncate_title_at_boundary ──
 
     #[test]
     fn test_truncate_chars_within_limit() {
-        assert_eq!(truncate_chars("hello", 10), "hello");
+        assert_eq!(truncate_title_at_boundary("hello", 10), "hello");
     }
 
     #[test]
     fn test_truncate_chars_exact_limit() {
-        assert_eq!(truncate_chars("hello", 5), "hello");
+        assert_eq!(truncate_title_at_boundary("hello", 5), "hello");
     }
 
     #[test]
-    fn test_truncate_chars_exceeds_limit() {
-        assert_eq!(truncate_chars("hello world", 5), "hello");
+    fn test_truncate_chars_prefers_word_boundary() {
+        assert_eq!(truncate_title_at_boundary("hello world again", 8), "hello");
     }
 
     #[test]
     fn test_truncate_chars_empty() {
-        assert_eq!(truncate_chars("", 5), "");
+        assert_eq!(truncate_title_at_boundary("", 5), "");
     }
 
     #[test]
     fn test_truncate_chars_unicode() {
-        assert_eq!(truncate_chars("你好世界", 2), "你好");
+        assert_eq!(truncate_title_at_boundary("你好世界", 2), "你好");
     }
 
     // ── strip_spoken_prefix ──
@@ -1183,39 +1546,39 @@ mod tests {
 
     #[test]
     fn test_sanitize_fallback_title_basic() {
-        let result = sanitize_fallback_session_title("帮我写一个登录功能");
+        let result = sanitize_fallback_session_title("帮我写一个登录功能", true);
         assert!(result.is_some());
         assert_eq!(result.unwrap(), "写一个登录功能");
     }
 
     #[test]
     fn test_sanitize_fallback_title_removes_newlines() {
-        let result = sanitize_fallback_session_title("第一行\n第二行");
+        let result = sanitize_fallback_session_title("第一行\n第二行", true);
         assert!(result.is_some());
         assert_eq!(result.unwrap(), "第一行");
     }
 
     #[test]
     fn test_sanitize_fallback_title_removes_punctuation() {
-        let result = sanitize_fallback_session_title("你好！世界。");
+        let result = sanitize_fallback_session_title("你好！世界。", true);
         assert!(result.is_some());
         assert_eq!(result.unwrap(), "你好");
     }
 
     #[test]
     fn test_sanitize_fallback_title_empty_input() {
-        assert!(sanitize_fallback_session_title("").is_none());
+        assert!(sanitize_fallback_session_title("", true).is_none());
     }
 
     #[test]
     fn test_sanitize_fallback_title_only_prefix() {
-        assert!(sanitize_fallback_session_title("帮我").is_none());
+        assert!(sanitize_fallback_session_title("帮我", true).is_none());
     }
 
     #[test]
     fn test_sanitize_fallback_title_truncates_long() {
         let long_input = "这是一个非常非常非常非常非常非常非常非常非常长的标题";
-        let result = sanitize_fallback_session_title(long_input);
+        let result = sanitize_fallback_session_title(long_input, true);
         assert!(result.is_some());
         assert!(result.unwrap().chars().count() <= 24);
     }
@@ -1224,34 +1587,134 @@ mod tests {
 
     #[test]
     fn test_sanitize_ai_title_removes_title_prefix() {
-        let result = sanitize_session_title("标题：登录功能实现", true);
+        let result = sanitize_session_title("标题：登录功能实现", true, true);
         assert!(result.is_some());
         assert_eq!(result.unwrap(), "登录功能实现");
     }
 
     #[test]
     fn test_sanitize_ai_title_removes_title_colon() {
-        let result = sanitize_session_title("Title: Login Feature", true);
+        let result = sanitize_session_title("Title: Login Feature", true, true);
         assert!(result.is_some());
         assert_eq!(result.unwrap(), "Login Feature");
     }
 
     #[test]
     fn test_sanitize_ai_title_multiline() {
-        let result = sanitize_session_title("第一行标题\n第二行内容", true);
+        let result = sanitize_session_title("第一行标题\n第二行内容", true, true);
         assert!(result.is_some());
         assert_eq!(result.unwrap(), "第一行标题");
     }
 
     #[test]
     fn test_sanitize_ai_title_rejects_title_generation_meta_text() {
-        assert!(sanitize_session_title("会话标题 会话标题生成请求", true).is_none());
-        assert!(sanitize_session_title("Session Title title generation request", true).is_none());
+        assert!(sanitize_session_title("会话标题 会话标题生成请求", true, true).is_none());
+        assert!(
+            sanitize_session_title("Session Title title generation request", true, true).is_none()
+        );
     }
 
     #[test]
     fn test_sanitize_fallback_title_rejects_single_char_noise() {
-        assert!(sanitize_fallback_session_title("o o o o o").is_none());
+        assert!(sanitize_fallback_session_title("o o o o o", true).is_none());
+    }
+
+    // ── 资源地址 / 代码块识别 ──
+
+    #[test]
+    fn test_sanitize_fallback_rejects_pure_windows_path() {
+        assert!(sanitize_fallback_session_title(
+            "C:\\Users\\26424\\AppData\\Local\\Temp\\screenshot.png",
+            true
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn test_sanitize_terminal_fallback_keeps_pure_windows_path() {
+        assert_eq!(
+            sanitize_fallback_session_title("C:\\Users\\26424\\x.log", false),
+            Some("C: Users 26424 x.log".to_string())
+        );
+    }
+
+    #[test]
+    fn test_sanitize_fallback_rejects_quoted_path_with_spaces() {
+        assert!(sanitize_fallback_session_title(
+            "\"C:\\Users\\Some User\\My Project\\src\\App.tsx\"",
+            true
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn test_sanitize_fallback_rejects_pure_url() {
+        assert!(
+            sanitize_fallback_session_title("https://github.com/example/Termflow", true).is_none()
+        );
+    }
+
+    #[test]
+    fn test_sanitize_fallback_rejects_posix_and_unc_paths() {
+        assert!(sanitize_fallback_session_title("/var/log/syslog", true).is_none());
+        assert!(sanitize_fallback_session_title("\\\\server\\share\\report.pdf", true).is_none());
+        assert!(sanitize_fallback_session_title("./scripts/build.sh", true).is_none());
+    }
+
+    #[test]
+    fn test_sanitize_fallback_keeps_task_with_path() {
+        assert_eq!(
+            sanitize_fallback_session_title("修复 src/components/Terminal.tsx 的粘贴问题", true),
+            Some("修复 Terminal.tsx 的粘贴问题".to_string())
+        );
+    }
+
+    #[test]
+    fn test_sanitize_fallback_keeps_task_with_url() {
+        assert_eq!(
+            sanitize_fallback_session_title(
+                "检查 https://github.com/example/Termflow 的构建配置",
+                true
+            ),
+            Some("检查 Termflow 的构建配置".to_string())
+        );
+    }
+
+    #[test]
+    fn test_sanitize_fallback_keeps_git_command_task() {
+        assert_eq!(
+            sanitize_fallback_session_title("git rebase 冲突怎么解决", true),
+            Some("git rebase 冲突怎么解决".to_string())
+        );
+    }
+
+    #[test]
+    fn test_sanitize_fallback_drops_flags_but_keeps_task() {
+        assert_eq!(
+            sanitize_fallback_session_title("npm install --legacy-peer-deps 为什么失败", true),
+            Some("npm install 为什么失败".to_string())
+        );
+    }
+
+    #[test]
+    fn test_sanitize_fallback_rejects_pure_code_fence() {
+        assert!(sanitize_fallback_session_title("```ts", true).is_none());
+    }
+
+    #[test]
+    fn test_sanitize_fallback_prefers_description_around_code_fence() {
+        assert_eq!(
+            sanitize_fallback_session_title("修复这个 ```x=1``` 的问题", true),
+            Some("修复这个 的问题".to_string())
+        );
+    }
+
+    #[test]
+    fn test_is_resource_only_text() {
+        assert!(is_resource_only_text("C:\\tmp\\a.png"));
+        assert!(is_resource_only_text("https://example.com/a"));
+        assert!(!is_resource_only_text("修复 C:\\tmp\\a.png 的问题"));
+        assert!(!is_resource_only_text("git rebase 冲突怎么解决"));
     }
 
     // ── is_invalid_generated_title ──

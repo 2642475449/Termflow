@@ -1239,10 +1239,15 @@ fn mark_agent_sandbox_failure(execution: &mut TaskExecution) {
     if execution.status != ScheduledTaskRunStatus::Succeeded {
         return;
     }
-    // 只识别 CLI stderr 的实际启动错误，不根据模型回答中的“权限”判断失败。
-    let Some((_, stderr)) = execution.output.split_once("\n--- stderr ---\n") else {
+    let Some((stdout, stderr)) = execution.output.split_once("\n--- stderr ---\n") else {
         return;
     };
+    // Codex 会将详细执行轨迹写入 stderr，其中可能包含它读取到的源码文本。
+    // 因此不能仅凭 stderr 中的关键字判定失败；只有未得到任何最终回答时，
+    // 才将明确的沙箱初始化错误作为本次任务失败处理。
+    if !stdout.trim().is_empty() {
+        return;
+    }
     if stderr.lines().any(|line| {
         (line.contains("ERROR codex_core::tools::router")
             && line.contains("Failed to create unified exec process")
@@ -1530,20 +1535,20 @@ mod tests {
     }
 
     #[test]
-    fn agent_acl_failure_is_failed_even_with_zero_exit_code() {
+    fn sandbox_diagnostic_in_trace_does_not_override_a_successful_agent_report() {
         let mut execution = super::TaskExecution {
             status: ScheduledTaskRunStatus::Succeeded,
             exit_code: Some(0),
             output: super::combine_output(
-                "无法读取仓库".into(),
+                "发现 1 个需要修复的问题".into(),
                 "2026-09-13 ERROR codex_core::tools::router: exec_command failed: Failed to create unified exec process: helper_unknown_error: apply deny-read ACLs".into(),
             ),
             error: None,
         };
         super::mark_agent_sandbox_failure(&mut execution);
-        assert_eq!(execution.status, ScheduledTaskRunStatus::Failed);
+        assert_eq!(execution.status, ScheduledTaskRunStatus::Succeeded);
         assert_eq!(execution.exit_code, Some(0));
-        assert!(execution.error.is_some());
+        assert!(execution.error.is_none());
     }
 
     #[test]
@@ -1567,7 +1572,7 @@ mod tests {
     }
 
     #[test]
-    fn agent_sandbox_failure_without_stdout_is_failed() {
+    fn agent_sandbox_failure_without_final_response_is_failed() {
         let mut execution = super::TaskExecution {
             status: ScheduledTaskRunStatus::Succeeded,
             exit_code: Some(0),

@@ -161,6 +161,18 @@ export interface Session {
   archivedAt?: number;
   titleSource?: "default" | "auto" | "manual";
   firstPromptTitle?: string;
+  /** 独立保存标题来源；name 仅作为最终显示值。 */
+  temporaryTitle?: string;
+  generatedTitle?: string;
+  manualTitle?: string;
+  titleGeneration?: {
+    prompt: string;
+    status: "pending" | "generating" | "failed" | "succeeded";
+    attempts: number;
+    requestId?: string;
+    error?: string;
+    nextRetryAt?: number;
+  };
   status?: "starting" | "running" | "waiting" | "completed" | "error" | "stopped";
   unreadCount?: number;
   lastEventAt?: number;
@@ -617,6 +629,7 @@ export interface ContentSearchMatch {
   relativePath: string;
   lineNumber: number;
   startColumn: number;
+  endLineNumber: number;
   endColumn: number;
   lineText: string;
   contextBefore: string[];
@@ -877,7 +890,9 @@ export interface GitDiffContentResult {
   originalContent: string;
   modifiedContent: string;
   isBinary: boolean;
-  contentKind?: "text" | "binary" | "gitlink";
+  contentKind?: "text" | "binary" | "gitlink" | "image";
+  originalImage?: string | null;
+  modifiedImage?: string | null;
   originalLabel: string;
   modifiedLabel: string;
 }

@@ -1,7 +1,7 @@
 pub(crate) mod antigravity;
-pub mod schema;
-pub mod clipboard;
 pub mod background;
+pub mod clipboard;
+pub mod schema;
 
 use parking_lot::Mutex;
 use rusqlite::{params, Connection, OptionalExtension};
@@ -853,7 +853,6 @@ impl Database {
         Ok(())
     }
 
-
     pub fn has_any_settings(&self) -> Result<bool, String> {
         let conn = self.conn.lock();
         let exists = conn
@@ -1413,7 +1412,6 @@ impl Database {
     }
 }
 
-
 fn u64_to_sqlite_integer(value: u64) -> i64 {
     value.min(i64::MAX as u64) as i64
 }
@@ -1743,7 +1741,7 @@ mod tests {
         );
     }
 
-
+    #[test]
     fn remote_notification_channels_round_trip_and_sync_legacy_feishu_fields() {
         let database = Database::open_in_memory();
         let mut settings = PersistentSettingsRecord::default();

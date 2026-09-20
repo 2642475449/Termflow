@@ -129,6 +129,10 @@ function formatPreviewTime(timestamp: number, locale: string, timezone: string):
   }
 }
 
+function isFormValidationError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "errorFields" in error;
+}
+
 export function ScheduledTaskForm({
   task,
   projects,
@@ -145,6 +149,7 @@ export function ScheduledTaskForm({
   const [preview, setPreview] = useState<number[]>([]);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [formRevision, setFormRevision] = useState(0);
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const executionKind = Form.useWatch("executionKind", form) ?? "agent";
   const scheduleKind = Form.useWatch("scheduleKind", form) ?? "daily";
 
@@ -243,10 +248,9 @@ export function ScheduledTaskForm({
       await refreshScheduledTasks();
       onSaved();
     } catch (error: unknown) {
+      if (isFormValidationError(error)) return;
       const message = error instanceof Error ? error.message : String(error);
-      if (message && !message.includes("Please complete the form")) {
-        setSaveError(message);
-      }
+      if (message) setSaveError(message);
     } finally {
       setSaving(false);
     }
@@ -264,14 +268,12 @@ export function ScheduledTaskForm({
       onCancel();
       return;
     }
-    Modal.confirm({
-      title: t("scheduledTasks.discardDraftTitle"),
-      content: t("scheduledTasks.discardDraftDescription"),
-      okText: t("scheduledTasks.discardDraft"),
-      okType: "danger",
-      cancelText: t("common.cancel"),
-      onOk: onCancel,
-    });
+    setDiscardConfirmOpen(true);
+  }
+
+  function handleDiscardConfirm() {
+    setDiscardConfirmOpen(false);
+    onCancel();
   }
 
   return (
@@ -463,6 +465,17 @@ export function ScheduledTaskForm({
           </Button>
         </div>
       </Form>
+      <Modal
+        open={discardConfirmOpen}
+        title={t("scheduledTasks.discardDraftTitle")}
+        okText={t("scheduledTasks.discardDraft")}
+        okType="danger"
+        cancelText={t("common.cancel")}
+        onCancel={() => setDiscardConfirmOpen(false)}
+        onOk={handleDiscardConfirm}
+      >
+        {t("scheduledTasks.discardDraftDescription")}
+      </Modal>
     </section>
   );
 }

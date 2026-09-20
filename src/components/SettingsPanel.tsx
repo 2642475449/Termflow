@@ -703,18 +703,37 @@ function ShellOptionLabel({ shell, text }: { shell: TerminalShell; text: string 
   );
 }
 
-const ASR_MODELS = [
-  { value: DEFAULT_ASR_MODEL, label: DEFAULT_ASR_MODEL },
-  { value: "qwen3-asr-flash", label: "Qwen3-ASR-Flash (阿里百炼)" },
-];
+type AsrModelOption = {
+  value: string;
+  label: string;
+  modeKey: string;
+  descriptionKey: string;
+};
 
 type AsrProvider = "mimo" | "dashscope";
 
-const MIMO_ASR_MODELS = ASR_MODELS.filter((option) => option.value === DEFAULT_ASR_MODEL);
+const MIMO_ASR_MODELS: AsrModelOption[] = [
+  {
+    value: DEFAULT_ASR_MODEL,
+    label: "MiMo v2.5 ASR",
+    modeKey: "settings.voiceRecognition.modelOptions.cloud",
+    descriptionKey: "settings.voiceRecognition.modelOptions.mimoDescription",
+  },
+];
 
-const DASHSCOPE_ASR_MODELS = [
-  { value: "qwen-audio-3.0-asr-flash-streaming", label: "Qwen-Audio-3.0-ASR-Flash-Streaming（实时）" },
-  { value: "qwen3-asr-flash", label: "Qwen3-ASR-Flash (阿里百炼)" },
+const DASHSCOPE_ASR_MODELS: AsrModelOption[] = [
+  {
+    value: "qwen-audio-3.0-asr-flash-streaming",
+    label: "Qwen-Audio-3.0-ASR-Flash-Streaming",
+    modeKey: "settings.voiceRecognition.modelOptions.realtime",
+    descriptionKey: "settings.voiceRecognition.modelOptions.qwenStreamingDescription",
+  },
+  {
+    value: "qwen3-asr-flash",
+    label: "Qwen3-ASR-Flash",
+    modeKey: "settings.voiceRecognition.modelOptions.nonRealtime",
+    descriptionKey: "settings.voiceRecognition.modelOptions.qwenFlashDescription",
+  },
 ];
 
 function VoiceRecognitionPage() {
@@ -751,6 +770,27 @@ function VoiceRecognitionPage() {
     { label: "API", value: "api" },
   ];
   const currentModelOptions = isDashScopeProvider ? DASHSCOPE_ASR_MODELS : MIMO_ASR_MODELS;
+  const renderAsrModelOption = (option: { data: AsrModelOption }) => {
+    const model = option.data;
+    const isSelected = model.value === asrModel;
+
+    return (
+      <div className="flex min-w-0 items-start gap-3 py-1">
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="truncate font-medium text-[var(--cs-text-primary)]">{model.label}</span>
+            <span className="shrink-0 text-xs text-[var(--cs-text-tertiary)]">
+              {t(model.modeKey)}
+            </span>
+          </div>
+          <div className="mt-1 text-xs leading-5 text-[var(--cs-text-secondary)]">
+            {t(model.descriptionKey)}
+          </div>
+        </div>
+        {isSelected && <CheckOutlined className="mt-0.5 shrink-0 text-[var(--cs-primary)]" />}
+      </div>
+    );
+  };
   const apiKeyPlaceholder = isDashScopeProvider
     ? "请输入 DashScope API Key"
     : asrAuthMode === "token-plan"
@@ -1027,6 +1067,8 @@ function VoiceRecognitionPage() {
                 setAsrModel(value);
               }}
               options={currentModelOptions}
+              optionRender={renderAsrModelOption}
+              popupClassName="app-asr-model-select-dropdown"
               style={{ width: 280 }}
               placeholder={t("settings.voiceRecognition.modelPlaceholder", {
                 defaultValue: "请选择模型",
