@@ -264,6 +264,18 @@
     "splitterHint": "左右拖动调整宽度；双击重置"
   },
   "statusBar": {
+    "file": {
+      "navigation": "文件路径导航",
+      "copyPath": "复制文件路径",
+      "pathCopied": "路径已复制",
+      "copyFailed": "复制路径失败",
+      "file": "文件",
+      "position": "行 {{line}}，列 {{column}}",
+      "saved": "已保存",
+      "unsaved": "未保存",
+      "spaces": "{{count}} 个空格",
+      "tabs": "制表符：{{count}}"
+    },
     "noDefaultAgent": "未设置默认智能体",
     "defaultAgentTooltip": "默认智能体：{{name}}",
     "launcher": "启动器",

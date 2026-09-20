@@ -58,68 +58,36 @@ export function getFileExtension(name: string): string {
   return normalizedName.slice(lastDotIndex + 1);
 }
 
+function createFileIcon(svg: string, color: string, className = ""): FileIconInfo {
+  return {
+    icon: (
+      <span
+        className={`app-seti-file-icon ${className}`.trim()}
+        aria-hidden="true"
+        dangerouslySetInnerHTML={{ __html: svg.replace(/<svg\b/, `<svg color="${color}"`) }}
+      />
+    ),
+    color,
+  };
+}
+
 export function getFileIconByName(fileName: string): FileIconInfo {
   const normalizedName = fileName.trim().toLowerCase();
   const extension = getFileExtension(normalizedName);
   if (extension === "jsp") {
-    return {
-      icon: (
-        <span
-          className="app-seti-file-icon app-jsp-file-icon"
-          aria-hidden="true"
-          dangerouslySetInnerHTML={{ __html: jspIconSvg }}
-        />
-      ),
-      color: "#c65353",
-    };
+    return createFileIcon(jspIconSvg, "#c65353", "app-jsp-file-icon");
   }
   if (extension === "xml") {
-    return {
-      icon: (
-        <span
-          className="app-seti-file-icon app-xml-file-icon"
-          aria-hidden="true"
-          dangerouslySetInnerHTML={{ __html: xmlIconSvg }}
-        />
-      ),
-      color: "#c87532",
-    };
+    return createFileIcon(xmlIconSvg, "#c87532", "app-xml-file-icon");
   }
   if (["ppt", "pptx", "pps", "ppsx"].includes(extension)) {
-    return {
-      icon: (
-        <span
-          className="app-seti-file-icon app-powerpoint-file-icon"
-          aria-hidden="true"
-          dangerouslySetInnerHTML={{ __html: powerpointIconSvg }}
-        />
-      ),
-      color: "#d24726",
-    };
+    return createFileIcon(powerpointIconSvg, "#d24726", "app-powerpoint-file-icon");
   }
-  if (extension === "md" || extension === "mdx" || extension === "markdown") {
-    return {
-      icon: (
-        <span
-          className="app-seti-file-icon app-markdown-file-icon"
-          aria-hidden="true"
-          dangerouslySetInnerHTML={{ __html: markdownIconSvg }}
-        />
-      ),
-      color: "#4f9f5f",
-    };
+  if (["md", "mdx", "markdown"].includes(extension)) {
+    return createFileIcon(markdownIconSvg, "#4f9f5f", "app-markdown-file-icon");
   }
   const visual = resolveSetiIcon(normalizedName);
-  return {
-    icon: (
-      <span
-        className="app-seti-file-icon"
-        aria-hidden="true"
-        dangerouslySetInnerHTML={{ __html: visual.svg }}
-      />
-    ),
-    color: visual.color,
-  };
+  return createFileIcon(visual.svg, visual.color);
 }
 
 export function getFileIcon(fileName: string, isDir = false, isExpanded = false): FileIconInfo {

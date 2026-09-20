@@ -10,12 +10,14 @@ import {
   getMonacoTypography,
 } from "@/lib/monaco";
 import { useAppStore } from "@/store";
+import { useFileEditorStatusStore } from "@/store/slices/fileEditorStatus";
 import type { FileRevealTarget } from "@/lib/fileNavigation";
 
 loader.config({ monaco });
 registerRichCodeTokens();
 
 interface MonacoTextEditorProps {
+  statusTabId?: string;
   filePath: string;
   value: string;
   readOnly: boolean;
@@ -29,6 +31,7 @@ interface MonacoTextEditorProps {
 }
 
 function MonacoTextEditor({
+  statusTabId,
   filePath,
   value,
   readOnly,
@@ -45,6 +48,12 @@ function MonacoTextEditor({
   const editorFontSize = useAppStore((s) => s.editorFontSize);
   const systemPrefersDark = useAppStore((s) => s.systemPrefersDark);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const statusDisposables = useRef<monaco.IDisposable[]>([]);
+  useEffect(() => () => {
+    statusDisposables.current.forEach((disposable) => disposable.dispose());
+    statusDisposables.current = [];
+    if (statusTabId) useFileEditorStatusStore.getState().removeEditorStatus(statusTabId);
+  }, [statusTabId]);
   const onSaveRef = useRef(onSave);
   const saveEnabledRef = useRef(saveEnabled);
   onSaveRef.current = onSave;
@@ -82,6 +91,29 @@ function MonacoTextEditor({
 
   const handleMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
+    if (statusTabId) {
+      const updateStatus = () => {
+        const model = editor.getModel();
+        const position = editor.getPosition();
+        if (!model || !position) return;
+        const options = model.getOptions();
+        const languageId = model.getLanguageId();
+        const languageName = monaco.languages.getLanguages().find((entry: monaco.languages.ILanguageExtensionPoint) => entry.id === languageId)?.aliases?.[0] ?? languageId;
+        useFileEditorStatusStore.getState().setEditorStatus(statusTabId, {
+          line: position.lineNumber, column: position.column, language: languageName,
+          eol: model.getEOL() === "\r\n" ? "CRLF" : "LF",
+          tabSize: options.tabSize, insertSpaces: options.insertSpaces,
+        });
+      };
+      statusDisposables.current = [
+        editor.onDidChangeCursorPosition(updateStatus),
+        editor.onDidChangeModel(updateStatus),
+        editor.onDidChangeModelContent(updateStatus),
+        editor.onDidChangeModelOptions(updateStatus),
+        editor.onDidChangeModelLanguage(updateStatus),
+      ];
+      updateStatus();
+    }
     disableMonacoCommandPalette(editor, monaco);
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
       if (saveEnabledRef.current) onSaveRef.current?.();
@@ -106,6 +138,7 @@ function MonacoTextEditor({
 
   return (
     <MonacoContextMenu
+      filePath={filePath}
       className="flex-1 min-h-0 w-full"
       getEditors={() => (editorRef.current ? [editorRef.current] : [])}
       saveAction={

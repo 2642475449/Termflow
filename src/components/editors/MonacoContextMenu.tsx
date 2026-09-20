@@ -1,5 +1,6 @@
 import {
   CopyOutlined,
+  MessageOutlined,
   EditOutlined,
   RedoOutlined,
   SaveOutlined,
@@ -12,10 +13,18 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
   useMemo,
+  useEffect,
   useRef,
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { AgentIcon } from "@/components/AgentIcon";
+import { SideQuestionComposer } from "@/components/SideQuestionComposer";
+import { inspectAgentClis } from "@/lib/api";
+import { openAuxiliaryQuestion } from "@/lib/auxiliaryDock";
+import { buildFileSideQuestionPrompt, sanitizeTerminalSelection, type SideQuestionContext } from "@/lib/sideQuestion";
+import { useAppStore } from "@/store";
+import type { AgentCliInfo } from "@/types";
 import {
   getMonacoContextMenuAvailability,
   type MonacoContextMenuFacts,
@@ -34,6 +43,7 @@ interface MonacoContextMenuSaveAction {
 }
 
 interface MonacoContextMenuProps {
+  filePath?: string;
   children: ReactNode;
   className?: string;
   getEditors: () => readonly monaco.editor.IStandaloneCodeEditor[];
@@ -63,11 +73,31 @@ function MonacoContextMenu({
   className,
   getEditors,
   saveAction,
+  filePath,
 }: MonacoContextMenuProps) {
   const { t } = useTranslation();
   const activeEditorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const [open, setOpen] = useState(false);
   const [facts, setFacts] = useState<MonacoContextMenuFacts | null>(null);
+  const projectPath = useAppStore((state) => state.currentProject?.path);
+  const [agents, setAgents] = useState<AgentCliInfo[]>([]);
+  const selectionRef = useRef<Extract<SideQuestionContext, { kind: "file" }> | null>(null);
+  const [draft, setDraft] = useState<{
+    agent: AgentCliInfo;
+    projectPath: string;
+    context: Extract<SideQuestionContext, { kind: "file" }>;
+  } | null>(null);
+  const [question, setQuestion] = useState("");
+  const submittingRef = useRef(false);
+
+  useEffect(() => {
+    if (!filePath) return;
+    let disposed = false;
+    void inspectAgentClis().then((items) => {
+      if (!disposed) setAgents(items.filter((agent) => agent.installed));
+    }).catch((error) => console.warn("Failed to inspect agents for file context menu:", error));
+    return () => { disposed = true; };
+  }, [filePath]);
 
   const availability = useMemo(
     () =>
@@ -138,8 +168,22 @@ function MonacoContextMenu({
         extra: "Ctrl+S",
         disabled: !availability.save,
       },
+      ...(filePath ? [
+        { type: "divider" as const },
+        {
+          key: "ask-in-sidebar",
+          icon: <MessageOutlined />,
+          label: t("terminal.askInSidebar"),
+          disabled: !facts?.hasSelection || !projectPath || agents.length === 0,
+          children: agents.map((agent) => ({
+            key: `ask-in-sidebar:${agent.id}`,
+            label: agent.name,
+            icon: <AgentIcon agentId={agent.id} size={15} />,
+          })),
+        },
+      ] : []),
     ],
-    [availability, t],
+    [availability, t, filePath, facts, projectPath, agents],
   );
 
   function findTargetEditor(target: EventTarget | null) {
@@ -152,6 +196,17 @@ function MonacoContextMenu({
   function handleContextMenuCapture(event: ReactMouseEvent<HTMLDivElement>) {
     const editor = findTargetEditor(event.target);
     activeEditorRef.current = editor;
+    const selection = editor?.getSelection();
+    const model = editor?.getModel();
+    selectionRef.current = filePath && model && selection && !selection.isEmpty()
+      ? {
+          kind: "file", filePath,
+          startLine: selection.startLineNumber,
+          endLine: selection.endColumn === 1 && selection.endLineNumber > selection.startLineNumber
+            ? selection.endLineNumber - 1 : selection.endLineNumber,
+          selection: sanitizeTerminalSelection(model.getValueInRange(selection)),
+        }
+      : null;
     setFacts(editor ? getEditorFacts(editor, saveAction?.enabled ?? false) : null);
   }
 
@@ -171,6 +226,17 @@ function MonacoContextMenu({
     const editor = activeEditorRef.current;
     setOpen(false);
 
+    if (key.startsWith("ask-in-sidebar:")) {
+      const agent = agents.find((item) => item.id === key.slice("ask-in-sidebar:".length));
+      const context = selectionRef.current;
+      if (agent && context?.selection.text && projectPath) {
+        submittingRef.current = false;
+        setQuestion("");
+        setDraft({ agent, context, projectPath });
+      }
+      return;
+    }
+
     if (action === "save") {
       if (availability.save) saveAction?.run();
       return;
@@ -182,16 +248,38 @@ function MonacoContextMenu({
   }
 
   return (
-    <Dropdown
-      trigger={["contextMenu"]}
-      open={open}
-      menu={{ items: menuItems, onClick: handleMenuClick }}
-      onOpenChange={handleOpenChange}
-    >
-      <div className={className} onContextMenuCapture={handleContextMenuCapture}>
-        {children}
-      </div>
-    </Dropdown>
+    <>
+      <Dropdown
+        trigger={["contextMenu"]}
+        open={open}
+        menu={{ items: menuItems, onClick: handleMenuClick }}
+        onOpenChange={handleOpenChange}
+      >
+        <div className={className} onContextMenuCapture={handleContextMenuCapture}>
+          {children}
+        </div>
+      </Dropdown>
+      <SideQuestionComposer
+        open={Boolean(draft)}
+        agent={draft?.agent ?? null}
+        context={draft?.context ?? null}
+        question={question}
+        onQuestionChange={setQuestion}
+        onCancel={() => { setDraft(null); setQuestion(""); }}
+        onSubmit={() => {
+          if (!draft || !question.trim() || submittingRef.current) return;
+          submittingRef.current = true;
+          openAuxiliaryQuestion({
+            agent: draft.agent,
+            projectPath: draft.projectPath,
+            question: question.trim(),
+            prompt: buildFileSideQuestionPrompt({ ...draft, question }),
+          });
+          setDraft(null);
+          setQuestion("");
+        }}
+      />
+    </>
   );
 }
 

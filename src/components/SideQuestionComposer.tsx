@@ -31,7 +31,7 @@ export function SideQuestionComposer({
 }: SideQuestionComposerProps) {
   const { t } = useTranslation();
   const canSubmit = Boolean(agent && canSubmitSideQuestion(question, context));
-  const isResourceQuestion = context?.kind === "resources";
+  const isResourceQuestion = context?.kind === "resources" || context?.kind === "file";
   const presets = isResourceQuestion ? RESOURCE_SIDE_QUESTION_PRESETS : SIDE_QUESTION_PRESETS;
 
   const handleQuestionKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
@@ -106,7 +106,10 @@ export function SideQuestionComposer({
           </div>
         </div>
 
-        {context?.kind === "terminal" ? (
+        {context?.kind === "file" ? (
+          <code className="break-all text-xs">{context.filePath}:{context.startLine}-{context.endLine}</code>
+        ) : null}
+        {context?.kind === "terminal" || context?.kind === "file" ? (
           <div>
             <div className="mb-2 flex items-center justify-between gap-3 text-sm">
               <span style={{ color: "var(--cs-text-secondary)" }}>
@@ -190,7 +193,7 @@ export function SideQuestionComposer({
           />
         ) : null}
 
-        {context?.kind === "terminal" && context.selection.potentialSecret ? (
+        {(context?.kind === "terminal" || context?.kind === "file") && context.selection.potentialSecret ? (
           <Alert
             type="warning"
             showIcon

@@ -264,6 +264,18 @@
     "splitterHint": "Drag horizontally to resize; double-click to reset"
   },
   "statusBar": {
+    "file": {
+      "navigation": "File path navigation",
+      "copyPath": "Copy file path",
+      "pathCopied": "Path copied",
+      "copyFailed": "Failed to copy path",
+      "file": "File",
+      "position": "Ln {{line}}, Col {{column}}",
+      "saved": "Saved",
+      "unsaved": "Unsaved",
+      "spaces": "Spaces: {{count}}",
+      "tabs": "Tab size: {{count}}"
+    },
     "noDefaultAgent": "No default agent",
     "defaultAgentTooltip": "Default agent: {{name}}",
     "launcher": "Launcher",

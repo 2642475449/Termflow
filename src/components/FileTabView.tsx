@@ -762,6 +762,7 @@ function FileTabView({ tabId, projectPath, path, isActive }: FileTabViewProps) {
         </div>
       ) : (
         <MonacoTextEditor
+          statusTabId={tabId}
           filePath={path}
           value={content}
           readOnly={readOnly}

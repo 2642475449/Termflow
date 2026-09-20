@@ -264,6 +264,18 @@
     "splitterHint": "左右拖曳調整寬度；按兩下重設"
   },
   "statusBar": {
+    "file": {
+      "navigation": "檔案路徑導覽",
+      "copyPath": "複製檔案路徑",
+      "pathCopied": "路徑已複製",
+      "copyFailed": "複製路徑失敗",
+      "file": "檔案",
+      "position": "行 {{line}}，欄 {{column}}",
+      "saved": "已儲存",
+      "unsaved": "未儲存",
+      "spaces": "{{count}} 個空格",
+      "tabs": "定位字元：{{count}}"
+    },
     "noDefaultAgent": "未設定預設智慧體",
     "defaultAgentTooltip": "預設智慧體：{{name}}",
     "launcher": "啟動器",

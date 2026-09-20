@@ -5,6 +5,7 @@ import type { TFunction } from "i18next";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AgentIcon } from "@/components/AgentIcon";
+import { FileStatusDetails, FileStatusPath } from "./FileStatusBar";
 import { getAntigravityUsage, getClaudeRateLimits, getCodexRateLimits, getQoderUsage, getSearchIndexStatus, gitCancelCloneTask, inspectAgentClis } from "@/lib/api";
 import { summarizeBackgroundTasks } from "@/lib/backgroundTasks";
 import {
@@ -32,6 +33,9 @@ function StatusBar() {
   const defaultAgentId = useAppStore((state) => state.defaultAgentId);
   const claudeCliInfo = useAppStore((state) => state.claudeCliInfo);
   const currentProject = useAppStore((state) => state.currentProject);
+  const focusedTab = useAppStore((state) => state.focusedTabId ? state.tabsById[state.focusedTabId] : undefined);
+  const activeSidebarSection = useAppStore((state) => state.activeSidebarSection);
+  const fileTab = activeSidebarSection !== "schedules" && focusedTab?.kind === "file" ? focusedTab : null;
   const gitCloneTasks = useAppStore((state) => state.gitCloneTasks);
   const upsertGitCloneTask = useAppStore((state) => state.upsertGitCloneTask);
   const removeGitCloneTask = useAppStore((state) => state.removeGitCloneTask);
@@ -64,7 +68,7 @@ function StatusBar() {
     ? searchIndexListenerError ?? searchIndexStatusError
     : null;
 
-  const activeSession = sessions.find((session) => session.id === activeSessionId) ?? null;
+  const activeSession = !fileTab ? sessions.find((session) => session.id === activeSessionId) ?? null : null;
   const showCodexUsage = shouldLoadCodexRateLimits(activeSession);
   const loadClaudeUsage = shouldLoadClaudeRateLimits(activeSession);
   const showClaudeUsage = loadClaudeUsage && shouldShowClaudeRateLimits(claudeRateLimits);
@@ -74,8 +78,8 @@ function StatusBar() {
     if (isAiAgentId(activeSession?.agentId)) {
       return activeSession.agentId;
     }
-    return defaultAgentId;
-  }, [activeSession?.agentId, defaultAgentId]);
+    return fileTab ? null : defaultAgentId;
+  }, [activeSession?.agentId, defaultAgentId, fileTab]);
 
   useEffect(() => {
     if (!effectiveAgentId) {
@@ -412,7 +416,6 @@ function StatusBar() {
     visibleSearchIndexStatus,
     visibleSearchIndexStatusError,
   );
-  const additionalBackgroundTaskCount = Math.max(backgroundTaskSummary.totalCount - 1, 0);
 
   useEffect(() => {
     let disposed = false;
@@ -482,23 +485,6 @@ function StatusBar() {
     };
   }, [openProject, removeGitCloneTask, upsertGitCloneTask]);
 
-  const cloneStageLabel = activeCloneTask?.stage
-    ? t(`projectLauncher.cloneStages.${activeCloneTask.stage}`, {
-        defaultValue: activeCloneTask.stage,
-      })
-    : t("projectLauncher.cloning");
-  const cloneCountLabel = activeCloneTask?.current && activeCloneTask?.total
-    ? `${activeCloneTask.current}/${activeCloneTask.total}`
-    : activeCloneTask?.total
-      ? `${activeCloneTask.total}`
-      : null;
-  const cloneMetaLabel = [
-    activeCloneTask?.progressPercent != null ? `${activeCloneTask.progressPercent}%` : null,
-    cloneCountLabel,
-    activeCloneTask?.transferred,
-    activeCloneTask?.speed,
-    simplifyRemoteUrl(activeCloneTask?.remoteUrl ?? null),
-  ].filter(Boolean).join(" · ");
   const indexStateLabel = visibleSearchIndexStatusError
     ? t("statusBar.backgroundTasks.unavailable")
     : t(`statusBar.backgroundTasks.${visibleSearchIndexStatus?.state ?? "unavailable"}`, {
@@ -522,29 +508,18 @@ function StatusBar() {
   const indexCompactProgress = backgroundTaskSummary.indexProgressPercent != null
     ? `${backgroundTaskSummary.indexProgressPercent}%`
     : indexStateLabel;
-  const compactTaskMeta = backgroundTaskSummary.concurrent
-    ? [
-        `${t("statusBar.backgroundTasks.cloneCompact")} ${cloneCompactProgress}`,
-        `${t("statusBar.backgroundTasks.indexCompact")} ${indexCompactProgress}`,
-      ].join(" · ")
-    : activeCloneTask
-      ? cloneMetaLabel
-      : indexCompactProgress;
+  const compactTaskMeta = backgroundTaskSummary.totalCount > 1
+    ? null : activeCloneTask ? cloneCompactProgress : indexCompactProgress;
   const indexHasError = Boolean(visibleSearchIndexStatusError)
     || visibleSearchIndexStatus?.state === "failed"
     || visibleSearchIndexStatus?.state === "unsupported";
-  const compactTaskTitle = backgroundTaskSummary.concurrent
+  const compactTaskTitle = backgroundTaskSummary.totalCount > 1
     ? t("statusBar.backgroundTasks.multiple", { count: backgroundTaskSummary.totalCount })
     : activeCloneTask
       ? t("projectLauncher.backgroundCloning", { name: activeCloneTask.directoryName })
       : t("statusBar.backgroundTasks.indexing", {
           name: currentProject?.name ?? t("statusBar.backgroundTasks.searchIndex"),
         });
-  const compactTaskStage = backgroundTaskSummary.concurrent
-    ? null
-    : activeCloneTask
-      ? cloneStageLabel
-      : indexStateLabel;
   const backgroundTaskPopoverContent = backgroundTaskSummary.totalCount > 0 ? (
     <div
       className="w-[520px] overflow-hidden rounded-[12px] border"
@@ -722,7 +697,7 @@ function StatusBar() {
 
   return (
     <div
-      className="app-shell-chrome app-statusbar h-8 px-3 flex items-center justify-between gap-3 text-[12px]"
+      className={`app-shell-chrome app-statusbar h-8 px-3 flex shrink-0 items-center justify-between gap-3 text-[12px]${fileTab ? " app-statusbar-file" : ""}`}
       style={{
         background: "transparent",
         borderTop: "0",
@@ -730,7 +705,7 @@ function StatusBar() {
       }}
     >
       <div className="flex min-w-0 flex-1 items-center justify-start">
-        {showCodexUsage ? (
+        {fileTab ? <FileStatusPath path={fileTab.resourceId} projectPath={currentProject?.path} /> : showCodexUsage ? (
           <RateLimitUsageStatus
             agentId="codex"
             limits={codexRateLimits}
@@ -762,7 +737,7 @@ function StatusBar() {
           />
         ) : null}
       </div>
-      <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
+      <div className="app-statusbar-right flex min-w-0 items-center justify-end gap-3">
         {backgroundTaskSummary.totalCount > 0 ? (
           <Popover
             trigger={["click"]}
@@ -775,9 +750,8 @@ function StatusBar() {
           >
             <button
               type="button"
-              className="flex h-6 min-w-0 items-center gap-2 px-0 text-left transition-colors"
+              className="app-statusbar-task flex h-6 min-w-0 items-center gap-2 px-0 text-left transition-colors"
               style={{
-                width: "min(360px, 45vw)",
                 background: "transparent",
                 border: "0",
                 boxShadow: "none",
@@ -798,11 +772,7 @@ function StatusBar() {
                   <span className="truncate" style={{ color: "var(--cs-text-secondary)" }}>
                     {compactTaskTitle}
                   </span>
-                  {compactTaskStage ? (
-                    <span className="shrink-0" style={{ color: "var(--cs-text-tertiary)" }}>
-                      {compactTaskStage}
-                    </span>
-                  ) : null}
+
                 </div>
                 <div
                   className="mt-1 flex h-[2px] gap-[2px] overflow-hidden rounded-full"
@@ -844,26 +814,18 @@ function StatusBar() {
                 >
                   {compactTaskMeta}
                 </span>
-                {additionalBackgroundTaskCount > 0 ? (
-                  <span
-                    className="shrink-0 text-[10px] font-medium"
-                    style={{
-                      color: "var(--cs-text-secondary)",
-                    }}
-                  >
-                    +{additionalBackgroundTaskCount}
-                  </span>
-                ) : null}
+
               </div>
             </button>
           </Popover>
         ) : null}
-        <span
+        {backgroundTaskSummary.totalCount > 0 && (fileTab || versionLabel) ? <span className="app-statusbar-divider" aria-hidden="true" /> : null}
+        {fileTab ? <FileStatusDetails tabId={fileTab.id} path={fileTab.resourceId} /> : <span
           className="min-w-0 max-w-[360px] truncate text-[12px]"
           title={versionLabel}
         >
           {versionLabel}
-        </span>
+        </span>}
       </div>
     </div>
   );

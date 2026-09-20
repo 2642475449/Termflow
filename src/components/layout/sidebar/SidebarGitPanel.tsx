@@ -872,9 +872,9 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
                   }
                 />
 
-                {/* No changes */}
-                {fileStatuses.length === 0 && !loading && (
-                  <div className="flex flex-col items-center justify-center gap-2 py-8" style={{ color: "var(--cs-text-tertiary)" }}>
+                {/* 刷新时保留空状态高度，首次加载仅隐藏内容，避免下方图形跳动。 */}
+                {fileStatuses.length === 0 && (
+                  <div className={`flex flex-col items-center justify-center gap-2 py-8 text-[var(--cs-text-tertiary)]${loading && isRepo !== true ? " invisible" : ""}`}>
                     <CheckOutlined className="text-2xl" />
                     <span className="text-sm">{t("sidebar.gitNoChanges")}</span>
                   </div>

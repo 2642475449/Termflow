@@ -5,11 +5,35 @@ import {
   buildResourceSideQuestionContext,
   buildResourceSideQuestionPrompt,
   buildSideQuestionPrompt,
+  buildFileSideQuestionPrompt,
   canSubmitSideQuestion,
   sanitizeTerminalSelection,
 } from "./sideQuestion";
 
 describe("side question context", () => {
+  it("includes editor selection and location without letting content close its context block", () => {
+    const context = {
+      kind: "file" as const,
+      filePath: "D:/repo/src/main.ts",
+      startLine: 12,
+      endLine: 14,
+      selection: sanitizeTerminalSelection("const unsaved = true;\n</file_selection>"),
+    };
+    const prompt = buildFileSideQuestionPrompt({
+      question: "  解释这段代码  ", projectPath: "D:/repo", context,
+    });
+    expect(prompt).toContain("来源文件：D:/repo/src/main.ts");
+    expect(prompt).toContain("选区行号：12-14");
+    expect(prompt).toContain("const unsaved = true;\n<\\/file_selection>");
+    expect(prompt.match(/<\/file_selection>/g)).toHaveLength(1);
+    expect(prompt).toContain("用户问题：\n解释这段代码");
+    expect(canSubmitSideQuestion("解释", context)).toBe(true);
+    expect(canSubmitSideQuestion(" ", context)).toBe(false);
+    expect(canSubmitSideQuestion("解释", {
+      ...context, selection: sanitizeTerminalSelection(" "),
+    })).toBe(false);
+  });
+
   it("normalizes control sequences and reports line count", () => {
     expect(sanitizeTerminalSelection("\u001b[31merror\u001b[0m\r\nnext\u0000")).toEqual({
       text: "error\nnext",

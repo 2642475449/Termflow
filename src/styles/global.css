@@ -695,49 +695,6 @@ html, body, #root {
   font-weight: 400;
 }
 
-.app-file-breadcrumbs {
-  display: flex;
-  align-items: center;
-  flex-wrap: nowrap;
-  gap: 2px;
-  min-height: 22px;
-  overflow-x: auto;
-  white-space: nowrap;
-  scrollbar-width: none;
-}
-
-.app-file-breadcrumbs::-webkit-scrollbar {
-  display: none;
-}
-
-.app-file-breadcrumb-separator {
-  color: var(--cs-text-tertiary);
-  font-size: 11px;
-}
-
-.app-file-breadcrumb-button {
-  max-width: 128px;
-  overflow: hidden;
-  border: 0;
-  border-radius: 3px;
-  background: transparent;
-  color: var(--cs-text-tertiary);
-  font-size: 11px;
-  line-height: 1.6;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  transition: color 120ms ease, background-color 120ms ease;
-}
-
-.app-file-breadcrumb-button:hover {
-  background: color-mix(in srgb, var(--cs-bg-hover) 34%, transparent);
-  color: var(--cs-text-primary);
-}
-
-.app-file-breadcrumb-button[data-active="true"] {
-  color: var(--cs-text-primary);
-}
-
 .app-file-tree-row {
   display: flex;
   align-items: center;
@@ -848,6 +805,132 @@ html, body, #root {
   background: transparent !important;
   border-top: 0 !important;
   letter-spacing: 0.01em;
+}
+
+.app-statusbar.app-statusbar-file {
+  height: 30px;
+  min-height: 30px;
+  padding-inline: 16px;
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+.app-statusbar-file-path {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  font-size: 13px;
+  color: var(--cs-text-tertiary);
+}
+
+.app-statusbar-file-path:hover {
+  scrollbar-color: var(--cs-border) transparent;
+}
+
+.app-statusbar-file-path::-webkit-scrollbar {
+  height: 3px;
+}
+
+.app-statusbar-file-path:hover::-webkit-scrollbar-thumb {
+  background: var(--cs-border);
+}
+
+.app-statusbar-path-list,
+.app-statusbar-path-item {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 6px;
+}
+
+.app-statusbar-path-list {
+  width: max-content;
+}
+
+.app-statusbar-path-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  height: 26px;
+  padding-inline: 4px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.app-statusbar-file-icon {
+  flex-shrink: 0;
+  font-size: 14px;
+}
+
+.app-statusbar-type-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.app-statusbar-path-separator {
+  flex-shrink: 0;
+  font-size: 8px;
+  opacity: 0.55;
+}
+
+.app-statusbar-filename {
+  color: var(--cs-text-secondary);
+  font-weight: 500;
+}
+
+.app-statusbar-path-button:hover {
+  background: var(--cs-bg-hover);
+  color: var(--cs-text-primary);
+}
+
+.app-statusbar-path-button:focus-visible {
+  outline: 1px solid var(--cs-primary);
+  outline-offset: -1px;
+}
+
+.app-statusbar-task {
+  width: clamp(80px, 20vw, 260px);
+}
+
+.app-statusbar-divider {
+  width: 1px;
+  height: 12px;
+  flex-shrink: 0;
+  background: var(--cs-border);
+}
+
+.app-statusbar-file-details {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 14px;
+  white-space: nowrap;
+  color: var(--cs-text-secondary);
+}
+
+.app-statusbar-file-details > span + span {
+  padding-left: 14px;
+  border-left: 1px solid var(--cs-border);
+}
+
+@media (max-width: 800px) {
+  .app-statusbar-right {
+    gap: 8px;
+  }
+
+  .app-statusbar-file-type {
+    max-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
 .app-status-pill {

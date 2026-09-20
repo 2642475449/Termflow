@@ -136,28 +136,6 @@ function buildRelativePath(rootPath: string, targetPath: string): string {
   return targetPath;
 }
 
-function buildBreadcrumbs(rootName: string, rootPath: string, selectedPath: string) {
-  const normalizedRoot = normalizePath(rootPath);
-  const normalizedSelected = normalizePath(selectedPath);
-  const relative = normalizedSelected === normalizedRoot
-    ? ""
-    : normalizedSelected.startsWith(`${normalizedRoot}/`)
-      ? normalizedSelected.slice(normalizedRoot.length + 1)
-      : "";
-
-  const segments = relative ? relative.split("/").filter(Boolean) : [];
-  const items = [{ label: rootName, path: rootPath }];
-
-  for (let index = 0; index < segments.length; index += 1) {
-    items.push({
-      label: segments[index],
-      path: joinPath(rootPath, segments.slice(0, index + 1)),
-    });
-  }
-
-  return items;
-}
-
 function getDirectoryPathsToExpand(rootPath: string, targetPath: string, targetIsDirectory: boolean): string[] {
   const normalizedRoot = normalizePath(rootPath);
   const normalizedTarget = normalizePath(targetPath);
@@ -435,7 +413,6 @@ function SidebarProjectPanel({
   const treeContainerRef = useRef<HTMLDivElement | null>(null);
   const setResourceDragState = useAppStore((s) => s.setResourceDragState);
 
-  const rootLabel = useMemo(() => currentProject?.name ?? "", [currentProject?.name]);
   const normalizedSelectedPaths = useMemo(
     () => new Set(selectedPaths.map((path) => normalizePath(path))),
     [selectedPaths]
@@ -733,11 +710,6 @@ function SidebarProjectPanel({
   const searchTree = useMemo(
     () => (currentProject ? buildSearchTree(currentProject.path, searchResults) : []),
     [currentProject, searchResults]
-  );
-
-  const breadcrumbs = useMemo(
-    () => buildBreadcrumbs(rootLabel, currentProject?.path ?? "", selectedPath ?? currentProject?.path ?? ""),
-    [currentProject?.path, rootLabel, selectedPath]
   );
 
   const isSearchMode = filterValue.trim().length > 0;
@@ -1978,30 +1950,6 @@ function SidebarProjectPanel({
 
       <div className="flex flex-1 min-h-0 flex-col px-1 py-2">
         <div className="px-2 pb-2">
-          <div className="app-file-breadcrumbs">
-            {breadcrumbs.map((segment, index) => {
-              const isLast = index === breadcrumbs.length - 1;
-              return (
-                <div key={segment.path} className="flex min-w-0 items-center gap-1">
-                  {index > 0 && <span className="app-file-breadcrumb-separator">/</span>}
-                  <button
-                    type="button"
-                    className="app-file-breadcrumb-button"
-                    data-active={isLast ? "true" : "false"}
-                    onClick={() => {
-                      if (isLast) {
-                        selectOnlyPath(segment.path);
-                        return;
-                      }
-                      void revealPath(segment.path, true);
-                    }}
-                  >
-                    {segment.label}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
           <Input
             size="small"
             allowClear
@@ -2009,7 +1957,6 @@ function SidebarProjectPanel({
             onChange={(event) => setFilterValue(event.target.value)}
             placeholder={filterPlaceholderText}
             prefix={<SearchOutlined className="text-[11px]" />}
-            className="mt-2"
           />
         </div>
 

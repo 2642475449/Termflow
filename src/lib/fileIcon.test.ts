@@ -10,6 +10,13 @@ function getSvg(fileName: string): string {
 }
 
 describe("fileIcon", () => {
+  it("embeds the shared type color so icons do not inherit a surface accent", () => {
+    for (const fileName of ["README.md", "document.pdf", "Main.java", "index.ts", "form.jsp", "pom.xml", "slides.pptx"]) {
+      const visual = getFileIconByName(fileName);
+      expect(getSvg(fileName)).toContain(`<svg color="${visual.color}"`);
+    }
+  });
+
   it("extracts ordinary extensions but not dotfiles", () => {
     expect(getFileExtension("component.TSX")).toBe("tsx");
     expect(getFileExtension(".gitignore")).toBe("");

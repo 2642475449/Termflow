@@ -264,6 +264,18 @@
     "splitterHint": "左右にドラッグして幅を変更、ダブルクリックでリセット"
   },
   "statusBar": {
+    "file": {
+      "navigation": "ファイルパスのナビゲーション",
+      "copyPath": "ファイルパスをコピー",
+      "pathCopied": "パスをコピーしました",
+      "copyFailed": "パスをコピーできませんでした",
+      "file": "ファイル",
+      "position": "行 {{line}}、列 {{column}}",
+      "saved": "保存済み",
+      "unsaved": "未保存",
+      "spaces": "スペース: {{count}}",
+      "tabs": "タブ幅: {{count}}"
+    },
     "noDefaultAgent": "デフォルトエージェント未設定",
     "defaultAgentTooltip": "デフォルトエージェント: {{name}}",
     "launcher": "ランチャー",
