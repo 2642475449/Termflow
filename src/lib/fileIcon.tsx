@@ -20,6 +20,26 @@ const resolveSetiIcon = themeIcons({
 });
 
 const folderColor = "#5b7cfa";
+const archiveIconColor = "#b79a2f";
+const archiveExtensions = new Set([
+  "zip",
+  "rar",
+  "7z",
+  "tar",
+  "gz",
+  "gzip",
+  "bz",
+  "bz2",
+  "xz",
+  "lz",
+  "lz4",
+  "zst",
+  "tgz",
+  "tbz",
+  "tbz2",
+  "txz",
+  "cab",
+]);
 const markdownIconSvg = `
   <svg viewBox="0 0 32 32" focusable="false">
     <path d="M2.5 8h4l4 5.1 4-5.1h4v16h-4V14l-4 5-4-5v10h-4V8zm20.5 0h4v9h3.5L25 24l-5.5-7H23V8z"/>
@@ -43,6 +63,13 @@ const powerpointIconSvg = `
     <path d="M16 8a8 8 0 1 1 0 16V8zm2 2.3v5.2h5.2A6 6 0 0 0 18 10.3z" opacity=".45"/>
     <path d="M4 8.5 18 6v20L4 23.5v-15z"/>
     <path fill="white" d="M8 12h4.3c2.4 0 3.8 1.2 3.8 3.4 0 2.3-1.5 3.6-4 3.6h-1.5v3H8V12zm2.6 2.1v2.8H12c1 0 1.5-.5 1.5-1.4 0-1-.5-1.4-1.5-1.4h-1.4z"/>
+  </svg>
+`;
+const archiveIconSvg = `
+  <svg viewBox="0 0 32 32" focusable="false">
+    <path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M6 3h14l6 6v20H6V3zm14 0v7h6"/>
+    <path d="M14 11h4v2h-4zm0 4h4v2h-4zm0 4h4v2h-4zm0 4h4v2h-4z"/>
+    <path d="M13 25h6v2h-6z"/>
   </svg>
 `;
 
@@ -85,6 +112,9 @@ export function getFileIconByName(fileName: string): FileIconInfo {
   }
   if (["md", "mdx", "markdown"].includes(extension)) {
     return createFileIcon(markdownIconSvg, "#4f9f5f", "app-markdown-file-icon");
+  }
+  if (archiveExtensions.has(extension)) {
+    return createFileIcon(archiveIconSvg, archiveIconColor, "app-archive-file-icon");
   }
   const visual = resolveSetiIcon(normalizedName);
   return createFileIcon(visual.svg, visual.color);

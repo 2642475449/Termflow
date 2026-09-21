@@ -80,6 +80,31 @@ describe("fileIcon", () => {
     expect(getFileIconByName("show.ppsx").color).toBe("#d24726");
   });
 
+  it("uses one clear zipper-file logo for common archive formats", () => {
+    const archiveNames = [
+      "materials.zip",
+      "materials.rar",
+      "materials.7z",
+      "materials.tar",
+      "materials.tar.gz",
+      "materials.tar.xz",
+      "materials.cab",
+    ];
+    const archiveSvg = getSvg(archiveNames[0]);
+
+    for (const archiveName of archiveNames) {
+      const icon = getFileIconByName(archiveName).icon as ReactElement<{
+        className: string;
+      }>;
+      expect(icon.props.className).toContain("app-archive-file-icon");
+      expect(getSvg(archiveName)).toBe(archiveSvg);
+      expect(getFileIconByName(archiveName).color).toBe("#b79a2f");
+    }
+
+    expect(archiveSvg).toContain('stroke="currentColor"');
+    expect(archiveSvg).not.toBe(getSvg("unknown-file"));
+  });
+
   it("keeps folders visually consistent and changes the expanded glyph", () => {
     const src = getFileIcon("src", true);
     const nodeModules = getFileIcon("node_modules", true);
