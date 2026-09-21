@@ -125,7 +125,7 @@ export function SideQuestionComposer({
                 borderColor: "var(--cs-border-secondary)",
                 background: "var(--cs-bg-hover)",
                 color: "var(--cs-text-secondary)",
-                fontFamily: "monospace",
+                fontFamily: "var(--font-mono)",
               }}
             >
               {context.selection.text}

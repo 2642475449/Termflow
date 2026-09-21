@@ -249,7 +249,7 @@ export function QuickCommandsPage() {
                   </div>
                   <div
                     className="text-xs truncate mt-0.5"
-                    style={{ color: "var(--cs-text-tertiary)", fontFamily: "monospace" }}
+                    style={{ color: "var(--cs-text-tertiary)", fontFamily: "var(--font-mono)" }}
                   >
                     {cmd.action === "agent-prompt" && cmd.agentId
                       ? `${getAgentDisplayName(cmd.agentId)} · `

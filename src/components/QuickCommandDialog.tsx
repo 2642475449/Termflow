@@ -276,7 +276,7 @@ export function QuickCommandDialog({
             )}
             autoSize={{ minRows: 6, maxRows: 14 }}
             maxLength={4000}
-            style={{ fontFamily: "monospace", fontSize: 16, lineHeight: 1.6 }}
+            style={{ fontFamily: "var(--font-mono)", fontSize: 16, lineHeight: 1.6 }}
           />
         </div>
 
