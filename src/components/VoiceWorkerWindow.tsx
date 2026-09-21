@@ -13,6 +13,8 @@ import i18n from "@/i18n";
 type VoiceWorkerAction = "press" | "release" | "toggle" | "cancel";
 type VoiceInputTarget = "terminal" | "system";
 
+const VOICE_OVERLAY_REASSERT_INTERVAL_MS = 600;
+
 interface VoiceWorkerConfigPayload {
   apiKey: string;
   authMode: MimoAuthMode;
@@ -275,23 +277,30 @@ function VoiceWorkerWindow() {
       workerState.phase !== "idle" &&
       workerState.phase !== "done";
 
-    if (isOverlayActive) {
-      ensureVoiceOverlayWindow()
-        .then(() => emit("voice-overlay-state", overlayStateRef.current))
-        .catch((error) => {
-          console.error("voice worker failed to ensure overlay window:", error);
-          void emit("voice-worker-error", {
-            code: "overlay_show_failed",
-            message:
-              error instanceof Error && error.message
-                ? error.message
-                : String(error || "Failed to show the voice overlay."),
-          });
-        });
+    if (!isOverlayActive) {
+      hideVoiceOverlayWindow().catch(() => undefined);
       return;
     }
 
-    hideVoiceOverlayWindow().catch(() => undefined);
+    ensureVoiceOverlayWindow()
+      .then(() => emit("voice-overlay-state", overlayStateRef.current))
+      .catch((error) => {
+        console.error("voice worker failed to ensure overlay window:", error);
+        void emit("voice-worker-error", {
+          code: "overlay_show_failed",
+          message:
+            error instanceof Error && error.message
+              ? error.message
+              : String(error || "Failed to show the voice overlay."),
+        });
+      });
+
+    // 显示请求与状态事件可能在平台层被丢弃（隐藏 WebView 恢复延迟、show 丢失等），
+    // 而 phase 在录音期间不再变化，缺少重试点。周期性幂等地重新声明可见性自愈。
+    const reassertTimer = setInterval(() => {
+      ensureVoiceOverlayWindow().catch(() => undefined);
+    }, VOICE_OVERLAY_REASSERT_INTERVAL_MS);
+    return () => clearInterval(reassertTimer);
   }, [workerState.phase]);
 
   return null;

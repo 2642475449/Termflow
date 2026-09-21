@@ -627,16 +627,20 @@ pub fn ensure_voice_overlay_window(
         .get_webview_window(VOICE_OVERLAY_LABEL)
         .ok_or_else(|| "语音悬浮窗未初始化".to_string())?;
 
-    let (x, y) = voice_overlay_position(&app, &window)?;
-    overlay_window
-        .set_size(Size::Physical(PhysicalSize::new(
-            VOICE_OVERLAY_WIDTH,
-            VOICE_OVERLAY_HEIGHT,
-        )))
-        .map_err(|error| format!("Failed to size voice overlay: {error}"))?;
-    overlay_window
-        .set_position(Position::Physical(PhysicalPosition::new(x, y)))
-        .map_err(|error| format!("Failed to position voice overlay: {error}"))?;
+    // 工作窗口在录音期间会周期性重声明可见性以自愈丢失的 show 调用。
+    // 已可见时跳过尺寸与位置计算，避免胶囊在用户切换前台窗口时跳屏。
+    if !overlay_window.is_visible().unwrap_or(false) {
+        let (x, y) = voice_overlay_position(&app, &window)?;
+        overlay_window
+            .set_size(Size::Physical(PhysicalSize::new(
+                VOICE_OVERLAY_WIDTH,
+                VOICE_OVERLAY_HEIGHT,
+            )))
+            .map_err(|error| format!("Failed to size voice overlay: {error}"))?;
+        overlay_window
+            .set_position(Position::Physical(PhysicalPosition::new(x, y)))
+            .map_err(|error| format!("Failed to position voice overlay: {error}"))?;
+    }
     overlay_window
         .set_always_on_top(true)
         .map_err(|error| format!("Failed to keep voice overlay on top: {error}"))?;

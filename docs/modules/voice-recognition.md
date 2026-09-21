@@ -67,6 +67,8 @@
 
 **生命周期**：VoiceWorkerWindow 在录音/转录阶段（phase 非 idle 且非 done）自动调用 `ensure_voice_overlay_window` 显示悬浮窗，完成后调用 `hide_voice_overlay_window` 隐藏。窗口位置计算基于当前显示器尺寸，居中显示在屏幕底部（距底部 72px）。`VoiceOverlayState` 跟踪窗口所有者（owner_label），确保只有创建者可以隐藏窗口。
 
+**可见性自愈**：显示请求与状态事件可能在平台层丢失（隐藏 WebView 恢复延迟等），而录音期间 phase 不再变化、缺少自然重试点。因此 Worker 在 phase 活跃期间每 600ms 幂等地重声明一次悬浮窗可见性；Rust 端对已可见窗口跳过尺寸与位置计算，仅在隐藏→显示时重新定位，避免胶囊跳屏。
+
 **渲染内容**：监听 `voice-overlay-state` 事件获取状态，渲染 `VoiceStatusCapsule` 组件（非交互模式），展示录音状态图标、音量电平动画（Equalizer）、耗时徽章、状态文字。
 
 **代码位置**：
