@@ -50,6 +50,7 @@ export default function AuxiliaryFileView({
   const [kind, setKind] = useState<"text" | "image" | "pdf" | "binary">("text");
   const [content, setContent] = useState("");
   const [savedContent, setSavedContent] = useState("");
+  const [encoding, setEncoding] = useState<string | null>(null);
   const [readOnly, setReadOnly] = useState(true);
   const [markdownViewMode, setMarkdownViewMode] = useState<"edit" | "preview">("preview");
   const [imageSrc, setImageSrc] = useState<string | null>(null);
@@ -70,6 +71,7 @@ export default function AuxiliaryFileView({
     setError(null);
     setContent("");
     setSavedContent("");
+    setEncoding(null);
     setReadOnly(true);
     setImageSrc(null);
     setPdfData(null);
@@ -85,6 +87,7 @@ export default function AuxiliaryFileView({
           if (!cancelled) {
             setContent(file.content);
             setSavedContent(file.content);
+            setEncoding(file.encoding);
             setReadOnly(file.readOnly);
             setModifiedAtMs(file.modifiedAtMs ?? status.modifiedAtMs ?? null);
           }
@@ -121,19 +124,25 @@ export default function AuxiliaryFileView({
 
     saveInFlightRef.current = true;
     try {
-      await writeProjectFile(projectPath, path, content);
+      await writeProjectFile(projectPath, path, content, encoding ?? undefined);
       setSavedContent(content);
       setError(null);
       window.dispatchEvent(new CustomEvent(GIT_REFRESH_EVENT, { detail: { projectPath } }));
       if (!options?.silent) message.success(t("fileTabs.saveSuccess"));
       return true;
     } catch (reason) {
-      message.error(reason instanceof Error ? reason.message : t("fileTabs.saveFailed"));
+      const nextMessage =
+        typeof reason === "string"
+          ? reason
+          : reason instanceof Error
+            ? reason.message
+            : t("fileTabs.saveFailed");
+      message.error(nextMessage);
       return false;
     } finally {
       saveInFlightRef.current = false;
     }
-  }, [content, isDirty, kind, path, projectPath, readOnly, t]);
+  }, [content, encoding, isDirty, kind, path, projectPath, readOnly, t]);
 
   useEffect(() => {
     if (!active || !isDirty || readOnly) return;

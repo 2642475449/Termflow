@@ -23,6 +23,24 @@ it("asks on first close without closing the workspace", async () => {
   expect(completeWorkspaceClose).not.toHaveBeenCalled();
 });
 
+it("explicit project close offers direct close without changing background preferences", async () => {
+  useBackgroundStore.setState({ settings: { runInBackground: true, askBeforeClose: false } });
+  await requestWorkspaceClose(false, true);
+  expect(useBackgroundStore.getState()).toMatchObject({ promptOpen: true, remember: false });
+  expect(getBackgroundSettings).not.toHaveBeenCalled();
+  expect(completeWorkspaceClose).not.toHaveBeenCalled();
+  await chooseWorkspaceClose(false);
+  expect(completeWorkspaceClose).toHaveBeenCalledWith(false);
+  expect(setBackgroundSettings).not.toHaveBeenCalled();
+});
+
+it("guards explicit project close during update download", async () => {
+  useApplicationUpdateStore.setState({ phase: "downloading" });
+  await expect(requestWorkspaceClose(false, true)).rejects.toThrow("application-update-in-progress");
+  expect(useBackgroundStore.getState().promptOpen).toBe(false);
+  expect(completeWorkspaceClose).not.toHaveBeenCalled();
+});
+
 it("remembers the background choice before hiding", async () => {
   await chooseWorkspaceClose(true);
   expect(setBackgroundSettings).toHaveBeenCalledWith({ runInBackground: true, askBeforeClose: false });

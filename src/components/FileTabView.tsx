@@ -178,6 +178,7 @@ function FileTabView({ tabId, projectPath, path, isActive }: FileTabViewProps) {
   const [pdfData, setPdfData] = useState<Uint8Array | null>(null);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
   const [savedContent, setSavedContent] = useState("");
+  const [encoding, setEncoding] = useState<string | null>(null);
   const [readOnly, setReadOnly] = useState(fileDocument?.readOnly ?? false);
   const [sizeBytes, setSizeBytes] = useState<number | null>(fileDocument?.sizeBytes ?? null);
   const [largeFile, setLargeFile] = useState(fileDocument?.largeFile ?? false);
@@ -284,6 +285,7 @@ function FileTabView({ tabId, projectPath, path, isActive }: FileTabViewProps) {
         setPdfData(null);
         setImageLoadFailed(false);
         setSavedContent(textContent);
+        setEncoding(result.encoding);
         setReadOnly(result.readOnly);
         setSizeBytes(result.sizeBytes ?? status.sizeBytes ?? null);
         setLargeFile(result.largeFile ?? status.largeFile ?? false);
@@ -308,6 +310,7 @@ function FileTabView({ tabId, projectPath, path, isActive }: FileTabViewProps) {
         setImageLoadFailed(false);
         setContent("");
         setSavedContent("");
+        setEncoding(null);
         setSizeBytes(result.sizeBytes ?? status.sizeBytes ?? null);
         setLargeFile(status.largeFile ?? false);
         setTabDirty(tabId, false);
@@ -319,6 +322,7 @@ function FileTabView({ tabId, projectPath, path, isActive }: FileTabViewProps) {
         setImageSrc(null);
         setImageLoadFailed(false);
         setSavedContent("");
+        setEncoding(null);
         try {
           setPdfData(await readProjectPdf(projectPath, path));
         } catch (reason) {
@@ -334,6 +338,7 @@ function FileTabView({ tabId, projectPath, path, isActive }: FileTabViewProps) {
       setPdfData(null);
       setImageLoadFailed(false);
       setSavedContent("");
+      setEncoding(null);
       setSizeBytes(status.sizeBytes ?? null);
       setLargeFile(status.largeFile ?? false);
       setTabDirty(tabId, false);
@@ -354,6 +359,7 @@ function FileTabView({ tabId, projectPath, path, isActive }: FileTabViewProps) {
       setImageLoadFailed(false);
       setContent("");
       setSavedContent("");
+      setEncoding(null);
     } finally {
       setLoading(false);
     }
@@ -371,7 +377,7 @@ function FileTabView({ tabId, projectPath, path, isActive }: FileTabViewProps) {
 
     saveInFlightRef.current = true;
     try {
-      await writeProjectFile(projectPath, path, content);
+      await writeProjectFile(projectPath, path, content, encoding ?? undefined);
       const status = await inspectProjectFile(projectPath, path);
       setSavedContent(content);
       setTabDirty(tabId, false);
@@ -400,13 +406,20 @@ function FileTabView({ tabId, projectPath, path, isActive }: FileTabViewProps) {
       }
       return true;
     } catch (nextError) {
-      message.error(nextError instanceof Error ? nextError.message : t("fileTabs.saveFailed"));
+      const nextMessage =
+        typeof nextError === "string"
+          ? nextError
+          : nextError instanceof Error
+            ? nextError.message
+            : t("fileTabs.saveFailed");
+      message.error(nextMessage);
       return false;
     } finally {
       saveInFlightRef.current = false;
     }
   }, [
     content,
+    encoding,
     isDirty,
     kind,
     message,

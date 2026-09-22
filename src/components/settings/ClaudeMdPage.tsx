@@ -55,6 +55,7 @@ type ProjectInstructionState = {
   exists: boolean;
   content: string;
   draft: string;
+  encoding?: string | null;
   loading: boolean;
   saving: boolean;
   loaded: boolean;
@@ -78,6 +79,7 @@ function createEmptyProjectInstructionState(): ProjectInstructionState {
     exists: false,
     content: "",
     draft: "",
+    encoding: null,
     loading: false,
     saving: false,
     loaded: false,
@@ -400,6 +402,7 @@ export function ClaudeMdPage() {
           exists: true,
           content: file.content,
           draft: file.content,
+          encoding: file.encoding,
           loading: false,
           saving: false,
           loaded: true,
@@ -415,6 +418,7 @@ export function ClaudeMdPage() {
           exists: false,
           content: "",
           draft: "",
+          encoding: null,
           loading: false,
           saving: false,
           loaded: true,
@@ -486,12 +490,19 @@ export function ClaudeMdPage() {
           const { parentPath, name } = splitRelativePath(activeProjectTarget.relativePath);
           await createProjectFile(projectPath, resolveProjectParentPath(projectPath, parentPath), name);
         }
-        await writeProjectFile(projectPath, activeProjectTarget.relativePath, activeProjectState.draft);
+        await writeProjectFile(
+          projectPath,
+          activeProjectTarget.relativePath,
+          activeProjectState.draft,
+          activeProjectState.encoding ?? undefined
+        );
         await loadProjectInstruction(activeProjectTarget, true);
         message.success(`${activeAgentConfig.name} 指令文件已保存`);
       } catch (error) {
         console.error("Failed to save agent instruction file:", error);
-        message.error(`保存 ${activeAgentConfig.name} 指令文件失败`);
+        const detail =
+          typeof error === "string" ? error : error instanceof Error ? error.message : "";
+        message.error(detail || `保存 ${activeAgentConfig.name} 指令文件失败`);
         setProjectInstructions((prev) => ({
           ...prev,
           [activeProjectKey]: {

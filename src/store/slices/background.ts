@@ -53,7 +53,7 @@ function checkUpdateGuard(): void {
   if (phase === "downloading" || phase === "installing") throw new Error("application-update-in-progress");
 }
 
-export async function requestWorkspaceClose(exitApplication = false): Promise<void> {
+export async function requestWorkspaceClose(exitApplication = false, explicitProjectClose = false): Promise<void> {
   const state = useBackgroundStore.getState();
   if (state.busy || (state.promptOpen && !exitApplication)) return;
   checkUpdateGuard();
@@ -61,6 +61,11 @@ export async function requestWorkspaceClose(exitApplication = false): Promise<vo
   try {
     if (exitApplication) {
       await exitBackgroundApplication();
+      return;
+    }
+    // 任务监控的项目关闭入口始终提供直接关闭选项，不覆盖全局后台偏好。
+    if (explicitProjectClose) {
+      useBackgroundStore.setState({ promptOpen: true, remember: false });
       return;
     }
     // SQLite 是多窗口设置的权威来源，关闭时不依赖旧窗口缓存。

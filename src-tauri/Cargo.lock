@@ -4960,6 +4960,7 @@ dependencies = [
  "chrono",
  "chrono-tz",
  "dirs-next",
+ "encoding_rs",
  "futures-util",
  "git2",
  "globset",

@@ -449,12 +449,9 @@ function TitleBarProjectSwitcher() {
         }
       >
         <div className="pt-1">
-          <div>
-            {t("projectLauncher.openProjectQuestion", {
-              name: pendingProjectPath?.split(/[\\/]/).pop() || pendingProjectPath || "",
-            })}
-          </div>
-          <ProjectOpenWarnings />
+          <ProjectOpenDescription
+            projectName={pendingProjectPath?.split(/[\\/]/).pop() || pendingProjectPath || ""}
+          />
           <Checkbox
             className="mt-4"
             checked={rememberOpenChoice}
@@ -468,7 +465,7 @@ function TitleBarProjectSwitcher() {
   );
 }
 
-function ProjectOpenWarnings() {
+function ProjectOpenDescription({ projectName }: { projectName: string }) {
   const { t } = useTranslation();
   const runningSessionCount = useAppStore((state) =>
     state.sessions.filter(isSessionTurnRunning).length
@@ -476,26 +473,25 @@ function ProjectOpenWarnings() {
   const dirtyFileCount = useAppStore((state) => Object.values(state.tabsById).filter(
     (tab) => tab.dirty
   ).length);
-  if (runningSessionCount === 0 && dirtyFileCount === 0) return null;
-  return (
-    <div className="mt-3 flex items-start gap-2.5 text-xs leading-5">
-      <WarningOutlined
-        className="mt-[3px] shrink-0"
-        style={{ color: "var(--cs-warning)" }}
-      />
-      <div className="min-w-0">
-        <div style={{ color: "var(--cs-text-secondary)" }}>
-          {runningSessionCount > 0 ? (
-            <div>{t("projectLauncher.openProjectRunningSessions", { count: runningSessionCount })}</div>
-          ) : null}
-          {dirtyFileCount > 0 ? (
-            <div>{t("projectLauncher.openProjectUnsavedFiles", { count: dirtyFileCount })}</div>
-          ) : null}
-        </div>
-        <div className="mt-0.5" style={{ color: "var(--cs-warning)" }}>
-          {t("projectLauncher.currentWindowCleanupWarning")}
-        </div>
+  if (runningSessionCount === 0 && dirtyFileCount === 0) {
+    return (
+      <div className="text-sm leading-5 text-[var(--cs-text-secondary)]">
+        {t("projectLauncher.openProjectQuestion", { name: projectName })}
       </div>
+    );
+  }
+  const warning = runningSessionCount > 0 && dirtyFileCount > 0
+    ? t("projectLauncher.currentWindowRunningAndDirtyWarning", {
+      sessionCount: runningSessionCount,
+      fileCount: dirtyFileCount,
+    })
+    : runningSessionCount > 0
+      ? t("projectLauncher.currentWindowRunningSessionsWarning", { count: runningSessionCount })
+      : t("projectLauncher.currentWindowUnsavedFilesWarning", { count: dirtyFileCount });
+  return (
+    <div className="flex items-center gap-2 text-sm leading-5 text-[var(--cs-warning)]">
+      <WarningOutlined className="shrink-0" />
+      <span>{warning}</span>
     </div>
   );
 }

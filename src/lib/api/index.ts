@@ -822,12 +822,14 @@ export async function readProjectFile(
 export async function writeProjectFile(
   projectPath: string,
   path: string,
-  content: string
+  content: string,
+  encoding?: string
 ): Promise<void> {
   await invoke("write_project_file", {
     projectPath,
     path,
     content,
+    encoding,
   });
 }
 

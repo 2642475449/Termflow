@@ -10,6 +10,7 @@ import { useOpenProjectsStore } from "@/store/slices/openProjects";
 import {
   requestTaskMonitorSnapshots,
   requestTaskMonitorTabClose,
+  requestTaskMonitorProjectClose,
   startTaskMonitorSync,
   useTaskMonitorStore,
 } from "@/store/slices/taskMonitor";
@@ -29,7 +30,10 @@ export function TaskMonitorPopover() {
   const snapshots = useTaskMonitorStore((s) => s.snapshots);
   const projects = collectOpenProjects(windows, currentProject);
 
-  useEffect(() => startTaskMonitorSync(), []);
+  useEffect(() => startTaskMonitorSync((error) => {
+    message.error(error instanceof Error && error.message === "application-update-in-progress"
+      ? t("updater.keepOpenDuringDownload") : t("taskMonitor.closeProjectFailed"));
+  }), [t]);
   useEffect(() => {
     if (!open) return;
     const refresh = () => {
@@ -66,6 +70,18 @@ export function TaskMonitorPopover() {
     }
   }
 
+  async function closeProject(targetWindowLabel: string, projectPath: string) {
+    setOpen(false);
+    try {
+      // 先恢复目标窗口，让常驻关闭对话框在用户可见的窗口中展示。
+      if (!await focusProjectWindow(projectPath, "")) throw new Error("Project window unavailable");
+      await requestTaskMonitorProjectClose(targetWindowLabel, projectPath);
+    } catch (error) {
+      console.error("Failed to close monitored project:", error);
+      message.error(t("taskMonitor.closeProjectFailed"));
+    }
+  }
+
   const content = (
     <div className="app-task-monitor">
       <div className="app-task-monitor-header">
@@ -85,7 +101,16 @@ export function TaskMonitorPopover() {
             <section key={key} className="app-task-monitor-project" aria-label={project.name}>
               <div className="app-task-monitor-project-name" title={project.path}>
                 <FolderOpenOutlined />
-                <span className="truncate">{project.name}</span>
+                <span className="min-w-0 flex-1 truncate">{project.name}</span>
+                {targetWindowLabel && (
+                  <Tooltip title={t("taskMonitor.closeProject")}>
+                    <button type="button" className="app-task-monitor-project-close flex h-6 w-6 shrink-0 items-center justify-center rounded"
+                      aria-label={t("taskMonitor.closeProject")}
+                      onClick={() => void closeProject(targetWindowLabel, project.path)}>
+                      <CloseOutlined />
+                    </button>
+                  </Tooltip>
+                )}
               </div>
               {(!projectTabs || projectTabs.length === 0) && (
                 <p className="app-task-monitor-empty">{t(projectTabs ? "taskMonitor.noTabs" : "taskMonitor.loading")}</p>

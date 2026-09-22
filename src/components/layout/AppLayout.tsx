@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { Button, Layout, message, Spin } from "antd";
+import { Layout, message, Spin } from "antd";
 import dayjs from "dayjs";
 import TitleBar from "./TitleBar";
 import StatusBar from "./StatusBar";
@@ -9,6 +9,7 @@ import AuxiliaryDock from "./AuxiliaryDock";
 import TabBar from "@/components/TabBar";
 import HomePage from "@/pages/home";
 import SessionCheckpointSummaryBar from "@/components/SessionCheckpointSummaryBar";
+import { SessionResumeView } from "@/components/SessionResumeView";
 import { NewSessionDialog } from "@/components/NewSessionDialog";
 import GlobalTextSearchDialog from "@/components/GlobalTextSearchDialog";
 import { VoiceTrigger } from "@/components/VoiceButton";
@@ -259,23 +260,9 @@ function WorkspacePane({ paneId }: { paneId: string }) {
                         onExit={() => updateSession(tabId, { active: false })}
                         onClose={() => closeTab(tabId)}
                       />
-                    ) : (
-                      <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-                        <div className="text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>
-                          {i18n.t("terminal.sessionDisconnected")}
-                        </div>
-                        <div className="max-w-md text-xs" style={{ color: "var(--cs-text-tertiary)" }}>
-                          {i18n.t("terminal.sessionDisconnectedDesc")}
-                        </div>
-                        <Button
-                          type="primary"
-                          loading={session?.status === "starting"}
-                          onClick={() => void resumeSession(tabId)}
-                        >
-                          {i18n.t("terminal.resumeSession")}
-                        </Button>
-                      </div>
-                    )}
+                    ) : session ? (
+                      <SessionResumeView session={session} onResume={() => void resumeSession(tabId)} />
+                    ) : null}
                   </Suspense>
                 </div>
               );

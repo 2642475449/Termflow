@@ -51,7 +51,8 @@ export default defineConfig(async () => ({
         }
       : undefined,
     watch: {
-      ignored: ["**/src-tauri/**"],
+      // 本地依赖缓存包含大量文件，无需参与前端热更新监听。
+      ignored: ["**/src-tauri/**", "**/.pnpm-store/**", "**/.corepack/**"],
     },
   },
 }));

@@ -132,6 +132,7 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
   const [availableAgents, setAvailableAgents] = useState<AgentCliInfo[] | null>(null);
   const [loadingAgents, setLoadingAgents] = useState(false);
   const tabRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const tabListRef = useRef<HTMLDivElement | null>(null);
   const pressStateRef = useRef<PressState | null>(null);
   const suppressClickRef = useRef(false);
 
@@ -151,6 +152,24 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
     () => new Map(sessions.map((session) => [session.id, session])),
     [sessions]
   );
+
+  useEffect(() => {
+    const list = tabListRef.current;
+    if (!list) return;
+    // 仅滚动标签区域，避免把新建按钮或外层分栏一起滚走。
+    const revealActiveTab = () => {
+      const tab = activeTabId ? tabRefs.current[activeTabId] : null;
+      if (!tab) return;
+      const viewport = list.getBoundingClientRect();
+      const bounds = tab.getBoundingClientRect();
+      if (bounds.left < viewport.left) list.scrollLeft += bounds.left - viewport.left;
+      else if (bounds.right > viewport.right) list.scrollLeft += bounds.right - viewport.right;
+    };
+    revealActiveTab();
+    const observer = new ResizeObserver(revealActiveTab);
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [activeTabId, tabIds]);
 
   const loadAvailableAgents = useCallback(async (
     options?: { forceRefresh?: boolean; showLoading?: boolean },
@@ -525,7 +544,7 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
   return (
     <div
       data-tabbar-pane={paneId}
-      className="app-shell-chrome app-glass-tabbar flex items-end overflow-x-auto shrink-0"
+      className="app-shell-chrome app-glass-tabbar app-tabbar flex items-end shrink-0"
       style={{
         background: isCrossPaneDropTarget
           ? "color-mix(in srgb, var(--cs-primary) 10%, transparent)"
@@ -536,6 +555,15 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
           : undefined,
       }}
     >
+      <div
+        ref={tabListRef}
+        className="app-tabbar-tabs"
+        onWheel={(event) => {
+          const list = event.currentTarget;
+          if (list.scrollWidth <= list.clientWidth || event.deltaX !== 0) return;
+          list.scrollLeft += event.deltaY;
+        }}
+      >
       {openTabs.map((tabId) => {
         const isActive = tabId === activeSessionId;
         const isSettings = tabId === SETTINGS_ID;
@@ -564,7 +592,7 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
               ref={(node) => {
                 tabRefs.current[tabId] = node;
               }}
-              className="relative shrink-0"
+              className="app-tabbar-tab relative"
             >
               {dropTarget?.tabId === tabId && (
                 <div
@@ -578,7 +606,7 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
               )}
               <div
                 data-active={isActive ? "true" : "false"}
-                className={`tab-item app-tab-chrome app-marker-host app-marker-bottom app-glass-tab ${isActive ? "app-glass-tab-active" : ""} flex items-center gap-1.5 px-3 cursor-pointer shrink-0`}
+                className={`tab-item app-tab-chrome app-marker-host app-marker-bottom app-glass-tab ${isActive ? "app-glass-tab-active" : ""} flex items-center gap-1.5 px-3 cursor-pointer`}
                 style={{
                   opacity: isDragging ? 0.2 : 1,
                   transform: isDragging ? "scale(0.98)" : "none",
@@ -648,24 +676,22 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
                   />
                 )}
                 {isSettings ? (
-                  <span className="text-xs">{t("common.settings")}</span>
+                  <span className="app-tabbar-title text-xs" title={t("common.settings")}>{t("common.settings")}</span>
                 ) : isScheduledTasks ? (
-                  <span className="text-xs">{t("scheduledTasks.title")}</span>
+                  <span className="app-tabbar-title text-xs" title={t("scheduledTasks.title")}>{t("scheduledTasks.title")}</span>
                 ) : isFile || isDiff ? (
-                  <Tooltip title={filePath ?? diffPath ?? undefined} mouseEnterDelay={0.5}>
-                    <span className={`text-xs max-w-[120px] truncate ${tab?.preview ? 'italic opacity-70' : ''}`}>
+                  <Tooltip title={<><div>{tab?.title}</div><div>{filePath ?? diffPath}</div></>} mouseEnterDelay={0.5}>
+                    <span className={`app-tabbar-title text-xs ${tab?.preview ? 'italic opacity-70' : ''}`}>
                       {tab?.title}
                       {tab.dirty ? " *" : ""}
                     </span>
                   </Tooltip>
                 ) : (
-                  <div className={`flex min-w-0 max-w-[140px] items-center gap-1 ${tab?.preview ? 'italic opacity-70' : ''}`}>
-                    <Tooltip title={session!.path} mouseEnterDelay={0.5}>
-                      <span className="truncate text-xs">
-                        {(tab?.title ?? session!.name) + (tab?.dirty ? " *" : "")}
-                      </span>
-                    </Tooltip>
-                  </div>
+                  <Tooltip title={tab?.title ?? session!.name} mouseEnterDelay={0.5}>
+                    <span className={`app-tabbar-title text-xs ${tab?.preview ? 'italic opacity-70' : ''}`}>
+                      {(tab?.title ?? session!.name) + (tab?.dirty ? " *" : "")}
+                    </span>
+                  </Tooltip>
                 )}
                 <Button
                   type="text"
@@ -683,6 +709,7 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
           </Dropdown>
         );
       })}
+      </div>
       {currentProject && (
         <div
           className="shrink-0 flex items-center justify-center px-1.5 gap-1.5"

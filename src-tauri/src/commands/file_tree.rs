@@ -1,4 +1,5 @@
 use crate::path_utils::{display_path, normalize_input_path};
+use encoding_rs::{Encoding, GBK, UTF_16BE, UTF_16LE, UTF_8};
 use serde::Serialize;
 use std::cmp::Ordering;
 use std::fs;
@@ -70,6 +71,7 @@ pub struct ProjectFileContent {
     pub name: String,
     pub content: String,
     pub kind: ProjectFileKind,
+    pub encoding: String,
     pub read_only: bool,
     pub size_bytes: u64,
     pub large_file: bool,
@@ -326,7 +328,8 @@ pub fn read_project_file(project_path: String, path: String) -> Result<ProjectFi
     }
     let size_bytes = metadata.len();
     let large_file = size_bytes > MAX_EDITABLE_TEXT_FILE_BYTES;
-    let content = fs::read_to_string(&target_path).map_err(|e| format!("读取文件失败: {}", e))?;
+    let raw_bytes = fs::read(&target_path).map_err(|e| format!("读取文件失败: {}", e))?;
+    let (content, encoding) = decode_text_bytes(&raw_bytes);
 
     Ok(ProjectFileContent {
         path: display_path(&target_path),
@@ -336,6 +339,7 @@ pub fn read_project_file(project_path: String, path: String) -> Result<ProjectFi
             .unwrap_or_else(|| display_path(&target_path)),
         content,
         kind,
+        encoding: encoding.to_string(),
         read_only: metadata.permissions().readonly() || large_file,
         size_bytes,
         large_file,
@@ -446,6 +450,7 @@ pub fn write_project_file(
     project_path: String,
     path: String,
     content: String,
+    encoding: Option<String>,
 ) -> Result<(), String> {
     let root_path = normalize_input_path(&project_path);
     if !root_path.exists() {
@@ -465,7 +470,8 @@ pub fn write_project_file(
         return Err("当前文件为只读，无法保存".to_string());
     }
 
-    fs::write(&target_path, content).map_err(|e| format!("保存文件失败: {}", e))?;
+    let bytes = encode_text_bytes(&content, encoding.as_deref())?;
+    fs::write(&target_path, bytes).map_err(|e| format!("保存文件失败: {}", e))?;
     Ok(())
 }
 
@@ -878,6 +884,60 @@ fn metadata_modified_at_ms(metadata: &fs::Metadata) -> Option<u64> {
         .ok()
         .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
         .map(|duration| duration.as_millis() as u64)
+}
+
+fn decode_text_bytes(bytes: &[u8]) -> (String, &'static str) {
+    if let Some((encoding, bom_len)) = Encoding::for_bom(bytes) {
+        let (content, _, _) = encoding.decode(&bytes[bom_len..]);
+        let label = if encoding == UTF_8 {
+            "utf-8-bom"
+        } else if encoding == UTF_16LE {
+            "utf-16le"
+        } else {
+            "utf-16be"
+        };
+        return (content.into_owned(), label);
+    }
+    if let Ok(text) = std::str::from_utf8(bytes) {
+        return (text.to_string(), "utf-8");
+    }
+    let (content, _, _) = GBK.decode(bytes);
+    (content.into_owned(), "gbk")
+}
+
+fn encode_text_bytes(content: &str, encoding: Option<&str>) -> Result<Vec<u8>, String> {
+    match encoding.unwrap_or("utf-8") {
+        "utf-8-bom" => {
+            let mut bytes = b"\xEF\xBB\xBF".to_vec();
+            bytes.extend_from_slice(content.as_bytes());
+            Ok(bytes)
+        }
+        "utf-16le" | "utf-16be" => {
+            let encoding = if encoding == Some("utf-16le") {
+                UTF_16LE
+            } else {
+                UTF_16BE
+            };
+            let (encoded, _, _) = encoding.encode(content);
+            let bom: &[u8] = if encoding == UTF_16LE {
+                b"\xFF\xFE"
+            } else {
+                b"\xFE\xFF"
+            };
+            let mut bytes = bom.to_vec();
+            bytes.extend_from_slice(&encoded);
+            Ok(bytes)
+        }
+        "gbk" => {
+            // GBK 编码器对不可映射字符写入 HTML 数字实体而非报错,必须检查 had_errors 以免污染文件
+            let (encoded, _, had_errors) = GBK.encode(content);
+            if had_errors {
+                return Err("保存文件失败: 内容包含 GBK 编码无法表示的字符".to_string());
+            }
+            Ok(encoded.into_owned())
+        }
+        _ => Ok(content.as_bytes().to_vec()),
+    }
 }
 
 fn detect_file_kind(path: &Path) -> Result<ProjectFileKind, String> {
@@ -1485,5 +1545,125 @@ mod tests {
 
         fs::remove_file(pdf_path).unwrap();
         fs::remove_dir(directory).unwrap();
+    }
+
+    #[test]
+    fn decode_text_bytes_identifies_plain_utf8() {
+        let (content, encoding) = decode_text_bytes("中文 plain text".as_bytes());
+        assert_eq!(content, "中文 plain text");
+        assert_eq!(encoding, "utf-8");
+    }
+
+    #[test]
+    fn decode_text_bytes_strips_utf8_bom() {
+        let mut bytes = b"\xEF\xBB\xBF".to_vec();
+        bytes.extend_from_slice("带 BOM 的内容".as_bytes());
+
+        let (content, encoding) = decode_text_bytes(&bytes);
+        assert_eq!(content, "带 BOM 的内容");
+        assert_eq!(encoding, "utf-8-bom");
+    }
+
+    #[test]
+    fn decode_text_bytes_decodes_gbk_bytes() {
+        let (content, encoding) = decode_text_bytes(&[0xD6, 0xD0, 0xCE, 0xC4]);
+        assert_eq!(content, "中文");
+        assert_eq!(encoding, "gbk");
+    }
+
+    #[test]
+    fn decode_text_bytes_decodes_utf16le_and_be() {
+        let (le, le_encoding) = decode_text_bytes(&[0xFF, 0xFE, 0x2D, 0x4E, 0x87, 0x65]);
+        assert_eq!(le, "中文");
+        assert_eq!(le_encoding, "utf-16le");
+
+        let (be, be_encoding) = decode_text_bytes(&[0xFE, 0xFF, 0x4E, 0x2D, 0x65, 0x87]);
+        assert_eq!(be, "中文");
+        assert_eq!(be_encoding, "utf-16be");
+    }
+
+    #[test]
+    fn read_project_file_returns_gbk_content_with_encoding_label() {
+        let directory = tempfile::tempdir().unwrap();
+        let file_path = directory.path().join("keys.txt");
+        fs::write(&file_path, [0xD6, 0xD0, 0xCE, 0xC4]).unwrap();
+
+        let content =
+            read_project_file(display_path(directory.path()), display_path(&file_path)).unwrap();
+        assert_eq!(content.content, "中文");
+        assert_eq!(content.encoding, "gbk");
+    }
+
+    #[test]
+    fn write_project_file_roundtrips_gbk_encoding() {
+        let directory = tempfile::tempdir().unwrap();
+        let file_path = directory.path().join("keys.txt");
+        fs::write(&file_path, [0xD6, 0xD0, 0xCE, 0xC4]).unwrap();
+
+        write_project_file(
+            display_path(directory.path()),
+            display_path(&file_path),
+            "中文追加".to_string(),
+            Some("gbk".to_string()),
+        )
+        .unwrap();
+
+        let bytes = fs::read(&file_path).unwrap();
+        let (decoded, encoding) = decode_text_bytes(&bytes);
+        assert_eq!(encoding, "gbk");
+        assert_eq!(decoded, "中文追加");
+    }
+
+    #[test]
+    fn write_project_file_rejects_characters_unmappable_in_gbk() {
+        let directory = tempfile::tempdir().unwrap();
+        let file_path = directory.path().join("keys.txt");
+        let original = [0xD6, 0xD0, 0xCE, 0xC4];
+        fs::write(&file_path, original).unwrap();
+
+        let result = write_project_file(
+            display_path(directory.path()),
+            display_path(&file_path),
+            "中文 😀".to_string(),
+            Some("gbk".to_string()),
+        );
+        assert!(result.is_err());
+        assert_eq!(fs::read(&file_path).unwrap(), original);
+    }
+
+    #[test]
+    fn write_project_file_defaults_to_utf8_without_encoding() {
+        let directory = tempfile::tempdir().unwrap();
+        let file_path = directory.path().join("notes.txt");
+        fs::write(&file_path, "old").unwrap();
+
+        write_project_file(
+            display_path(directory.path()),
+            display_path(&file_path),
+            "中文".to_string(),
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(fs::read(&file_path).unwrap(), "中文".as_bytes());
+    }
+
+    #[test]
+    fn write_project_file_preserves_utf8_bom_on_save() {
+        let directory = tempfile::tempdir().unwrap();
+        let file_path = directory.path().join("notes.txt");
+        fs::write(&file_path, "old").unwrap();
+
+        write_project_file(
+            display_path(directory.path()),
+            display_path(&file_path),
+            "中文".to_string(),
+            Some("utf-8-bom".to_string()),
+        )
+        .unwrap();
+
+        let bytes = fs::read(&file_path).unwrap();
+        assert_eq!(&bytes[..3], b"\xEF\xBB\xBF");
+        assert_eq!(&bytes[3..], "中文".as_bytes());
     }
 }

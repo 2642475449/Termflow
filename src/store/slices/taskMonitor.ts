@@ -3,10 +3,12 @@ import { emit, listen } from "@tauri-apps/api/event";
 import { useAppStore } from "@/store";
 import { collectTaskMonitorTabs, type TaskMonitorSnapshot } from "@/lib/taskMonitor";
 import { closeTabRuntime } from "@/lib/tabClose";
+import { requestWorkspaceClose } from "./background";
 
 const SNAPSHOT_EVENT = "termflow-task-monitor-snapshot";
 const REQUEST_EVENT = "termflow-task-monitor-request";
 const CLOSE_REQUEST_EVENT = "termflow-task-monitor-close-request";
+const PROJECT_CLOSE_REQUEST_EVENT = "termflow-task-monitor-project-close-request";
 
 export interface TaskMonitorCloseRequest {
   windowLabel: string;
@@ -33,8 +35,12 @@ export async function requestTaskMonitorTabClose(request: TaskMonitorCloseReques
   await emit(CLOSE_REQUEST_EVENT, request);
 }
 
+export async function requestTaskMonitorProjectClose(windowLabel: string, projectPath: string) {
+  await emit(PROJECT_CLOSE_REQUEST_EVENT, { windowLabel, projectPath });
+}
+
 // 每个项目窗口常驻响应快照请求，状态只传标签元数据，不传终端内容。
-export function startTaskMonitorSync(): () => void {
+export function startTaskMonitorSync(onProjectCloseError?: (error: unknown) => void): () => void {
   let disposed = false;
   const cleanups: (() => void)[] = [];
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -67,6 +73,14 @@ export function startTaskMonitorSync(): () => void {
       }),
       listen(REQUEST_EVENT, () => { if (!disposed) publish(); }),
       listen<TaskMonitorCloseRequest>(CLOSE_REQUEST_EVENT, ({ payload }) => { void closeTab(payload); }),
+      listen<{ windowLabel: string; projectPath: string }>(PROJECT_CLOSE_REQUEST_EVENT, ({ payload }) => {
+        const state = useAppStore.getState();
+        if (disposed || payload.windowLabel !== state.windowLabel || payload.projectPath !== state.currentProject?.path) return;
+        void requestWorkspaceClose(false, true).catch((error) => {
+          console.error("Task monitor project close failed:", error);
+          onProjectCloseError?.(error);
+        });
+      }),
     ]);
     for (const result of results) {
       if (result.status === "fulfilled") {

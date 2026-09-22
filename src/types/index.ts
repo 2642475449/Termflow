@@ -588,6 +588,7 @@ export interface ProjectFileContent {
   name: string;
   content: string;
   kind: "text" | "image" | "pdf" | "binary";
+  encoding: string;
   readOnly: boolean;
   sizeBytes: number;
   largeFile: boolean;

@@ -1825,6 +1825,45 @@ html, body, #root {
   justify-content: center;
 }
 
+/* 标签区域独立收缩和滚动，为右侧新建按钮保留空间。 */
+.app-tabbar {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.app-tabbar-tabs {
+  display: flex;
+  align-items: flex-end;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.app-tabbar-tab {
+  /* 固定等宽，空间不足时由标签区域横向滚动。 */
+  flex: 0 0 180px;
+  width: 180px;
+  min-width: 0;
+}
+
+.app-tabbar-tab .app-tab-chrome {
+  min-width: 0;
+  width: 100%;
+}
+
+.app-tabbar-tab .app-tab-chrome > :first-child {
+  flex-shrink: 0;
+}
+
+.app-tabbar-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 /* 标签页关闭按钮 hover 显示 */
 .tab-item .tab-close-btn {
   opacity: 0;
