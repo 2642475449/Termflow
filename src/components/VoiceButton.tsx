@@ -251,6 +251,11 @@ const StatusText: React.FC<{ phase: AsrPhase; errorMessage?: string | null }> = 
   return (
     <span
       style={{
+        display: "block",
+        minWidth: 0,
+        maxWidth: 360,
+        overflow: "hidden",
+        textOverflow: "ellipsis",
         fontSize: 12,
         fontWeight: 500,
         color: "var(--cs-text-primary, #e8e6f0)",
@@ -356,6 +361,9 @@ export const VoiceStatusCapsule: React.FC<VoiceStatusCapsuleProps> = ({
             position: "relative",
             display: "flex",
             alignItems: "center",
+            maxWidth: "calc(100vw - 16px)",
+            boxSizing: "border-box",
+            overflow: "hidden",
             gap: showText ? 10 : 8,
             padding: showText ? "8px 16px 8px 12px" : "9px 13px",
             minWidth: compactMinWidth,
@@ -386,6 +394,9 @@ export const VoiceStatusCapsule: React.FC<VoiceStatusCapsuleProps> = ({
           {liveText ? (
             <span
               style={{
+                display: "block",
+                flex: "0 1 360px",
+                minWidth: 0,
                 maxWidth: 360,
                 overflow: "hidden",
                 textOverflow: "ellipsis",
