@@ -3,6 +3,7 @@ import type { StateStorage } from "zustand/middleware";
 import type { Session } from "@/types";
 import type { AttentionItem } from "@/lib/attention";
 import { createAppStore } from "./index";
+import { createProjectScopedStorage } from "@/lib/projectScopedStorage";
 
 const NOW = 2_000_000_000_000;
 const PROJECT = "D:/workspace/demo";
@@ -39,6 +40,25 @@ function attention(kind: AttentionItem["kind"], id: string): AttentionItem {
 }
 
 describe("store persistence v3", () => {
+  it("keeps a new session when another window writes stale settings", () => {
+    let saved: string | null = null;
+    const sharedStorage = createProjectScopedStorage({
+      getItem: () => saved,
+      setItem: (_name, value) => { saved = value; },
+      removeItem: () => { saved = null; },
+    });
+    const projectWindow = createAppStore(sharedStorage);
+    const staleWindow = createAppStore(sharedStorage);
+
+    projectWindow.getState().setCurrentProject({ path: PROJECT, name: "Demo" });
+    projectWindow.getState().addSession(session());
+    staleWindow.getState().setPinnedCollapsed(true);
+
+    const restored = createAppStore(sharedStorage);
+    expect(restored.getState().projectSessions[PROJECT]).toHaveLength(1);
+    expect(restored.getState().projectSessions[PROJECT][0].id).toBe("session-1");
+  });
+
   it("migrates v2 state while discarding runtime-only attention", () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);

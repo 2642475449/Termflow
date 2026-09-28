@@ -49,6 +49,7 @@ import {
   toPersistedProjectSessions,
 } from "@/lib/sessions";
 import { normalizeArchivedSessionGroups } from "@/lib/archivedSessions";
+import { createProjectScopedStorage } from "@/lib/projectScopedStorage";
 import {
   createDefaultRemoteNotificationChannels,
   type RemoteNotificationProvider,
@@ -150,7 +151,7 @@ function createMemoryStateStorage(): StateStorage {
 
 function getDefaultStateStorage(): StateStorage {
   if (typeof localStorage !== "undefined") {
-    return localStorage;
+    return createProjectScopedStorage(localStorage);
   }
   return createMemoryStateStorage();
 }
@@ -2721,6 +2722,7 @@ function createPersistOptions(storage?: StateStorage) {
         projectSessions
       );
       return {
+        __writerProjectPath: state.currentProject?.path ?? null,
         lastProject: state.lastProject,
         recentProjects: state.recentProjects,
         sessionEvents: sanitizePersistedSessionEvents(
