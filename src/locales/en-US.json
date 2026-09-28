@@ -2309,7 +2309,17 @@
     "filterAll": "All",
     "filterGlobal": "Global",
     "noProjectCommands": "No commands for this project",
-    "incomplete": "Incomplete"
+    "incomplete": "Incomplete",
+    "running": "Running",
+    "stop": "Stop",
+    "stopSuccess": "Stopped: {{label}}",
+    "stopFailed": "Failed to stop",
+    "clickToFocus": "Click to view terminal",
+    "restart": "Rerun",
+    "browseScript": "Browse script file...",
+    "selectScriptTitle": "Select Project Script File",
+    "scriptFiles": "Script Files (*.bat, *.cmd, *.ps1, *.sh, *.py, *.js)",
+    "allFiles": "All Files"
   },
   "auxiliaryDock": {
     "toggle": "Toggle auxiliary workspace",

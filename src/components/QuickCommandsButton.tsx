@@ -9,6 +9,8 @@ import {
   CodeOutlined,
   RobotOutlined,
   SearchOutlined,
+  StopOutlined,
+  ReloadOutlined,
 } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "@/store";
@@ -20,7 +22,7 @@ import {
   quickCommandMatchesRepository,
 } from "@/lib/quickCommands";
 import { searchQuickCommands } from "@/lib/quickCommandSearch";
-import { inspectAgentClis, resolveRecentCodexSessionId, spawnPty } from "@/lib/api";
+import { inspectAgentClis, resolveRecentCodexSessionId, spawnPty, closePty } from "@/lib/api";
 import {
   getAgentCommandShell,
   getAgentDisplayName,
@@ -41,6 +43,7 @@ export function QuickCommandsButton() {
   const updateSession = useAppStore((s) => s.updateSession);
   const agentPermissionDefaults = useAppStore((s) => s.agentPermissionDefaults);
   const defaultTerminalShell = useAppStore((s) => s.defaultTerminalShell);
+  const sessions = useAppStore((s) => s.sessions);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -146,6 +149,7 @@ export function QuickCommandsButton() {
         createdAt: sessionCreatedAt,
         active: true,
         ephemeral: !isAgentPrompt,
+        quickCommandId: command.id,
         hasPromptHistory: isAgentPrompt,
         status: "starting",
         titleSource: "manual",
@@ -206,7 +210,47 @@ export function QuickCommandsButton() {
     [currentProject, addSession, agentPermissionDefaults, defaultTerminalShell, openTab, t, updateSession],
   );
 
-  // 保存命令（新增或编辑）
+  // 检查命令是否正在运行
+  const isCommandRunning = useCallback(
+    (commandId: string) => {
+      return sessions.some(
+        (s) => s.quickCommandId === commandId && s.active && s.status !== "stopped",
+      );
+    },
+    [sessions],
+  );
+
+  const getRunningSession = useCallback(
+    (commandId: string) => {
+      return sessions.find(
+        (s) => s.quickCommandId === commandId && s.active && s.status !== "stopped",
+      );
+    },
+    [sessions],
+  );
+
+  const stopCommand = useCallback(
+    async (command: TerminalQuickCommand, e?: React.MouseEvent) => {
+      e?.stopPropagation();
+      const runningSessions = sessions.filter(
+        (s) => s.quickCommandId === command.id && s.active && s.status !== "stopped",
+      );
+      if (runningSessions.length === 0) return;
+
+      for (const session of runningSessions) {
+        try {
+          await closePty(session.id);
+        } catch (err) {
+          console.error("Failed to close PTY:", err);
+        }
+        updateSession(session.id, { active: false, status: "stopped" });
+      }
+      message.success(t("quickCommands.stopSuccess", { label: command.label }));
+    },
+    [sessions, updateSession, t],
+  );
+
+    // 保存命令（新增或编辑）
   const saveCommand = useCallback(
     (command: TerminalQuickCommand) => {
       const existing = terminalQuickCommands.findIndex((c) => c.id === command.id);
@@ -275,7 +319,15 @@ export function QuickCommandsButton() {
         case "Enter":
           e.preventDefault();
           if (filteredCommands[selectedIndex]) {
-            runCommand(filteredCommands[selectedIndex]);
+            const cmd = filteredCommands[selectedIndex];
+            const running = isCommandRunning(cmd.id);
+            const runningSession = running ? getRunningSession(cmd.id) : undefined;
+            if (running && runningSession) {
+              openTab(runningSession.id);
+              setMenuOpen(false);
+            } else {
+              runCommand(cmd);
+            }
           }
           break;
         case "Escape":
@@ -317,6 +369,9 @@ export function QuickCommandsButton() {
   // 渲染命令项
   const renderCommandItem = (command: TerminalQuickCommand, index: number) => {
     const isSelected = index === selectedIndex;
+    const running = isCommandRunning(command.id);
+    const runningSession = running ? getRunningSession(command.id) : undefined;
+
     return (
       <div
         key={command.id}
@@ -326,13 +381,22 @@ export function QuickCommandsButton() {
           background: isSelected ? "var(--cs-bg-hover)" : "transparent",
           minHeight: 32,
         }}
-        onClick={() => runCommand(command)}
+        onClick={() => {
+          if (running && runningSession) {
+            openTab(runningSession.id);
+            setMenuOpen(false);
+          } else {
+            runCommand(command);
+          }
+        }}
         onMouseEnter={() => {
           setSelectedIndex(index);
           scrollToSelected(index);
         }}
       >
-        {command.action === "agent-prompt" ? (
+        {running ? (
+          <span className="quick-command-running-dot" />
+        ) : command.action === "agent-prompt" ? (
           command.agentId ? (
             <AgentIcon agentId={command.agentId} size={14} />
           ) : (
@@ -347,10 +411,21 @@ export function QuickCommandsButton() {
         )}
         <div className="flex-1 min-w-0">
           <div
-            className="text-xs font-medium truncate"
+            className="text-xs font-medium truncate flex items-center gap-1.5"
             style={{ color: "var(--cs-text-primary)" }}
           >
-            {command.label}
+            <span className="truncate">{command.label}</span>
+            {running && (
+              <span
+                className="text-[10px] px-1 py-0.2 rounded font-normal shrink-0"
+                style={{
+                  background: "color-mix(in srgb, var(--cs-success) 14%, transparent)",
+                  color: "var(--cs-success)",
+                }}
+              >
+                {t("quickCommands.running")}
+              </span>
+            )}
           </div>
           <div
             className="text-xs truncate"
@@ -370,8 +445,40 @@ export function QuickCommandsButton() {
         </div>
         <div
           className="flex items-center gap-1 opacity-0 transition-opacity"
-          style={{ opacity: isSelected ? 1 : 0 }}
+          style={{ opacity: isSelected || running ? 1 : 0 }}
         >
+          {running && (
+            <Tooltip title={t("quickCommands.stop")}>
+              <Button
+                type="text"
+                size="small"
+                danger
+                icon={<StopOutlined style={{ fontSize: 12 }} />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  stopCommand(command, e);
+                }}
+                aria-label={t("quickCommands.stop")}
+              />
+            </Tooltip>
+          )}
+          {running && (
+            <Tooltip title={t("quickCommands.restart")}>
+              <Button
+                type="text"
+                size="small"
+                icon={<ReloadOutlined style={{ fontSize: 11 }} />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void (async () => {
+                    await stopCommand(command);
+                    await runCommand(command);
+                  })();
+                }}
+                aria-label={t("quickCommands.restart")}
+              />
+            </Tooltip>
+          )}
           <Button
             type="text"
             size="small"
@@ -521,25 +628,38 @@ export function QuickCommandsButton() {
     );
   }
 
+  const isPreferredRunning = preferredCommand ? isCommandRunning(preferredCommand.id) : false;
+  const preferredRunningSession = preferredCommand ? getRunningSession(preferredCommand.id) : undefined;
+
   // 非空状态：分裂按钮
   return (
     <>
       <div className="quick-command-trigger-group">
-        {/* 左侧主按钮：运行首选命令 */}
+        {/* 左侧主按钮：未运行时启动，运行时点击聚焦对应终端 */}
         <Tooltip
           title={
-            preferredCommand
-              ? `${preferredCommand.label}: ${preferredCommand.command}`
-              : undefined
+            isPreferredRunning
+              ? `${preferredCommand?.label ?? ""} (${t("quickCommands.running")}) · ${t("quickCommands.clickToFocus")}`
+              : preferredCommand
+                ? `${preferredCommand.label}: ${preferredCommand.command}`
+                : undefined
           }
         >
           <button
             type="button"
             className="quick-command-trigger-part quick-command-trigger-main"
-            onClick={() => preferredCommand && runCommand(preferredCommand)}
+            onClick={() => {
+              if (isPreferredRunning && preferredRunningSession) {
+                openTab(preferredRunningSession.id);
+              } else if (preferredCommand) {
+                runCommand(preferredCommand);
+              }
+            }}
             disabled={!preferredCommand}
           >
-            {preferredCommand?.action === "agent-prompt" ? (
+            {isPreferredRunning ? (
+              <span className="quick-command-running-dot" />
+            ) : preferredCommand?.action === "agent-prompt" ? (
               preferredCommand.agentId ? (
                 <AgentIcon agentId={preferredCommand.agentId} size={14} />
               ) : (
@@ -551,6 +671,20 @@ export function QuickCommandsButton() {
             <span className="truncate leading-none">{preferredCommand?.label ?? ""}</span>
           </button>
         </Tooltip>
+
+        {/* 运行中时显示停止按钮 */}
+        {isPreferredRunning && preferredCommand && (
+          <Tooltip title={`${t("quickCommands.stop")}: ${preferredCommand.label}`}>
+            <button
+              type="button"
+              className="quick-command-trigger-part quick-command-trigger-stop"
+              onClick={(e) => stopCommand(preferredCommand, e)}
+              aria-label={t("quickCommands.stop")}
+            >
+              <StopOutlined style={{ fontSize: 11 }} />
+            </button>
+          </Tooltip>
+        )}
 
         {/* 右侧下拉箭头 */}
         <Popover

@@ -2304,7 +2304,17 @@
     "filterAll": "全部",
     "filterGlobal": "全域",
     "noProjectCommands": "此專案暫無命令",
-    "incomplete": "未完成"
+    "incomplete": "未完成",
+    "running": "執行中",
+    "stop": "停止",
+    "stopSuccess": "已停止：{{label}}",
+    "stopFailed": "停止失敗",
+    "clickToFocus": "點擊切換至終端",
+    "restart": "重新執行",
+    "browseScript": "選擇指令碼檔案...",
+    "selectScriptTitle": "選擇專案指令碼檔案",
+    "scriptFiles": "指令碼檔案 (*.bat, *.cmd, *.ps1, *.sh, *.py, *.js)",
+    "allFiles": "所有檔案"
   },
   "auxiliaryDock": {
     "toggle": "切換右側輔助工作區",

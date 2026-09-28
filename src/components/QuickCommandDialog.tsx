@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Modal, Input, Switch, Segmented, Collapse, Select, Spin, type InputRef } from "antd";
+import { Modal, Input, Switch, Segmented, Collapse, Select, Spin, Button, type InputRef } from "antd";
+import { FolderOpenOutlined } from "@ant-design/icons";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
 import type { AgentCliInfo, AiAgentId, QuickCommandAction, QuickCommandScope, TerminalQuickCommand } from "@/types";
 import { ShortcutHint } from "@/components/ui/ShortcutHint";
@@ -105,6 +107,66 @@ export function QuickCommandDialog({
     && commandText.trimEnd().length > 0
     && (action !== "agent-prompt" || !!agentId);
 
+  const handleBrowseScript = useCallback(async () => {
+    try {
+      const selected = await openDialog({
+        multiple: false,
+        directory: false,
+        defaultPath: repositoryId || undefined,
+        title: t("quickCommands.selectScriptTitle"),
+        filters: [
+          {
+            name: t("quickCommands.scriptFiles"),
+            extensions: ["bat", "cmd", "ps1", "sh", "bash", "py", "js", "ts"],
+          },
+          {
+            name: t("quickCommands.allFiles"),
+            extensions: ["*"],
+          },
+        ],
+      });
+
+      if (!selected || typeof selected !== "string") return;
+
+      let scriptPath = selected;
+      if (repositoryId) {
+        const normRepo = repositoryId.replace(/\\/g, "/").replace(/\/$/, "");
+        const normSelected = selected.replace(/\\/g, "/");
+        if (normSelected.toLowerCase().startsWith(normRepo.toLowerCase() + "/")) {
+          scriptPath = normSelected.slice(normRepo.length + 1);
+        }
+      }
+
+      const ext = scriptPath.split(".").pop()?.toLowerCase() ?? "";
+      const fileName = scriptPath.split(/[\\/]/).pop() ?? scriptPath;
+      const baseName = fileName.replace(/\.[^/.]+$/, "");
+
+      let generatedCommand = "";
+      if (ext === "ps1") {
+        const winPath = scriptPath.replace(/\//g, "\\");
+        generatedCommand = `powershell -ExecutionPolicy Bypass -File .\\${winPath}`;
+      } else if (ext === "bat" || ext === "cmd") {
+        const winPath = scriptPath.replace(/\//g, "\\");
+        generatedCommand = `.\\${winPath}`;
+      } else if (ext === "sh" || ext === "bash") {
+        generatedCommand = `bash ./${scriptPath.replace(/\\/g, "/")}`;
+      } else if (ext === "py") {
+        generatedCommand = `python ./${scriptPath.replace(/\\/g, "/")}`;
+      } else if (ext === "js" || ext === "ts") {
+        generatedCommand = `node ./${scriptPath.replace(/\\/g, "/")}`;
+      } else {
+        generatedCommand = `.\\${scriptPath.replace(/\//g, "\\")}`;
+      }
+
+      setCommandText(generatedCommand);
+      if (!label.trim()) {
+        setLabel(baseName);
+      }
+    } catch (error) {
+      console.error("Failed to select script file:", error);
+    }
+  }, [repositoryId, label, t]);
+
   const handleSave = useCallback(() => {
     if (!canSave) return;
 
@@ -260,12 +322,25 @@ export function QuickCommandDialog({
 
         {/* 命令正文 */}
         <div>
-          <label
-            className="block text-sm font-medium mb-1.5"
-            style={{ color: "var(--cs-text-secondary)" }}
-          >
-            {t(action === "agent-prompt" ? "quickCommands.promptText" : "quickCommands.commandText")}
-          </label>
+          <div className="flex items-center justify-between mb-1.5">
+            <label
+              className="text-sm font-medium"
+              style={{ color: "var(--cs-text-secondary)" }}
+            >
+              {t(action === "agent-prompt" ? "quickCommands.promptText" : "quickCommands.commandText")}
+            </label>
+            {action === "terminal-command" && (
+              <Button
+                type="text"
+                size="small"
+                icon={<FolderOpenOutlined style={{ fontSize: 13 }} />}
+                onClick={handleBrowseScript}
+                style={{ fontSize: 12, color: "var(--cs-primary)", height: 24, padding: "0 6px" }}
+              >
+                {t("quickCommands.browseScript")}
+              </Button>
+            )}
+          </div>
           <Input.TextArea
             value={commandText}
             onChange={(e) => setCommandText(e.target.value)}
