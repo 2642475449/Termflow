@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
 const MANAGED_SCRIPT_NAME: &str = "termflow-agent-hook.cjs";
+const PI_EXTENSION_SCRIPT_NAME: &str = "termflow-agent-status.js";
 const ANTIGRAVITY_STATUSLINE_SCRIPT_NAME: &str = "termflow-antigravity-statusline.cjs";
 const ANTIGRAVITY_STATUSLINE_MARKER: &str = "termflow-antigravity-statusline.cjs";
 const ANTIGRAVITY_ORIGINAL_STATUSLINE_NAME: &str = "antigravity-statusline-original.json";
@@ -31,7 +32,7 @@ static INSTALL_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 pub(crate) fn supports_agent_status_hook(agent_id: &str) -> bool {
     matches!(
         agent_id,
-        "claude" | "codex" | "qoder" | "antigravity" | "opencode"
+        "claude" | "codex" | "qoder" | "antigravity" | "opencode" | "pi"
     )
 }
 
@@ -61,6 +62,7 @@ pub fn ensure_agent_status_hook(agent_id: String) -> Result<AgentHookStatus, Str
         "qoder" => install_qoder_hook(),
         "antigravity" => install_antigravity_hook(),
         "opencode" => install_opencode_plugin(),
+        "pi" => install_pi_extension(),
         _ => Ok(AgentHookStatus {
             agent: agent_id,
             configured: false,
@@ -329,6 +331,80 @@ fn install_opencode_plugin() -> Result<AgentHookStatus, String> {
                 .into(),
         ),
     })
+}
+
+fn install_pi_extension() -> Result<AgentHookStatus, String> {
+    let home = dirs_next::home_dir().ok_or("无法读取用户主目录")?;
+    let extension_path = home
+        .join(".pi")
+        .join("agent")
+        .join("extensions")
+        .join(PI_EXTENSION_SCRIPT_NAME);
+    if let Ok(existing) = fs::read_to_string(&extension_path) {
+        if !existing.starts_with("// Termflow managed Pi status extension") {
+            return Err(format!(
+                "Pi 扩展路径已被其他文件占用: {}",
+                extension_path.display()
+            ));
+        }
+    }
+    write_if_changed(&extension_path, pi_extension_source().as_bytes())?;
+    Ok(AgentHookStatus {
+        agent: "pi".into(),
+        configured: true,
+        config_path: extension_path.to_string_lossy().into_owned(),
+        detail: Some("Pi 生命周期事件已连接任务开始、完成、中断与失败状态".into()),
+    })
+}
+
+fn pi_extension_source() -> &'static str {
+    r#"// Termflow managed Pi status extension
+let sequence = 0;
+let outcome = 'completed';
+
+async function post(state, eventType, ctx) {
+  const port = process.env.TERMFLOW_INGEST_PORT;
+  const token = process.env.TERMFLOW_INGEST_TOKEN;
+  const sessionId = process.env.TERMFLOW_SESSION_ID;
+  if (!port || !token || !sessionId) return;
+  const createdAt = Date.now();
+  sequence += 1;
+  try {
+    await fetch(`http://127.0.0.1:${port}/internal/session-events`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-termflow-token': token },
+      body: JSON.stringify({
+        agent: 'pi', state, event_type: eventType,
+        event_id: `pi:${sessionId}:${eventType}:${createdAt}:${sequence}`,
+        session_id: sessionId,
+        project_path: process.env.TERMFLOW_PROJECT_PATH || process.cwd(),
+        provider_session_id: ctx.sessionManager.getSessionId(),
+        source: 'pi', created_at: createdAt,
+      }),
+      signal: AbortSignal.timeout(1200),
+    });
+  } catch {}
+}
+
+export default function (pi) {
+  pi.on('agent_start', async (_event, ctx) => {
+    outcome = 'completed';
+    await post('running', 'working', ctx);
+  });
+  pi.on('agent_before_settle', (event) => { outcome = event.outcome; });
+  pi.on('agent_settled', async (_event, ctx) => {
+    if (outcome === 'error') await post('error', 'process_error', ctx);
+    else if (outcome === 'aborted') await post('waiting', 'agent_aborted', ctx);
+    else await post('completed', 'assistant_complete', ctx);
+  });
+  pi.on('ui_prompt_start', async (_event, ctx) => {
+    await post('waiting', 'waiting_input', ctx);
+  });
+  pi.on('ui_prompt_end', async (_event, ctx) => {
+    await post('running', 'working', ctx);
+  });
+}
+"#
 }
 
 fn opencode_config_root() -> Result<PathBuf, String> {
@@ -744,9 +820,9 @@ mod tests {
         antigravity_statusline_script, definition_contains_owned_command,
         hook_action_contains_owned_command, install_antigravity_hook_group,
         install_antigravity_statusline_config, install_json_hooks, managed_hook_script,
-        opencode_plugin_source, remove_legacy_codex_trust, remove_owned_json_hooks,
-        resolve_opencode_config_root, supports_agent_status_hook, ANTIGRAVITY_HOOK_GROUP,
-        QODER_HOOK_EVENTS,
+        opencode_plugin_source, pi_extension_source, remove_legacy_codex_trust,
+        remove_owned_json_hooks, resolve_opencode_config_root, supports_agent_status_hook,
+        ANTIGRAVITY_HOOK_GROUP, QODER_HOOK_EVENTS,
     };
     use serde_json::json;
     use std::path::PathBuf;
@@ -782,9 +858,16 @@ mod tests {
     }
 
     #[test]
-    fn pi_does_not_attempt_an_unsupported_status_hook_install() {
-        assert!(!supports_agent_status_hook("pi"));
+    fn pi_uses_settled_lifecycle_for_final_status() {
+        assert!(supports_agent_status_hook("pi"));
         assert!(supports_agent_status_hook("claude"));
+        let source = pi_extension_source();
+        assert!(source.contains("pi.on('agent_start'"));
+        assert!(source.contains("pi.on('agent_before_settle'"));
+        assert!(source.contains("pi.on('agent_settled'"));
+        assert!(source.contains("outcome === 'error'"));
+        assert!(source.contains("outcome === 'aborted'"));
+        assert!(source.contains("'assistant_complete'"));
     }
 
     #[test]

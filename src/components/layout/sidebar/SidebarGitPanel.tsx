@@ -11,6 +11,7 @@ import {
 } from "@ant-design/icons";
 import {
   gitDiffContent,
+  gitAddToGitignore,
   gitInitRepository,
   gitGenerateCommitMessage,
   gitDiscardChanges,
@@ -385,6 +386,26 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
     [currentProject, gitActionsBlockedReason, gitActionsBlocked, loadGitData, t]
   );
 
+  const handleAddToGitignore = useCallback(async (file: GitFileStatus) => {
+    if (!currentProject || gitActionsBlocked) {
+      if (gitActionsBlocked) message.warning(gitActionsBlockedReason);
+      return;
+    }
+    const controller = getGitRefreshController();
+    const operationId = controller?.markOperationStart();
+    try {
+      const tracked = await gitAddToGitignore(currentProject.path, file.path);
+      await loadGitData();
+      message.success(t("sidebar.gitIgnoreSuccess"));
+      if (tracked) message.info(t("sidebar.gitIgnoreTrackedNotice"));
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      message.error(t("sidebar.gitIgnoreFailed", { detail }));
+    } finally {
+      if (operationId) controller?.markOperationEnd(operationId);
+    }
+  }, [currentProject, gitActionsBlocked, gitActionsBlockedReason, loadGitData, t]);
+
   const handleUnstageFile = useCallback(
     async (file: GitFileStatus) => {
       if (!currentProject || gitActionsBlocked) {
@@ -506,6 +527,14 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
         });
       }
 
+      if (canOpenWorkingTree) {
+        items.push({
+          key: "add-to-gitignore",
+          label: t("sidebar.gitContextAddToGitignore"),
+          disabled: gitActionsBlocked,
+        });
+      }
+
       items.push(
         { type: "divider" },
         {
@@ -545,6 +574,9 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
             case "discard":
               handleDiscard(file);
               break;
+            case "add-to-gitignore":
+              void handleAddToGitignore(file);
+              break;
             case "show-in-manager":
               void handleOpenPathInManager(file.path);
               break;
@@ -558,6 +590,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
       };
     },
     [
+      handleAddToGitignore,
       handleDiscard,
       handleOpenFile,
       handleOpenPathInManager,

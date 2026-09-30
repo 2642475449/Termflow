@@ -1310,6 +1310,54 @@ describe("ASR region persistence", () => {
     expect(useAppStore.getState().asrRegion).toBe("beijing");
   });
 });
+
+it("round-trips voice cleanup model and switch through persistent settings", () => {
+  const previous = getPersistentSettingsSnapshot();
+  try {
+    applyPersistentSettingsToStore({
+      ...previous,
+      asrModel: "qwen3-asr-flash",
+      voicePolishEnabled: false,
+      voicePolishProvider: "dashscope",
+      voicePolishApiKey: "polish-test-key",
+      voicePolishModel: "qwen-plus",
+    });
+    expect(useAppStore.getState().voicePolishEnabled).toBe(false);
+    expect(getPersistentSettingsSnapshot().voicePolishModel).toBe("qwen-plus");
+    expect(getPersistentSettingsSnapshot().voicePolishApiKey).toBe("polish-test-key");
+    useAppStore.getState().setAsrModel("mimo-v2.5-asr");
+    expect(useAppStore.getState().voicePolishProvider).toBe("dashscope");
+    expect(useAppStore.getState().voicePolishModel).toBe("qwen-plus");
+    applyPersistentSettingsToStore({
+      ...previous,
+      asrModel: "qwen3-asr-flash",
+      voicePolishModel: "qwen-flash",
+      voicePolishProvider: "dashscope",
+    });
+    expect(useAppStore.getState().voicePolishModel).toBe("qwen-plus");
+  } finally {
+    applyPersistentSettingsToStore(previous);
+  }
+});
+
+it("restores independent cleanup credentials and presets through Zustand persistence", () => {
+  const values = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => { values.set(key, value); },
+    removeItem: (key: string) => { values.delete(key); },
+  };
+  const first = createAppStore(storage);
+  first.getState().setVoicePolishProvider("deepseek");
+  first.getState().setVoicePolishApiKey("test-only-credential");
+  first.getState().setVoicePolishModel("deepseek-v4-pro");
+  first.getState().setVoicePolishEnabled(false);
+  const restored = createAppStore(storage).getState();
+  expect(restored.voicePolishApiKey).toBe("test-only-credential");
+  expect(restored.voicePolishModel).toBe("deepseek-v4-pro");
+  expect(restored.voicePolishEnabled).toBe(false);
+  expect(restored.asrApiKey).toBe("");
+});
 it("persistent settings normalize network proxy values", () => {
   const original = getPersistentSettingsSnapshot();
   try {

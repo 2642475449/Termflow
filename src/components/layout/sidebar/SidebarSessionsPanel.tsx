@@ -130,7 +130,7 @@ function SidebarSessionsPanel({
       >
         <div
           data-active={isActive ? "true" : "false"}
-          className="app-sidebar-list-item app-marker-host app-marker-left group flex items-center gap-2 px-2.5 py-2 rounded-l-none rounded-r-[8px] cursor-pointer"
+          className="app-sidebar-list-item app-marker-host app-marker-left group flex items-center gap-2 px-2.5 py-1 rounded-l-none rounded-r-[8px] cursor-pointer"
           style={{
             background: isActive
               ? "color-mix(in srgb, var(--cs-primary) 9%, transparent)"

@@ -74,7 +74,10 @@ import {
   configureVoiceGlobalShortcut,
   startLiveAsr,
   finishLiveAsr,
+  polishVoiceText,
 } from "@/lib/api";
+import { availableVoicePolishModels, resolveVoicePolishModel } from "@/lib/voicePolish";
+import { VoiceProviderLabel } from "@/components/settings/VoiceProviderLabel";
 import type {
   SkillCatalog,
   SkillDetail,
@@ -479,7 +482,6 @@ function GeneralPage() {
     <>
       <SettingsPageHeader
         title={t("settings.menu.general")}
-        description={t("settings.general.headerDesc")}
       />
       <SettingSection title={t("settings.general.appearance.title")}>
         <div className="p-5">
@@ -624,7 +626,6 @@ function TerminalPage() {
     <>
       <SettingsPageHeader
         title={t("settings.menu.terminal")}
-        description={t("settings.terminal.headerDesc")}
       />
       <SettingSection title={t("settings.terminal.shell")}>
         <SettingRow label={t("settings.terminal.defaultShell")} desc={t("settings.terminal.defaultShellDesc")}>
@@ -742,17 +743,30 @@ function VoiceRecognitionPage() {
   const asrAuthMode = useAppStore((s) => s.asrAuthMode);
   const asrModel = useAppStore((s) => s.asrModel);
   const asrRegion = useAppStore((s) => s.asrRegion);
+  const voicePolishEnabled = useAppStore((s) => s.voicePolishEnabled);
+  const voicePolishModel = useAppStore((s) => s.voicePolishModel);
+  const voicePolishProvider = useAppStore((s) => s.voicePolishProvider);
+  const voicePolishApiKey = useAppStore((s) => s.voicePolishApiKey);
+  const voicePolishAuthMode = useAppStore((s) => s.voicePolishAuthMode);
+  const voicePolishRegion = useAppStore((s) => s.voicePolishRegion);
   const voiceShortcut = useAppStore((s) => s.voiceShortcut);
   const voiceTriggerVisible = useAppStore((s) => s.voiceTriggerVisible);
   const setAsrApiKey = useAppStore((s) => s.setAsrApiKey);
   const setAsrAuthMode = useAppStore((s) => s.setAsrAuthMode);
   const setAsrModel = useAppStore((s) => s.setAsrModel);
   const setAsrRegion = useAppStore((s) => s.setAsrRegion);
+  const setVoicePolishEnabled = useAppStore((s) => s.setVoicePolishEnabled);
+  const setVoicePolishModel = useAppStore((s) => s.setVoicePolishModel);
+  const setVoicePolishProvider = useAppStore((s) => s.setVoicePolishProvider);
+  const setVoicePolishApiKey = useAppStore((s) => s.setVoicePolishApiKey);
+  const setVoicePolishAuthMode = useAppStore((s) => s.setVoicePolishAuthMode);
+  const setVoicePolishRegion = useAppStore((s) => s.setVoicePolishRegion);
   const setVoiceShortcut = useAppStore((s) => s.setVoiceShortcut);
   const setVoiceTriggerVisible = useAppStore((s) => s.setVoiceTriggerVisible);
 
   const [showApiKey, setShowApiKey] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [polishTesting, setPolishTesting] = useState(false);
   const [isRecordingShortcut, setIsRecordingShortcut] = useState(false);
   const [isPreparingShortcutRecording, setIsPreparingShortcutRecording] = useState(false);
   const previousShortcutRef = useRef<string | null>(null);
@@ -762,8 +776,8 @@ function VoiceRecognitionPage() {
       : "mimo";
   const isDashScopeProvider = asrProvider === "dashscope";
   const providerOptions = [
-    { label: "MiMo", value: "mimo" },
-    { label: "阿里百炼 DashScope", value: "dashscope" },
+    { label: <VoiceProviderLabel provider="mimo" label="MiMo" />, value: "mimo" },
+    { label: <VoiceProviderLabel provider="dashscope" label="DashScope" />, value: "dashscope" },
   ];
   const mimoAuthOptions = [
     { label: "Token Plan", value: "token-plan" },
@@ -819,6 +833,32 @@ function VoiceRecognitionPage() {
       return;
     }
     setAsrModel(DEFAULT_ASR_MODEL);
+  };
+
+  const handlePolishTest = async () => {
+    if (!voicePolishApiKey.trim()) {
+      message.warning(t("settings.voiceRecognition.apiKeyRequired"));
+      return;
+    }
+    setPolishTesting(true);
+    try {
+      const output = await polishVoiceText(
+        t("settings.voiceRecognition.polishingTestSample"),
+        voicePolishProvider,
+        resolveVoicePolishModel(voicePolishProvider, voicePolishModel),
+        voicePolishApiKey.trim(),
+        voicePolishAuthMode,
+        voicePolishRegion,
+      );
+      Modal.info({
+        title: t("settings.voiceRecognition.polishingTestSuccess"),
+        content: output,
+      });
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setPolishTesting(false);
+    }
   };
 
   const restoreGlobalVoiceShortcut = useCallback(async (shortcut: string) => {
@@ -1012,11 +1052,13 @@ function VoiceRecognitionPage() {
             defaultValue: "选择语音识别服务后，只显示该服务需要的配置项。",
           })}
         >
-          <Segmented
-            size="small"
+          <Select
+            className="w-64"
             value={asrProvider}
             options={providerOptions}
-            onChange={(value) => handleProviderChange(value as AsrProvider)}
+            onChange={handleProviderChange}
+            showSearch={false}
+            aria-label={t("settings.voiceRecognition.serviceProvider")}
           />
         </SettingRow>
         {!isDashScopeProvider && (
@@ -1099,6 +1141,71 @@ function VoiceRecognitionPage() {
             />
           </div>
         </SettingRow>
+        )}
+      </SettingSection>
+
+      <SettingSection title={t("settings.voiceRecognition.polishingSectionTitle")}>
+        <SettingRow
+          label={t("settings.voiceRecognition.polishingLabel")}
+          desc={t("settings.voiceRecognition.polishingDesc")}
+        >
+          <Switch checked={voicePolishEnabled} onChange={setVoicePolishEnabled} />
+        </SettingRow>
+        <SettingRow label={t("settings.voiceRecognition.serviceProvider")} desc={t("settings.voiceRecognition.polishingProviderDesc")}>
+          <Select
+            className="w-64"
+            value={voicePolishProvider}
+            onChange={setVoicePolishProvider}
+            options={[
+              { value: "deepseek", label: <VoiceProviderLabel provider="deepseek" label="DeepSeek" /> },
+              { value: "dashscope", label: <VoiceProviderLabel provider="dashscope" label="DashScope" /> },
+              { value: "mimo", label: <VoiceProviderLabel provider="mimo" label="MiMo" /> },
+            ]}
+          />
+        </SettingRow>
+        <SettingRow label={t("settings.voiceRecognition.apiKey")} desc={t("settings.voiceRecognition.polishingKeyDesc")}>
+          <Input.Password
+            className="w-80"
+            value={voicePolishApiKey}
+            onChange={(event) => setVoicePolishApiKey(event.target.value)}
+            autoComplete="off"
+            placeholder={t("settings.voiceRecognition.polishingKeyPlaceholder", { provider: voicePolishProvider === "deepseek" ? "DeepSeek" : voicePolishProvider === "dashscope" ? "DashScope" : "MiMo" })}
+          />
+        </SettingRow>
+        {voicePolishProvider === "mimo" && (
+          <SettingRow label={t("settings.voiceRecognition.polishingAuthLabel")}>
+            <Select className="w-64" value={voicePolishAuthMode} onChange={setVoicePolishAuthMode} options={mimoAuthOptions} />
+          </SettingRow>
+        )}
+        {voicePolishProvider === "dashscope" && (
+          <SettingRow label={t("settings.voiceRecognition.region")} desc={t("settings.voiceRecognition.regionDesc")}>
+            <Select className="w-64" value={voicePolishRegion} onChange={setVoicePolishRegion} options={[
+              { value: "beijing", label: t("settings.voiceRecognition.polishingRegionBeijing") },
+              { value: "singapore", label: t("settings.voiceRecognition.polishingRegionSingapore") },
+              { value: "us", label: t("settings.voiceRecognition.polishingRegionUs") },
+            ]} />
+          </SettingRow>
+        )}
+        <SettingRow
+          label={t("settings.voiceRecognition.polishingModelLabel")}
+          desc={t("settings.voiceRecognition.polishingModelDesc")}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              value={resolveVoicePolishModel(voicePolishProvider, voicePolishModel)}
+              onChange={setVoicePolishModel}
+              options={availableVoicePolishModels(voicePolishProvider).map((model) => ({ value: model, label: model }))}
+              showSearch={false}
+              aria-label={t("settings.voiceRecognition.polishingModelLabel")}
+              className="w-64"
+            />
+            <Button loading={polishTesting} onClick={() => void handlePolishTest()}>
+              {t("settings.voiceRecognition.polishingTest")}
+            </Button>
+          </div>
+        </SettingRow>
+        {voicePolishEnabled && !voicePolishApiKey.trim() && (
+          <p className="px-5 pb-4 text-sm text-[var(--cs-text-secondary)]">{t("settings.voiceRecognition.polishingKeyMissing")}</p>
         )}
       </SettingSection>
 
@@ -1196,7 +1303,6 @@ function ShortcutsPage() {
     <>
       <SettingsPageHeader
         title={t("settings.menu.shortcuts")}
-        description={t("settings.shortcuts.headerDesc")}
       />
       <SettingSection title={t("settings.menu.shortcuts")}>
         {SHORTCUTS.map((s, i) => (
@@ -1238,10 +1344,6 @@ function ShortcutsPage() {
         <div className="px-4 py-3">
           <Text className="text-[11px]" style={{ color: "var(--cs-text-tertiary)" }}>
             {t("settings.shortcuts.hint1")}
-          </Text>
-          <br />
-          <Text className="text-[11px]" style={{ color: "var(--cs-text-tertiary)" }}>
-            {t("settings.shortcuts.hint2")}
           </Text>
         </div>
       </SettingSection>

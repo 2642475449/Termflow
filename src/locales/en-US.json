@@ -332,7 +332,6 @@
       "modelLabel": "Current model"
     },
     "antigravityUsage": {
-      "summaryHint": "Remaining quotas are shown in fixed positions by model group, with separate 5-hour and weekly limits.",
       "title": "Antigravity usage",
       "loading": "Antigravity usage…",
       "pending": "Waiting for the first quota snapshot",
@@ -856,6 +855,10 @@
     "gitDiscardConfirmOk": "Discard",
     "gitStageSuccess": "Staged successfully",
     "gitStageFailed": "Failed to stage",
+    "gitContextAddToGitignore": "Add to .gitignore",
+    "gitIgnoreSuccess": "Added to .gitignore",
+    "gitIgnoreTrackedNotice": "Git already tracks this file. The ignore rule will not hide its changes until you stop tracking it.",
+    "gitIgnoreFailed": "Failed to add to .gitignore: {{detail}}",
     "gitUnstageSuccess": "Unstaged successfully",
     "gitUnstageFailed": "Failed to unstage",
     "gitBranchList": "Branches",
@@ -934,6 +937,9 @@
     "gitContinueOperationFailed": "Failed to continue {{operation}}"
   },
   "projectLauncher": {
+    "createProject": "New Project",
+    "createChooseLocation": "Choose New Project Location",
+    "createAndOpen": "Create and Open",
     "cloneTitle": "Clone Git Repository",
     "cloneSubtitle": "Create a local project from a remote repository",
     "repositoryUrl": "Repository URL",
@@ -1329,7 +1335,7 @@
         "loading": "Loading quota…", "installFirst": "Install and sign in to view quota", "unsupported": "Quota reading is not supported", "unavailable": "Quota is temporarily unavailable", "startSession": "Start a session to view quota", "refreshFailed": "Quota update failed; showing the last successful result",
         "healthy": "Quota available", "low": "Quota running low", "exhausted": "Quota nearly exhausted", "session": "5-hour {{value}}%", "weekly": "Weekly {{value}}%", "remainingPercent": "{{value}}% remaining", "remainingCredits": "{{value}} remaining", "signInAntigravity": "Sign in to Antigravity CLI", "timeout": "Quota query timed out", "gemini": "Gemini", "claudeGpt": "Claude/GPT", "sessionShort": "5h", "weeklyShort": "weekly"
       },
-      "detailHint": "Click an agent to view versions, quota, and installation commands.",
+      "viewDetails": "View details",
       "pathHint": "Detection uses the system PATH currently available to Termflow. If a newly installed or updated agent is not detected, restart your computer and try again."
     },
     "theme": {
@@ -1380,12 +1386,9 @@
       "openSettings": "Open Settings",
       "clearInput": "Clear input",
       "voiceInput": "Voice Input",
-      "headerDesc": "Review the current built-in shortcut layout. Custom mappings will be added gradually.",
-      "hint1": "These global shortcuts also work when the terminal has focus.",
-      "hint2": "Custom shortcuts will be supported in a future version."
+      "hint1": "These global shortcuts also work when the terminal has focus."
     },
     "notifications": {
-      "headerDesc": "Manage task notification channels, triggers, sounds, and delivery status.",
       "channels": "Notification channels",
       "triggerPolicy": "Trigger policy",
       "systemThreshold": "System notification threshold",
@@ -1474,7 +1477,6 @@
       "targets": { "googleOAuth": "Google OAuth", "github": "GitHub", "openai": "OpenAI", "claude": "Claude", "gemini": "Gemini", "glm": "GLM", "qwen": "Qwen" }
     },
     "general": {
-      "headerDesc": "Manage app theme, language, and startup behavior.",
       "appearance": {
         "title": "Appearance",
         "mode": "Display mode",
@@ -1565,7 +1567,6 @@
       }
     },
     "terminal": {
-      "headerDesc": "Configure terminal shell, typography, cursor behavior, and security options in one place.",
       "shell": "Default Terminal",
       "defaultShell": "Default Shell",
       "defaultShellDesc": "Select the shell program used when creating new terminals",
@@ -1998,7 +1999,24 @@
       "theme": "Theme"
     },
     "voiceRecognition": {
+      "polishingTestSample": "Um, meet Lin tomorrow at three, no, four in the afternoon to confirm the event page.",
+      "polishingRegionUs": "US (Virginia)",
+      "polishingRegionSingapore": "Singapore",
+      "polishingRegionBeijing": "North China 2 (Beijing)",
+      "polishingAuthLabel": "Key type",
+      "polishingKeyMissing": "No cleanup API Key configured. Original transcripts will be used until you enter a Key.",
+      "polishingKeyPlaceholder": "Enter {{provider}} API Key",
+      "polishingKeyDesc": "Enter the selected cleanup provider’s API Key. It is saved separately from the speech recognition Key. Enter a new Key after switching providers.",
+      "polishingProviderDesc": "Choose a text cleanup provider independently of speech recognition.",
       "headerDesc": "Configure voice recognition service, shortcuts, and transcription tests.",
+      "polishingLabel": "Smart cleanup",
+      "polishingSectionTitle": "Smart transcription cleanup",
+      "polishingDesc": "After transcription, calls the text model below to remove filler words, handle corrections, fix clear errors, and format the result. This adds one request; failures use the original transcript.",
+      "polishingEnabled": "Enabled",
+      "polishingModelLabel": "Cleanup model",
+      "polishingModelDesc": "Choose from the provided models only. DeepSeek uses non-thinking mode. Provider usage charges apply, including test requests.",
+      "polishingTest": "Test cleanup model",
+      "polishingTestSuccess": "Cleanup model call succeeded",
       "title": "Voice Recognition",
       "developing": "Feature in development...",
       "description": "Voice recognition feature is under development, stay tuned",
@@ -2015,7 +2033,7 @@
       "applyHint": "Please visit the service provider's website to apply for an API Key",
       "modelConfig": "Model Configuration",
       "model": "Model",
-      "modelDesc": "Choose a preset model or enter a custom model name",
+      "modelDesc": "Choose from the provided speech recognition models only.",
       "modelPlaceholder": "e.g. mimo-v2.5-asr or qwen3-asr-flash",
       "modelOptions": {
         "cloud": "Cloud",
@@ -2069,7 +2087,7 @@
       "idleTooltip": "Click or hold the shortcut to start voice input",
       "requestingPermission": "Requesting microphone permission...",
       "recordingTooltip": "Recording, release the shortcut or click to stop",
-      "transcribing": "Transcribing...",
+      "transcribing": "Transcribing and polishing...",
       "doneTooltip": "Recognition complete",
       "errorTooltip": "An error occurred, click to retry",
       "permissionDenied": "Microphone permission denied",

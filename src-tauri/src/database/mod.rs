@@ -165,6 +165,18 @@ fn default_asr_region() -> String {
     "beijing".into()
 }
 
+fn default_polish_auth_mode() -> String {
+    "api".into()
+}
+
+fn default_voice_polish_provider() -> String {
+    "deepseek".into()
+}
+
+fn default_voice_polish_enabled() -> bool {
+    true
+}
+
 fn infer_asr_auth_mode(api_key: &str) -> String {
     let normalized = api_key.trim().to_ascii_lowercase();
     if normalized.starts_with("sk-cp-") || normalized.starts_with("tp-") {
@@ -230,6 +242,18 @@ pub struct PersistentSettingsRecord {
     pub asr_model: String,
     #[serde(default = "default_asr_region")]
     pub asr_region: String,
+    #[serde(default = "default_voice_polish_enabled")]
+    pub voice_polish_enabled: bool,
+    #[serde(default)]
+    pub voice_polish_model: String,
+    #[serde(default = "default_voice_polish_provider")]
+    pub voice_polish_provider: String,
+    #[serde(default)]
+    pub voice_polish_api_key: String,
+    #[serde(default = "default_polish_auth_mode")]
+    pub voice_polish_auth_mode: String,
+    #[serde(default = "default_asr_region")]
+    pub voice_polish_region: String,
     pub voice_shortcut: String,
     pub voice_input_target: String,
     pub voice_trigger_visible: bool,
@@ -279,6 +303,12 @@ impl Default for PersistentSettingsRecord {
             asr_auth_mode: default_asr_auth_mode(),
             asr_model: "mimo-v2.5-asr".into(),
             asr_region: default_asr_region(),
+            voice_polish_enabled: default_voice_polish_enabled(),
+            voice_polish_model: String::new(),
+            voice_polish_provider: default_voice_polish_provider(),
+            voice_polish_api_key: String::new(),
+            voice_polish_auth_mode: default_polish_auth_mode(),
+            voice_polish_region: default_asr_region(),
             voice_shortcut: "Ctrl+Shift+V".into(),
             voice_input_target: "system".into(),
             voice_trigger_visible: true,
@@ -934,6 +964,18 @@ impl Database {
             .unwrap_or_else(|| infer_asr_auth_mode(&settings.asr_api_key));
         settings.asr_model = read_setting(&conn, "voice.model")?.unwrap_or(settings.asr_model);
         settings.asr_region = read_setting(&conn, "voice.region")?.unwrap_or(settings.asr_region);
+        settings.voice_polish_enabled =
+            read_setting(&conn, "voice.polishEnabled")?.unwrap_or(settings.voice_polish_enabled);
+        settings.voice_polish_model =
+            read_setting(&conn, "voice.polishModel")?.unwrap_or(settings.voice_polish_model);
+        settings.voice_polish_provider =
+            read_setting(&conn, "voice.polishProvider")?.unwrap_or(settings.voice_polish_provider);
+        settings.voice_polish_api_key =
+            read_setting(&conn, "voice.polishApiKey")?.unwrap_or(settings.voice_polish_api_key);
+        settings.voice_polish_auth_mode =
+            read_setting(&conn, "voice.polishAuthMode")?.unwrap_or(settings.voice_polish_auth_mode);
+        settings.voice_polish_region =
+            read_setting(&conn, "voice.polishRegion")?.unwrap_or(settings.voice_polish_region);
         settings.voice_shortcut =
             read_setting(&conn, "voice.shortcut")?.unwrap_or(settings.voice_shortcut);
         settings.voice_input_target =
@@ -1131,6 +1173,20 @@ impl Database {
         write_setting(&conn, "voice.authMode", &settings.asr_auth_mode)?;
         write_setting(&conn, "voice.model", &settings.asr_model)?;
         write_setting(&conn, "voice.region", &settings.asr_region)?;
+        write_setting(&conn, "voice.polishEnabled", &settings.voice_polish_enabled)?;
+        write_setting(&conn, "voice.polishModel", &settings.voice_polish_model)?;
+        write_setting(
+            &conn,
+            "voice.polishProvider",
+            &settings.voice_polish_provider,
+        )?;
+        write_setting(&conn, "voice.polishApiKey", &settings.voice_polish_api_key)?;
+        write_setting(
+            &conn,
+            "voice.polishAuthMode",
+            &settings.voice_polish_auth_mode,
+        )?;
+        write_setting(&conn, "voice.polishRegion", &settings.voice_polish_region)?;
         write_setting(&conn, "voice.shortcut", &settings.voice_shortcut)?;
         write_setting(&conn, "voice.inputTarget", &settings.voice_input_target)?;
         write_setting(
@@ -1844,6 +1900,51 @@ mod tests {
         let restored: PersistentSettingsRecord = serde_json::from_value(value).unwrap();
 
         assert_eq!(restored.asr_region, "beijing");
+    }
+
+    #[test]
+    fn voice_polish_settings_round_trip_and_default_for_old_records() {
+        let database = Database::open_in_memory();
+        let mut settings = PersistentSettingsRecord::default();
+        settings.voice_polish_enabled = false;
+        settings.voice_polish_model = "qwen-plus".into();
+        settings.voice_polish_provider = "dashscope".into();
+        settings.voice_polish_api_key = "polish-test-key".into();
+        settings.voice_polish_auth_mode = "api".into();
+        settings.voice_polish_region = "singapore".into();
+        database
+            .save_general_persistent_settings(&settings)
+            .unwrap();
+        let restored = database.load_persistent_settings().unwrap();
+        assert!(!restored.voice_polish_enabled);
+        assert_eq!(restored.voice_polish_model, "qwen-plus");
+        assert_eq!(restored.voice_polish_provider, "dashscope");
+        assert_eq!(restored.voice_polish_api_key, "polish-test-key");
+        assert_eq!(restored.voice_polish_auth_mode, "api");
+        assert_eq!(restored.voice_polish_region, "singapore");
+
+        let mut old_record = serde_json::to_value(PersistentSettingsRecord::default()).unwrap();
+        old_record
+            .as_object_mut()
+            .unwrap()
+            .remove("voicePolishEnabled");
+        old_record
+            .as_object_mut()
+            .unwrap()
+            .remove("voicePolishModel");
+        for key in [
+            "voicePolishProvider",
+            "voicePolishApiKey",
+            "voicePolishAuthMode",
+            "voicePolishRegion",
+        ] {
+            old_record.as_object_mut().unwrap().remove(key);
+        }
+        let restored: PersistentSettingsRecord = serde_json::from_value(old_record).unwrap();
+        assert!(restored.voice_polish_enabled);
+        assert!(restored.voice_polish_model.is_empty());
+        assert_eq!(restored.voice_polish_provider, "deepseek");
+        assert!(restored.voice_polish_api_key.is_empty());
     }
 
     #[test]

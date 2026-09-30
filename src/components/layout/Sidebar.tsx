@@ -1,6 +1,6 @@
 import { retrySessionTitle } from "@/store/slices/sessionTitleSlice";
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Layout, Button, message, Modal, Input, Tooltip } from "antd";
+import { Layout, message, Modal, Input, Tooltip } from "antd";
 import type { MenuProps } from "antd";
 import {
   PlusOutlined,
@@ -13,6 +13,7 @@ import {
   InboxOutlined,
   CheckOutlined,
   SafetyCertificateOutlined,
+  ClockCircleOutlined,
 } from "@ant-design/icons";
 import { useAppStore, type SidebarSection } from "@/store";
 import {
@@ -32,7 +33,7 @@ import { useResumeSession } from "@/hooks/useResumeSession";
 import SidebarProjectPanel from "./sidebar/SidebarProjectPanel";
 import SidebarSessionsPanel from "./sidebar/SidebarSessionsPanel";
 import SidebarGitPanel from "./sidebar/SidebarGitPanel";
-import SidebarScheduledTasksPanel from "./sidebar/SidebarScheduledTasksPanel";
+import { SCHEDULED_TASKS_TAB_ID } from "@/lib/scheduledTasks";
 import { useGitRefreshController } from "@/hooks/useGitRefreshController";
 import { useGitFileWatcher } from "@/hooks/useGitFileWatcher";
 import { GIT_REFRESH_EVENT, publishGitStatusSnapshot } from "@/lib/gitStatusEvents";
@@ -55,6 +56,7 @@ function Sidebar({ collapsed, section }: SidebarProps) {
   const sidebarWidth = useAppStore((s) => s.sidebarWidth);
   const sessions = useAppStore((s) => s.sessions);
   const activeSessionId = useAppStore((s) => s.activeSessionId);
+  const focusedTabId = useAppStore((s) => s.focusedTabId);
   const resumeSession = useResumeSession();
   const openTab = useAppStore((s) => s.openTab);
   const openFileTab = useAppStore((s) => s.openFileTab);
@@ -361,27 +363,29 @@ function Sidebar({ collapsed, section }: SidebarProps) {
       const previousCursor = document.body.style.cursor;
       const previousUserSelect = document.body.style.userSelect;
       let frameId = 0;
+      const widthAt = (clientX: number) => Math.min(
+        MAX_SIDEBAR_WIDTH,
+        Math.max(MIN_SIDEBAR_WIDTH, startWidth + clientX - startX)
+      );
 
       document.body.style.cursor = "col-resize";
       document.body.style.userSelect = "none";
       setIsResizing(true);
 
       const onPointerMove = (moveEvent: PointerEvent) => {
-        const deltaX = moveEvent.clientX - startX;
-        const nextWidth = Math.min(
-          MAX_SIDEBAR_WIDTH,
-          Math.max(MIN_SIDEBAR_WIDTH, startWidth + deltaX)
-        );
-
         if (frameId) cancelAnimationFrame(frameId);
         frameId = requestAnimationFrame(() => {
-          setSidebarWidth(nextWidth);
+          frameId = 0;
+          setSidebarWidth(widthAt(moveEvent.clientX));
           syncActiveTerminalLayout();
         });
       };
 
-      const stopResizing = () => {
+      const stopResizing = (upEvent: PointerEvent) => {
         if (frameId) cancelAnimationFrame(frameId);
+        if (upEvent.type === "pointerup") {
+          setSidebarWidth(widthAt(upEvent.clientX));
+        }
         document.body.style.cursor = previousCursor;
         document.body.style.userSelect = previousUserSelect;
         setIsResizing(false);
@@ -402,7 +406,7 @@ function Sidebar({ collapsed, section }: SidebarProps) {
     MAX_SIDEBAR_WIDTH,
     Math.max(MIN_SIDEBAR_WIDTH, sidebarWidth || DEFAULT_SIDEBAR_WIDTH)
   );
-  const shellWidth = collapsed ? 0 : effectiveSidebarWidth + RESIZE_HANDLE_WIDTH;
+  const shellWidth = collapsed ? 0 : effectiveSidebarWidth;
 
   return (
     <div
@@ -416,9 +420,7 @@ function Sidebar({ collapsed, section }: SidebarProps) {
         maxWidth: shellWidth,
         overflow: "hidden",
         opacity: collapsed ? 0 : 1,
-        transition: isResizing
-          ? "opacity 120ms ease"
-          : "width 200ms ease, min-width 200ms ease, max-width 200ms ease, opacity 120ms ease",
+        transition: "opacity 120ms ease",
       }}
     >
       <Sider
@@ -434,34 +436,34 @@ function Sidebar({ collapsed, section }: SidebarProps) {
         }}
       >
         <div className="app-sidebar-surface flex min-h-0 flex-1 flex-col">
-          {section === "sessions" && currentProject && (
+          {section === "sessions" && (
             <div
               className="px-3 pt-2.5 pb-2"
               style={{ borderBottom: "1px solid color-mix(in srgb, var(--cs-border-sidebar) 88%, transparent)" }}
             >
-              <Tooltip title={t("sidebar.newSessionTooltip")} mouseEnterDelay={0.4}>
-                <Button
-                  type="default"
-                  icon={<PlusOutlined />}
-                  block
+              {currentProject && <Tooltip title={t("sidebar.newSessionTooltip")} mouseEnterDelay={0.4}>
+                <button
+                  type="button"
+                  className="app-sidebar-new-session-button flex h-7 w-full items-center justify-start gap-2 rounded-[7px] px-3 text-sm font-medium text-[var(--cs-text-secondary)] hover:bg-[var(--cs-bg-hover)]"
                   onClick={() => window.dispatchEvent(new CustomEvent("shortcut:new-session"))}
-                  style={{
-                    height: 34,
-                    borderRadius: 8,
-                    borderColor: "color-mix(in srgb, var(--cs-primary) 24%, var(--cs-border-sidebar) 76%)",
-                    background: "color-mix(in srgb, var(--cs-primary) 7%, var(--cs-bg-sidebar) 93%)",
-                    color: "color-mix(in srgb, var(--cs-primary) 74%, var(--cs-text-primary) 26%)",
-                    fontWeight: 600,
-                    boxShadow: "none",
-                  }}
                 >
+                  <PlusOutlined />
                   {t("sidebar.newSession")}
-                </Button>
-              </Tooltip>
+                </button>
+              </Tooltip>}
+              <button
+                type="button"
+                data-active={focusedTabId === SCHEDULED_TASKS_TAB_ID}
+                className="app-sidebar-scheduled-tasks-button mt-1 flex h-7 w-full items-center justify-start gap-2 rounded-[7px] px-3 text-sm font-medium text-[var(--cs-text-secondary)] hover:bg-[var(--cs-bg-hover)]"
+                onClick={() => openTab(SCHEDULED_TASKS_TAB_ID)}
+              >
+                <ClockCircleOutlined />
+                {t("scheduledTasks.title")}
+              </button>
             </div>
           )}
 
-          <div className={section === "project" ? "flex-1 min-h-0 overflow-hidden p-3" : section === "schedules" ? "flex-1 min-h-0 overflow-hidden" : "flex-1 min-h-0 overflow-y-auto app-project-tree-scroll p-2.5"}>
+          <div className={section === "project" ? "flex-1 min-h-0 overflow-hidden p-3" : "flex-1 min-h-0 overflow-y-auto app-project-tree-scroll p-2.5"}>
             {section === "project" ? (
               <SidebarProjectPanel
                 currentProject={currentProject}
@@ -486,8 +488,6 @@ function Sidebar({ collapsed, section }: SidebarProps) {
                 key={currentProject?.path ?? "no-project"}
                 currentProject={currentProject}
               />
-            ) : section === "schedules" ? (
-              <SidebarScheduledTasksPanel currentProject={currentProject} />
             ) : (
               <SidebarSessionsPanel
                 currentProject={currentProject}

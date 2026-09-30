@@ -3,6 +3,7 @@ import {
   Button,
   Empty,
   Popconfirm,
+  Select,
   Spin,
   Switch,
   Tag,
@@ -230,6 +231,7 @@ export default function ScheduledTasksPanel() {
   const initialized = useScheduledTaskStore((state) => state.initialized);
   const loadError = useScheduledTaskStore((state) => state.error);
   const scope = useScheduledTaskStore((state) => state.scope);
+  const setScope = useScheduledTaskStore((state) => state.setScope);
   const selectedRunId = useScheduledTaskStore((state) => state.selectedRunId);
   const setSelectedRunId = useScheduledTaskStore((state) => state.setSelectedRunId);
   const editor = useScheduledTaskStore((state) => state.editor);
@@ -364,6 +366,19 @@ export default function ScheduledTasksPanel() {
           <Button type="primary" icon={<ClockCircleOutlined />} disabled={!currentProject && projects.length === 0} onClick={() => setEditor("create")}>
             {t("scheduledTasks.newTask")}
           </Button>
+        </div>
+        <div className="mb-5 flex items-center gap-2">
+          <Select
+            className="min-w-56"
+            aria-label={t("scheduledTasks.sidebarNavLabel")}
+            value={scope}
+            onChange={setScope}
+            options={[
+              { value: "current", label: t("scheduledTasks.currentProject") },
+              { value: "all", label: t("scheduledTasks.allProjects") },
+              ...projects.map((project) => ({ value: project.path, label: project.name })),
+            ]}
+          />
         </div>
 
         {loadError && (

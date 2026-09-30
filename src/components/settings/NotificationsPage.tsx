@@ -20,7 +20,6 @@ import {
   type NotificationEvent,
   type NotificationSoundType,
 } from "@/store";
-import { NotificationDiagnostics } from "./NotificationDiagnostics";
 import { SettingsPageHeader } from "./SettingsPageHeader";
 import feishuIcon from "@/assets/remote-notification-icons/feishu.svg";
 import dingtalkIcon from "@/assets/remote-notification-icons/dingtalk.svg";
@@ -305,7 +304,6 @@ export function NotificationsPage() {
     <>
       <SettingsPageHeader
         title={t("settings.menu.notifications")}
-        description={t("settings.notifications.headerDesc")}
       />
 
       <NotificationSection title={t("settings.notifications.channels")}>
@@ -558,9 +556,6 @@ export function NotificationsPage() {
           ))}
       </NotificationSection>
 
-      <NotificationSection title={t("sidebar.attentionDiagnostics.title")}>
-        <NotificationDiagnostics />
-      </NotificationSection>
     </>
   );
 }

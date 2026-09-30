@@ -107,7 +107,6 @@ export function GitSettingsPage() {
     <div className="mx-auto max-w-5xl">
       <SettingsPageHeader
         title={t("settings.menu.git")}
-        description={t("settings.agents.gitProfiles.description")}
       />
       <div className="app-glass-card rounded-xl px-4 py-4" style={{ background: "var(--cs-bg-card)", border: "1px solid var(--cs-border-card)" }}>
         <div className="flex flex-wrap items-start justify-between gap-3">

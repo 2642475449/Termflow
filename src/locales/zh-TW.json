@@ -332,7 +332,6 @@
       "modelLabel": "目前模型"
     },
     "antigravityUsage": {
-      "summaryHint": "依模型群組分別顯示 5 小時和每週的剩餘額度，位置固定；各週期獨立計算。",
       "title": "Antigravity 用量",
       "loading": "Antigravity 用量…",
       "pending": "等待首次額度快照",
@@ -856,6 +855,10 @@
     "gitDiscardConfirmOk": "捨棄",
     "gitStageSuccess": "暫存成功",
     "gitStageFailed": "暫存失敗",
+    "gitContextAddToGitignore": "加入 .gitignore",
+    "gitIgnoreSuccess": "已加入 .gitignore",
+    "gitIgnoreTrackedNotice": "此檔案已被 Git 追蹤，忽略規則不會隱藏其變更；需先停止追蹤。",
+    "gitIgnoreFailed": "加入 .gitignore 失敗：{{detail}}",
     "gitUnstageSuccess": "取消暫存成功",
     "gitUnstageFailed": "取消暫存失敗",
     "gitBranchList": "分支",
@@ -934,6 +937,9 @@
     "gitContinueOperationFailed": "繼續{{operation}}失敗"
   },
   "projectLauncher": {
+    "createProject": "新增專案",
+    "createChooseLocation": "選擇新專案儲存位置",
+    "createAndOpen": "建立並開啟",
     "cloneTitle": "複製 Git 儲存庫",
     "cloneSubtitle": "從遠端儲存庫建立一個本地專案",
     "repositoryUrl": "儲存庫位址",
@@ -1329,7 +1335,7 @@
         "loading": "正在讀取額度…", "installFirst": "安裝並登入後顯示額度", "unsupported": "暫不支援讀取額度", "unavailable": "暫時無法讀取額度", "startSession": "啟動一次工作階段後顯示額度", "refreshFailed": "額度更新失敗，目前顯示上次成功查詢的結果",
         "healthy": "額度充足", "low": "額度較低", "exhausted": "額度即將用盡", "session": "5 小時 {{value}}%", "weekly": "每週 {{value}}%", "remainingPercent": "剩餘 {{value}}%", "remainingCredits": "剩餘 {{value}}", "signInAntigravity": "請先登入 Antigravity CLI", "timeout": "額度查詢逾時", "gemini": "Gemini", "claudeGpt": "Claude/GPT", "sessionShort": "5小時", "weeklyShort": "每週"
       },
-      "detailHint": "點擊智慧體列可查看版本、額度與安裝命令。",
+      "viewDetails": "查看詳情",
       "pathHint": "偵測結果以 Termflow 目前讀取到的系統 PATH 為準。安裝或更新智慧體後，如果仍未偵測到，請重新啟動電腦再試。"
     },
     "theme": {
@@ -1380,12 +1386,9 @@
       "openSettings": "開啟設定",
       "clearInput": "清空輸入",
       "voiceInput": "語音輸入",
-      "headerDesc": "檢視目前內建快速鍵佈局，後續會逐步支援自訂組態。",
-      "hint1": "上述全域快速鍵在終端機獲得焦點時同樣可用",
-      "hint2": "自訂快速鍵將在後續版本中支援"
+      "hint1": "上述全域快速鍵在終端機獲得焦點時同樣可用"
     },
     "notifications": {
-      "headerDesc": "管理任務事件的通知管道、觸發條件、提示音與投遞狀態。",
       "channels": "通知管道", "triggerPolicy": "觸發策略", "systemThreshold": "系統通知門檻", "feishuThreshold": "飛書長任務門檻",
       "feishuThresholdDesc": "僅任務完成事件使用此門檻；失敗、等待輸入與權限請求會立即通知", "remoteThreshold": "遠端通知長任務門檻", "remoteThresholdDesc": "僅任務完成事件使用此門檻；失敗、等待輸入與權限請求會立即通知",
       "threshold": { "min5": "5 分鐘", "min10": "10 分鐘", "min30": "30 分鐘", "hour1": "1 小時" },
@@ -1469,7 +1472,6 @@
       "targets": { "googleOAuth": "Google OAuth", "github": "GitHub", "openai": "OpenAI", "claude": "Claude", "gemini": "Gemini", "glm": "GLM", "qwen": "Qwen" }
     },
     "general": {
-      "headerDesc": "統一管理介面主題、語言與啟動行為。",
       "appearance": {
         "title": "外觀",
         "mode": "顯示模式",
@@ -1560,7 +1562,6 @@
       }
     },
     "terminal": {
-      "headerDesc": "統一組態終端機 Shell、字型、游標行為與安全性選項。",
       "shell": "預設終端機",
       "defaultShell": "預設 Shell",
       "defaultShellDesc": "選擇新建終端機時使用的 Shell 程式",
@@ -1993,7 +1994,24 @@
       "theme": "主題"
     },
     "voiceRecognition": {
+      "polishingTestSample": "嗯，明天下午三點，不對，四點和小林確認活動頁面。",
+      "polishingRegionUs": "美國（維吉尼亞）",
+      "polishingRegionSingapore": "新加坡",
+      "polishingRegionBeijing": "華北2（北京）",
+      "polishingAuthLabel": "Key 類型",
+      "polishingKeyMissing": "尚未設定整理 API Key，目前僅輸出原始轉寫。填寫後可測試並啟用智慧整理。",
+      "polishingKeyPlaceholder": "請輸入 {{provider}} API Key",
+      "polishingKeyDesc": "填寫所選整理服務商的 API Key，獨立儲存，不共用語音辨識 Key。切換服務商後需重新填寫。",
+      "polishingProviderDesc": "獨立選擇文字整理服務，不受語音辨識服務商影響。",
       "headerDesc": "組態語音辨識服務、快速鍵與轉寫測試。",
+      "polishingLabel": "智慧整理",
+      "polishingSectionTitle": "智慧優化與整理",
+      "polishingDesc": "轉寫後呼叫下方文字模型，去除口癖、處理改口、修正錯字並整理格式。每次會增加一次請求；失敗時使用原始轉寫。",
+      "polishingEnabled": "已啟用",
+      "polishingModelLabel": "整理模型",
+      "polishingModelDesc": "僅可選擇提供的預設模型。DeepSeek 使用非思考模式；依服務商規則計費，測試也會發出請求。",
+      "polishingTest": "測試整理模型",
+      "polishingTestSuccess": "整理模型呼叫成功",
       "title": "語音辨識",
       "developing": "功能開發中...",
       "description": "語音辨識功能正在緊張開發中，敬請期待",
@@ -2010,7 +2028,7 @@
       "applyHint": "請前往服務商官網申請 API Key",
       "modelConfig": "模型組態",
       "model": "模型",
-      "modelDesc": "可選擇預設模型，也可手動填寫其他模型名",
+      "modelDesc": "僅可選擇提供的預設語音辨識模型。",
       "modelPlaceholder": "例如 mimo-v2.5-asr 或 qwen3-asr-flash",
       "modelOptions": {
         "cloud": "雲端",
@@ -2064,7 +2082,7 @@
       "idleTooltip": "點擊或按住快速鍵開始語音輸入",
       "requestingPermission": "請求麥克風權限...",
       "recordingTooltip": "正在錄音，放開快速鍵或點擊結束",
-      "transcribing": "轉錄中...",
+      "transcribing": "轉錄並整理中...",
       "doneTooltip": "辨識完成",
       "errorTooltip": "發生錯誤，點擊重試",
       "permissionDenied": "麥克風權限被拒絕",

@@ -1120,6 +1120,7 @@ fn normalize_event_type(state: &str, event_type: Option<&str>) -> Option<&'stati
         "waitinginput" | "questionasked" => Some("waiting_input"),
         "processerror" | "sessionerror" => Some("process_error"),
         "hookerror" => Some("hook_error"),
+        "agentaborted" => Some("agent_aborted"),
         _ => match state {
             "completed" => Some("assistant_complete"),
             "waiting" => Some("waiting_input"),
@@ -1133,6 +1134,7 @@ fn should_emit_attention_event(state: &str, event_type: Option<&str>) -> bool {
     (state == "waiting" || state == "error")
         && event_type.is_some()
         && event_type != Some("session_start")
+        && event_type != Some("agent_aborted")
 }
 
 fn normalize_agent(agent: Option<&str>) -> Option<String> {
@@ -1142,6 +1144,7 @@ fn normalize_agent(agent: Option<&str>) -> Option<String> {
         "qoder" => Some("qoder"),
         "antigravity" => Some("antigravity"),
         "opencode" => Some("opencode"),
+        "pi" => Some("pi"),
         _ => None,
     }
     .map(str::to_string)
@@ -1153,6 +1156,7 @@ fn agent_label(agent: &str) -> &'static str {
         "qoder" => "Qoder CLI",
         "antigravity" => "Antigravity CLI",
         "opencode" => "OpenCode",
+        "pi" => "Pi",
         _ => "Claude Code",
     }
 }
@@ -1430,12 +1434,22 @@ mod tests {
             Some("permission_request")
         ));
         assert!(should_emit_attention_event("error", Some("process_error")));
+        assert_eq!(
+            normalize_event_type("waiting", Some("agent_aborted")),
+            Some("agent_aborted")
+        );
+        assert!(!should_emit_attention_event(
+            "waiting",
+            Some("agent_aborted")
+        ));
     }
 
     #[test]
     fn rejects_unknown_agent_ids() {
         assert_eq!(normalize_agent(Some("claude")).as_deref(), Some("claude"));
         assert_eq!(normalize_agent(Some("qoder")).as_deref(), Some("qoder"));
+        assert_eq!(normalize_agent(Some("pi")).as_deref(), Some("pi"));
+        assert_eq!(agent_label("pi"), "Pi");
         assert_eq!(
             normalize_agent(Some("antigravity")).as_deref(),
             Some("antigravity")

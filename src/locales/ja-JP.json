@@ -332,7 +332,6 @@
       "modelLabel": "現在のモデル"
     },
     "antigravityUsage": {
-      "summaryHint": "モデルグループごとに5時間枠と週間枠の残量を固定位置に表示します。各期間の割り当ては独立しています。",
       "title": "Antigravity 使用量",
       "loading": "Antigravity 使用量…",
       "pending": "最初の割り当てスナップショットを待機中",
@@ -856,6 +855,10 @@
     "gitDiscardConfirmOk": "破棄",
     "gitStageSuccess": "ステージしました",
     "gitStageFailed": "ステージに失敗しました",
+    "gitContextAddToGitignore": ".gitignore に追加",
+    "gitIgnoreSuccess": ".gitignore に追加しました",
+    "gitIgnoreTrackedNotice": "このファイルは Git の追跡対象です。追跡を解除するまで、無視ルールを追加しても変更は表示されます。",
+    "gitIgnoreFailed": ".gitignore への追加に失敗しました: {{detail}}",
     "gitUnstageSuccess": "ステージ解除しました",
     "gitUnstageFailed": "ステージ解除に失敗しました",
     "gitBranchList": "ブランチ",
@@ -934,6 +937,9 @@
     "gitContinueOperationFailed": "{{operation}}を続行できませんでした"
   },
   "projectLauncher": {
+    "createProject": "新しいプロジェクト",
+    "createChooseLocation": "新しいプロジェクトの保存先を選択",
+    "createAndOpen": "作成して開く",
     "cloneTitle": "Git リポジトリをクローン",
     "cloneSubtitle": "リモートリポジトリからローカルプロジェクトを作成",
     "repositoryUrl": "リポジトリ URL",
@@ -1329,7 +1335,7 @@
         "loading": "利用枠を読み込み中…", "installFirst": "インストールしてログインすると利用枠を表示します", "unsupported": "利用枠の読み取りには未対応です", "unavailable": "利用枠を一時的に取得できません", "startSession": "セッションを開始すると利用枠を表示します", "refreshFailed": "利用枠の更新に失敗したため、前回取得した結果を表示しています",
         "healthy": "利用枠は十分です", "low": "利用枠が少なくなっています", "exhausted": "利用枠がまもなくなくなります", "session": "5 時間 {{value}}%", "weekly": "週間 {{value}}%", "remainingPercent": "残り {{value}}%", "remainingCredits": "残り {{value}}", "signInAntigravity": "Antigravity CLI にログインしてください", "timeout": "利用枠の照会がタイムアウトしました", "gemini": "Gemini", "claudeGpt": "Claude/GPT", "sessionShort": "5時間", "weeklyShort": "週間"
       },
-      "detailHint": "エージェントをクリックすると、バージョン、使用枠、インストールコマンドを確認できます。",
+      "viewDetails": "詳細を見る",
       "pathHint": "検出には Termflow から利用できる現在のシステム PATH を使用します。新しくインストールまたは更新したエージェントが検出されない場合は、コンピューターを再起動して再試行してください。"
     },
     "theme": {
@@ -1380,12 +1386,9 @@
       "openSettings": "設定を開く",
       "clearInput": "入力をクリア",
       "voiceInput": "音声入力",
-      "headerDesc": "現在の組み込みショートカット構成を確認できます。カスタム割り当ては今後追加予定です。",
-      "hint1": "これらのグローバルショートカットは、ターミナルにフォーカスがある場合も動作します。",
-      "hint2": "カスタムショートカットは将来のバージョンで対応予定です。"
+      "hint1": "これらのグローバルショートカットは、ターミナルにフォーカスがある場合も動作します。"
     },
     "notifications": {
-      "headerDesc": "タスクイベントの通知先、通知条件、サウンド、配信状態を管理します。",
       "channels": "通知チャネル", "triggerPolicy": "通知条件", "systemThreshold": "システム通知のしきい値", "feishuThreshold": "Feishu 長時間タスクのしきい値",
       "feishuThresholdDesc": "完了通知だけに適用され、エラー・入力待ち・権限要求は直ちに通知されます", "remoteThreshold": "リモート通知の長時間タスクしきい値", "remoteThresholdDesc": "完了通知だけに適用され、エラー・入力待ち・権限要求は直ちに通知されます",
       "threshold": { "min5": "5 分", "min10": "10 分", "min30": "30 分", "hour1": "1 時間" },
@@ -1469,7 +1472,6 @@
       "targets": { "googleOAuth": "Google OAuth", "github": "GitHub", "openai": "OpenAI", "claude": "Claude", "gemini": "Gemini", "glm": "GLM", "qwen": "Qwen" }
     },
     "general": {
-      "headerDesc": "アプリのテーマ、言語、起動動作、通知体験をまとめて管理します。",
       "appearance": {
         "title": "外観",
         "mode": "表示モード",
@@ -1560,7 +1562,6 @@
       }
     },
     "terminal": {
-      "headerDesc": "Header Desc",
       "shell": "Default ターミナル",
       "defaultShell": "Default Shell",
       "defaultShellDesc": "Default Shell Desc",
@@ -1993,7 +1994,24 @@
       "theme": "テーマ"
     },
     "voiceRecognition": {
+      "polishingTestSample": "えっと、明日の午後三時、いや四時に林さんとイベントページを確認します。",
+      "polishingRegionUs": "米国（バージニア）",
+      "polishingRegionSingapore": "シンガポール",
+      "polishingRegionBeijing": "華北2（北京）",
+      "polishingAuthLabel": "Key の種類",
+      "polishingKeyMissing": "整理 API Key が未設定のため、元の文字起こしを使用します。",
+      "polishingKeyPlaceholder": "{{provider}} API Key を入力",
+      "polishingKeyDesc": "選択した整理サービスの API Key を入力してください。音声認識とは別に保存します。サービス変更後は Key の再入力が必要です。",
+      "polishingProviderDesc": "音声認識とは独立してテキスト整理サービスを選択します。",
       "headerDesc": "音声認識サービス、ショートカット、文字起こしテストを設定します。",
+      "polishingLabel": "スマート整理",
+      "polishingSectionTitle": "音声テキストの最適化と整理",
+      "polishingDesc": "文字起こし後に下のテキストモデルを呼び出し、フィラーや言い直し、誤字、書式を整理します。追加リクエストが発生し、失敗時は元の文字起こしを使用します。",
+      "polishingEnabled": "有効",
+      "polishingModelLabel": "整理モデル",
+      "polishingModelDesc": "用意されたモデルのみ選択できます。DeepSeek は非思考モードを使用します。テストを含め、サービスの利用料金が適用されます。",
+      "polishingTest": "整理モデルをテスト",
+      "polishingTestSuccess": "整理モデルの呼び出しに成功しました",
       "title": "音声認識",
       "developing": "機能開発中...",
       "description": "音声認識機能は開発中です。しばらくお待ちください。",
@@ -2010,7 +2028,7 @@
       "applyHint": "サービスプロバイダーの公式サイトで API Key を申請してください",
       "modelConfig": "モデル設定",
       "model": "モデル",
-      "modelDesc": "プリセットモデルを選択するか、カスタムモデル名を入力できます",
+      "modelDesc": "用意された音声認識モデルのみ選択できます。",
       "modelPlaceholder": "例: mimo-v2.5-asr または qwen3-asr-flash",
       "modelOptions": {
         "cloud": "クラウド",
@@ -2064,7 +2082,7 @@
       "idleTooltip": "クリックまたはショートカット長押しで音声入力を開始",
       "requestingPermission": "マイク権限をリクエスト中...",
       "recordingTooltip": "録音中です。ショートカットを離すかクリックして停止します",
-      "transcribing": "文字起こし中...",
+      "transcribing": "文字起こしと整理中...",
       "doneTooltip": "認識が完了しました",
       "errorTooltip": "エラーが発生しました。クリックして再試行",
       "permissionDenied": "マイク権限が拒否されました",

@@ -1,3 +1,4 @@
+import type { VoicePolishConfig } from "@/lib/voicePolish";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { emit, listen } from "@tauri-apps/api/event";
 import { useVoiceRecognition, type AsrPhase } from "@/hooks/useVoiceRecognition";
@@ -20,6 +21,12 @@ interface VoiceWorkerConfigPayload {
   authMode: MimoAuthMode;
   model: string;
   region?: "beijing" | "singapore" | "us";
+  polishEnabled: boolean;
+  polishModel: string;
+  polishProvider: VoicePolishConfig["provider"];
+  polishApiKey: VoicePolishConfig["apiKey"];
+  polishAuthMode: VoicePolishConfig["authMode"];
+  polishRegion: VoicePolishConfig["region"];
   shortcut: string;
   inputTarget: VoiceInputTarget;
 }
@@ -54,6 +61,12 @@ function VoiceWorkerWindow() {
   const asrAuthMode = useAppStore((s) => s.asrAuthMode);
   const asrModel = useAppStore((s) => s.asrModel);
   const asrRegion = useAppStore((s) => s.asrRegion);
+  const voicePolishEnabled = useAppStore((s) => s.voicePolishEnabled);
+  const voicePolishModel = useAppStore((s) => s.voicePolishModel);
+  const voicePolishProvider = useAppStore((s) => s.voicePolishProvider);
+  const voicePolishApiKey = useAppStore((s) => s.voicePolishApiKey);
+  const voicePolishAuthMode = useAppStore((s) => s.voicePolishAuthMode);
+  const voicePolishRegion = useAppStore((s) => s.voicePolishRegion);
   const voiceShortcut = useAppStore((s) => s.voiceShortcut);
   const voiceInputTarget = useAppStore((s) => s.voiceInputTarget);
   const [config, setConfig] = useState<VoiceWorkerConfigPayload>({
@@ -61,6 +74,12 @@ function VoiceWorkerWindow() {
     authMode: asrAuthMode,
     model: asrModel,
     region: asrRegion,
+    polishEnabled: voicePolishEnabled,
+    polishModel: voicePolishModel,
+    polishProvider: voicePolishProvider,
+    polishApiKey: voicePolishApiKey,
+    polishAuthMode: voicePolishAuthMode,
+    polishRegion: voicePolishRegion,
     shortcut: voiceShortcut,
     inputTarget: voiceInputTarget,
   });
@@ -71,6 +90,14 @@ function VoiceWorkerWindow() {
     authMode: config.authMode,
     model: config.model,
     region: config.region,
+    polishEnabled: config.polishEnabled,
+    polishConfig: {
+      provider: config.polishProvider,
+      model: config.polishModel,
+      apiKey: config.polishApiKey,
+      authMode: config.polishAuthMode,
+      region: config.polishRegion,
+    },
     onResult: (text) => {
       if (config.inputTarget === "system") {
         void sendTextToFocusedWindow(text).catch((err) => {
@@ -134,11 +161,17 @@ function VoiceWorkerWindow() {
       authMode: asrAuthMode,
       model: asrModel,
       region: asrRegion,
+      polishEnabled: voicePolishEnabled,
+      polishModel: voicePolishModel,
+      polishProvider: voicePolishProvider,
+      polishApiKey: voicePolishApiKey,
+      polishAuthMode: voicePolishAuthMode,
+      polishRegion: voicePolishRegion,
       shortcut: voiceShortcut,
       inputTarget: voiceInputTarget,
     };
     setConfig(nextConfig);
-  }, [asrApiKey, asrAuthMode, asrModel, asrRegion, voiceInputTarget, voiceShortcut]);
+  }, [asrApiKey, asrAuthMode, asrModel, asrRegion, voiceInputTarget, voicePolishEnabled, voicePolishModel, voicePolishProvider, voicePolishApiKey, voicePolishAuthMode, voicePolishRegion, voiceShortcut]);
 
   useEffect(() => {
     let disposed = false;

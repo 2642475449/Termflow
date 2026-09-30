@@ -1315,6 +1315,17 @@ export async function cancelLiveAsr(sessionId: string): Promise<void> {
   await invoke("cancel_live_asr", { sessionId });
 }
 
+export async function polishVoiceText(
+  text: string,
+  provider: string,
+  polishModel: string,
+  apiKey: string,
+  authMode: string,
+  region: string,
+): Promise<string> {
+  return await invoke<string>("polish_voice_text", { text, provider, polishModel, apiKey, authMode, region });
+}
+
 // Git API
 
 export async function gitRepoInfo(projectPath: string): Promise<GitRepoInfo> {
@@ -1323,6 +1334,10 @@ export async function gitRepoInfo(projectPath: string): Promise<GitRepoInfo> {
 
 export async function gitStatus(projectPath: string): Promise<GitFileStatus[]> {
   return await invoke("git_status", { projectPath });
+}
+
+export async function gitAddToGitignore(projectPath: string, filePath: string): Promise<boolean> {
+  return await invoke("git_add_to_gitignore", { projectPath, filePath });
 }
 
 export async function gitInitRepository(projectPath: string): Promise<void> {

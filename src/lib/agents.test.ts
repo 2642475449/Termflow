@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getAgentCommandShell,
   getAgentIdsWithCapability,
@@ -96,7 +96,8 @@ describe("agent capability registry", () => {
     expect(supportsAgentCapability("pi", "interactiveTerminal")).toBe(true);
     expect(supportsAgentCapability("pi", "resume")).toBe(true);
     expect(supportsAgentCapability("pi", "skills")).toBe(true);
-    expect(supportsAgentCapability("pi", "statusEvents")).toBe(false);
+    expect(supportsAgentCapability("pi", "statusEvents")).toBe(true);
+    expect(supportsAgentCapability("pi", "usageTelemetry")).toBe(true);
     expect(supportsAgentCapability("pi", "mcpManagement")).toBe(false);
     expect(getAgentIdsWithCapability("mcpManagement")).toEqual([
       "claude",
@@ -131,6 +132,21 @@ describe("formatAgentVersion", () => {
 });
 
 describe("getAgentStartupCommand", () => {
+  beforeEach(() => vi.stubGlobal("navigator", { platform: "Linux x86_64" }));
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("keeps Windows Codex sessions off the shared daemon", () => {
+    vi.stubGlobal("navigator", { platform: "Win32" });
+    expect(getAgentStartupCommand("codex")).toBe("codex --no-daemon");
+    expect(getAgentStartupCommand("codex", undefined, "019f1e67-8ab6-7b02-b0c2-275ca68979fa"))
+      .toBe('codex --no-daemon resume "019f1e67-8ab6-7b02-b0c2-275ca68979fa"');
+    expect(getAgentStartupCommand("codex", undefined, null, "Explain this"))
+      .toBe("$__termflow_prompt=$env:TERMFLOW_INITIAL_PROMPT; Remove-Item Env:TERMFLOW_INITIAL_PROMPT; codex --no-daemon $__termflow_prompt");
+    expect(getAgentStartupCommand("codex", undefined, null, null, {
+      yolo: true, approvalMode: "untrusted", sandboxMode: "workspace-write", effort: "inherit",
+    })).toBe("codex --no-daemon --dangerously-bypass-approvals-and-sandbox");
+  });
+
   it("keeps Claude on the native session startup path", () => {
     expect(getAgentStartupCommand("claude")).toBeUndefined();
     expect(getAgentStartupCommand()).toBeUndefined();
@@ -233,6 +249,11 @@ describe("getAgentStartupCommand", () => {
         { permissionMode: "plan" },
       ),
     ).toBe("qoderclicn --permission-mode plan");
+  });
+
+  it("opens the same OpenCode session when returning from chat", () => {
+    expect(getAgentStartupCommand("opencode", undefined, "ses_123"))
+      .toBe('opencode --session "ses_123"');
   });
 
   it("uses Pi's exact session id and continue fallback", () => {

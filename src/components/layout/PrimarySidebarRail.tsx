@@ -1,4 +1,4 @@
-import { CodeOutlined, FolderOutlined, SettingOutlined, BranchesOutlined, ClockCircleOutlined } from "@ant-design/icons";
+import { CodeOutlined, FolderOutlined, SettingOutlined, BranchesOutlined } from "@ant-design/icons";
 import { message, Popover, Tooltip } from "antd";
 import { useCallback, useState } from "react";
 import { getQuickSettingsSubmenuOnPopoverChange, toggleQuickSettingsSubmenu, type QuickSettingsSubmenu } from "@/lib/quickSettingsMenu";
@@ -98,9 +98,6 @@ function SettingsMenu({
   const settingsShortcut = getKeysForAction("openSettings");
 
   const handleOpenSettings = () => {
-    if (useAppStore.getState().activeSidebarSection === "schedules") {
-      useAppStore.getState().setActiveSidebarSection("sessions");
-    }
     openTab(SETTINGS_ID);
     onClose();
   };
@@ -375,11 +372,6 @@ function PrimarySidebarRail() {
     [activeSidebarSection, setActiveSidebarSection, setSidebarCollapsed, sidebarCollapsed]
   );
 
-  const handleOpenScheduledTasks = useCallback(() => {
-    setActiveSidebarSection("schedules");
-    setSidebarCollapsed(false);
-  }, [setActiveSidebarSection, setSidebarCollapsed]);
-
   const gitTooltip = (
     <div className="flex flex-col gap-1 text-xs leading-5">
       <div>{t("sidebar.gitSection", "Git")}</div>
@@ -429,13 +421,6 @@ function PrimarySidebarRail() {
             </span>
           )}
         </div>
-        <RailButton
-          active={activeSidebarSection === "schedules"}
-          title={t("scheduledTasks.title")}
-          onClick={handleOpenScheduledTasks}
-        >
-          <ClockCircleOutlined className="text-[18px]" />
-        </RailButton>
       </div>
       <div className="flex flex-col items-center gap-1.5">
         <Popover

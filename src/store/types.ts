@@ -1,6 +1,7 @@
 import type { AiAgentId, ClaudeCliInfo, GitCommitMessageProfile, NetworkProxyMode, ProjectOpenBehavior, Session, WindowMode, WindowProjectContext } from "@/types";
 import type { TerminalCompletionNotificationSlice } from "./slices/terminalCompletionNotification";
 import type { TerminalCompletionRuntimeSlice } from "./slices/terminalCompletionRuntime";
+import type { VoicePolishSlice } from "./slices/voicePolish";
 
 export type ThemeMode = "light-glass" | "light-warm" | "dark-starry" | "dark-mocha";
 export type ThemeCategory = "light" | "dark" | "system";
@@ -152,7 +153,8 @@ export interface ProjectWorkspace {
 
 export interface AppState
   extends TerminalCompletionNotificationSlice,
-    TerminalCompletionRuntimeSlice {
+    TerminalCompletionRuntimeSlice,
+    VoicePolishSlice {
   windowContextReady: boolean;
   windowMode: WindowMode;
   windowLabel: string;

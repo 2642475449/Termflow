@@ -147,6 +147,12 @@ function App() {
   const asrAuthMode = useAppStore((s) => s.asrAuthMode);
   const asrModel = useAppStore((s) => s.asrModel);
   const asrRegion = useAppStore((s) => s.asrRegion);
+  const voicePolishEnabled = useAppStore((s) => s.voicePolishEnabled);
+  const voicePolishModel = useAppStore((s) => s.voicePolishModel);
+  const voicePolishProvider = useAppStore((s) => s.voicePolishProvider);
+  const voicePolishApiKey = useAppStore((s) => s.voicePolishApiKey);
+  const voicePolishAuthMode = useAppStore((s) => s.voicePolishAuthMode);
+  const voicePolishRegion = useAppStore((s) => s.voicePolishRegion);
   const voiceShortcut = useAppStore((s) => s.voiceShortcut);
   const voiceInputTarget = useAppStore((s) => s.voiceInputTarget);
   const voiceTriggerVisible = useAppStore((s) => s.voiceTriggerVisible);
@@ -205,6 +211,12 @@ function App() {
       asrAuthMode,
       asrModel,
       asrRegion,
+      voicePolishEnabled,
+      voicePolishModel,
+      voicePolishProvider,
+      voicePolishApiKey,
+      voicePolishAuthMode,
+      voicePolishRegion,
       voiceShortcut,
       voiceInputTarget,
       voiceTriggerVisible,
@@ -214,6 +226,12 @@ function App() {
       asrAuthMode,
       asrModel,
       asrRegion,
+      voicePolishEnabled,
+      voicePolishModel,
+      voicePolishProvider,
+      voicePolishApiKey,
+      voicePolishAuthMode,
+      voicePolishRegion,
       darkTheme,
       editorFontSize,
       language,

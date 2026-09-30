@@ -180,11 +180,11 @@ export const AGENT_DEFINITIONS: Record<AiAgentId, AgentDefinition> = {
       headlessText: "full",
       resume: "full",
       permissionWaiting: "unsupported",
-      statusEvents: "unsupported",
+      statusEvents: "partial",
       skills: "full",
       instructions: "full",
       mcpManagement: "unsupported",
-      usageTelemetry: "unsupported",
+      usageTelemetry: "partial",
     },
   },
 };
@@ -386,6 +386,10 @@ export function getAgentStartupCommand(
       const command = AGENT_DEFINITIONS.codex.command;
       
       const parts = [command];
+      // Windows 上共享 app-server daemon 执行命令和 Hook 时可能弹出独立终端窗口。
+      if (typeof navigator !== "undefined" && /Win/i.test(navigator.platform)) {
+        parts.push("--no-daemon");
+      }
 
       if (codexOptions?.yolo) {
         parts.push("--dangerously-bypass-approvals-and-sandbox");
@@ -433,7 +437,9 @@ export function getAgentStartupCommand(
     case "opencode": {
       // OpenCode's initial prompt is persisted after startup through its
       // authenticated loopback session API. Keep multiline content out of argv.
-      return AGENT_DEFINITIONS.opencode.command;
+      return agentSessionId
+        ? `${AGENT_DEFINITIONS.opencode.command} --session ${quoteShellArg(agentSessionId)}`
+        : AGENT_DEFINITIONS.opencode.command;
     }
     case "qoder": {
       const options = launchOptions as QoderSessionLaunchOptions | undefined;

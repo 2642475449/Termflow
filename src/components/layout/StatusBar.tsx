@@ -34,8 +34,7 @@ function StatusBar() {
   const claudeCliInfo = useAppStore((state) => state.claudeCliInfo);
   const currentProject = useAppStore((state) => state.currentProject);
   const focusedTab = useAppStore((state) => state.focusedTabId ? state.tabsById[state.focusedTabId] : undefined);
-  const activeSidebarSection = useAppStore((state) => state.activeSidebarSection);
-  const fileTab = activeSidebarSection !== "schedules" && focusedTab?.kind === "file" ? focusedTab : null;
+  const fileTab = focusedTab?.kind === "file" ? focusedTab : null;
   const gitCloneTasks = useAppStore((state) => state.gitCloneTasks);
   const upsertGitCloneTask = useAppStore((state) => state.upsertGitCloneTask);
   const removeGitCloneTask = useAppStore((state) => state.removeGitCloneTask);
@@ -1091,7 +1090,6 @@ function AntigravityUsageStatus({
         </button>
       </div>
       <div className="space-y-3 px-3 py-3">
-        {hasData && <p className="m-0 text-[11px] text-[var(--cs-text-tertiary)]">{t("statusBar.antigravityUsage.summaryHint")}</p>}
         {hasData ? usage.windows.map((window) => (
           <AntigravityUsageWindowRow key={window.id} window={window} />
         )) : (

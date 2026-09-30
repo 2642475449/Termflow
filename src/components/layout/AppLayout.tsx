@@ -550,24 +550,6 @@ function AppLayout() {
 
   useEffect(() => startScheduledTaskSync(), []);
 
-  useEffect(() => {
-    // 清理旧版本任务标签，任务页面改由侧边栏控制。
-    for (const tab of Object.values(tabsById)) {
-      if (tab.id === SCHEDULED_TASKS_TAB_ID || tab.kind === "scheduled-tasks") {
-        closeTab(tab.id);
-      }
-    }
-  }, [tabsById, closeTab]);
-
-  useEffect(() => useAppStore.subscribe((state, previous) => {
-    if (
-      state.activeSidebarSection === "schedules"
-      && state.activeSessionId !== previous.activeSessionId
-    ) {
-      state.setActiveSidebarSection("sessions");
-    }
-  }), []);
-
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const visibleTerminalSessionKey = Object.values(panesById)
     .map((pane) => pane.activeTabId)
@@ -976,6 +958,12 @@ function AppLayout() {
   const asrAuthMode = useAppStore((s) => s.asrAuthMode);
   const asrModel = useAppStore((s) => s.asrModel);
   const asrRegion = useAppStore((s) => s.asrRegion);
+  const voicePolishEnabled = useAppStore((s) => s.voicePolishEnabled);
+  const voicePolishModel = useAppStore((s) => s.voicePolishModel);
+  const voicePolishProvider = useAppStore((s) => s.voicePolishProvider);
+  const voicePolishApiKey = useAppStore((s) => s.voicePolishApiKey);
+  const voicePolishAuthMode = useAppStore((s) => s.voicePolishAuthMode);
+  const voicePolishRegion = useAppStore((s) => s.voicePolishRegion);
   const voiceShortcut = useAppStore((s) => s.voiceShortcut);
   const voiceInputTarget = useAppStore((s) => s.voiceInputTarget);
   const [hasGlobalVoiceShortcut, setHasGlobalVoiceShortcut] = useState(false);
@@ -1002,11 +990,17 @@ function AppLayout() {
       authMode: asrAuthMode,
       model: asrModel,
       region: asrRegion,
+      polishEnabled: voicePolishEnabled,
+      polishModel: voicePolishModel,
+      polishProvider: voicePolishProvider,
+      polishApiKey: voicePolishApiKey,
+      polishAuthMode: voicePolishAuthMode,
+      polishRegion: voicePolishRegion,
       shortcut: voiceShortcut,
       inputTarget: voiceInputTarget,
     };
     void emit("voice-worker-config", payload).catch(() => undefined);
-  }, [asrApiKey, asrAuthMode, asrModel, asrRegion, voiceInputTarget, voiceShortcut]);
+  }, [asrApiKey, asrAuthMode, asrModel, asrRegion, voiceInputTarget, voicePolishEnabled, voicePolishModel, voicePolishProvider, voicePolishApiKey, voicePolishAuthMode, voicePolishRegion, voiceShortcut]);
   useEffect(() => {
     const unlistenPromise = listen<{ text: string }>("voice-worker-result", (event) => {
       const text = event.payload?.text;
@@ -1890,15 +1884,10 @@ function AppLayout() {
           collapsed={sidebarCollapsed}
           section={activeSidebarSection}
         />
-        <Content className="app-main-content flex flex-col">
+        <Content className="app-main-content flex flex-col" data-sidebar-attached={!sidebarCollapsed ? "true" : undefined}>
           <div className="app-main-stage flex min-h-0 flex-1 flex-row">
             <div className="app-main-stage-body relative min-h-0 min-w-0 flex-1">
-              {activeSidebarSection === "schedules" && (
-                <Suspense fallback={<WorkspaceContentFallback />}>
-                  <ScheduledTasksPanel />
-                </Suspense>
-              )}
-              <div className={activeSidebarSection === "schedules" ? "hidden" : "h-full min-h-0"}>
+              <div className="h-full min-h-0">
                 {windowMode === "project" && hasTabs ? (
                   <WorkspaceLayoutNode node={workspaceLayout.root} />
                 ) : windowMode === "project" && activeSession && activeSession.active ? (
@@ -1927,7 +1916,7 @@ function AppLayout() {
               />
             ) : null}
             <VoiceTrigger
-              visible={voiceTriggerVisible && !settingsVisible && activeSidebarSection !== "schedules"}
+              visible={voiceTriggerVisible && !settingsVisible}
               onClick={handleVoiceTrigger}
               onHide={handleHideVoiceTrigger}
               shortcutLabel={voiceShortcut}

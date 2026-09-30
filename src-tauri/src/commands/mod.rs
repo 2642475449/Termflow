@@ -23,5 +23,6 @@ pub mod settings;
 pub mod skills;
 pub mod system_input;
 pub mod voice;
+pub mod voice_polish;
 pub mod voice_shortcut;
 pub mod window;

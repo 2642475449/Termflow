@@ -2426,6 +2426,127 @@ fn build_qoder_usage_stats() -> Result<AggregatedTranscriptStats, String> {
     build_qoder_usage_stats_from_paths(collect_qoder_database_paths())
 }
 
+fn collect_pi_session_files(root: &Path) -> Result<Vec<PathBuf>, String> {
+    if !root.exists() {
+        return Ok(Vec::new());
+    }
+    let mut files = Vec::new();
+    for project in fs::read_dir(root).map_err(|error| format!("读取 Pi 会话目录失败: {error}"))?
+    {
+        let project = project.map_err(|error| format!("读取 Pi 项目目录失败: {error}"))?;
+        if !project
+            .file_type()
+            .map_err(|error| error.to_string())?
+            .is_dir()
+        {
+            continue;
+        }
+        for entry in fs::read_dir(project.path())
+            .map_err(|error| format!("读取 Pi 项目会话失败: {error}"))?
+        {
+            let entry = entry.map_err(|error| format!("读取 Pi 会话条目失败: {error}"))?;
+            if entry
+                .file_type()
+                .map_err(|error| error.to_string())?
+                .is_file()
+                && entry.path().extension().and_then(|value| value.to_str()) == Some("jsonl")
+            {
+                files.push(entry.path());
+            }
+        }
+    }
+    Ok(files)
+}
+
+fn parse_pi_usage_event(record: &Value, session_id: &str) -> Option<ParsedAgentUsageEvent> {
+    if record.get("type")?.as_str()? != "message" {
+        return None;
+    }
+    let message = record.get("message")?;
+    if message.get("role")?.as_str()? != "assistant" {
+        return None;
+    }
+    let usage = message.get("usage")?;
+    let model = message.get("model")?.as_str()?.trim();
+    if model.is_empty() {
+        return None;
+    }
+    let timestamp = record
+        .get("timestamp")
+        .and_then(Value::as_str)
+        .and_then(parse_timestamp_utc)?;
+    let input = json_u64(usage.get("input"));
+    let output = json_u64(usage.get("output"));
+    let cache_read = json_u64(usage.get("cacheRead"));
+    let cache_write = json_u64(usage.get("cacheWrite"));
+    let reasoning = json_u64(usage.get("reasoning")).min(output);
+    let categorized_total = input
+        .saturating_add(output)
+        .saturating_add(cache_read)
+        .saturating_add(cache_write);
+    let total_tokens = json_u64(usage.get("totalTokens")).max(categorized_total);
+    if total_tokens == 0 {
+        return None;
+    }
+    // Pi reports reasoning as a subset of output, while cache reads and writes
+    // are separate from input. Keep display buckets mutually exclusive.
+    let mut token_breakdown = AgentUsageTokenBreakdown {
+        input_tokens: input,
+        output_tokens: output - reasoning,
+        cache_read_tokens: cache_read,
+        cache_creation_tokens: cache_write,
+        reasoning_output_tokens: reasoning,
+        other_tokens: total_tokens - categorized_total,
+        total_tokens: 0,
+    };
+    token_breakdown.recalculate_total();
+    Some(ParsedAgentUsageEvent {
+        session_id: session_id.to_string(),
+        timestamp,
+        model: model.to_string(),
+        total_tokens,
+        token_breakdown,
+    })
+}
+
+fn build_pi_usage_stats_from_files(
+    session_files: Vec<PathBuf>,
+) -> Result<AggregatedTranscriptStats, String> {
+    let mut aggregate = AggregatedTranscriptStats::default();
+    let mut sessions = BTreeMap::<String, UsageSessionSpan>::new();
+    for path in session_files {
+        let file = fs::File::open(&path)
+            .map_err(|error| format!("读取 Pi 会话 {} 失败: {error}", display_path(&path)))?;
+        let mut session_id = path.to_string_lossy().to_string();
+        for line in BufReader::new(file).lines() {
+            let line = line.map_err(|error| format!("读取 Pi 会话记录失败: {error}"))?;
+            let Ok(record) = serde_json::from_str::<Value>(&line) else {
+                continue;
+            };
+            if record.get("type").and_then(Value::as_str) == Some("session") {
+                if let Some(id) = record
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .filter(|id| !id.is_empty())
+                {
+                    session_id = id.to_string();
+                }
+            }
+            if let Some(event) = parse_pi_usage_event(&record, &session_id) {
+                record_generic_usage_event(&mut aggregate, &mut sessions, event);
+            }
+        }
+    }
+    finalize_generic_sessions(&mut aggregate, sessions);
+    Ok(aggregate)
+}
+
+fn build_pi_usage_stats() -> Result<AggregatedTranscriptStats, String> {
+    let home = dirs_next::home_dir().ok_or("无法获取用户主目录")?;
+    let files = collect_pi_session_files(&home.join(".pi").join("agent").join("sessions"))?;
+    build_pi_usage_stats_from_files(files)
+}
+
 fn parse_ymd_prefix(input: &str) -> Option<(i32, u32, u32)> {
     let date = input.get(0..10)?;
     let year = date.get(0..4)?.parse::<i32>().ok()?;
@@ -2758,6 +2879,27 @@ pub(crate) fn build_agent_usage_overview(
             "Qoder CLI",
             "partial",
             "Qoder/QoderCN SharedClientCache/cache/db/local.db (assistant token_info only)",
+            Some(error),
+        )),
+    }
+
+    match build_pi_usage_stats() {
+        Ok(stats) => {
+            providers.push(build_provider_summary(
+                "pi",
+                "Pi",
+                "partial",
+                "~/.pi/agent/sessions/*/*.jsonl (assistant message usage)",
+                &stats,
+                None,
+            ));
+            merge_aggregated_stats(&mut aggregate, stats);
+        }
+        Err(error) => providers.push(build_empty_provider_summary(
+            "pi",
+            "Pi",
+            "partial",
+            "~/.pi/agent/sessions/*/*.jsonl (assistant message usage)",
             Some(error),
         )),
     }
@@ -4116,6 +4258,64 @@ pub fn configure_claude_hook() -> Result<HookStatus, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pi_usage_reads_assistant_messages_and_separate_cache_tokens() {
+        let root = tempfile::tempdir().unwrap();
+        let project = root.path().join("--project--");
+        fs::create_dir(&project).unwrap();
+        let path = project.join("session.jsonl");
+        let records = [
+            json!({"type":"session","id":"pi-session","timestamp":"2026-09-01T00:00:00Z"}),
+            json!({"type":"model_change","modelId":"ignored","timestamp":"2026-09-01T00:01:00Z"}),
+            json!({"type":"message","timestamp":"2026-09-01T00:02:00Z","message":{"role":"user","content":"hello"}}),
+            json!({"type":"message","timestamp":"2026-09-01T00:03:00Z","message":{"role":"assistant","model":"model-a","usage":{"input":10,"output":5,"cacheRead":20,"cacheWrite":3,"reasoning":2,"totalTokens":38}}}),
+            json!({"type":"message","timestamp":"2026-09-01T00:04:00Z","message":{"role":"assistant","model":"model-b","usage":{"input":4,"output":6,"cacheRead":0,"cacheWrite":0,"reasoning":1,"totalTokens":10}}}),
+            json!({"type":"message","timestamp":"2026-09-01T00:05:00Z","message":{"role":"assistant","model":"model-b","usage":{"input":0,"output":0,"totalTokens":0}}}),
+        ];
+        fs::write(
+            &path,
+            records
+                .iter()
+                .map(Value::to_string)
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )
+        .unwrap();
+
+        let files = collect_pi_session_files(root.path()).unwrap();
+        assert_eq!(files, vec![path]);
+        let stats = build_pi_usage_stats_from_files(files).unwrap();
+        assert_eq!(stats.total_sessions, 1);
+        assert_eq!(stats.total_messages, 2);
+        assert_eq!(stats.total_tokens(), 48);
+        assert_eq!(stats.model_usage["model-a"].total_tokens(), 38);
+        assert_eq!(stats.model_usage["model-b"].total_tokens(), 10);
+        assert_eq!(stats.token_breakdown.input_tokens, 14);
+        assert_eq!(stats.token_breakdown.output_tokens, 8);
+        assert_eq!(stats.token_breakdown.reasoning_output_tokens, 3);
+        assert_eq!(stats.token_breakdown.cache_read_tokens, 20);
+        assert_eq!(stats.token_breakdown.cache_creation_tokens, 3);
+        assert_eq!(stats.token_breakdown.total_tokens, 48);
+        let date = local_date_string(&parse_timestamp_utc("2026-09-01T00:03:00Z").unwrap());
+        assert_eq!(stats.daily_model_tokens[&date]["model-a"], 38);
+        assert_eq!(stats.daily_model_tokens[&date]["model-b"], 10);
+    }
+
+    #[test]
+    fn pi_usage_ignores_missing_session_root_and_malformed_records() {
+        let root = tempfile::tempdir().unwrap();
+        assert!(collect_pi_session_files(&root.path().join("missing"))
+            .unwrap()
+            .is_empty());
+        let project = root.path().join("--project--");
+        fs::create_dir(&project).unwrap();
+        let path = project.join("session.jsonl");
+        fs::write(&path, "not json\n{\"type\":\"message\",\"message\":{\"role\":\"assistant\",\"model\":\"model-a\",\"usage\":{\"totalTokens\":10}}}").unwrap();
+        let stats = build_pi_usage_stats_from_files(vec![path]).unwrap();
+        assert_eq!(stats.total_tokens(), 0);
+        assert_eq!(stats.total_sessions, 0);
+    }
 
     #[test]
     fn default_claude_hooks_cover_permission_resume_lifecycle() {

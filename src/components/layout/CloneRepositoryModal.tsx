@@ -1,5 +1,4 @@
 import {
-  BranchesOutlined,
   DownOutlined,
   FolderOpenOutlined,
   LinkOutlined,
@@ -110,18 +109,10 @@ function CloneRepositoryModal({ open, onCancel, onCloneStarted }: CloneRepositor
       closable={!submitting}
       onCancel={onCancel}
       title={
-        <div className="flex items-center gap-2.5">
-          <span
-            className="flex h-8 w-8 items-center justify-center rounded-lg"
-            style={{ background: "color-mix(in srgb, var(--cs-primary) 14%, transparent)", color: "var(--cs-primary)" }}
-          >
-            <BranchesOutlined />
-          </span>
-          <div>
-            <div className="text-[15px] font-semibold">{t("projectLauncher.cloneTitle")}</div>
-            <div className="mt-0.5 text-[11px] font-normal" style={{ color: "var(--cs-text-tertiary)" }}>
-              {t("projectLauncher.cloneSubtitle")}
-            </div>
+        <div>
+          <div className="text-[15px] font-semibold">{t("projectLauncher.cloneTitle")}</div>
+          <div className="mt-0.5 text-[11px] font-normal" style={{ color: "var(--cs-text-tertiary)" }}>
+            {t("projectLauncher.cloneSubtitle")}
           </div>
         </div>
       }

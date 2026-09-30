@@ -4,17 +4,20 @@ import {
   DeleteOutlined,
   DownOutlined,
   FolderOutlined,
+  FolderAddOutlined,
+  FolderOpenOutlined,
   WarningOutlined,
   RightOutlined,
 } from "@ant-design/icons";
-import { Button, Checkbox, Modal, Popover, message } from "antd";
+import { Button, Checkbox, Input, Modal, Popover, message } from "antd";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useProjectLauncher } from "@/hooks/useProjectLauncher";
 import CloneRepositoryModal from "@/components/layout/CloneRepositoryModal";
 import { useAppStore } from "@/store";
 import { isSessionTurnRunning } from "@/lib/sessions";
-import { focusExistingProjectWindow } from "@/lib/api";
+import { createProjectDirectory, focusExistingProjectWindow } from "@/lib/api";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { collectOpenProjects, projectPathKey } from "@/lib/openProjects";
 import { useOpenProjectsStore } from "@/store/slices/openProjects";
 
@@ -55,6 +58,11 @@ function TitleBarProjectSwitcher() {
   const projectWindows = useOpenProjectsStore((state) => state.windows);
   const setOpenProjectWindows = useOpenProjectsStore((state) => state.setOpenProjectWindows);
   const [cloneOpen, setCloneOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createParent, setCreateParent] = useState("");
+  const [createName, setCreateName] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [pendingProjectPath, setPendingProjectPath] = useState<string | null>(null);
   const [rememberOpenChoice, setRememberOpenChoice] = useState(false);
 
@@ -67,6 +75,14 @@ function TitleBarProjectSwitcher() {
   }, [open, currentProject?.path, setOpenProjectWindows]);
 
   const quickActions = [
+    {
+      key: "create-project",
+      icon: <FolderAddOutlined />,
+      label: t("projectLauncher.createProject"),
+      onClick: async () => {
+        setCreateOpen(true);
+      },
+    },
     {
       key: "open-folder",
       icon: <FolderOutlined />,
@@ -88,7 +104,7 @@ function TitleBarProjectSwitcher() {
 
   async function handleQuickAction(action: (typeof quickActions)[number]) {
     setOpen(false);
-    await waitForPopoverToClose();
+    await waitForOverlayToClose();
     try {
       await action.onClick();
     } catch (error) {
@@ -99,7 +115,7 @@ function TitleBarProjectSwitcher() {
 
   async function handleOpenRecentProject(path: string) {
     setOpen(false);
-    await waitForPopoverToClose();
+    await waitForOverlayToClose();
     await requestProjectOpen(path);
   }
 
@@ -181,6 +197,49 @@ function TitleBarProjectSwitcher() {
 
   function handleRemoveRecentProject(path: string) {
     removeRecentProject(path);
+  }
+
+  async function chooseCreateParent() {
+    try {
+      const selected = await openDialog({
+        directory: true,
+        multiple: false,
+        title: t("projectLauncher.createChooseLocation"),
+      });
+      if (selected) {
+        setCreateParent(selected as string);
+        setCreateError(null);
+      }
+    } catch (error) {
+      setCreateError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  function closeCreateProject() {
+    setCreateOpen(false);
+    setCreateParent("");
+    setCreateName("");
+    setCreateError(null);
+  }
+
+  async function handleCreateProject() {
+    if (!createParent.trim() || !createName.trim() || creating) return;
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const path = await createProjectDirectory(
+        createParent.trim(),
+        createParent.trim(),
+        createName.trim(),
+      );
+      closeCreateProject();
+      await waitForOverlayToClose();
+      await requestProjectOpen(path);
+    } catch (error) {
+      setCreateError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCreating(false);
+    }
   }
 
   const openProjects = collectOpenProjects(projectWindows, currentProject);
@@ -284,7 +343,7 @@ function TitleBarProjectSwitcher() {
             <button
               key={action.key}
               type="button"
-              className="flex h-10 w-full items-center gap-2.5 rounded-[7px] px-2.5 text-left transition-colors"
+              className="flex h-8 w-full items-center gap-2.5 rounded-[7px] px-2.5 text-left transition-colors"
               style={{
                 color: "var(--cs-text-primary)",
               }}
@@ -430,6 +489,63 @@ function TitleBarProjectSwitcher() {
         }}
       />
       <Modal
+        open={createOpen}
+        title={t("projectLauncher.createProject")}
+        centered
+        width={520}
+        maskClosable={!creating}
+        keyboard={!creating}
+        closable={!creating}
+        onCancel={closeCreateProject}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button disabled={creating} onClick={closeCreateProject}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              type="primary"
+              loading={creating}
+              disabled={!createParent.trim() || !createName.trim()}
+              onClick={() => void handleCreateProject()}
+            >
+              {t("projectLauncher.createAndOpen")}
+            </Button>
+          </div>
+        }
+      >
+        <div className="pt-2">
+          <div className="mb-1.5 text-[12px] font-medium text-[var(--cs-text-secondary)]">
+            {t("projectLauncher.cloneLocation")}
+          </div>
+          <div className="flex gap-2">
+            <Input
+              value={createParent}
+              readOnly
+              placeholder={t("projectLauncher.cloneLocationPlaceholder")}
+            />
+            <Button icon={<FolderOpenOutlined />} onClick={() => void chooseCreateParent()}>
+              {t("projectLauncher.browse")}
+            </Button>
+          </div>
+          <div className="mb-1.5 mt-4 text-[12px] font-medium text-[var(--cs-text-secondary)]">
+            {t("projectLauncher.directoryName")}
+          </div>
+          <Input
+            value={createName}
+            placeholder={t("projectLauncher.directoryNamePlaceholder")}
+            disabled={creating}
+            onChange={(event) => {
+              setCreateName(event.target.value);
+              setCreateError(null);
+            }}
+            onPressEnter={() => void handleCreateProject()}
+          />
+          {createError ? (
+            <div className="mt-3 text-[12px] text-[var(--cs-danger)]">{createError}</div>
+          ) : null}
+        </div>
+      </Modal>
+      <Modal
         open={pendingProjectPath !== null}
         title={t("projectLauncher.openProjectTitle")}
         centered
@@ -496,7 +612,7 @@ function ProjectOpenDescription({ projectName }: { projectName: string }) {
   );
 }
 
-function waitForPopoverToClose() {
+function waitForOverlayToClose() {
   return new Promise<void>((resolve) => {
     window.setTimeout(resolve, 0);
   });

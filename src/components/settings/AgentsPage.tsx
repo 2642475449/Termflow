@@ -170,7 +170,6 @@ export function AgentsPage() {
         </div>
       )}
 
-      <div className="mt-5 text-xs leading-5" style={{ color: "var(--cs-text-tertiary)" }}>{t("settings.agents.detailHint")}</div>
       <AgentDetailsDrawer agent={selectedAgent} open={selectedAgent !== null} onClose={() => setSelectedAgentId(null)} quotas={quotas} quotaLoading={quotaLoading} refreshing={loading || quotaLoading || versionLoading} onRefresh={() => void refresh(true)} onSetDefault={() => { if (selectedAgent) selectDefault(selectedAgent); }} onCopyInstall={(command, shell) => { if (selectedAgent) void copyInstall(selectedAgent, command, shell); }} />
     </div>
   );
@@ -201,7 +200,17 @@ function AgentRow({ agent, quota, quotaLoading, isDefault, isLast, onOpen, onSet
       <div className="flex min-w-0 items-center gap-3">
         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl" style={{ background: `${definition.brandColor}16`, border: `1px solid ${definition.brandColor}32` }}><AgentIcon agentId={agent.id} size={25} /></div>
         <div className="min-w-0">
-          <div className="truncate text-base font-semibold" style={{ color: "var(--cs-text-primary)" }}>{definition.displayName}</div>
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="truncate text-base font-semibold" style={{ color: "var(--cs-text-primary)" }}>{definition.displayName}</span>
+            <button
+              type="button"
+              className="shrink-0 border-0 bg-transparent p-0 text-xs text-[var(--cs-primary)] hover:underline"
+              onClick={(event) => { event.stopPropagation(); onOpen(); }}
+              onKeyDown={(event) => event.stopPropagation()}
+            >
+              {t("settings.agents.viewDetails")}
+            </button>
+          </div>
           <div className="flex min-w-0 items-center gap-1.5 text-xs" style={{ color: "var(--cs-text-tertiary)" }}>
             <code className="truncate">{definition.command}</code>{version ? <><span>·</span><span className="truncate">{version}</span></> : null}
           </div>

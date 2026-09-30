@@ -71,6 +71,8 @@ import {
   createNetworkProxySlice,
   type NetworkProxySlice,
 } from "./slices/networkProxy";
+import { createVoicePolishSlice, type VoicePolishSlice } from "./slices/voicePolish";
+import { normalizeVoicePolishProvider, resolveVoicePolishModel } from "@/lib/voicePolish";
 import {
   createTerminalCompletionNotificationSlice,
   normalizeTerminalCompletionNotificationThreshold,
@@ -89,7 +91,7 @@ import { SCHEDULED_TASKS_TAB_ID } from "@/lib/scheduledTasks";
 export type ThemeMode = "light-glass" | "light-warm" | "dark-starry" | "dark-mocha";
 export type ThemeCategory = "light" | "dark" | "system";
 export type Language = "zh_CN" | "zh_TW" | "en" | "ja";
-export type SidebarSection = "project" | "sessions" | "git" | "schedules";
+export type SidebarSection = "project" | "sessions" | "git";
 export type NotificationSoundType =
   | "default"
   | "waiting"
@@ -298,6 +300,12 @@ export function getPersistentSettingsSnapshot(): PersistentSettings {
     asrAuthMode: state.asrAuthMode,
     asrModel: state.asrModel,
     asrRegion: state.asrRegion,
+    voicePolishEnabled: state.voicePolishEnabled,
+    voicePolishModel: state.voicePolishModel,
+    voicePolishProvider: state.voicePolishProvider,
+    voicePolishApiKey: state.voicePolishApiKey,
+    voicePolishAuthMode: state.voicePolishAuthMode,
+    voicePolishRegion: state.voicePolishRegion,
     voiceShortcut: state.voiceShortcut,
     voiceInputTarget: state.voiceInputTarget,
     voiceTriggerVisible: state.voiceTriggerVisible,
@@ -359,6 +367,12 @@ export function applyPersistentSettingsToStore(settings: PersistentSettings) {
     asrAuthMode: normalizeMimoAuthMode(settings.asrAuthMode, settings.asrApiKey),
     asrModel: normalizeAsrModel(settings.asrModel),
     asrRegion: normalizeDashScopeRegion(settings.asrRegion),
+    voicePolishEnabled: settings.voicePolishEnabled ?? true,
+    voicePolishProvider: normalizeVoicePolishProvider(settings.voicePolishProvider),
+    voicePolishApiKey: settings.voicePolishApiKey ?? "",
+    voicePolishAuthMode: settings.voicePolishAuthMode === "token-plan" ? "token-plan" : "api",
+    voicePolishRegion: normalizeDashScopeRegion(settings.voicePolishRegion),
+    voicePolishModel: resolveVoicePolishModel(normalizeVoicePolishProvider(settings.voicePolishProvider), settings.voicePolishModel ?? ""),
     voiceShortcut: settings.voiceShortcut ?? DEFAULT_VOICE_SHORTCUT,
     voiceInputTarget: normalizeVoiceInputTarget(settings.voiceInputTarget),
     voiceTriggerVisible: settings.voiceTriggerVisible ?? true,
@@ -606,7 +620,8 @@ interface ProjectWorkspace {
 interface AppState
   extends NetworkProxySlice,
     TerminalCompletionNotificationSlice,
-    TerminalCompletionRuntimeSlice {
+    TerminalCompletionRuntimeSlice,
+    VoicePolishSlice {
   windowContextReady: boolean;
   windowMode: WindowMode;
   windowLabel: string;
@@ -1530,6 +1545,7 @@ function transitionAttentionById(
 const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
   return {
       ...createNetworkProxySlice((partial) => set(partial)),
+      ...createVoicePolishSlice((partial) => set(partial)),
       ...createTerminalCompletionNotificationSlice((partial) => set(partial)),
       ...createTerminalCompletionRuntimeSlice((partial) => set(partial), () => get()),
       windowContextReady: false,
@@ -2769,6 +2785,12 @@ function createPersistOptions(storage?: StateStorage) {
         sidebarSessionsCollapsed: state.sidebarSessionsCollapsed,
         sidebarGitChangesCollapsed: state.sidebarGitChangesCollapsed,
         sidebarGitGraphCollapsed: state.sidebarGitGraphCollapsed,
+        voicePolishEnabled: state.voicePolishEnabled,
+        voicePolishProvider: state.voicePolishProvider,
+        voicePolishModel: state.voicePolishModel,
+        voicePolishApiKey: state.voicePolishApiKey,
+        voicePolishAuthMode: state.voicePolishAuthMode,
+        voicePolishRegion: state.voicePolishRegion,
       };
     },
     onRehydrateStorage: () => (state?: AppState) => {

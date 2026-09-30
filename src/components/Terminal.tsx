@@ -244,7 +244,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
   const setSidebarCollapsed = useAppStore((s) => s.setSidebarCollapsed);
   const setActiveSidebarSection = useAppStore((s) => s.setActiveSidebarSection);
   const isFocusedWorkspaceSession = useAppStore((s) =>
-    s.activeSidebarSection !== "schedules" && s.activeSessionId === sessionId
+    s.activeSessionId === sessionId
   );
   const setTerminalCompletionIntegration = useAppStore(
     (s) => s.setTerminalCompletionIntegration,
@@ -1285,17 +1285,12 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
         if (event.payload.sessionId !== sessionId || !event.payload.text) {
           return;
         }
-
-        const inputCapture = consumeTerminalSubmissionInput(
-          pendingSubmissionInputRef.current,
-          event.payload.text,
-          pendingSubmissionEscapeSequenceRef.current,
-        );
-        pendingSubmissionInputRef.current = inputCapture.nextValue;
-        pendingSubmissionEscapeSequenceRef.current = inputCapture.pendingSequence;
-        captureInputForAutoTitleRef.current?.(event.payload.text);
-
-        void enqueueInput(() => ptyInput(sessionId, event.payload.text)).catch(console.error);
+        // 使用终端粘贴协议，避免分段或列表中的换行被当作回车提交。
+        // 未启用括号粘贴的程序不具备该保护，此时将换行折叠为空格。
+        const text = term.modes.bracketedPasteMode
+          ? event.payload.text
+          : event.payload.text.replace(/\r?\n/g, " ");
+        void pasteGate.paste(async () => text);
       },
     );
     // Listen for PTY exit

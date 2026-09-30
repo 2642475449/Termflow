@@ -1,3 +1,4 @@
+import type { VoicePolishConfig } from "@/lib/voicePolish";
 export interface SessionContextUsage {
   usedTokens: number;
   totalTokens: number | null;
@@ -107,6 +108,12 @@ export interface PersistentSettings {
   asrAuthMode: string;
   asrModel: string;
   asrRegion: string;
+  voicePolishEnabled: boolean;
+  voicePolishModel: string;
+  voicePolishProvider: VoicePolishConfig["provider"];
+  voicePolishApiKey: VoicePolishConfig["apiKey"];
+  voicePolishAuthMode: VoicePolishConfig["authMode"];
+  voicePolishRegion: VoicePolishConfig["region"];
   voiceShortcut: string;
   voiceInputTarget: string;
   voiceTriggerVisible: boolean;

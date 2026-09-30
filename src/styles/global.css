@@ -271,6 +271,7 @@ html, body, #root {
 }
 
 .app-sidebar-frame {
+  position: relative;
   padding: 6px 0 12px 0;
 }
 
@@ -281,7 +282,8 @@ html, body, #root {
   height: 100%;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--cs-border-card, var(--cs-border-sidebar)) 92%, transparent);
-  border-radius: var(--cs-panel-radius);
+  border-right: 0;
+  border-radius: var(--cs-panel-radius) 0 0 var(--cs-panel-radius);
   background:
     linear-gradient(
       180deg,
@@ -539,6 +541,11 @@ html, body, #root {
   box-shadow: 0 16px 36px color-mix(in srgb, var(--cs-bg-app) 12%, transparent);
 }
 
+.app-main-content[data-sidebar-attached="true"] .app-main-stage {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
 .app-main-stage-body {
   position: relative;
   min-height: 0;
@@ -600,12 +607,12 @@ html, body, #root {
 }
 
 .app-sidebar-resize-handle {
-  position: relative;
-  flex: 0 0 auto;
-  height: auto;
-  align-self: stretch;
-  margin: 6px 0 12px;
-  border-radius: 999px;
+  position: absolute;
+  z-index: 4;
+  top: 6px;
+  right: 0;
+  bottom: 12px;
+  margin: 0;
   overflow: visible;
   transition:
     background-color 150ms ease,
@@ -2740,141 +2747,15 @@ html, body, #root {
 }
 
 /* Scheduled tasks: project-scoped plans and their background run history. */
-.app-scheduled-sidebar-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--cs-text-primary);
-}
-
-.app-scheduled-sidebar-item {
-  display: flex;
-  width: 100%;
-  min-height: 34px;
-  align-items: center;
-  gap: 9px;
-  border: 0;
-  border-radius: 7px;
-  padding: 6px 9px;
-  background: transparent;
-  color: var(--cs-text-secondary);
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.app-scheduled-sidebar-item:hover,
-.app-scheduled-sidebar-item[data-active="true"] {
+.app-sidebar-scheduled-tasks-button[data-active="true"] {
   background: var(--cs-bg-hover);
-  color: var(--cs-text-primary);
+  color: var(--cs-primary);
 }
 
-.app-scheduled-sidebar-item:focus-visible,
 .app-scheduled-task-name:focus-visible,
 .app-scheduled-run-row:focus-visible {
   outline: 2px solid var(--cs-primary);
   outline-offset: -2px;
-}
-
-.app-scheduled-sidebar-count {
-  margin-left: auto;
-  color: var(--cs-text-tertiary);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-
-.app-scheduled-sidebar-project {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.app-scheduled-sidebar-disclosure {
-  display: flex;
-  width: 10px;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  color: var(--cs-text-tertiary);
-}
-
-.app-scheduled-sidebar-disclosure[data-visible="false"] {
-  visibility: hidden;
-}
-
-.app-scheduled-sidebar-disclosure > .anticon {
-  font-size: 9px;
-  transition: transform 150ms ease;
-}
-
-.app-scheduled-sidebar-disclosure[data-expanded="true"] > .anticon {
-  transform: rotate(90deg);
-}
-
-.app-scheduled-sidebar-item[data-expanded="true"] {
-  color: var(--cs-text-primary);
-}
-
-.app-scheduled-sidebar-task {
-  display: flex;
-  width: 100%;
-  min-height: 28px;
-  align-items: center;
-  gap: 8px;
-  border: 0;
-  border-radius: 6px;
-  padding: 4px 9px 4px 31px;
-  background: transparent;
-  color: var(--cs-text-secondary);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.app-scheduled-sidebar-task:hover,
-.app-scheduled-sidebar-task:focus-visible {
-  background: var(--cs-bg-hover);
-  color: var(--cs-text-primary);
-}
-
-.app-scheduled-sidebar-task:focus-visible {
-  outline: 2px solid var(--cs-primary);
-  outline-offset: -2px;
-}
-
-.app-scheduled-sidebar-task-status {
-  width: 7px;
-  height: 7px;
-  flex: none;
-  border-radius: 999px;
-  background: var(--cs-text-tertiary);
-}
-
-.app-scheduled-sidebar-task-status[data-enabled="true"] {
-  background: var(--cs-success);
-}
-
-.app-scheduled-sidebar-label {
-  color: var(--cs-text-tertiary);
-  font-weight: 600;
-}
-
-.app-scheduled-sidebar-status {
-  display: flex;
-  gap: 8px;
-  border-top: 1px solid var(--cs-border-sidebar);
-  color: var(--cs-text-secondary);
-  line-height: 1.4;
-}
-
-.app-scheduled-sidebar-status > span {
-  color: var(--cs-success);
-  font-size: 10px;
-  line-height: 1.7;
-}
-
-.app-scheduled-sidebar-status .text-\[11px\] {
-  color: var(--cs-text-tertiary);
 }
 
 .app-scheduled-tasks {

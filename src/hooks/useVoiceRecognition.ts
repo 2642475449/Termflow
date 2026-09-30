@@ -1,3 +1,4 @@
+import { resolveVoicePolishModel, type VoicePolishConfig } from "@/lib/voicePolish";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -5,6 +6,7 @@ import i18n from "@/i18n";
 import {
   cancelLiveAsr,
   finishLiveAsr,
+  polishVoiceText,
   sendLiveAsrAudio,
   startLiveAsr,
 } from "@/lib/api";
@@ -79,6 +81,8 @@ export interface UseVoiceRecognitionOptions {
   authMode?: MimoAuthMode;
   model: string;
   region?: DashScopeRegion;
+  polishEnabled?: boolean;
+  polishConfig?: VoicePolishConfig;
   onResult: (text: string) => void;
   onError?: (err: AsrError) => void;
   maxDurationMs?: number;
@@ -403,7 +407,7 @@ async function transcribeWithOpenAICompatible(
 export function useVoiceRecognition(
   options: UseVoiceRecognitionOptions,
 ): UseVoiceRecognitionReturn {
-  const { apiKey, authMode = "token-plan", model, region = "beijing", onResult, onError, maxDurationMs = MAX_AUTO_DURATION_MS } =
+  const { apiKey, authMode = "token-plan", model, region = "beijing", polishEnabled = true, polishConfig, onResult, onError, maxDurationMs = MAX_AUTO_DURATION_MS } =
     options;
 
   const [phase, setPhase] = useState<AsrPhase>("idle");
@@ -424,6 +428,8 @@ export function useVoiceRecognition(
   const authModeRef = useRef(authMode);
   const regionRef = useRef(region);
   const modelRef = useRef(model);
+  const polishEnabledRef = useRef(polishEnabled);
+  const polishConfigRef = useRef(polishConfig);
   const onResultRef = useRef(onResult);
   const onErrorRef = useRef(onError);
   const mountedRef = useRef(true);
@@ -450,6 +456,7 @@ export function useVoiceRecognition(
   const liveFinalTextRef = useRef<string[]>([]);
   const liveAudioQueueRef = useRef<Promise<void>>(Promise.resolve());
   const liveProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const recordingGenerationRef = useRef(0);
 
   const setPhaseRef = useCallback((next: AsrPhase) => {
     phaseRef.current = next;
@@ -467,6 +474,11 @@ export function useVoiceRecognition(
   useEffect(() => {
     modelRef.current = model;
   }, [model]);
+
+  useEffect(() => {
+    polishEnabledRef.current = polishEnabled;
+    polishConfigRef.current = polishConfig;
+  }, [polishEnabled, polishConfig]);
 
   useEffect(() => {
     regionRef.current = region;
@@ -547,6 +559,33 @@ export function useVoiceRecognition(
     [scheduleAutoResetToIdle, setPhaseRef],
   );
 
+  const deliverFinalText = useCallback(async (source: string, generation: number) => {
+    let result = source;
+    try {
+      const config = polishConfigRef.current;
+      if (polishEnabledRef.current && config?.apiKey.trim()) {
+        result = await polishVoiceText(
+          source,
+          config.provider,
+          resolveVoicePolishModel(config.provider, config.model),
+          config.apiKey,
+          config.authMode,
+          config.region,
+        );
+      }
+    } catch (error) {
+      // 整理服务不可用时仍交付原始转写，不丢失用户输入。
+      console.warn("voice text polishing failed; using original transcription:", error);
+    }
+    if (!mountedRef.current || recordingGenerationRef.current !== generation) return;
+    const finalText = result.trim() || source;
+    setLastText(finalText);
+    setLiveText(finalText);
+    setPhaseRef("done");
+    onResultRef.current?.(finalText);
+    scheduleAutoResetToIdle("done", SUCCESS_SETTLE_MS);
+  }, [scheduleAutoResetToIdle, setPhaseRef]);
+
   useEffect(() => {
     let disposed = false;
     const unlistenPromise = listen<LiveAsrEvent>("voice-live-asr-event", (event) => {
@@ -573,18 +612,15 @@ export function useVoiceRecognition(
           emitError({ code: "empty_audio", message: "未识别到语音内容" });
           return;
         }
-        setLastText(text);
-        setLiveText(text);
-        setPhaseRef("done");
-        onResultRef.current?.(text);
-        scheduleAutoResetToIdle("done", SUCCESS_SETTLE_MS);
+        setPhaseRef("transcribing");
+        void deliverFinalText(text, recordingGenerationRef.current);
       }
     });
     return () => {
       disposed = true;
       void unlistenPromise.then((unlisten) => unlisten());
     };
-  }, [emitError, scheduleAutoResetToIdle, setPhaseRef]);
+  }, [deliverFinalText, emitError, setPhaseRef]);
 
   const queueLiveAudio = useCallback((samples: Float32Array) => {
     const sessionId = liveSessionIdRef.current;
@@ -627,6 +663,7 @@ export function useVoiceRecognition(
   const transcribe = useCallback(
     async (blob: Blob) => {
       setPhaseRef("transcribing");
+      const generation = recordingGenerationRef.current;
       const currentModel = modelRef.current;
       const currentAuthMode = authModeRef.current;
       const currentRegion = regionRef.current;
@@ -678,10 +715,7 @@ export function useVoiceRecognition(
           emitError({ code: "empty_audio", message: "未识别到语音内容" });
           return;
         }
-        setLastText(sanitized);
-        setPhaseRef("done");
-        onResultRef.current?.(sanitized);
-        scheduleAutoResetToIdle("done", SUCCESS_SETTLE_MS);
+        await deliverFinalText(sanitized, generation);
       } catch (err) {
         let asrError: AsrError;
         if (err instanceof Error) {
@@ -701,7 +735,7 @@ export function useVoiceRecognition(
         emitError(asrError);
       }
     },
-    [emitError, scheduleAutoResetToIdle, setPhaseRef],
+    [deliverFinalText, emitError, setPhaseRef],
   );
 
   const start = useCallback(async () => {
@@ -721,6 +755,7 @@ export function useVoiceRecognition(
       return; // idempotent
     }
 
+    recordingGenerationRef.current += 1;
     clearAutoResetTimer();
     setErrorMessage(null);
     chunksRef.current = [];
@@ -891,6 +926,7 @@ export function useVoiceRecognition(
   }, []);
 
   const cancel = useCallback(() => {
+    recordingGenerationRef.current += 1;
     stopTimers();
     clearAutoResetTimer();
     if (mediaRecorderRef.current) {
