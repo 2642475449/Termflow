@@ -116,9 +116,7 @@ export function GitSettingsPage() {
               <div className="text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>
                 {t("settings.agents.gitProfiles.title")}
               </div>
-              <div className="mt-1 text-xs" style={{ color: "var(--cs-text-tertiary)" }}>
-                {t("settings.agents.gitProfiles.description")}
-              </div>
+
             </div>
           </div>
           <Button icon={<PlusOutlined />} onClick={() => openProfileEditor()}>
@@ -161,7 +159,7 @@ export function GitSettingsPage() {
           <div>
             <div className="mb-1 text-xs" style={{ color: "var(--cs-text-secondary)" }}>{t("settings.agents.gitProfiles.instructions")}</div>
             <Input.TextArea value={profileInstructions} maxLength={6000} autoSize={{ minRows: 6, maxRows: 12 }} showCount placeholder={t("settings.agents.gitProfiles.instructionsPlaceholder")} onChange={(event) => setProfileInstructions(event.target.value)} />
-            <div className="mt-1 text-xs" style={{ color: "var(--cs-text-tertiary)" }}>{t("settings.agents.gitProfiles.instructionsHint")}</div>
+
           </div>
           <div className="flex items-center justify-between gap-3 rounded-lg px-3 py-2" style={{ background: "var(--cs-bg-hover)" }}>
             <span className="text-sm" style={{ color: "var(--cs-text-secondary)" }}>{t("settings.agents.gitProfiles.makeDefault")}</span>

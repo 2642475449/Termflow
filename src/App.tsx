@@ -153,6 +153,7 @@ function App() {
   const voicePolishApiKey = useAppStore((s) => s.voicePolishApiKey);
   const voicePolishAuthMode = useAppStore((s) => s.voicePolishAuthMode);
   const voicePolishRegion = useAppStore((s) => s.voicePolishRegion);
+  const voicePolishStyle = useAppStore((s) => s.voicePolishStyle);
   const voiceShortcut = useAppStore((s) => s.voiceShortcut);
   const voiceInputTarget = useAppStore((s) => s.voiceInputTarget);
   const voiceTriggerVisible = useAppStore((s) => s.voiceTriggerVisible);
@@ -217,6 +218,7 @@ function App() {
       voicePolishApiKey,
       voicePolishAuthMode,
       voicePolishRegion,
+      voicePolishStyle,
       voiceShortcut,
       voiceInputTarget,
       voiceTriggerVisible,
@@ -232,6 +234,7 @@ function App() {
       voicePolishApiKey,
       voicePolishAuthMode,
       voicePolishRegion,
+      voicePolishStyle,
       darkTheme,
       editorFontSize,
       language,

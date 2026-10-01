@@ -27,6 +27,7 @@ interface VoiceWorkerConfigPayload {
   polishApiKey: VoicePolishConfig["apiKey"];
   polishAuthMode: VoicePolishConfig["authMode"];
   polishRegion: VoicePolishConfig["region"];
+  polishStyle: VoicePolishConfig["style"];
   shortcut: string;
   inputTarget: VoiceInputTarget;
 }
@@ -67,6 +68,7 @@ function VoiceWorkerWindow() {
   const voicePolishApiKey = useAppStore((s) => s.voicePolishApiKey);
   const voicePolishAuthMode = useAppStore((s) => s.voicePolishAuthMode);
   const voicePolishRegion = useAppStore((s) => s.voicePolishRegion);
+  const voicePolishStyle = useAppStore((s) => s.voicePolishStyle);
   const voiceShortcut = useAppStore((s) => s.voiceShortcut);
   const voiceInputTarget = useAppStore((s) => s.voiceInputTarget);
   const [config, setConfig] = useState<VoiceWorkerConfigPayload>({
@@ -80,6 +82,7 @@ function VoiceWorkerWindow() {
     polishApiKey: voicePolishApiKey,
     polishAuthMode: voicePolishAuthMode,
     polishRegion: voicePolishRegion,
+    polishStyle: voicePolishStyle,
     shortcut: voiceShortcut,
     inputTarget: voiceInputTarget,
   });
@@ -97,6 +100,7 @@ function VoiceWorkerWindow() {
       apiKey: config.polishApiKey,
       authMode: config.polishAuthMode,
       region: config.polishRegion,
+      style: config.polishStyle,
     },
     onResult: (text) => {
       if (config.inputTarget === "system") {
@@ -167,11 +171,12 @@ function VoiceWorkerWindow() {
       polishApiKey: voicePolishApiKey,
       polishAuthMode: voicePolishAuthMode,
       polishRegion: voicePolishRegion,
+      polishStyle: voicePolishStyle,
       shortcut: voiceShortcut,
       inputTarget: voiceInputTarget,
     };
     setConfig(nextConfig);
-  }, [asrApiKey, asrAuthMode, asrModel, asrRegion, voiceInputTarget, voicePolishEnabled, voicePolishModel, voicePolishProvider, voicePolishApiKey, voicePolishAuthMode, voicePolishRegion, voiceShortcut]);
+  }, [asrApiKey, asrAuthMode, asrModel, asrRegion, voiceInputTarget, voicePolishEnabled, voicePolishModel, voicePolishProvider, voicePolishApiKey, voicePolishAuthMode, voicePolishRegion, voicePolishStyle, voiceShortcut]);
 
   useEffect(() => {
     let disposed = false;

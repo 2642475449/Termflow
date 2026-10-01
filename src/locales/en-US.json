@@ -2004,7 +2004,7 @@
       "polishingRegionSingapore": "Singapore",
       "polishingRegionBeijing": "North China 2 (Beijing)",
       "polishingAuthLabel": "Key type",
-      "polishingKeyMissing": "No cleanup API Key configured. Original transcripts will be used until you enter a Key.",
+      "polishingKeyMissing": "No API Key configured. Using original transcripts.",
       "polishingKeyPlaceholder": "Enter {{provider}} API Key",
       "polishingKeyDesc": "Enter the selected cleanup provider’s API Key. It is saved separately from the speech recognition Key. Enter a new Key after switching providers.",
       "polishingProviderDesc": "Choose a text cleanup provider independently of speech recognition.",
@@ -2015,6 +2015,31 @@
       "polishingEnabled": "Enabled",
       "polishingModelLabel": "Cleanup model",
       "polishingModelDesc": "Choose from the provided models only. DeepSeek uses non-thinking mode. Provider usage charges apply, including test requests.",
+      "polishingStyleLabel": "Organization",
+      "polishingStyleDesc": "Your selection applies to voice input. All modes remove fillers, fix wording, and preserve meaning while editing the transcript.",
+      "polishingStyles": {
+        "continuous": "Keep the original order",
+        "paragraphs": "Split by meaning",
+        "structured": "Organize into paragraphs or lists"
+      },
+      "polishingStyleDescriptions": {
+        "continuous": "Keep the original order and clean up wording in one continuous paragraph.",
+        "paragraphs": "Start a new paragraph when the topic or meaning changes, keeping the original order.",
+        "structured": "Use paragraphs for prose and lists for explicit items or steps."
+      },
+      "polishingPreview": {
+        "sourceLabel": "Shared voice transcript",
+        "fixedHint": "Fixed example showing editing differences",
+        "deleted": "Deleted text",
+        "added": "Added or revised text",
+        "lineBreak": "Line break",
+        "source": "Um, Mom said to come home for lunch on Sunday and arrive before eleven thirty. Well, Buy some fruit on the way, and I will pick up the cake. If traffic is heavy, let the group know ahead of time.",
+        "results": {
+          "continuous": "Mom said to come home for lunch on Sunday and arrive before eleven thirty. Buy some fruit on the way, and I will pick up the cake. If traffic is heavy, let the group know ahead of time.",
+          "paragraphs": "Mom said to come home for lunch on Sunday and arrive before eleven thirty.\n\nBuy some fruit on the way, and I will pick up the cake.\n\nIf traffic is heavy, let the group know ahead of time.",
+          "structured": "Mom said to come home for lunch on Sunday and arrive before eleven thirty.\n\n- Buy some fruit on the way.\n- I will pick up the cake.\n\nIf traffic is heavy, let the group know ahead of time."
+        }
+      },
       "polishingTest": "Test cleanup model",
       "polishingTestSuccess": "Cleanup model call succeeded",
       "title": "Voice Recognition",

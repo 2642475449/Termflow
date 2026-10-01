@@ -177,6 +177,10 @@ fn default_voice_polish_enabled() -> bool {
     true
 }
 
+fn default_voice_polish_style() -> String {
+    "paragraphs".into()
+}
+
 fn infer_asr_auth_mode(api_key: &str) -> String {
     let normalized = api_key.trim().to_ascii_lowercase();
     if normalized.starts_with("sk-cp-") || normalized.starts_with("tp-") {
@@ -254,6 +258,8 @@ pub struct PersistentSettingsRecord {
     pub voice_polish_auth_mode: String,
     #[serde(default = "default_asr_region")]
     pub voice_polish_region: String,
+    #[serde(default = "default_voice_polish_style")]
+    pub voice_polish_style: String,
     pub voice_shortcut: String,
     pub voice_input_target: String,
     pub voice_trigger_visible: bool,
@@ -309,6 +315,7 @@ impl Default for PersistentSettingsRecord {
             voice_polish_api_key: String::new(),
             voice_polish_auth_mode: default_polish_auth_mode(),
             voice_polish_region: default_asr_region(),
+            voice_polish_style: default_voice_polish_style(),
             voice_shortcut: "Ctrl+Shift+V".into(),
             voice_input_target: "system".into(),
             voice_trigger_visible: true,
@@ -976,6 +983,8 @@ impl Database {
             read_setting(&conn, "voice.polishAuthMode")?.unwrap_or(settings.voice_polish_auth_mode);
         settings.voice_polish_region =
             read_setting(&conn, "voice.polishRegion")?.unwrap_or(settings.voice_polish_region);
+        settings.voice_polish_style =
+            read_setting(&conn, "voice.polishStyle")?.unwrap_or(settings.voice_polish_style);
         settings.voice_shortcut =
             read_setting(&conn, "voice.shortcut")?.unwrap_or(settings.voice_shortcut);
         settings.voice_input_target =
@@ -1187,6 +1196,7 @@ impl Database {
             &settings.voice_polish_auth_mode,
         )?;
         write_setting(&conn, "voice.polishRegion", &settings.voice_polish_region)?;
+        write_setting(&conn, "voice.polishStyle", &settings.voice_polish_style)?;
         write_setting(&conn, "voice.shortcut", &settings.voice_shortcut)?;
         write_setting(&conn, "voice.inputTarget", &settings.voice_input_target)?;
         write_setting(
@@ -1912,6 +1922,7 @@ mod tests {
         settings.voice_polish_api_key = "polish-test-key".into();
         settings.voice_polish_auth_mode = "api".into();
         settings.voice_polish_region = "singapore".into();
+        settings.voice_polish_style = "structured".into();
         database
             .save_general_persistent_settings(&settings)
             .unwrap();
@@ -1922,6 +1933,7 @@ mod tests {
         assert_eq!(restored.voice_polish_api_key, "polish-test-key");
         assert_eq!(restored.voice_polish_auth_mode, "api");
         assert_eq!(restored.voice_polish_region, "singapore");
+        assert_eq!(restored.voice_polish_style, "structured");
 
         let mut old_record = serde_json::to_value(PersistentSettingsRecord::default()).unwrap();
         old_record
@@ -1937,6 +1949,7 @@ mod tests {
             "voicePolishApiKey",
             "voicePolishAuthMode",
             "voicePolishRegion",
+            "voicePolishStyle",
         ] {
             old_record.as_object_mut().unwrap().remove(key);
         }
@@ -1945,6 +1958,7 @@ mod tests {
         assert!(restored.voice_polish_model.is_empty());
         assert_eq!(restored.voice_polish_provider, "deepseek");
         assert!(restored.voice_polish_api_key.is_empty());
+        assert_eq!(restored.voice_polish_style, "paragraphs");
     }
 
     #[test]

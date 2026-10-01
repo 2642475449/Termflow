@@ -171,6 +171,24 @@ pub fn migrate(conn: &Connection) -> Result<(), String> {
             .map_err(|error| format!("更新截图缓存版本失败: {error}"))?;
     }
 
+    if version < 8 {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS app_settings (
+                key TEXT PRIMARY KEY NOT NULL,
+                value TEXT NOT NULL,
+                updated_at_ms INTEGER NOT NULL
+            );",
+        )
+        .map_err(|error| format!("检查语音设置表失败: {error}"))?;
+        conn.execute(
+            "DELETE FROM app_settings WHERE key = 'voice.polishCustomPrompt' OR (key = 'voice.polishStyle' AND value = '\"custom\"')",
+            [],
+        )
+        .map_err(|error| format!("移除已停用的语音自定义提示词失败: {error}"))?;
+        conn.pragma_update(None, "user_version", 8)
+            .map_err(|error| format!("更新语音设置版本失败: {error}"))?;
+    }
+
     Ok(())
 }
 
@@ -203,7 +221,7 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(version, 7);
+        assert_eq!(version, 8);
         assert_eq!(session_table_exists, 1);
         assert_eq!(control_table_exists, 1);
     }
@@ -243,6 +261,35 @@ mod tests {
             .unwrap();
 
         assert_eq!(legacy_setting_exists, 0);
+    }
+
+    #[test]
+    fn migration_removes_custom_voice_prompt_and_retired_style() {
+        let connection = Connection::open_in_memory().unwrap();
+        migrate(&connection).unwrap();
+        connection
+            .execute(
+                "INSERT INTO app_settings (key, value, updated_at_ms) VALUES (?1, ?2, 0)",
+                rusqlite::params!["voice.polishCustomPrompt", "\"old instructions\""],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO app_settings (key, value, updated_at_ms) VALUES (?1, ?2, 0)",
+                rusqlite::params!["voice.polishStyle", "\"custom\""],
+            )
+            .unwrap();
+        connection.pragma_update(None, "user_version", 7).unwrap();
+
+        migrate(&connection).unwrap();
+        let remaining: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM app_settings WHERE key IN ('voice.polishCustomPrompt', 'voice.polishStyle')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(remaining, 0);
     }
 
     #[test]

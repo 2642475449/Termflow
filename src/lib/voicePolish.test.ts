@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { availableVoicePolishModels, defaultVoicePolishModel, normalizeVoicePolishProvider, resolveVoicePolishModel } from "./voicePolish";
+import { availableVoicePolishModels, defaultVoicePolishModel, normalizeVoicePolishProvider, normalizeVoicePolishStyle, resolveVoicePolishModel, VOICE_POLISH_STYLES } from "./voicePolish";
 import { createVoicePolishSlice, type VoicePolishSlice } from "@/store/slices/voicePolish";
 
 it("defaults to DeepSeek independently of ASR", () => {
@@ -31,4 +31,18 @@ it("clears credentials when switching cleanup providers", () => {
   expect(state.voicePolishApiKey).toBe("");
   expect(state.voicePolishModel).toBe("qwen-plus");
   expect(state.voicePolishProvider).toBe("dashscope");
+});
+
+it("only offers the three organization modes", () => {
+  let state: VoicePolishSlice = createVoicePolishSlice((partial) => { state = { ...state, ...partial }; });
+  expect(VOICE_POLISH_STYLES).toEqual(["continuous", "paragraphs", "structured"]);
+  expect(state.voicePolishStyle).toBe("paragraphs");
+  expect(normalizeVoicePolishStyle("unknown")).toBe("paragraphs");
+  expect(normalizeVoicePolishStyle("custom")).toBe("paragraphs");
+  expect(normalizeVoicePolishStyle("faithful")).toBe("continuous");
+  expect(normalizeVoicePolishStyle("clear")).toBe("paragraphs");
+  expect(normalizeVoicePolishStyle("academic")).toBe("paragraphs");
+  expect(normalizeVoicePolishStyle("casual")).toBe("paragraphs");
+  state.setVoicePolishStyle("structured");
+  expect(state.voicePolishStyle).toBe("structured");
 });

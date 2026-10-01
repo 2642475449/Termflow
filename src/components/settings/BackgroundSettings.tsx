@@ -8,7 +8,7 @@ export function BackgroundSettings() {
   const { settings, ready, busy } = useBackgroundStore();
   return <>
     {(["runInBackground", "askBeforeClose"] as const).map((key) => (
-      <SettingRow key={key} label={t(`background.${key}`)} desc={t(`background.${key}Description`)}>
+      <SettingRow key={key} label={t(`background.${key}`)}>
         <Switch checked={settings[key]} disabled={!ready || busy} loading={busy}
           aria-label={t(`background.${key}`)} onChange={(checked) => {
             const next = { ...settings, [key]: checked };

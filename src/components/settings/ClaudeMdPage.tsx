@@ -611,7 +611,6 @@ export function ClaudeMdPage() {
     <>
       <SettingsPageHeader
         title={t("settings.claudeMd.title")}
-        description={t("settings.claudeMd.headerDesc")}
         actions={
           <>
             <Button

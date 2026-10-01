@@ -229,7 +229,6 @@ export function ArchivedSessionsPage() {
             </Tag>
           </div>
         }
-        description={t("settings.archived.headerDesc")}
       >
         <div className="flex flex-wrap items-center gap-2">
           <Input

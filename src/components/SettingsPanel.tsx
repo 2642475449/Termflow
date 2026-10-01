@@ -29,7 +29,7 @@ import {
   SafetyCertificateOutlined,
   DatabaseOutlined,
 } from "@ant-design/icons";
-import { Segmented, Typography, Tag, Select, Spin, Empty, Button, message, Switch, Input, Drawer, Modal, Tooltip, Popover } from "antd";
+import { Segmented, Tag, Select, Spin, Empty, Button, message, Switch, Input, Drawer, Modal, Tooltip, Popover } from "antd";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useTranslation } from "react-i18next";
@@ -76,6 +76,7 @@ import {
   finishLiveAsr,
   polishVoiceText,
 } from "@/lib/api";
+import { VoicePolishModePicker } from "@/components/settings/VoicePolishModePicker";
 import { availableVoicePolishModels, resolveVoicePolishModel } from "@/lib/voicePolish";
 import { VoiceProviderLabel } from "@/components/settings/VoiceProviderLabel";
 import type {
@@ -123,8 +124,6 @@ import {
   getAgentIdsWithCapability,
 } from "@/lib/agents";
 import packageJson from "../../package.json";
-
-const { Text } = Typography;
 
 // Fill in the website URL when it is ready.
 const ABOUT_LINKS: Record<"website" | "github", string | null> = {
@@ -350,7 +349,7 @@ function ThemeCard({ opt, isActive, onClick, tabIndex, onKeyDown }: {
           <div className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: opt.accent }} />
           <span className="text-sm font-semibold" style={{ color: "var(--cs-text-primary)" }}>{t(opt.labelKey)}</span>
         </div>
-        <div className="ml-5 mt-1 text-[11px] leading-4" style={{ color: "var(--cs-text-tertiary)" }}>{t(opt.descKey)}</div>
+
       </div>
     </button>
   );
@@ -490,9 +489,7 @@ function GeneralPage() {
               <div className="text-sm font-semibold" style={{ color: "var(--cs-text-primary)" }}>
                 {t("settings.general.appearance.mode.label")}
               </div>
-              <div className="mt-1 text-xs leading-5" style={{ color: "var(--cs-text-tertiary)" }}>
-                {t("settings.general.appearance.mode.desc")}
-              </div>
+
             </div>
             <Segmented
               size="middle"
@@ -521,7 +518,7 @@ function GeneralPage() {
       </SettingSection>
 
       <SettingSection title={t("settings.general.languageSection")}>
-        <SettingRow label={t("settings.general.uiLanguage")} desc={t("settings.general.uiLanguageDesc")}>
+        <SettingRow label={t("settings.general.uiLanguage")}>
           <Segmented
             size="small"
             value={language}
@@ -534,7 +531,6 @@ function GeneralPage() {
       <SettingSection title={t("settings.general.terminalSection")}>
         <SettingRow
           label={t("settings.general.terminalScrollback")}
-          desc={t("settings.general.terminalScrollbackDesc")}
         >
           <Select
             className="w-[150px]"
@@ -552,7 +548,6 @@ function GeneralPage() {
         <BackgroundSettings />
         <SettingRow
           label={t("settings.general.restoreLastProject")}
-          desc={t("settings.general.restoreLastProjectDesc")}
         >
           <Switch
             checked={startupRestoreLastProject}
@@ -561,7 +556,6 @@ function GeneralPage() {
         </SettingRow>
         <SettingRow
           label={t("settings.general.projectOpenBehavior")}
-          desc={t("settings.general.projectOpenBehaviorDesc")}
         >
           <Select
             value={projectOpenBehavior}
@@ -579,7 +573,6 @@ function GeneralPage() {
       <SettingSection title={t("settings.general.windowsIntegrationSection")}>
         <SettingRow
           label={t("settings.general.explorerContextMenu")}
-          desc={t("settings.general.explorerContextMenuDesc")}
         >
           <Switch
             checked={explorerContextMenuEnabled}
@@ -628,7 +621,7 @@ function TerminalPage() {
         title={t("settings.menu.terminal")}
       />
       <SettingSection title={t("settings.terminal.shell")}>
-        <SettingRow label={t("settings.terminal.defaultShell")} desc={t("settings.terminal.defaultShellDesc")}>
+        <SettingRow label={t("settings.terminal.defaultShell")}>
           <Segmented
             size="small"
             value={defaultTerminalShell}
@@ -639,7 +632,7 @@ function TerminalPage() {
       </SettingSection>
 
       <SettingSection title={t("settings.terminal.font")}>
-        <SettingRow label={t("settings.terminal.editorFontSize")} desc={t("settings.terminal.editorFontSizeDesc")}>
+        <SettingRow label={t("settings.terminal.editorFontSize")}>
           <Segmented
             size="small"
             value={editorFontSize}
@@ -647,7 +640,7 @@ function TerminalPage() {
             onChange={(v) => setEditorFontSize(v as number)}
           />
         </SettingRow>
-        <SettingRow label={t("settings.terminal.fontSize")} desc={t("settings.terminal.fontSizeDesc")}>
+        <SettingRow label={t("settings.terminal.fontSize")}>
           <Segmented
             size="small"
             value={terminalFontSize}
@@ -658,7 +651,7 @@ function TerminalPage() {
       </SettingSection>
 
       <SettingSection title={t("settings.terminal.behavior")}>
-        <SettingRow label={t("settings.terminal.cursorBlink")} desc={t("settings.terminal.cursorBlinkDesc")}>
+        <SettingRow label={t("settings.terminal.cursorBlink")}>
           <Segmented
             size="small"
             value={cursorBlink ? "on" : "off"}
@@ -669,7 +662,7 @@ function TerminalPage() {
             onChange={(v) => setCursorBlink(v === "on")}
           />
         </SettingRow>
-        <SettingRow label={t("settings.terminal.lineHeight")} desc={t("settings.terminal.lineHeightDesc")}>
+        <SettingRow label={t("settings.terminal.lineHeight")}>
           <Segmented
             size="small"
             value={lineHeight}
@@ -682,7 +675,7 @@ function TerminalPage() {
             onChange={(v) => setLineHeight(v as number)}
           />
         </SettingRow>
-        <SettingRow label={t("settings.terminal.renderer")} desc={t("settings.terminal.rendererDesc")}>
+        <SettingRow label={t("settings.terminal.renderer")}>
           <Switch
             checked={terminalRenderer !== "standard"}
             onChange={(checked) => setTerminalRenderer(checked ? "webgl" : "standard")}
@@ -749,6 +742,7 @@ function VoiceRecognitionPage() {
   const voicePolishApiKey = useAppStore((s) => s.voicePolishApiKey);
   const voicePolishAuthMode = useAppStore((s) => s.voicePolishAuthMode);
   const voicePolishRegion = useAppStore((s) => s.voicePolishRegion);
+  const voicePolishStyle = useAppStore((s) => s.voicePolishStyle);
   const voiceShortcut = useAppStore((s) => s.voiceShortcut);
   const voiceTriggerVisible = useAppStore((s) => s.voiceTriggerVisible);
   const setAsrApiKey = useAppStore((s) => s.setAsrApiKey);
@@ -761,6 +755,7 @@ function VoiceRecognitionPage() {
   const setVoicePolishApiKey = useAppStore((s) => s.setVoicePolishApiKey);
   const setVoicePolishAuthMode = useAppStore((s) => s.setVoicePolishAuthMode);
   const setVoicePolishRegion = useAppStore((s) => s.setVoicePolishRegion);
+  const setVoicePolishStyle = useAppStore((s) => s.setVoicePolishStyle);
   const setVoiceShortcut = useAppStore((s) => s.setVoiceShortcut);
   const setVoiceTriggerVisible = useAppStore((s) => s.setVoiceTriggerVisible);
 
@@ -797,9 +792,7 @@ function VoiceRecognitionPage() {
               {t(model.modeKey)}
             </span>
           </div>
-          <div className="mt-1 text-xs leading-5 text-[var(--cs-text-secondary)]">
-            {t(model.descriptionKey)}
-          </div>
+
         </div>
         {isSelected && <CheckOutlined className="mt-0.5 shrink-0 text-[var(--cs-primary)]" />}
       </div>
@@ -849,6 +842,7 @@ function VoiceRecognitionPage() {
         voicePolishApiKey.trim(),
         voicePolishAuthMode,
         voicePolishRegion,
+        voicePolishStyle,
       );
       Modal.info({
         title: t("settings.voiceRecognition.polishingTestSuccess"),
@@ -1043,14 +1037,10 @@ function VoiceRecognitionPage() {
     <>
       <SettingsPageHeader
         title={t("settings.menu.voiceRecognition")}
-        description={t("settings.voiceRecognition.headerDesc")}
       />
       <SettingSection title={t("settings.voiceRecognition.apiConfig", { defaultValue: "API 配置" })}>
         <SettingRow
           label={t("settings.voiceRecognition.provider", { defaultValue: "服务商" })}
-          desc={t("settings.voiceRecognition.providerDesc", {
-            defaultValue: "选择语音识别服务后，只显示该服务需要的配置项。",
-          })}
         >
           <Select
             className="w-64"
@@ -1064,9 +1054,6 @@ function VoiceRecognitionPage() {
         {!isDashScopeProvider && (
           <SettingRow
             label={t("settings.voiceRecognition.authMode", { defaultValue: "认证方式" })}
-            desc={t("settings.voiceRecognition.authModeDesc", {
-              defaultValue: "MiMo 支持 Token Plan 和 API 两种 Key 来源。",
-            })}
           >
             <Segmented
               size="small"
@@ -1080,7 +1067,6 @@ function VoiceRecognitionPage() {
         )}
         <SettingRow
           label={t("settings.voiceRecognition.apiKey", { defaultValue: "API Key" })}
-          desc={t("settings.voiceRecognition.apiKeyDesc", { defaultValue: "输入你的 API Key" })}
         >
           <div className="flex items-center gap-2">
             <Input.Password
@@ -1098,9 +1084,6 @@ function VoiceRecognitionPage() {
         </SettingRow>
         <SettingRow
           label={t("settings.voiceRecognition.model", { defaultValue: "模型" })}
-          desc={t("settings.voiceRecognition.modelDesc", {
-            defaultValue: "选择语音识别模型",
-          })}
         >
           <div className="flex flex-wrap items-center gap-2">
             <Select
@@ -1121,9 +1104,6 @@ function VoiceRecognitionPage() {
         {isDashScopeProvider && (
         <SettingRow
           label={t("settings.voiceRecognition.region", { defaultValue: "区域" })}
-          desc={t("settings.voiceRecognition.regionDesc", {
-            defaultValue: "选择 DashScope 服务区域（不同区域使用不同的 API Key）",
-          })}
         >
           <div className="flex flex-wrap items-center gap-2">
             <Select
@@ -1147,11 +1127,13 @@ function VoiceRecognitionPage() {
       <SettingSection title={t("settings.voiceRecognition.polishingSectionTitle")}>
         <SettingRow
           label={t("settings.voiceRecognition.polishingLabel")}
-          desc={t("settings.voiceRecognition.polishingDesc")}
         >
-          <Switch checked={voicePolishEnabled} onChange={setVoicePolishEnabled} />
+          <Tooltip title={t("settings.voiceRecognition.polishingDesc")}>
+            <Switch checked={voicePolishEnabled} onChange={setVoicePolishEnabled} />
+          </Tooltip>
         </SettingRow>
-        <SettingRow label={t("settings.voiceRecognition.serviceProvider")} desc={t("settings.voiceRecognition.polishingProviderDesc")}>
+        <VoicePolishModePicker value={voicePolishStyle} onChange={setVoicePolishStyle} />
+        <SettingRow label={t("settings.voiceRecognition.serviceProvider")}>
           <Select
             className="w-64"
             value={voicePolishProvider}
@@ -1163,7 +1145,7 @@ function VoiceRecognitionPage() {
             ]}
           />
         </SettingRow>
-        <SettingRow label={t("settings.voiceRecognition.apiKey")} desc={t("settings.voiceRecognition.polishingKeyDesc")}>
+        <SettingRow label={t("settings.voiceRecognition.apiKey")}>
           <Input.Password
             className="w-80"
             value={voicePolishApiKey}
@@ -1178,7 +1160,7 @@ function VoiceRecognitionPage() {
           </SettingRow>
         )}
         {voicePolishProvider === "dashscope" && (
-          <SettingRow label={t("settings.voiceRecognition.region")} desc={t("settings.voiceRecognition.regionDesc")}>
+          <SettingRow label={t("settings.voiceRecognition.region")}>
             <Select className="w-64" value={voicePolishRegion} onChange={setVoicePolishRegion} options={[
               { value: "beijing", label: t("settings.voiceRecognition.polishingRegionBeijing") },
               { value: "singapore", label: t("settings.voiceRecognition.polishingRegionSingapore") },
@@ -1188,7 +1170,6 @@ function VoiceRecognitionPage() {
         )}
         <SettingRow
           label={t("settings.voiceRecognition.polishingModelLabel")}
-          desc={t("settings.voiceRecognition.polishingModelDesc")}
         >
           <div className="flex flex-wrap items-center gap-2">
             <Select
@@ -1199,9 +1180,11 @@ function VoiceRecognitionPage() {
               aria-label={t("settings.voiceRecognition.polishingModelLabel")}
               className="w-64"
             />
-            <Button loading={polishTesting} onClick={() => void handlePolishTest()}>
-              {t("settings.voiceRecognition.polishingTest")}
-            </Button>
+            <Tooltip title={t("settings.voiceRecognition.polishingModelDesc")}>
+              <Button loading={polishTesting} onClick={() => void handlePolishTest()}>
+                {t("settings.voiceRecognition.polishingTest")}
+              </Button>
+            </Tooltip>
           </div>
         </SettingRow>
         {voicePolishEnabled && !voicePolishApiKey.trim() && (
@@ -1212,7 +1195,6 @@ function VoiceRecognitionPage() {
       <SettingSection title={t("settings.voiceRecognition.shortcutLabel", { defaultValue: "语音输入" })}>
         <SettingRow
           label={t("settings.voiceRecognition.shortcutLabel", { defaultValue: "语音输入快捷键" })}
-          desc={`${t("settings.voiceRecognition.shortcutDesc")} ${t("settings.voiceRecognition.shortcutRecordHint")}`}
         >
           <div className="flex flex-wrap items-center gap-2">
             <Input
@@ -1267,9 +1249,6 @@ function VoiceRecognitionPage() {
         </SettingRow>
         <SettingRow
           label={t("settings.voiceRecognition.triggerButton", { defaultValue: "麦克风图标" })}
-          desc={t("settings.voiceRecognition.triggerButtonDesc", {
-            defaultValue: "控制右下角麦克风图标是否显示。",
-          })}
         >
           <Switch checked={voiceTriggerVisible} onChange={setVoiceTriggerVisible} />
         </SettingRow>
@@ -1278,9 +1257,6 @@ function VoiceRecognitionPage() {
       <SettingSection title={t("settings.voiceRecognition.test", { defaultValue: "测试" })}>
         <SettingRow
           label={t("settings.voiceRecognition.testConnection", { defaultValue: "测试连接" })}
-          desc={t("settings.voiceRecognition.testConnectionDesc", {
-            defaultValue: "验证 API Key、模型与识别接口是否可用",
-          })}
         >
           <Button
             type="primary"
@@ -1341,11 +1317,7 @@ function ShortcutsPage() {
             </div>
           </div>
         ))}
-        <div className="px-4 py-3">
-          <Text className="text-[11px]" style={{ color: "var(--cs-text-tertiary)" }}>
-            {t("settings.shortcuts.hint1")}
-          </Text>
-        </div>
+
       </SettingSection>
     </>
   );
@@ -2000,11 +1972,7 @@ function SkillsPage() {
       <SettingSection title={`${t("settings.menu.skills")} (${totalItems})`}>
         <div className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
           <div className="min-w-0">
-            <div className="text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>
-              {activeAgent === "all"
-                ? t("settings.skills.listDesc")
-                : t("settings.skills.agentScopeDesc", { agent: skillAgentLabel(activeAgent, t) })}
-            </div>
+
             <div className="text-[11px] mt-1 break-all" style={{ color: "var(--cs-text-tertiary)" }}>
               {activeAgent === "all"
                 ? t("settings.skills.selectAgentForDirectory")
@@ -2060,7 +2028,6 @@ function SkillsPage() {
     <>
       <SettingsPageHeader
         title={t("settings.menu.skills")}
-        description={t("settings.skills.headerDesc")}
         actions={
           <>
             <Button
@@ -2155,15 +2122,6 @@ function SkillsPage() {
               onChange={(value) => setCreateAgent(value)}
               options={SKILL_AGENTS.map((agent) => ({ value: agent, label: skillAgentLabel(agent, t) }))}
             />
-            <div className="text-[11px] mt-1" style={{ color: "var(--cs-text-tertiary)" }}>
-              {createAgent === "codex" || createAgent === "pi" || (createScope === "workspace" && createAgent === "antigravity")
-                ? t(createScope === "workspace"
-                  ? "settings.skills.sharedAgentsWorkspaceHint"
-                  : "settings.skills.sharedAgentsUserHint")
-                : createAgent === "claude"
-                  ? t("settings.skills.opencodeCompatibilityHint")
-                  : t("settings.skills.nativeOnlyHint", { agent: skillAgentLabel(createAgent, t) })}
-            </div>
           </div>
           <div>
             <div className="text-xs mb-1" style={{ color: "var(--cs-text-tertiary)" }}>{t("settings.skills.skillScope")}</div>
@@ -2861,9 +2819,7 @@ function CommandsPage() {
       <SettingSection title={`${currentScope === "workspace" ? t("settings.commands.workspaceCommands") : t("settings.commands.userCommands")} (${totalItems})`}>
         <div className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
           <div className="min-w-0">
-            <div className="text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>
-              {currentScope === "workspace" ? t("settings.commands.workspaceCommandsDesc") : t("settings.commands.userCommandsDesc")}
-            </div>
+
             <div className="text-[11px] mt-1 break-all" style={{ color: "var(--cs-text-tertiary)" }}>
               {directoryPath || (currentScope === "workspace" ? t("settings.commands.workspaceDirUnavailable") : t("settings.commands.userDirUnavailable"))}
             </div>
@@ -2942,7 +2898,6 @@ function CommandsPage() {
     <>
       <SettingsPageHeader
         title={t("settings.menu.commands")}
-        description={t("settings.commands.headerDesc")}
         actions={
           <>
             <Button
@@ -3072,9 +3027,7 @@ function CommandsPage() {
               value={draft.template}
               onChange={(e) => setDraft((prev) => ({ ...prev, template: e.target.value }))}
             />
-            <div className="text-[11px] mt-1" style={{ color: "var(--cs-text-tertiary)" }}>
-              {t("settings.commands.commandContentHint")}
-            </div>
+
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
@@ -3641,9 +3594,7 @@ function HooksPage() {
       <SettingSection title={`${t("settings.menu.hooks")} (${totalItems})`}>
         <div className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
           <div className="min-w-0">
-            <div className="text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>
-              {t("settings.hooks.listDesc", { agent: hookAgentLabel(activeAgent, t) })}
-            </div>
+
             <div className="text-[11px] mt-1 break-all" style={{ color: "var(--cs-text-tertiary)" }}>
               {configPath || (currentScope === "workspace" ? t("settings.hooks.workspaceConfigUnavailable") : t("settings.hooks.userConfigUnavailable"))}
             </div>
@@ -3722,7 +3673,6 @@ function HooksPage() {
     <>
       <SettingsPageHeader
         title={t("settings.menu.hooks")}
-        description={t("settings.hooks.headerDesc")}
         actions={
           <>
             <Button
@@ -4927,12 +4877,8 @@ function AboutPage() {
                 </h1>
                 <Tag className="app-about-hero-version !m-0 rounded-full !px-2.5">v{packageJson.version}</Tag>
               </div>
-              <div className="app-about-hero-subtitle mt-1 text-sm font-medium">
-                {t("settings.about.subtitle")}
-              </div>
-              <div className="app-about-hero-description mt-2 max-w-2xl text-sm leading-6">
-                {t("settings.about.headerDesc")}
-              </div>
+
+
             </div>
           </div>
 

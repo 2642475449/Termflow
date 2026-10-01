@@ -1321,10 +1321,12 @@ it("round-trips voice cleanup model and switch through persistent settings", () 
       voicePolishProvider: "dashscope",
       voicePolishApiKey: "polish-test-key",
       voicePolishModel: "qwen-plus",
+      voicePolishStyle: "structured",
     });
     expect(useAppStore.getState().voicePolishEnabled).toBe(false);
     expect(getPersistentSettingsSnapshot().voicePolishModel).toBe("qwen-plus");
     expect(getPersistentSettingsSnapshot().voicePolishApiKey).toBe("polish-test-key");
+    expect(getPersistentSettingsSnapshot().voicePolishStyle).toBe("structured");
     useAppStore.getState().setAsrModel("mimo-v2.5-asr");
     expect(useAppStore.getState().voicePolishProvider).toBe("dashscope");
     expect(useAppStore.getState().voicePolishModel).toBe("qwen-plus");
@@ -1352,12 +1354,55 @@ it("restores independent cleanup credentials and presets through Zustand persist
   first.getState().setVoicePolishApiKey("test-only-credential");
   first.getState().setVoicePolishModel("deepseek-v4-pro");
   first.getState().setVoicePolishEnabled(false);
+  first.getState().setVoicePolishStyle("continuous");
   const restored = createAppStore(storage).getState();
   expect(restored.voicePolishApiKey).toBe("test-only-credential");
   expect(restored.voicePolishModel).toBe("deepseek-v4-pro");
   expect(restored.voicePolishEnabled).toBe(false);
+  expect(restored.voicePolishStyle).toBe("continuous");
   expect(restored.asrApiKey).toBe("");
 });
+
+it("migrates the four former styles from v4 while preserving cleanup credentials", () => {
+  for (const [previous, expected] of [
+    ["faithful", "continuous"], ["clear", "paragraphs"],
+    ["academic", "paragraphs"], ["casual", "paragraphs"],
+  ]) {
+    const values = new Map<string, string>([["termflow-settings", JSON.stringify({
+      version: 4,
+      state: { voicePolishStyle: previous, voicePolishApiKey: "test-only-credential" },
+    })]]);
+    const store = createAppStore({
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => { values.set(key, value); },
+      removeItem: (key) => { values.delete(key); },
+    });
+    expect(store.getState().voicePolishStyle).toBe(expected);
+    expect(store.getState().voicePolishApiKey).toBe("test-only-credential");
+    expect(JSON.parse(values.get("termflow-settings") ?? "{}").version).toBe(5);
+  }
+});
+
+it("retires saved custom voice prompts when migrating local settings", () => {
+  const values = new Map<string, string>([["termflow-settings", JSON.stringify({
+    state: { voicePolishStyle: "custom", voicePolishCustomPrompt: "obsolete instructions" },
+    version: 3,
+  })]]);
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => { values.set(key, value); },
+    removeItem: (key: string) => { values.delete(key); },
+  };
+  const restored = createAppStore(storage).getState();
+  expect(restored.voicePolishStyle).toBe("paragraphs");
+  const persisted = JSON.parse(values.get("termflow-settings") ?? "{}") as {
+    version?: number;
+    state?: { voicePolishCustomPrompt?: string };
+  };
+  expect(persisted.version).toBe(5);
+  expect(persisted.state?.voicePolishCustomPrompt).toBeUndefined();
+});
+
 it("persistent settings normalize network proxy values", () => {
   const original = getPersistentSettingsSnapshot();
   try {

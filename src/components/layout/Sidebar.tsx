@@ -441,7 +441,7 @@ function Sidebar({ collapsed, section }: SidebarProps) {
               className="px-3 pt-2.5 pb-2"
               style={{ borderBottom: "1px solid color-mix(in srgb, var(--cs-border-sidebar) 88%, transparent)" }}
             >
-              {currentProject && <Tooltip title={t("sidebar.newSessionTooltip")} mouseEnterDelay={0.4}>
+              <Tooltip title={t("sidebar.newSessionTooltip")} mouseEnterDelay={0.4}>
                 <button
                   type="button"
                   className="app-sidebar-new-session-button flex h-7 w-full items-center justify-start gap-2 rounded-[7px] px-3 text-sm font-medium text-[var(--cs-text-secondary)] hover:bg-[var(--cs-bg-hover)]"
@@ -450,7 +450,7 @@ function Sidebar({ collapsed, section }: SidebarProps) {
                   <PlusOutlined />
                   {t("sidebar.newSession")}
                 </button>
-              </Tooltip>}
+              </Tooltip>
               <button
                 type="button"
                 data-active={focusedTabId === SCHEDULED_TASKS_TAB_ID}

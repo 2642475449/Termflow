@@ -126,7 +126,6 @@ export function QuickCommandsPage() {
     <div className="flex flex-col gap-4 h-full">
       <SettingsPageHeader
         title={t("quickCommands.settingsTitle")}
-        description={t("quickCommands.settingsDescription")}
         actions={
           <Button
             type="primary"

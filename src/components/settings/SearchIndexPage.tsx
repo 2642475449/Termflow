@@ -21,7 +21,7 @@ import type { ProjectSearchIndexStatus, SearchIndexStorageStatus } from "@/types
 
 interface IndexSettingRowProps {
   title: string;
-  description: ReactNode;
+  description?: ReactNode;
   tag: ReactNode;
   checked?: boolean;
   disabled?: boolean;
@@ -47,9 +47,9 @@ function IndexSettingRow({
           </span>
           {tag}
         </div>
-        <div className="mt-1 text-xs leading-5" style={{ color: "var(--cs-text-tertiary)" }}>
+        {description && <div className="mt-1 text-xs leading-5" style={{ color: "var(--cs-text-tertiary)" }}>
           {description}
-        </div>
+        </div>}
       </div>
       <Switch
         checked={checked}
@@ -395,7 +395,6 @@ export function SearchIndexPage() {
     <div className="mx-auto max-w-5xl">
       <SettingsPageHeader
         title={t("settings.searchIndex.title")}
-        description={t("settings.searchIndex.subtitle")}
       />
 
       <div
@@ -411,7 +410,6 @@ export function SearchIndexPage() {
       >
         <IndexSettingRow
           title={t("settings.searchIndex.autoIndexTitle")}
-          description={t("settings.searchIndex.autoIndexDescription")}
           tag={<Tag className="m-0">{t("settings.searchIndex.comingSoon")}</Tag>}
           disabled
         />
@@ -457,9 +455,7 @@ export function SearchIndexPage() {
                 </span>
               ) : null}
             </div>
-            <div className="mt-2 text-xs leading-5" style={{ color: "var(--cs-text-tertiary)" }}>
-              {t("settings.searchIndex.excludedDirectories")}
-            </div>
+
             <div className="mt-3">
               <Button
                 size="small"
@@ -553,9 +549,7 @@ export function SearchIndexPage() {
             <div className="text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>
               {t("settings.searchIndex.clearCache")}
             </div>
-            <div className="mt-1 text-xs leading-5" style={{ color: "var(--cs-text-tertiary)" }}>
-              {t("settings.searchIndex.clearCacheDescription")}
-            </div>
+
           </div>
           <Button
             danger

@@ -1,4 +1,12 @@
 export type VoicePolishProvider = "deepseek" | "dashscope" | "mimo";
+export type VoicePolishStyle = "continuous" | "paragraphs" | "structured";
+
+export const VOICE_POLISH_STYLES: readonly VoicePolishStyle[] = ["continuous", "paragraphs", "structured"];
+
+export function normalizeVoicePolishStyle(style: string | undefined): VoicePolishStyle {
+  if (style === "faithful") return "continuous";
+  return VOICE_POLISH_STYLES.find((option) => option === style) ?? "paragraphs";
+}
 
 export interface VoicePolishConfig {
   provider: VoicePolishProvider;
@@ -6,6 +14,7 @@ export interface VoicePolishConfig {
   apiKey: string;
   authMode: "api" | "token-plan";
   region: "beijing" | "singapore" | "us";
+  style: VoicePolishStyle;
 }
 
 export function normalizeVoicePolishProvider(provider: string | undefined): VoicePolishProvider {

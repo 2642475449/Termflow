@@ -106,7 +106,6 @@ export function NetworkSettingsPage() {
     <div className="mx-auto max-w-6xl">
       <SettingsPageHeader
         title={t("settings.network.title")}
-        description={t("settings.network.description")}
       />
 
       <section className="app-glass-card rounded-xl border border-[var(--cs-border-card)] bg-[var(--cs-bg-card)] p-5">
@@ -148,9 +147,7 @@ export function NetworkSettingsPage() {
                 placeholder="localhost,127.0.0.1,::1"
                 onChange={(event) => setNetworkNoProxy(event.target.value)}
               />
-              <div className="mt-1 text-xs text-[var(--cs-text-tertiary)]">
-                {t("settings.network.noProxyHint")}
-              </div>
+
             </div>
           </div>
         </div>
@@ -163,9 +160,7 @@ export function NetworkSettingsPage() {
             <div className="text-sm font-medium text-[var(--cs-text-primary)]">
               {t("settings.network.connectivityTitle")}
             </div>
-            <div className="mt-1 text-xs text-[var(--cs-text-tertiary)]">
-              {t("settings.network.connectivityHint")}
-            </div>
+
           </div>
           <Button
             className="shrink-0"

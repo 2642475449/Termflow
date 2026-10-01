@@ -1999,7 +1999,7 @@
       "polishingRegionSingapore": "新加坡",
       "polishingRegionBeijing": "華北2（北京）",
       "polishingAuthLabel": "Key 類型",
-      "polishingKeyMissing": "尚未設定整理 API Key，目前僅輸出原始轉寫。填寫後可測試並啟用智慧整理。",
+      "polishingKeyMissing": "未設定 API Key，目前使用原始轉寫。",
       "polishingKeyPlaceholder": "請輸入 {{provider}} API Key",
       "polishingKeyDesc": "填寫所選整理服務商的 API Key，獨立儲存，不共用語音辨識 Key。切換服務商後需重新填寫。",
       "polishingProviderDesc": "獨立選擇文字整理服務，不受語音辨識服務商影響。",
@@ -2010,6 +2010,31 @@
       "polishingEnabled": "已啟用",
       "polishingModelLabel": "整理模型",
       "polishingModelDesc": "僅可選擇提供的預設模型。DeepSeek 使用非思考模式；依服務商規則計費，測試也會發出請求。",
+      "polishingStyleLabel": "整理方式",
+      "polishingStyleDesc": "選擇後持續用於語音輸入。三種方式均去口頭贅詞、修語病、保留原意，只編輯轉寫文字。",
+      "polishingStyles": {
+        "continuous": "按原有順序連貫",
+        "paragraphs": "按語意劃分段落",
+        "structured": "按內容層級分段或分項"
+      },
+      "polishingStyleDescriptions": {
+        "continuous": "保留原有順序，修正語病和口語冗餘，整理為連貫的一段。",
+        "paragraphs": "根據話題和語意轉折劃分自然段，保留原有表達順序。",
+        "structured": "按內容層級組織，明確的事項或步驟分項，普通內容分段。"
+      },
+      "polishingPreview": {
+        "sourceLabel": "同一段語音原文",
+        "fixedHint": "固定範例，僅展示整理差異",
+        "deleted": "刪除的文字",
+        "added": "新增或調整的文字",
+        "lineBreak": "換行",
+        "source": "嗯，媽說週日中午回家吃飯，讓我們十一點半前到。那個，你路上買點水果，我去拿蛋糕。要是塞車，就提前在群組裡說一聲。",
+        "results": {
+          "continuous": "媽說週日中午回家吃飯，讓我們十一點半前到。你路上買點水果，我去拿蛋糕。要是塞車，就提前在群組裡說一聲。",
+          "paragraphs": "媽說週日中午回家吃飯，讓我們十一點半前到。\n\n你路上買點水果，我去拿蛋糕。\n\n要是塞車，就提前在群組裡說一聲。",
+          "structured": "媽說週日中午回家吃飯，讓我們十一點半前到。\n\n- 你路上買點水果。\n- 我去拿蛋糕。\n\n要是塞車，就提前在群組裡說一聲。"
+        }
+      },
       "polishingTest": "測試整理模型",
       "polishingTestSuccess": "整理模型呼叫成功",
       "title": "語音辨識",

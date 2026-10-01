@@ -37,7 +37,6 @@ export function McpServersView(props: McpServersViewProps) {
   const threeScopes = props.agent === "claude" || props.agent === "qoder";
   const scopes: McpServerInfo["scope"][] = threeScopes ? ["local", "project", "user"] : ["workspace", "user"];
   const scopeLabel = (scope: McpServerInfo["scope"]) => text(`${scope}Servers`);
-  const scopeDetail = (scope: McpServerInfo["scope"]) => text(scope === "local" ? "localScopeHint" : scope === "user" ? "userScopeHint" : "projectScopeHint");
   const scopeCount = props.servers.filter((server) => server.scope === props.scope).length;
   const disabled = props.loading || props.refreshing || !props.available;
 
@@ -46,7 +45,7 @@ export function McpServersView(props: McpServersViewProps) {
       <header className="app-mcp-header">
         <div className="app-mcp-heading">
           <span className="app-mcp-heading-icon"><ApiOutlined /></span>
-          <div><h2>{text("title")}</h2><p>{text("overviewDesc")}</p></div>
+          <div><h2>{text("title")}</h2></div>
         </div>
         <Button type="primary" icon={<PlusOutlined />} disabled={disabled} onClick={props.onAdd}>{text("addServer")}</Button>
       </header>
@@ -70,22 +69,19 @@ export function McpServersView(props: McpServersViewProps) {
                 <span className="app-mcp-scope-top">{scope === "user" ? <GlobalOutlined /> : <FolderOpenOutlined />}
                   <strong>{scopeLabel(scope)}</strong><span className="app-mcp-count">{props.servers.filter((server) => server.scope === scope).length}</span>
                 </span>
-                <span className="app-mcp-scope-hint">{scopeDetail(scope)}</span>
               </button>
             ))}
           </div>
           <div className="app-mcp-context"><span>{text("currentProject")}</span><strong>{props.projectName || text("noProject")}</strong></div>
           <details className="app-mcp-config" key={`${props.agent}:${props.scope}`}>
             <summary>{text("configFile")}</summary>
-            <p>{text("configHint")}</p>
             <code>{props.configPath || text("workspaceConfigUnavailable")}</code>
             {props.configPath && <Button size="small" icon={<FolderOpenOutlined />} onClick={props.onOpenConfig}>{text("openConfigFile")}</Button>}
           </details>
         </aside>
 
         <div className="app-mcp-main" aria-busy={props.loading || props.refreshing}>
-          <div className="app-mcp-list-heading"><div><h3>{scopeLabel(props.scope)} <span className="app-mcp-count">{scopeCount}</span></h3>
-            <p>{scopeDetail(props.scope)}</p></div>
+          <div className="app-mcp-list-heading"><div><h3>{scopeLabel(props.scope)} <span className="app-mcp-count">{scopeCount}</span></h3></div>
             <Tooltip title={text("refreshList")}><Button icon={<ReloadOutlined />} loading={props.loading || props.refreshing}
               aria-label={text("refreshList")} onClick={props.onRefresh} /></Tooltip>
           </div>
@@ -97,7 +93,6 @@ export function McpServersView(props: McpServersViewProps) {
               <div className="app-mcp-empty"><InfoCircleOutlined /><h3>{text("loadFailed")}</h3><Button onClick={props.onRefresh}>{text("refreshList")}</Button></div>
             ) : props.filteredServers.length === 0 ? (
               <div className="app-mcp-empty"><CloudServerOutlined /><h3>{text(props.search ? "emptyFiltered" : "emptyInitial")}</h3>
-                <p>{text(props.search ? "emptyFilteredDetail" : "emptyInitialDetail")}</p>
                 {props.search ? <Button onClick={() => props.onSearch("")}>{text("clearSearch")}</Button>
                   : <Button type="primary" icon={<PlusOutlined />} onClick={props.onAdd}>{text("addServer")}</Button>}
               </div>
@@ -139,7 +134,6 @@ export function McpServersView(props: McpServersViewProps) {
               );
             })}
           </div>
-          <p className="app-mcp-footnote"><InfoCircleOutlined /><span>{text("checkHint")}</span></p>
         </div>
       </div>
     </section>

@@ -39,7 +39,7 @@ function attention(kind: AttentionItem["kind"], id: string): AttentionItem {
   };
 }
 
-describe("store persistence v3", () => {
+describe("store persistence v5", () => {
   it("keeps a new session when another window writes stale settings", () => {
     let saved: string | null = null;
     const sharedStorage = createProjectScopedStorage({
@@ -86,7 +86,7 @@ describe("store persistence v3", () => {
     expect(store.getState().windowMode).toBe("launcher");
   });
 
-  it("writes version 3 with only restart-safe attention data", () => {
+  it("writes version 5 with only restart-safe attention data", () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
     let persisted: string | null = null;
@@ -107,7 +107,7 @@ describe("store persistence v3", () => {
     });
 
     const parsed = JSON.parse(persisted!);
-    expect(parsed.version).toBe(3);
+    expect(parsed.version).toBe(5);
     expect(parsed.state.projectAttentionItems[PROJECT]).toHaveLength(1);
     expect(parsed.state.projectAttentionItems[PROJECT][0].kind).toBe("failure");
   });

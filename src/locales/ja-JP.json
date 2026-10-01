@@ -1999,7 +1999,7 @@
       "polishingRegionSingapore": "シンガポール",
       "polishingRegionBeijing": "華北2（北京）",
       "polishingAuthLabel": "Key の種類",
-      "polishingKeyMissing": "整理 API Key が未設定のため、元の文字起こしを使用します。",
+      "polishingKeyMissing": "API Key 未設定。元の文字起こしを使用します。",
       "polishingKeyPlaceholder": "{{provider}} API Key を入力",
       "polishingKeyDesc": "選択した整理サービスの API Key を入力してください。音声認識とは別に保存します。サービス変更後は Key の再入力が必要です。",
       "polishingProviderDesc": "音声認識とは独立してテキスト整理サービスを選択します。",
@@ -2010,6 +2010,31 @@
       "polishingEnabled": "有効",
       "polishingModelLabel": "整理モデル",
       "polishingModelDesc": "用意されたモデルのみ選択できます。DeepSeek は非思考モードを使用します。テストを含め、サービスの利用料金が適用されます。",
+      "polishingStyleLabel": "整理方法",
+      "polishingStyleDesc": "選択した方法が音声入力に適用されます。すべての方法で冗長な表現を削除し、文法を修正して原意を保ちます。",
+      "polishingStyles": {
+        "continuous": "元の順序でつなげる",
+        "paragraphs": "意味に合わせて段落分け",
+        "structured": "内容の階層に合わせて整理"
+      },
+      "polishingStyleDescriptions": {
+        "continuous": "元の順序を保ち、冗長な表現や文法を修正して一つの段落にまとめます。",
+        "paragraphs": "話題や意味の変わり目で段落を分け、元の順序を保ちます。",
+        "structured": "通常の文章は段落に、明確な項目や手順は箇条書きに整理します。"
+      },
+      "polishingPreview": {
+        "sourceLabel": "共通の音声原文",
+        "fixedHint": "固定例で編集の違いを表示",
+        "deleted": "削除した文字",
+        "added": "追加・修正した文字",
+        "lineBreak": "改行",
+        "source": "えーと、母が日曜の昼に家で食事をするので、十一時半までに来てと言っていた。あの、途中で果物を買ってきて、私はケーキを取りに行く。渋滞していたら、早めにグループに連絡して。",
+        "results": {
+          "continuous": "母が日曜の昼に家で食事をするので、十一時半までに来てと言っていた。途中で果物を買ってきて、私はケーキを取りに行く。渋滞していたら、早めにグループに連絡して。",
+          "paragraphs": "母が日曜の昼に家で食事をするので、十一時半までに来てと言っていた。\n\n途中で果物を買ってきて、私はケーキを取りに行く。\n\n渋滞していたら、早めにグループに連絡して。",
+          "structured": "母が日曜の昼に家で食事をするので、十一時半までに来てと言っていた。\n\n- 途中で果物を買ってきて。\n- 私はケーキを取りに行く。\n\n渋滞していたら、早めにグループに連絡して。"
+        }
+      },
       "polishingTest": "整理モデルをテスト",
       "polishingTestSuccess": "整理モデルの呼び出しに成功しました",
       "title": "音声認識",

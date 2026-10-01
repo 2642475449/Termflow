@@ -72,7 +72,7 @@ import {
   type NetworkProxySlice,
 } from "./slices/networkProxy";
 import { createVoicePolishSlice, type VoicePolishSlice } from "./slices/voicePolish";
-import { normalizeVoicePolishProvider, resolveVoicePolishModel } from "@/lib/voicePolish";
+import { normalizeVoicePolishProvider, normalizeVoicePolishStyle, resolveVoicePolishModel } from "@/lib/voicePolish";
 import {
   createTerminalCompletionNotificationSlice,
   normalizeTerminalCompletionNotificationThreshold,
@@ -306,6 +306,7 @@ export function getPersistentSettingsSnapshot(): PersistentSettings {
     voicePolishApiKey: state.voicePolishApiKey,
     voicePolishAuthMode: state.voicePolishAuthMode,
     voicePolishRegion: state.voicePolishRegion,
+    voicePolishStyle: state.voicePolishStyle,
     voiceShortcut: state.voiceShortcut,
     voiceInputTarget: state.voiceInputTarget,
     voiceTriggerVisible: state.voiceTriggerVisible,
@@ -372,6 +373,7 @@ export function applyPersistentSettingsToStore(settings: PersistentSettings) {
     voicePolishApiKey: settings.voicePolishApiKey ?? "",
     voicePolishAuthMode: settings.voicePolishAuthMode === "token-plan" ? "token-plan" : "api",
     voicePolishRegion: normalizeDashScopeRegion(settings.voicePolishRegion),
+    voicePolishStyle: normalizeVoicePolishStyle(settings.voicePolishStyle),
     voicePolishModel: resolveVoicePolishModel(normalizeVoicePolishProvider(settings.voicePolishProvider), settings.voicePolishModel ?? ""),
     voiceShortcut: settings.voiceShortcut ?? DEFAULT_VOICE_SHORTCUT,
     voiceInputTarget: normalizeVoiceInputTarget(settings.voiceInputTarget),
@@ -2727,7 +2729,7 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
 function createPersistOptions(storage?: StateStorage) {
   return {
     name: "termflow-settings",
-    version: 3,
+    version: 5,
     storage: createJSONStorage(() => storage ?? getDefaultStateStorage()),
     migrate: (persistedState: unknown) =>
       rehydrateMigrationState(persistedState as Partial<AppState> | undefined),
@@ -2791,6 +2793,7 @@ function createPersistOptions(storage?: StateStorage) {
         voicePolishApiKey: state.voicePolishApiKey,
         voicePolishAuthMode: state.voicePolishAuthMode,
         voicePolishRegion: state.voicePolishRegion,
+        voicePolishStyle: state.voicePolishStyle,
       };
     },
     onRehydrateStorage: () => (state?: AppState) => {
@@ -2853,6 +2856,8 @@ function rehydrateMigrationState(persistedState: Partial<AppState> | undefined) 
     );
     migratedState.asrModel = normalizeAsrModel(migratedState.asrModel);
     migratedState.asrRegion = normalizeDashScopeRegion(migratedState.asrRegion);
+    migratedState.voicePolishStyle = normalizeVoicePolishStyle(migratedState.voicePolishStyle);
+    delete (migratedState as Record<string, unknown>).voicePolishCustomPrompt;
     migratedState.voiceInputTarget = normalizeVoiceInputTarget(
       migratedState.voiceInputTarget
     );

@@ -135,7 +135,6 @@ export function AgentsPage() {
     <div className="mx-auto max-w-5xl">
       <SettingsPageHeader
         title={t("settings.agents.title")}
-        description={t("settings.agents.subtitleWithQuota")}
         actions={<Button icon={<ReloadOutlined />} loading={loading || quotaLoading || versionLoading} onClick={() => void refresh(true)}>{t("settings.agents.refresh")}</Button>}
       />
 
@@ -383,7 +382,7 @@ function AgentDetailsDrawer({ agent, open, onClose, quotas, quotaLoading, refres
             <div className="mb-2 flex items-center justify-between gap-2"><span className="text-xs font-medium text-[var(--cs-text-tertiary)]">{shell}</span><Button size="small" type="text" icon={<CopyOutlined />} onClick={() => onCopyInstall(command, shell)}>{t("common.copy")}</Button></div>
             <code className="block break-all text-xs leading-5 text-[var(--cs-text-secondary)]">{command}</code>
           </div>)}
-          <p className="m-0 text-xs leading-5 text-[var(--cs-text-tertiary)]">{t("settings.agents.details.commandHint")}</p>
+
         </AgentDetailSection>
       </div> : null}
     </Drawer>

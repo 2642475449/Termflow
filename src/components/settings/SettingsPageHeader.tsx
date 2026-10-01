@@ -1,13 +1,11 @@
 interface SettingsPageHeaderProps {
   title: React.ReactNode;
-  description?: React.ReactNode;
   actions?: React.ReactNode;
   children?: React.ReactNode;
 }
 
 export function SettingsPageHeader({
   title,
-  description,
   actions,
   children,
 }: SettingsPageHeaderProps) {
@@ -28,14 +26,6 @@ export function SettingsPageHeader({
           >
             {title}
           </div>
-          {description ? (
-            <div
-              className="mt-2 max-w-3xl text-sm leading-6"
-              style={{ color: "var(--cs-text-tertiary)" }}
-            >
-              {description}
-            </div>
-          ) : null}
         </div>
         {actions ? (
           <div className="flex shrink-0 flex-wrap items-start gap-2">

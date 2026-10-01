@@ -77,20 +77,20 @@ function NotificationSection({ title, children }: { title: string; children: Rea
 
 function NotificationRow({
   label,
-  desc,
+  status,
   children,
 }: {
   label: string;
-  desc?: string;
+  status?: string;
   children: ReactNode;
 }) {
   return (
     <div className="flex flex-col items-stretch gap-3 px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
       <div className="min-w-0 flex-1 xl:mr-4">
         <div className="text-sm" style={{ color: "var(--cs-text-primary)" }}>{label}</div>
-        {desc && (
+        {status && (
           <div className="mt-0.5 text-[11px]" style={{ color: "var(--cs-text-tertiary)" }}>
-            {desc}
+            {status}
           </div>
         )}
       </div>
@@ -309,13 +309,11 @@ export function NotificationsPage() {
       <NotificationSection title={t("settings.notifications.channels")}>
         <NotificationRow
           label={t("settings.general.systemNotification")}
-          desc={t("settings.general.systemNotificationDesc")}
         >
           <Switch checked={notificationEnabled} onChange={setNotificationEnabled} />
         </NotificationRow>
         <NotificationRow
           label={t("settings.notifications.remote.channelName")}
-          desc={t("settings.notifications.remote.channelDesc")}
         >
           <div className="flex items-center gap-3">
             {credentialLoading ? (
@@ -341,7 +339,6 @@ export function NotificationsPage() {
       <NotificationSection title={t("settings.notifications.triggerPolicy")}>
         <NotificationRow
           label={t("settings.notifications.systemThreshold")}
-          desc={t("settings.general.completionThresholdDesc")}
         >
           <Select
             size="small"
@@ -355,7 +352,6 @@ export function NotificationsPage() {
           <>
             <NotificationRow
               label={t("settings.notifications.remoteThreshold")}
-              desc={t("settings.notifications.remoteThresholdDesc")}
             >
               <Select
                 size="small"
@@ -365,8 +361,8 @@ export function NotificationsPage() {
                 style={{ width: 140 }}
               />
             </NotificationRow>
-            {remoteEventEntries.map(({ event, label, desc }) => (
-              <NotificationRow key={event} label={label} desc={desc}>
+            {remoteEventEntries.map(({ event, label }) => (
+              <NotificationRow key={event} label={label}>
                 <Switch
                   checked={selectedChannel.events[event]}
                   onChange={(enabled) => setRemoteEvent(selectedProvider, event, enabled)}
@@ -380,7 +376,6 @@ export function NotificationsPage() {
       <NotificationSection title={t("settings.notifications.terminalCompletion.section")}>
         <NotificationRow
           label={t("settings.notifications.terminalCompletion.enabled")}
-          desc={t("settings.notifications.terminalCompletion.enabledDesc")}
         >
           <Switch
             checked={terminalCompletionNotificationsEnabled}
@@ -390,7 +385,6 @@ export function NotificationsPage() {
         {terminalCompletionNotificationsEnabled && (
           <NotificationRow
             label={t("settings.notifications.terminalCompletion.threshold")}
-            desc={t("settings.notifications.terminalCompletion.thresholdDesc")}
           >
             <Select
               size="small"
@@ -403,7 +397,7 @@ export function NotificationsPage() {
         )}
         <NotificationRow
           label={t("settings.notifications.terminalCompletion.integrationStatus")}
-          desc={t(terminalCompletionStatusDescriptionKey)}
+          status={t(terminalCompletionStatusDescriptionKey)}
         >
           <Tag color={terminalCompletionStatusColor}>{t(terminalCompletionStatusKey)}</Tag>
         </NotificationRow>
@@ -518,7 +512,7 @@ export function NotificationsPage() {
       )}
 
       <NotificationSection title={t("settings.general.sound")}>
-        <NotificationRow label={t("settings.general.sound")} desc={t("settings.general.soundDesc")}>
+        <NotificationRow label={t("settings.general.sound")}>
           <Switch checked={soundEnabled} onChange={setSoundEnabled} />
         </NotificationRow>
         {soundEnabled &&

@@ -89,7 +89,6 @@ export function DataPrivacyPage() {
     <div className="mx-auto max-w-5xl">
       <SettingsPageHeader
         title={t("settings.usageData.title")}
-        description={t("settings.usageData.subtitle")}
         actions={
           <Button icon={<ReloadOutlined />} loading={loading} onClick={() => void loadStatus()}>
             {t("settings.usageData.refresh")}
@@ -109,9 +108,7 @@ export function DataPrivacyPage() {
             <div className="font-semibold" style={{ color: "var(--cs-text-primary)" }}>
               {t("settings.usageData.storageTitle")}
             </div>
-            <div className="mt-1 text-xs" style={{ color: "var(--cs-text-tertiary)" }}>
-              {t("settings.usageData.storageDescription")}
-            </div>
+
           </div>
         </div>
 
@@ -206,10 +203,7 @@ export function DataPrivacyPage() {
             </Button>
           </div>
         </div>
-        <div className="mt-4 grid gap-2 text-xs leading-5" style={{ color: "var(--cs-text-tertiary)" }}>
-          <div>{t("settings.usageData.rebuildDescription")}</div>
-          <div>{t("settings.usageData.clearDescription")}</div>
-        </div>
+
       </section>
     </div>
   );
