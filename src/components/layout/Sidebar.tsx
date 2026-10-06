@@ -411,6 +411,7 @@ function Sidebar({ collapsed, section }: SidebarProps) {
   return (
     <div
       className="app-shell-chrome app-sidebar-frame"
+      data-collapsed={collapsed ? "true" : "false"}
       style={{
         display: "flex",
         flexDirection: "row",
@@ -420,7 +421,6 @@ function Sidebar({ collapsed, section }: SidebarProps) {
         maxWidth: shellWidth,
         overflow: "hidden",
         opacity: collapsed ? 0 : 1,
-        transition: "opacity 120ms ease",
       }}
     >
       <Sider
@@ -463,7 +463,10 @@ function Sidebar({ collapsed, section }: SidebarProps) {
             </div>
           )}
 
-          <div className={section === "project" ? "flex-1 min-h-0 overflow-hidden p-3" : "flex-1 min-h-0 overflow-y-auto app-project-tree-scroll p-2.5"}>
+          <div
+            key={section}
+            className={`app-sidebar-section-content ${section === "project" ? "flex-1 min-h-0 overflow-hidden p-3" : "flex-1 min-h-0 overflow-y-auto app-project-tree-scroll p-2.5"}`}
+          >
             {section === "project" ? (
               <SidebarProjectPanel
                 currentProject={currentProject}

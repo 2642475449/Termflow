@@ -2105,6 +2105,7 @@
     },
     "voice": {
       "idleTooltip": "點擊或按住快速鍵開始語音輸入",
+      "startupTimeout": "語音啟動逾時，請檢查麥克風和網路後重試",
       "requestingPermission": "請求麥克風權限...",
       "recordingTooltip": "正在錄音，放開快速鍵或點擊結束",
       "transcribing": "轉錄並整理中...",

@@ -234,11 +234,8 @@ function WorkspacePane({ paneId }: { paneId: string }) {
               return (
                 <div
                   key={tabId}
-                  style={{
-                    display: tabId === pane.activeTabId ? "block" : "none",
-                    position: "absolute",
-                    inset: 0,
-                  }}
+                  className="app-workspace-tab-content"
+                  data-active={tabId === pane.activeTabId ? "true" : "false"}
                 >
                   <Suspense fallback={<WorkspaceContentFallback />}>
                     {isSettings ? (
@@ -971,6 +968,18 @@ function AppLayout() {
   const [workerVoiceState, setWorkerVoiceState] = useState<WorkerVoiceStatePayload>(
     INITIAL_WORKER_VOICE_STATE,
   );
+
+  useEffect(() => {
+    if (workerVoiceState.phase === "idle") return;
+    const handleCancelVoice = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      void emit("voice-worker-control", { action: "cancel" });
+    };
+    window.addEventListener("keydown", handleCancelVoice, true);
+    return () => window.removeEventListener("keydown", handleCancelVoice, true);
+  }, [workerVoiceState.phase]);
 
   const handleVoiceTrigger = useCallback(() => {
     void emit("voice-worker-control", { action: "toggle" });

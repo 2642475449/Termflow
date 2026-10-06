@@ -1,8 +1,29 @@
 @import "./themes.css";
+@import "./shell.css";
+@import "./motion.css";
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* 仅开发入口创建此元素，启动失败时展示实际调用栈供排查。 */
+.app-dev-runtime-error {
+  position: fixed;
+  inset: 16px;
+  z-index: 10000;
+  margin: 0;
+  padding: 20px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--cs-danger);
+  border-radius: var(--cs-radius-overlay);
+  background: var(--cs-bg-card-solid);
+  color: var(--cs-text-primary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+}
 
 @font-face {
   font-family: "Geist Mono";
@@ -30,7 +51,7 @@
     "Microsoft YaHei UI",
     "Noto Sans CJK SC",
     sans-serif;
-  --cs-marker-thickness: 1px;
+  --cs-marker-thickness: 2px;
   --cs-marker-color: color-mix(in srgb, var(--cs-primary) 56%, var(--cs-border-sidebar) 44%);
   --cs-marker-width-tab: 16px;
   --cs-marker-width-sidebar: 12px;
@@ -38,7 +59,7 @@
   --cs-marker-offset-tab: 12px;
   --cs-marker-offset-sidebar: 8px;
   --cs-marker-offset-rail: 10px;
-  --cs-panel-radius: 12px;
+  --cs-panel-radius: 10px;
 }
 
 [data-theme="light-glass"] body {
@@ -61,7 +82,7 @@
   background-image: none;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  box-shadow: 0 8px 20px rgba(31, 42, 68, 0.04);
+  box-shadow: none;
 }
 
 [data-theme="light-glass"] .app-glass-card,
@@ -73,7 +94,7 @@
 [data-theme="light-glass"] .app-terminal-surface {
   overflow: hidden;
   border-radius: 0;
-  box-shadow: 0 10px 26px rgba(31, 42, 68, 0.05);
+  box-shadow: none;
   background: var(--cs-bg-card);
 }
 
@@ -284,13 +305,8 @@ html, body, #root {
   border: 1px solid color-mix(in srgb, var(--cs-border-card, var(--cs-border-sidebar)) 92%, transparent);
   border-right: 0;
   border-radius: var(--cs-panel-radius) 0 0 var(--cs-panel-radius);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--cs-bg-card, var(--cs-bg-sidebar)) 96%, white 4%) 0%,
-      color-mix(in srgb, var(--cs-bg-card, var(--cs-bg-sidebar)) 90%, transparent) 100%
-    );
-  box-shadow: 0 14px 32px color-mix(in srgb, var(--cs-bg-app) 10%, transparent);
+  background: var(--cs-bg-sidebar);
+  box-shadow: none;
 }
 
 .app-marker-host {
@@ -298,21 +314,24 @@ html, body, #root {
 }
 
 .app-tab-chrome {
-  height: 34px;
+  height: 36px;
   min-width: 100px;
-  margin-top: 2px;
-  border-left: 1px solid color-mix(in srgb, var(--cs-border-card, var(--cs-border-sidebar)) 92%, transparent);
-  border-right: 1px solid color-mix(in srgb, var(--cs-border-card, var(--cs-border-sidebar)) 92%, transparent);
-  border-bottom: 1px solid transparent;
+  margin-top: 0;
+  border: 0;
+  border-right: 1px solid var(--cs-border-card);
   border-radius: 0;
-  background: color-mix(in srgb, var(--cs-bg-card) 78%, transparent);
-  color: var(--cs-text-tertiary);
+  background: var(--cs-bg-header);
+  color: var(--cs-text-secondary);
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.app-tab-chrome:hover {
+  background: var(--cs-bg-hover);
+  color: var(--cs-text-primary);
 }
 
 .app-tab-chrome[data-active="true"] {
-  margin-top: 0;
-  border-bottom-color: color-mix(in srgb, var(--cs-bg-card-solid, var(--cs-bg-card)) 92%, transparent);
-  background: color-mix(in srgb, var(--cs-bg-card-solid, var(--cs-bg-card)) 98%, white 2%);
+  background: var(--cs-bg-card-solid);
   color: var(--cs-text-primary);
 }
 
@@ -365,7 +384,6 @@ html, body, #root {
     color 150ms ease,
     background-color 150ms ease,
     border-color 150ms ease,
-    transform 150ms ease,
     box-shadow 150ms ease;
 }
 
@@ -431,17 +449,15 @@ html, body, #root {
 .app-rail-button:focus-visible,
 .app-sidebar-switcher:focus-visible,
 .app-sidebar-list-item:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--cs-primary) 28%, transparent);
+  outline: 2px solid var(--cs-focus-ring);
+  outline-offset: -2px;
 }
 
 .app-rail-button[data-active="true"] {
   color: var(--cs-primary);
-  background: color-mix(in srgb, var(--cs-primary-light) 76%, transparent);
-  border-color: color-mix(in srgb, var(--cs-primary) 14%, transparent);
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, white 16%, transparent),
-    0 6px 14px color-mix(in srgb, var(--cs-primary) 8%, transparent);
+  background: var(--cs-bg-active);
+  border-color: color-mix(in srgb, var(--cs-primary) 22%, var(--cs-border) 78%);
+  box-shadow: none;
 }
 
 .app-sidebar-switcher,
@@ -451,8 +467,7 @@ html, body, #root {
     background-color 150ms ease,
     border-color 150ms ease,
     color 150ms ease,
-    box-shadow 150ms ease,
-    transform 150ms ease;
+    box-shadow 150ms ease;
 }
 
 .app-sidebar-switcher {
@@ -532,13 +547,8 @@ html, body, #root {
   overflow: hidden;
   border-radius: var(--cs-panel-radius);
   border: 1px solid color-mix(in srgb, var(--cs-border-card, var(--cs-border)) 92%, transparent);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--cs-bg-card, var(--cs-bg-content)) 96%, white 4%) 0%,
-      color-mix(in srgb, var(--cs-bg-card, var(--cs-bg-content)) 90%, transparent) 100%
-    );
-  box-shadow: 0 16px 36px color-mix(in srgb, var(--cs-bg-app) 12%, transparent);
+  background: var(--cs-bg-card-solid);
+  box-shadow: none;
 }
 
 .app-main-content[data-sidebar-attached="true"] .app-main-stage {
@@ -549,7 +559,7 @@ html, body, #root {
 .app-main-stage-body {
   position: relative;
   min-height: 0;
-  background: color-mix(in srgb, var(--cs-bg-card-solid, var(--cs-bg-card)) 92%, transparent);
+  background: var(--cs-bg-card-solid);
 }
 
 .app-auxiliary-divider {
@@ -1864,6 +1874,8 @@ html, body, #root {
 }
 
 .app-tabbar-title {
+  font-size: 13px;
+  line-height: 20px;
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -1895,11 +1907,12 @@ html, body, #root {
   justify-content: center;
   width: 30px;
   height: 30px;
-  border-radius: 8px;
+  border-radius: var(--cs-radius-control);
   border: 1px solid color-mix(in srgb, var(--cs-primary) 22%, var(--cs-border-sidebar) 78%);
-  background: color-mix(in srgb, var(--cs-primary) 12%, transparent);
-  color: color-mix(in srgb, #ffffff 86%, var(--cs-primary) 14%);
+  background: var(--cs-bg-active);
+  color: var(--cs-primary);
   transition:
+    transform var(--cs-motion-fast) var(--cs-motion-ease),
     background-color 150ms ease,
     border-color 150ms ease,
     color 150ms ease,
@@ -1926,7 +1939,7 @@ html, body, #root {
   background: color-mix(in srgb, var(--cs-bg-card) 88%, var(--cs-primary) 12%);
   border-color: color-mix(in srgb, var(--cs-primary) 26%, var(--cs-border-sidebar) 74%);
   color: var(--cs-primary);
-  box-shadow: 0 1px 0 color-mix(in srgb, white 70%, transparent);
+  box-shadow: none;
 }
 
 [data-theme="light-glass"] .app-tabbar-new-button:hover,

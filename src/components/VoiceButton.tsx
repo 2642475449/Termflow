@@ -477,9 +477,7 @@ export const VoiceTrigger: React.FC<{
         defaultValue: "正在录音，松开快捷键或点击结束",
       }), shortcutLabel)
     : isBusy
-      ? withShortcutLabel(t(PHASE_TOOLTIP_KEY[phase], {
-          defaultValue: STATUS_TEXT_DEFAULTS[phase],
-        }), shortcutLabel)
+      ? t("common.cancel")
       : withShortcutLabel(t("settings.voice.idleTooltip", { defaultValue: "点击或按住快捷键开始语音输入" }), shortcutLabel);
 
   const icon = isBusy ? (
@@ -514,7 +512,6 @@ export const VoiceTrigger: React.FC<{
         type="button"
         aria-label={tooltip}
         onClick={onClick}
-        disabled={isBusy}
         style={{
           position: "absolute",
           right: 14,
@@ -538,7 +535,7 @@ export const VoiceTrigger: React.FC<{
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          cursor: isBusy ? "wait" : "pointer",
+          cursor: "pointer",
           fontSize: 16,
           opacity: isBusy ? 0.8 : 1,
         }}

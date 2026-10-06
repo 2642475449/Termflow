@@ -1,4 +1,5 @@
 import { Button, Checkbox, Dropdown, Empty, Input, Modal, Spin, Tooltip, message } from "antd";
+import { WorkbenchEmptyArtwork } from "@/components/ui/WorkbenchGlyph";
 import type { InputRef, MenuProps } from "antd";
 import {
   CompressOutlined,
@@ -1912,7 +1913,7 @@ function SidebarProjectPanel({
   );
 
   if (!currentProject) {
-    return <Empty description={noProjectText} className="mt-16" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
+    return <Empty description={noProjectText} className="mt-16" image={<WorkbenchEmptyArtwork kind="folder" />} />;
   }
 
   return (

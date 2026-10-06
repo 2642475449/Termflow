@@ -24,6 +24,7 @@ import { getKeysForAction } from "@/constants/shortcuts";
 import { closeTabRuntime, confirmCloseTab } from "@/lib/tabClose";
 import { AgentIcon } from "@/components/AgentIcon";
 import { AgentActivityIcon } from "@/components/AgentActivityIcon";
+import { TabSelectionIndicator } from "@/components/ui/TabSelectionIndicator";
 import { SCHEDULED_TASKS_TAB_ID } from "@/lib/scheduledTasks";
 import {
   getAgentIdsWithCapability,
@@ -558,6 +559,7 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
       <div
         ref={tabListRef}
         className="app-tabbar-tabs"
+        data-reordering={draggingTabId ? "true" : "false"}
         onWheel={(event) => {
           const list = event.currentTarget;
           if (list.scrollWidth <= list.clientWidth || event.deltaX !== 0) return;
@@ -606,7 +608,7 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
               )}
               <div
                 data-active={isActive ? "true" : "false"}
-                className={`tab-item app-tab-chrome app-marker-host app-marker-bottom app-glass-tab ${isActive ? "app-glass-tab-active" : ""} flex items-center gap-1.5 px-3 cursor-pointer`}
+                className={`tab-item app-tab-chrome app-marker-host app-glass-tab ${isActive ? "app-glass-tab-active" : ""} flex items-center gap-1.5 px-3 cursor-pointer`}
                 style={{
                   opacity: isDragging ? 0.2 : 1,
                   transform: isDragging ? "scale(0.98)" : "none",
@@ -709,6 +711,7 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
           </Dropdown>
         );
       })}
+      <TabSelectionIndicator listRef={tabListRef} tabRefs={tabRefs} activeTabId={activeTabId} tabIds={tabIds} />
       </div>
       {currentProject && (
         <div

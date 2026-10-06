@@ -101,7 +101,7 @@ function TitleBar() {
 
   return (
     <div
-      className="app-shell-chrome app-glass-toolbar h-9 flex items-center select-none"
+      className="app-shell-chrome app-glass-toolbar app-titlebar flex items-center select-none"
     >
       <div className="flex-1 flex items-center h-full pl-2">
         <div className="flex shrink-0 items-center gap-2 px-2">
@@ -112,31 +112,20 @@ function TitleBar() {
             draggable={false}
           />
           <span
-            className="text-[12px] font-semibold tracking-[0.01em]"
-            style={{ color: "var(--cs-text-primary)" }}
+            className="app-titlebar-brand text-[12px] font-semibold tracking-[0.01em]"
           >
             Termflow
           </span>
         </div>
         <div
-          className="mx-3 self-center"
-          style={{
-            width: 1,
-            height: 16,
-            background: "color-mix(in srgb, var(--cs-border) 54%, transparent)",
-          }}
+          className="app-titlebar-separator mx-3 self-center"
           aria-hidden="true"
         />
         <div className="shrink-0">
           <TitleBarProjectSwitcher />
         </div>
         <div
-          className="mx-3 self-center"
-          style={{
-            width: 1,
-            height: 16,
-            background: "color-mix(in srgb, var(--cs-border) 54%, transparent)",
-          }}
+          className="app-titlebar-separator mx-3 self-center"
           aria-hidden="true"
         />
         <div className="shrink-0">
@@ -170,19 +159,13 @@ function TitleBar() {
           </>
         )}
         <button
-          className="h-full px-3 flex items-center justify-center transition-colors"
-          style={{ color: "var(--cs-text-secondary)" }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--cs-bg-hover)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+          className="app-window-control"
           onClick={handleMinimize}
         >
           <MinusOutlined className="text-xs" />
         </button>
         <button
-          className="h-full px-3 flex items-center justify-center transition-colors"
-          style={{ color: "var(--cs-text-secondary)" }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--cs-bg-hover)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+          className="app-window-control"
           onClick={handleMaximize}
         >
           {isMaximized ? (
@@ -192,12 +175,10 @@ function TitleBar() {
           )}
         </button>
         <button
-          className="h-full px-3 flex items-center justify-center transition-colors"
-          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--cs-danger)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+          className="app-window-control app-window-control-close"
           onClick={handleClose}
         >
-          <CloseOutlined className="text-xs" style={{ color: "var(--cs-text-secondary)" }} />
+          <CloseOutlined className="text-xs" />
         </button>
       </div>
     </div>

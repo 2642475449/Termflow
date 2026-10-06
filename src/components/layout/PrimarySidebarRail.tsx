@@ -1,9 +1,10 @@
-import { CodeOutlined, FolderOutlined, SettingOutlined, BranchesOutlined } from "@ant-design/icons";
+import { SettingOutlined } from "@ant-design/icons";
 import { message, Popover, Tooltip } from "antd";
 import { useCallback, useState } from "react";
 import { getQuickSettingsSubmenuOnPopoverChange, toggleQuickSettingsSubmenu, type QuickSettingsSubmenu } from "@/lib/quickSettingsMenu";
 import { useTranslation } from "react-i18next";
 import { ShortcutHint } from "@/components/ui/ShortcutHint";
+import { WorkbenchGlyph } from "@/components/ui/WorkbenchGlyph";
 import { getKeysForAction } from "@/constants/shortcuts";
 import { useAppStore, type Language, type SidebarSection, type ThemeCategory } from "@/store";
 import { setClaudeTheme } from "@/lib/api";
@@ -12,6 +13,7 @@ import { useApplicationUpdateStore } from "@/store/slices/applicationUpdate";
 import i18n, { toI18nLanguage } from "@/i18n";
 
 interface RailButtonProps {
+  label?: string;
   active?: boolean;
   title: React.ReactNode;
   tooltipOpen?: boolean;
@@ -19,12 +21,13 @@ interface RailButtonProps {
   children: React.ReactNode;
 }
 
-function RailButton({ active = false, title, tooltipOpen, onClick, children }: RailButtonProps) {
+function RailButton({ active = false, title, label, tooltipOpen, onClick, children }: RailButtonProps) {
   return (
     <Tooltip title={title} placement="right" mouseEnterDelay={0.4} open={tooltipOpen}>
       <button
         type="button"
         aria-pressed={active}
+        aria-label={label ?? (typeof title === "string" ? title : undefined)}
         data-active={active ? "true" : "false"}
         className="app-rail-button app-marker-host app-marker-rail h-10 w-10 flex items-center justify-center rounded-md"
         onClick={onClick}
@@ -390,22 +393,23 @@ function PrimarySidebarRail() {
           title={t("sidebar.sessionsSection")}
           onClick={() => handleActivate("sessions")}
         >
-          <CodeOutlined className="text-[18px]" />
+          <WorkbenchGlyph kind="terminal" />
         </RailButton>
         <RailButton
           active={activeSidebarSection === "project"}
           title={t("common.file")}
           onClick={() => handleActivate("project")}
         >
-          <FolderOutlined className="text-[18px]" />
+          <WorkbenchGlyph kind="folder" />
         </RailButton>
         <div className="relative">
           <RailButton
             active={activeSidebarSection === "git"}
             title={gitTooltip}
+            label={t("sidebar.gitSection", "Git")}
             onClick={() => handleActivate("git")}
           >
-            <BranchesOutlined className="text-[18px]" />
+            <WorkbenchGlyph kind="git" />
           </RailButton>
           {gitChangeCount > 0 && (
             <span
@@ -447,7 +451,7 @@ function PrimarySidebarRail() {
               tooltipOpen={quickSettingsOpen ? false : undefined}
               onClick={() => {}}
             >
-              <SettingOutlined className="text-[18px]" />
+              <SettingOutlined className="app-nav-settings-gear text-[18px]" />
             </RailButton>
           </div>
         </Popover>

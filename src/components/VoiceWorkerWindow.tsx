@@ -207,14 +207,18 @@ function VoiceWorkerWindow() {
         return;
       }
       if (action === "release") {
-        if (currentVoice.phase === "recording") {
-          void currentVoice.stop();
-        }
+        // stop 内部读取实时 phaseRef，避免 React 尚未重渲染时漏掉释放。
+        void currentVoice.stop();
         return;
       }
       if (action === "toggle") {
         if (currentVoice.phase === "recording") {
           void currentVoice.stop();
+        } else if (
+          currentVoice.phase === "requesting_permission" ||
+          currentVoice.phase === "transcribing"
+        ) {
+          currentVoice.cancel();
         } else if (
           currentVoice.phase === "idle" ||
           currentVoice.phase === "error" ||
@@ -320,25 +324,36 @@ function VoiceWorkerWindow() {
       return;
     }
 
-    ensureVoiceOverlayWindow()
-      .then(() => emit("voice-overlay-state", overlayStateRef.current))
-      .catch((error) => {
+    let disposed = false;
+    const showOverlay = async () => {
+      try {
+        await ensureVoiceOverlayWindow();
+        // 显示窗口也可能迟到；取消后不能由旧请求重新显示浮层。
+        const latestState = overlayStateRef.current;
+        if (latestState.phase === "idle" || latestState.phase === "done") {
+          await hideVoiceOverlayWindow();
+          return;
+        }
+        if (!disposed) await emit("voice-overlay-state", latestState);
+      } catch (error) {
+        if (disposed) return;
         console.error("voice worker failed to ensure overlay window:", error);
         void emit("voice-worker-error", {
           code: "overlay_show_failed",
-          message:
-            error instanceof Error && error.message
-              ? error.message
-              : String(error || "Failed to show the voice overlay."),
+          message: error instanceof Error ? error.message : String(error),
         });
-      });
+      }
+    };
+    void showOverlay();
 
-    // 显示请求与状态事件可能在平台层被丢弃（隐藏 WebView 恢复延迟、show 丢失等），
-    // 而 phase 在录音期间不再变化，缺少重试点。周期性幂等地重新声明可见性自愈。
+    // 周期性重新声明窗口可见性，恢复平台层丢失的 show 请求。
     const reassertTimer = setInterval(() => {
-      ensureVoiceOverlayWindow().catch(() => undefined);
+      void showOverlay();
     }, VOICE_OVERLAY_REASSERT_INTERVAL_MS);
-    return () => clearInterval(reassertTimer);
+    return () => {
+      disposed = true;
+      clearInterval(reassertTimer);
+    };
   }, [workerState.phase]);
 
   return null;

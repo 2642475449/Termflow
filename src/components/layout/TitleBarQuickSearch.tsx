@@ -318,19 +318,8 @@ function TitleBarQuickSearch() {
     <>
       <button
         type="button"
-        className="flex h-7 min-w-[148px] items-center gap-2 rounded-[6px] border px-2.5 transition-colors"
-        style={{
-          background: open
-            ? "color-mix(in srgb, var(--cs-bg-card, #ffffff) 92%, var(--cs-bg-hover) 8%)"
-            : "color-mix(in srgb, var(--cs-bg-card, #ffffff) 96%, var(--cs-bg-header) 4%)",
-          borderColor: open
-            ? "color-mix(in srgb, var(--cs-primary) 18%, var(--cs-border-card, var(--cs-border)) 82%)"
-            : "color-mix(in srgb, var(--cs-border-card, var(--cs-border)) 92%, transparent)",
-          boxShadow: open
-            ? "0 0 0 1px color-mix(in srgb, var(--cs-primary) 10%, transparent)"
-            : "none",
-          color: "var(--cs-text-secondary)",
-        }}
+        className="app-titlebar-search"
+        data-active={open ? "true" : "false"}
         onClick={openSearch}
         title={t("titleBar.quickSearchTooltip")}
       >
@@ -350,7 +339,7 @@ function TitleBarQuickSearch() {
             padding: 8,
             background: "var(--cs-bg-card)",
             border: "1px solid var(--cs-border-card, var(--cs-border))",
-            boxShadow: "0 18px 40px rgba(15, 23, 42, 0.22)",
+            boxShadow: "var(--cs-shadow-floating)",
           },
         }}
       >

@@ -8,6 +8,7 @@ import {
   SafetyCertificateOutlined,
 } from "@ant-design/icons";
 import { Dropdown, Empty, Tooltip } from "antd";
+import { WorkbenchEmptyArtwork } from "@/components/ui/WorkbenchGlyph";
 import type { MenuProps } from "antd";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
@@ -76,7 +77,7 @@ function SidebarSessionsPanel({
       <Empty
         description={noProjectText}
         className="mt-16"
-        image={Empty.PRESENTED_IMAGE_SIMPLE}
+        image={<WorkbenchEmptyArtwork kind="terminal" />}
       />
     );
   }
@@ -86,7 +87,7 @@ function SidebarSessionsPanel({
       <Empty
         description={noSessionsText}
         className="mt-16"
-        image={Empty.PRESENTED_IMAGE_SIMPLE}
+        image={<WorkbenchEmptyArtwork kind="terminal" />}
       />
     );
   }
@@ -130,16 +131,7 @@ function SidebarSessionsPanel({
       >
         <div
           data-active={isActive ? "true" : "false"}
-          className="app-sidebar-list-item app-marker-host app-marker-left group flex items-center gap-2 px-2.5 py-1 rounded-l-none rounded-r-[8px] cursor-pointer"
-          style={{
-            background: isActive
-              ? "color-mix(in srgb, var(--cs-primary) 9%, transparent)"
-              : "transparent",
-            border: isActive
-              ? "1px solid color-mix(in srgb, var(--cs-primary) 22%, transparent)"
-              : "1px solid transparent",
-            boxShadow: isActive ? "inset 2px 0 0 var(--cs-primary)" : "none",
-          }}
+          className="app-sidebar-list-item app-session-list-item app-marker-host app-marker-left group flex items-center gap-2 cursor-pointer"
           onClick={() => onOpenSession(session.id)}
         >
           <span className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center">
@@ -165,7 +157,7 @@ function SidebarSessionsPanel({
                 .locale(locale.startsWith("zh") ? "zh-cn" : "en")
                 .fromNow();
               return (
-                <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px]">
+                <div className="app-session-meta mt-0.5 flex min-w-0 items-center gap-1.5">
                   {(session.checkpointPendingTurns ?? 0) > 0 && (
                     <>
                       <Tooltip
@@ -233,7 +225,7 @@ function SidebarSessionsPanel({
             })()}
           </div>
 
-          <div className="ml-auto flex items-center opacity-0 transition-opacity group-hover:opacity-100">
+          <div className="app-session-actions ml-auto flex items-center">
             <Tooltip title={session.pinned ? unpinSessionText : pinSessionText} mouseEnterDelay={0.5}>
               <button
                 type="button"

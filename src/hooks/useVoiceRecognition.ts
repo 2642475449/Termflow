@@ -28,6 +28,7 @@ import {
   type DashScopeRegion,
 } from "@/lib/dashscopeAsr";
 
+const STARTUP_TIMEOUT_MS = 20_000;
 const TRANSCRIBE_TIMEOUT_MS = 30_000;
 const LEVEL_POLL_INTERVAL_MS = 200;
 const MAX_AUTO_DURATION_MS = 60_000;
@@ -444,6 +445,7 @@ export function useVoiceRecognition(
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const mimeTypeRef = useRef<string>("");
+  const startupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const levelTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -493,6 +495,10 @@ export function useVoiceRecognition(
   }, [onError]);
 
   const stopTimers = useCallback(() => {
+    if (startupTimerRef.current) {
+      clearTimeout(startupTimerRef.current);
+      startupTimerRef.current = null;
+    }
     if (autoStopTimerRef.current) {
       clearTimeout(autoStopTimerRef.current);
       autoStopTimerRef.current = null;
@@ -560,6 +566,7 @@ export function useVoiceRecognition(
   );
 
   const deliverFinalText = useCallback(async (source: string, generation: number) => {
+    if (!mountedRef.current || recordingGenerationRef.current !== generation) return;
     let result = source;
     try {
       const config = polishConfigRef.current;
@@ -672,6 +679,7 @@ export function useVoiceRecognition(
 
       try {
         const preparedAudio = await prepareAudioForAsr(blob);
+        if (!mountedRef.current || recordingGenerationRef.current !== generation) return;
         let text = "";
 
         if (transport === "dashscope") {
@@ -707,6 +715,8 @@ export function useVoiceRecognition(
           );
         }
 
+        if (!mountedRef.current || recordingGenerationRef.current !== generation) return;
+
         // 去除 ASR 模型常见的尾部幻觉字符（如多余的斜杠、反斜杠等）
         const sanitized = text.replace(/[/\\]+$/, "").trim();
 
@@ -718,6 +728,7 @@ export function useVoiceRecognition(
         }
         await deliverFinalText(sanitized, generation);
       } catch (err) {
+        if (!mountedRef.current || recordingGenerationRef.current !== generation) return;
         let asrError: AsrError;
         if (err instanceof Error) {
           if (err.name === "AbortError") {
@@ -756,7 +767,8 @@ export function useVoiceRecognition(
       return; // idempotent
     }
 
-    recordingGenerationRef.current += 1;
+    const generation = ++recordingGenerationRef.current;
+    const isCurrent = () => mountedRef.current && recordingGenerationRef.current === generation;
     clearAutoResetTimer();
     setErrorMessage(null);
     chunksRef.current = [];
@@ -764,9 +776,25 @@ export function useVoiceRecognition(
     liveAudioQueueRef.current = Promise.resolve();
     setLiveText("");
     setPhaseRef("requesting_permission");
+    // 权限等待和 IPC 都可能悬挂；超时后作废本次初始化，允许重新开始。
+    startupTimerRef.current = setTimeout(() => {
+      if (!isCurrent()) return;
+      recordingGenerationRef.current += 1;
+      stopTimers();
+      const sessionId = liveSessionIdRef.current;
+      liveSessionIdRef.current = null;
+      if (sessionId) void cancelLiveAsr(sessionId).catch(() => undefined);
+      releaseStream();
+      emitError({ code: "unknown", message: i18n.t("settings.voice.startupTimeout") });
+    }, STARTUP_TIMEOUT_MS);
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // 权限请求无法中断；取消后返回的流必须立即释放。
+      if (!isCurrent()) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       streamRef.current = stream;
       const isLive = isLiveAsrModel(modelRef.current);
       if (isLive) {
@@ -780,6 +808,10 @@ export function useVoiceRecognition(
           modelRef.current,
           regionRef.current,
         );
+        if (!isCurrent()) {
+          void cancelLiveAsr(sessionId).catch(() => undefined);
+          return;
+        }
       }
 
       // Audio analysis for level meter
@@ -822,11 +854,13 @@ export function useVoiceRecognition(
       mediaRecorderRef.current = recorder;
 
       recorder.ondataavailable = (e) => {
+        if (!isCurrent()) return;
         if (e.data && e.data.size > 0) {
           chunksRef.current.push(e.data);
         }
       };
       recorder.onstop = () => {
+        if (!isCurrent()) return;
         const type = recorder.mimeType || mimeTypeRef.current || "audio/webm";
         const blob = new Blob(chunksRef.current, { type });
         chunksRef.current = [];
@@ -840,6 +874,7 @@ export function useVoiceRecognition(
           void liveAudioQueueRef.current
             .then(() => finishLiveAsr(sessionId))
             .catch((error) => {
+              if (!isCurrent()) return;
               liveSessionIdRef.current = null;
               emitError({ code: "network", message: error instanceof Error ? error.message : "结束实时转写失败" });
             });
@@ -852,6 +887,7 @@ export function useVoiceRecognition(
         void transcribe(blob);
       };
       recorder.onerror = (event) => {
+        if (!isCurrent()) return;
         const errEvent = event as unknown as { error?: { name?: string; message?: string } };
         const name = errEvent.error?.name;
         if (name === "NotAllowedError" || name === "SecurityError") {
@@ -865,6 +901,10 @@ export function useVoiceRecognition(
         releaseStream();
       };
 
+      if (startupTimerRef.current) {
+        clearTimeout(startupTimerRef.current);
+        startupTimerRef.current = null;
+      }
       recorder.start(250);
       recordingStartRef.current = Date.now();
       setPhaseRef("recording");
@@ -900,6 +940,8 @@ export function useVoiceRecognition(
         }
       }, maxDurationMs);
     } catch (err) {
+      // 过期初始化不能清理新录音资源或重新显示错误胶囊。
+      if (!isCurrent()) return;
       stopTimers();
       const liveSessionId = liveSessionIdRef.current;
       liveSessionIdRef.current = null;
@@ -918,13 +960,6 @@ export function useVoiceRecognition(
       }
     }
   }, [clearAutoResetTimer, emitError, isSupported, maxDurationMs, queueLiveAudio, releaseStream, setPhaseRef, stopTimers, transcribe]);
-
-  const stop = useCallback(async () => {
-    if (phaseRef.current !== "recording") return;
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-      mediaRecorderRef.current.stop();
-    }
-  }, []);
 
   const cancel = useCallback(() => {
     recordingGenerationRef.current += 1;
@@ -954,9 +989,21 @@ export function useVoiceRecognition(
     setPhaseRef("idle");
   }, [clearAutoResetTimer, releaseStream, setPhaseRef, stopTimers]);
 
+  const stop = useCallback(async () => {
+    if (phaseRef.current === "requesting_permission") {
+      cancel();
+      return;
+    }
+    if (phaseRef.current !== "recording") return;
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      mediaRecorderRef.current.stop();
+    }
+  }, [cancel]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      recordingGenerationRef.current += 1;
       stopTimers();
       clearAutoResetTimer();
       if (mediaRecorderRef.current) {

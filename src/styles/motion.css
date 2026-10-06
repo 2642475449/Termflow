@@ -1,0 +1,189 @@
+/* 动效只作用于外壳和呈现状态，不改变终端实例与内容坐标。 */
+:root {
+  --cs-motion-fast: 120ms;
+  --cs-motion-normal: 160ms;
+  --cs-motion-ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.app-sidebar-frame {
+  transition: opacity var(--cs-motion-fast) var(--cs-motion-ease);
+}
+
+/* 宽度立即更新，避免过渡期间反复调整 PTY 字符网格。 */
+.app-sidebar-frame[data-collapsed="false"] .app-sidebar-surface {
+  animation: app-panel-enter var(--cs-motion-normal) var(--cs-motion-ease);
+}
+
+.app-sidebar-section-content {
+  animation: app-panel-enter var(--cs-motion-normal) var(--cs-motion-ease);
+}
+
+.app-workspace-tab-content {
+  position: absolute;
+  inset: 0;
+  display: none;
+}
+
+.app-workspace-tab-content[data-active="true"] {
+  display: block;
+  animation: app-content-enter var(--cs-motion-fast) var(--cs-motion-ease);
+}
+
+.app-tabbar-tab {
+  animation: app-tab-enter var(--cs-motion-fast) var(--cs-motion-ease);
+}
+
+.app-tabbar-new-button:active {
+  transform: scale(0.94);
+}
+
+/* 指示线随标签列表滚动，连续点击时由当前位置转向新目标。 */
+.app-tabbar-tabs { position: relative; }
+
+.app-tab-selection-indicator {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  z-index: 3;
+  height: var(--cs-marker-thickness);
+  width: var(--cs-tab-indicator-width, 0px);
+  transform: translateX(var(--cs-tab-indicator-x, 0px));
+  background: var(--cs-primary);
+  pointer-events: none;
+  opacity: 0;
+}
+
+.app-tab-selection-indicator[data-visible="true"] { opacity: 1; }
+.app-tab-selection-indicator[data-ready="true"] {
+  transition: transform 180ms var(--cs-motion-ease), width 180ms var(--cs-motion-ease), opacity var(--cs-motion-fast) ease;
+}
+.app-tabbar-tabs[data-reordering="true"] .app-tab-selection-indicator { transition: none; }
+
+.app-nav-artwork { width: 22px; height: 22px; overflow: visible; }
+.app-nav-folder-front {
+  fill: var(--cs-bg-card-solid);
+  transform-origin: 4px 19px;
+  transition: transform 180ms var(--cs-motion-ease);
+}
+.app-nav-folder-paper {
+  opacity: 0;
+  transition: opacity 180ms var(--cs-motion-ease);
+}
+/* 前盖绕底边向外放下，露出纸页；向上平移会产生合拢的错觉。 */
+.app-rail-button:hover .app-nav-folder-front,
+.app-rail-button:focus-visible .app-nav-folder-front { transform: skewX(-8deg) scaleY(0.78); }
+.app-rail-button:hover .app-nav-folder-paper,
+.app-rail-button:focus-visible .app-nav-folder-paper { opacity: 1; }
+
+.app-rail-button:hover .app-nav-cursor,
+.app-rail-button:focus-visible .app-nav-cursor { animation: app-cursor-greet 520ms ease; }
+/* 分支围绕与主线的交点展开，线和节点一起运动，连接始终保持。 */
+.app-nav-git-branch {
+  transform-box: view-box;
+  transform-origin: 7px 14.5px;
+  transform: rotate(0deg);
+  transition: transform 260ms var(--cs-motion-ease);
+}
+.app-rail-button:hover .app-nav-git-branch,
+.app-rail-button:focus-visible .app-nav-git-branch { transform: rotate(14deg); }
+
+.app-nav-settings-gear {
+  transform: rotate(0deg);
+  transform-origin: center;
+  transition: transform 240ms var(--cs-motion-ease);
+}
+.app-rail-button:hover .app-nav-settings-gear,
+.app-rail-button:focus-visible .app-nav-settings-gear { transform: rotate(30deg); }
+
+.app-checkpoint-tone-icon,
+.app-checkpoint-status { transition: color var(--cs-motion-normal) ease, background-color var(--cs-motion-normal) ease; }
+.app-checkpoint-status-text { animation: app-content-enter var(--cs-motion-normal) ease; }
+.app-checkpoint-summary[data-feedback="reviewed"] .app-checkpoint-tone-icon { animation: app-status-arrive 480ms var(--cs-motion-ease); }
+
+.app-empty-artwork { width: 112px; height: 80px; }
+.app-empty-ground { fill: var(--cs-border); opacity: 0.5; }
+.app-empty-surface { fill: var(--cs-bg-hover); stroke: var(--cs-text-tertiary); stroke-width: 1.5; }
+.app-empty-paper { fill: var(--cs-bg-card-solid); stroke: var(--cs-border); stroke-width: 1.5; }
+.app-empty-outline { stroke: var(--cs-border); stroke-width: 1.5; }
+.app-empty-prompt { stroke: var(--cs-primary); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.app-empty-accent { fill: var(--cs-primary); opacity: 0.6; }
+.app-empty-muted { fill: var(--cs-text-tertiary); opacity: 0.5; }
+.app-empty-spark { stroke: var(--cs-primary); stroke-width: 1.5; stroke-linecap: round; opacity: 0.5; }
+.app-empty-object { animation: app-empty-arrive 360ms var(--cs-motion-ease); }
+.app-empty-spark { animation: app-content-enter 480ms ease; }
+
+@keyframes app-cursor-greet { 0%, 100% { opacity: 1; } 40% { opacity: 0.2; } }
+@keyframes app-status-arrive {
+  0% { opacity: 0.5; transform: scale(0.72); }
+  55% { opacity: 1; transform: scale(1.12); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes app-empty-arrive { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+@keyframes app-panel-enter {
+  from { opacity: 0.65; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes app-content-enter {
+  from { opacity: 0.88; }
+  to { opacity: 1; }
+}
+
+@keyframes app-tab-enter {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Ant Design 的开合仍使用自身生命周期；减少动态效果时保留完成事件。 */
+@media (prefers-reduced-motion: reduce) {
+  .app-sidebar-frame,
+  .app-sidebar-surface,
+  .app-sidebar-section-content,
+  .app-workspace-tab-content,
+  .app-tabbar-tab,
+  .app-tab-chrome,
+  .app-tabbar-new-button,
+  .app-rail-button,
+  .app-sidebar-list-item,
+  .app-session-actions,
+  .app-window-control,
+  .app-titlebar-search,
+  .app-titlebar-project {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .app-tab-selection-indicator,
+  .app-nav-settings-gear,
+  .app-nav-artwork *,
+  .app-checkpoint-tone-icon,
+  .app-checkpoint-status,
+  .app-checkpoint-status-text,
+  .app-empty-artwork * {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .app-rail-button:hover .app-nav-folder-front,
+  .app-rail-button:focus-visible .app-nav-folder-front,
+  .app-rail-button:hover .app-nav-git-branch,
+  .app-rail-button:focus-visible .app-nav-git-branch,
+  .app-rail-button:hover .app-nav-settings-gear,
+  .app-rail-button:focus-visible .app-nav-settings-gear {
+    transform: none;
+  }
+
+  .app-tabbar-new-button:active {
+    transform: none;
+  }
+
+  .ant-modal-root *,
+  .ant-popover,
+  .ant-dropdown,
+  .ant-drawer * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

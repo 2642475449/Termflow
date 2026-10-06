@@ -29,9 +29,9 @@ import { startSessionTitleGeneration } from "./store/slices/sessionTitleSlice";
 import { message, TOAST_NOTIFICATION_CONFIG, ToastHost } from "./lib/toast";
 
 const THEME_COLORS: Record<ThemeMode, string> = {
-  "light-glass": "#4f6cf7",
+  "light-glass": "#4263eb",
   "light-warm": "#c2713a",
-  "dark-starry": "#5c7ba3",
+  "dark-starry": "#8198ff",
   "dark-mocha": "#f5bd69",
 };
 
@@ -522,7 +522,12 @@ function App() {
         algorithm: isDark ? theme.darkAlgorithm : theme.defaultAlgorithm,
         token: {
           colorPrimary: primaryColor,
+          colorTextLightSolid: "var(--cs-text-on-primary)",
           borderRadius: 6,
+          motionDurationFast: "0.12s",
+          motionDurationMid: "0.16s",
+          motionDurationSlow: "0.2s",
+          motionEaseOut: "cubic-bezier(0.2, 0, 0, 1)",
         },
       }}
     >

@@ -1,0 +1,123 @@
+@layer components {
+  /* 工作台外壳：四套主题共享尺寸，通过主题变量提供实色层次。 */
+  .app-titlebar {
+    height: 40px;
+    background: var(--cs-bg-header);
+    color: var(--cs-text-secondary);
+  }
+
+  .app-titlebar-brand {
+    color: var(--cs-text-secondary);
+  }
+
+  .app-titlebar-separator {
+    width: 1px;
+    height: 16px;
+    background: var(--cs-border);
+  }
+
+  .app-window-control {
+    width: 40px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    background: transparent;
+    color: var(--cs-text-secondary);
+    transition: background-color 140ms ease, color 140ms ease;
+  }
+
+  .app-window-control:hover {
+    background: var(--cs-bg-hover);
+    color: var(--cs-text-primary);
+  }
+
+  .app-window-control-close:hover {
+    background: var(--cs-danger-hover);
+    color: var(--cs-danger);
+  }
+
+  .app-titlebar-search {
+    height: 30px;
+    min-width: 168px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 10px;
+    border: 1px solid var(--cs-border);
+    border-radius: var(--cs-radius-control);
+    background: var(--cs-bg-card-solid);
+    color: var(--cs-text-secondary);
+    transition: border-color 140ms ease, background-color 140ms ease;
+  }
+
+  .app-titlebar-search:hover,
+  .app-titlebar-search[data-active="true"] {
+    border-color: var(--cs-primary);
+  }
+
+  .app-titlebar-project {
+    border: 1px solid transparent;
+    border-radius: var(--cs-radius-control);
+  }
+
+  .app-titlebar-project:hover {
+    border-color: var(--cs-border);
+  }
+
+  .app-session-list-item {
+    min-height: 48px;
+    padding: 7px 10px;
+    border: 1px solid transparent;
+    border-radius: 0 var(--cs-radius-overlay) var(--cs-radius-overlay) 0;
+    background: transparent;
+  }
+
+  .app-session-list-item:hover {
+    background: var(--cs-bg-hover);
+  }
+
+  .app-session-list-item[data-active="true"] {
+    background: var(--cs-bg-active);
+    border-color: color-mix(in srgb, var(--cs-primary) 18%, transparent);
+  }
+
+  .app-session-meta {
+    font-size: 12px;
+    line-height: 18px;
+  }
+
+  .app-session-actions {
+    opacity: 0;
+    transition: opacity 140ms ease;
+  }
+
+  .app-session-list-item:hover .app-session-actions,
+  .app-session-list-item:focus-within .app-session-actions {
+    opacity: 1;
+  }
+
+  .app-tab-chrome[data-active="true"] .app-tabbar-title {
+    font-weight: 500;
+  }
+
+  .app-window-control:focus-visible,
+  .app-titlebar-search:focus-visible,
+  .app-titlebar-project:focus-visible {
+    outline: 2px solid var(--cs-focus-ring);
+    outline-offset: -2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .app-tab-chrome,
+    .app-rail-button,
+    .app-sidebar-list-item,
+    .app-session-actions,
+    .app-window-control,
+    .app-titlebar-search,
+    .app-titlebar-project {
+      transition: none;
+    }
+  }
+}

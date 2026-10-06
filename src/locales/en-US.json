@@ -2110,6 +2110,7 @@
     },
     "voice": {
       "idleTooltip": "Click or hold the shortcut to start voice input",
+      "startupTimeout": "Voice input startup timed out. Check your microphone and network, then try again.",
       "requestingPermission": "Requesting microphone permission...",
       "recordingTooltip": "Recording, release the shortcut or click to stop",
       "transcribing": "Transcribing and polishing...",

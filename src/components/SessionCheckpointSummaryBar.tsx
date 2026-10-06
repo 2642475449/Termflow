@@ -5,6 +5,7 @@ import {
   SafetyCertificateOutlined,
 } from "@ant-design/icons";
 import { Tooltip } from "antd";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { Session } from "@/types";
 import {
@@ -28,6 +29,21 @@ function ToneIcon({ tone }: { tone: CheckpointSummaryTone }) {
 function SessionCheckpointSummaryBar({ session }: { session: Session }) {
   const { t } = useTranslation();
   const summary = getCheckpointSummaryModel(session);
+  const tone = summary?.tone;
+  const previousToneRef = useRef({ sessionId: session.id, tone });
+  const [reviewFeedback, setReviewFeedback] = useState(false);
+  useEffect(() => {
+    const previous = previousToneRef.current;
+    const justReviewed = previous.sessionId === session.id
+      && previous.tone !== undefined
+      && previous.tone !== "reviewed"
+      && tone === "reviewed";
+    previousToneRef.current = { sessionId: session.id, tone };
+    setReviewFeedback(justReviewed);
+    if (!justReviewed) return;
+    const timer = window.setTimeout(() => setReviewFeedback(false), 600);
+    return () => window.clearTimeout(timer);
+  }, [session.id, tone]);
   if (!summary) return null;
 
   const statusText = (() => {
@@ -49,7 +65,8 @@ function SessionCheckpointSummaryBar({ session }: { session: Session }) {
     <Tooltip title={tooltip} mouseEnterDelay={0.45}>
       <button
         type="button"
-        className="group flex h-[34px] w-full shrink-0 items-center gap-2 px-3 text-left text-[11px]"
+        className="app-checkpoint-summary group flex h-[34px] w-full shrink-0 items-center gap-2 px-3 text-left text-[11px]"
+        data-feedback={reviewFeedback ? "reviewed" : undefined}
         style={{
           color: "var(--cs-text-secondary)",
           background: "color-mix(in srgb, var(--cs-bg-sidebar) 62%, transparent)",
@@ -59,7 +76,7 @@ function SessionCheckpointSummaryBar({ session }: { session: Session }) {
         aria-label={t("checkpointReview.summary.open")}
       >
         <span
-          className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md"
+          className="app-checkpoint-tone-icon inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md"
           style={{
             color: toneColor(summary.tone),
             background: `color-mix(in srgb, ${toneColor(summary.tone)} 10%, transparent)`,
@@ -86,13 +103,13 @@ function SessionCheckpointSummaryBar({ session }: { session: Session }) {
         )}
 
         <span
-          className="ml-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium"
+          className="app-checkpoint-status ml-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium"
           style={{
             color: toneColor(summary.tone),
             background: `color-mix(in srgb, ${toneColor(summary.tone)} 9%, transparent)`,
           }}
         >
-          {statusText}
+          <span key={`${session.id}:${summary.tone}`} className="app-checkpoint-status-text">{statusText}</span>
         </span>
 
         <RightOutlined

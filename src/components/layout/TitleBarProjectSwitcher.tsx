@@ -436,7 +436,7 @@ function TitleBarProjectSwitcher() {
           type="button"
           aria-haspopup="menu"
           aria-expanded={open}
-          className="flex h-8 min-w-[124px] max-w-[196px] items-center gap-2 rounded-[6px] px-2 text-left transition-colors"
+          className="app-titlebar-project flex h-8 min-w-[124px] max-w-[196px] items-center gap-2 rounded-[6px] px-2 text-left transition-colors"
           style={{
             background: open ? "var(--cs-bg-hover)" : "transparent",
           }}

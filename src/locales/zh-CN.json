@@ -2110,6 +2110,7 @@
     },
     "voice": {
       "idleTooltip": "点击或按住快捷键开始语音输入",
+      "startupTimeout": "语音启动超时，请检查麦克风和网络后重试",
       "requestingPermission": "请求麦克风权限...",
       "recordingTooltip": "正在录音，松开快捷键或点击结束",
       "transcribing": "转录并整理中...",

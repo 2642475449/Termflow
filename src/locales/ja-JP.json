@@ -2105,6 +2105,7 @@
     },
     "voice": {
       "idleTooltip": "クリックまたはショートカット長押しで音声入力を開始",
+      "startupTimeout": "音声入力の開始がタイムアウトしました。マイクとネットワークを確認して再試行してください。",
       "requestingPermission": "マイク権限をリクエスト中...",
       "recordingTooltip": "録音中です。ショートカットを離すかクリックして停止します",
       "transcribing": "文字起こしと整理中...",

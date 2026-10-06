@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, future::Future, sync::Arc, time::Duration};
 
 use futures_util::{SinkExt, StreamExt};
 use parking_lot::Mutex;
@@ -15,6 +15,7 @@ const MIMO_API_CHAT_COMPLETIONS_ENDPOINT: &str = "https://api.xiaomimimo.com/v1/
 const MIMO_TOKEN_PLAN_CHAT_COMPLETIONS_ENDPOINT: &str =
     "https://token-plan-cn.xiaomimimo.com/v1/chat/completions";
 const DEFAULT_ASR_LANGUAGE: &str = "zh";
+const LIVE_ASR_START_TIMEOUT: Duration = Duration::from_secs(15);
 const LIVE_ASR_MODEL: &str = "qwen-audio-3.0-asr-flash-streaming";
 
 /// 实时识别会话由后端持有，以便在 WebSocket 握手时安全携带 API Key。
@@ -76,44 +77,61 @@ pub async fn start_live_asr(
             .map_err(|error| format!("设置实时语音客户端标识失败: {error}"))?,
     );
 
-    let (socket, _) = connect_async(request)
-        .await
-        .map_err(|error| format!("连接实时语音服务失败: {error}"))?;
-    let (mut writer, mut reader) = socket.split();
-    let task_id = new_live_asr_task_id();
-    let start = json!({
-        "header": { "action": "run-task", "task_id": task_id, "streaming": "duplex" },
-        "payload": {
-            "task_group": "audio", "task": "asr", "function": "recognition",
-            "model": LIVE_ASR_MODEL,
-            "parameters": { "format": "pcm", "sample_rate": 16000, "max_sentence_silence": 600 },
-            "input": {}
-        }
-    });
-    writer
-        .send(Message::Text(start.to_string().into()))
-        .await
-        .map_err(|error| format!("启动实时语音任务失败: {error}"))?;
-
-    loop {
-        let Some(message) = reader.next().await else {
-            return Err("实时语音服务在任务启动前关闭了连接".into());
-        };
-        let message = message.map_err(|error| format!("读取实时语音响应失败: {error}"))?;
-        if let Some(event) = parse_live_asr_event(&session_id, &message)? {
-            if event.kind == "started" {
-                break;
-            }
-            if event.kind == "error" {
-                return Err(event
-                    .message
-                    .unwrap_or_else(|| "实时语音任务启动失败".into()));
-            }
-        }
-    }
-
+    // 在连接前登记，取消才能覆盖握手和等待 task-started 的阶段。
     let (sender, mut receiver) = mpsc::unbounded_channel();
-    sessions.0.lock().insert(session_id.clone(), sender);
+    {
+        let mut session_map = sessions.0.lock();
+        if session_map.contains_key(&session_id) {
+            return Err("实时语音会话已存在".into());
+        }
+        session_map.insert(session_id.clone(), sender);
+    }
+    let startup = async {
+        let (socket, _) = connect_async(request)
+            .await
+            .map_err(|error| format!("连接实时语音服务失败: {error}"))?;
+        let (mut writer, mut reader) = socket.split();
+        let task_id = new_live_asr_task_id();
+        let start = json!({
+            "header": { "action": "run-task", "task_id": task_id, "streaming": "duplex" },
+            "payload": {
+                "task_group": "audio", "task": "asr", "function": "recognition",
+                "model": LIVE_ASR_MODEL,
+                "parameters": { "format": "pcm", "sample_rate": 16000, "max_sentence_silence": 600 },
+                "input": {}
+            }
+        });
+        writer
+            .send(Message::Text(start.to_string().into()))
+            .await
+            .map_err(|error| format!("启动实时语音任务失败: {error}"))?;
+
+        loop {
+            let Some(message) = reader.next().await else {
+                return Err("实时语音服务在任务启动前关闭了连接".into());
+            };
+            let message = message.map_err(|error| format!("读取实时语音响应失败: {error}"))?;
+            if let Some(event) = parse_live_asr_event(&session_id, &message)? {
+                if event.kind == "started" {
+                    break;
+                }
+                if event.kind == "error" {
+                    return Err(event
+                        .message
+                        .unwrap_or_else(|| "实时语音任务启动失败".into()));
+                }
+            }
+        }
+        Ok((writer, reader, task_id))
+    };
+    let (mut writer, mut reader, task_id) =
+        match await_live_asr_start(startup, &mut receiver, LIVE_ASR_START_TIMEOUT).await {
+            Ok(connection) => connection,
+            Err(error) => {
+                sessions.0.lock().remove(&session_id);
+                return Err(error);
+            }
+        };
     let session_map = sessions.0.clone();
     tauri::async_runtime::spawn(async move {
         let mut finishing = false;
@@ -153,6 +171,21 @@ pub async fn start_live_asr(
         let _ = writer.close().await;
     });
     Ok(())
+}
+
+// 取消或超时会丢弃启动 Future，释放其持有的 socket，不留后台握手任务。
+async fn await_live_asr_start<T>(
+    startup: impl Future<Output = Result<T, String>>,
+    receiver: &mut mpsc::UnboundedReceiver<LiveAsrCommand>,
+    timeout: Duration,
+) -> Result<T, String> {
+    tokio::select! {
+        biased;
+        _ = receiver.recv() => Err("实时语音启动已取消".into()),
+        result = tokio::time::timeout(timeout, startup) => {
+            result.map_err(|_| "实时语音服务启动超时，请检查网络后重试".to_string())?
+        }
+    }
 }
 
 #[tauri::command]
@@ -512,4 +545,92 @@ fn sanitize_asr_text(text: &str) -> String {
     let trimmed = text.trim();
     let sanitized = trimmed.trim_end_matches(|c: char| c == '/' || c == '\\');
     sanitized.trim().to_string()
+}
+
+#[cfg(test)]
+mod live_start_tests {
+    use super::*;
+
+    #[test]
+    fn cancellation_drops_pending_startup() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .expect("test runtime");
+        runtime.block_on(async {
+            let (sender, mut receiver) = mpsc::unbounded_channel();
+            sender.send(LiveAsrCommand::Cancel).expect("cancel channel");
+            let result = await_live_asr_start(
+                std::future::pending::<Result<(), String>>(),
+                &mut receiver,
+                Duration::from_secs(15),
+            )
+            .await;
+            assert_eq!(result, Err("实时语音启动已取消".into()));
+        });
+    }
+
+    #[test]
+    fn cancel_releases_resources_of_an_already_pending_connection() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        struct ConnectionGuard(Arc<AtomicBool>);
+        impl Drop for ConnectionGuard {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::SeqCst);
+            }
+        }
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .expect("test runtime");
+        runtime.block_on(async {
+            let released = Arc::new(AtomicBool::new(false));
+            let guard = ConnectionGuard(released.clone());
+            let (sender, mut receiver) = mpsc::unbounded_channel();
+            let startup = async move {
+                let _connection = guard;
+                sender.send(LiveAsrCommand::Cancel).expect("cancel channel");
+                std::future::pending::<Result<(), String>>().await
+            };
+            assert_eq!(
+                await_live_asr_start(startup, &mut receiver, Duration::from_secs(15)).await,
+                Err("实时语音启动已取消".into())
+            );
+            assert!(released.load(Ordering::SeqCst));
+        });
+    }
+
+    #[test]
+    fn pending_startup_times_out() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .expect("test runtime");
+        runtime.block_on(async {
+            let (_sender, mut receiver) = mpsc::unbounded_channel();
+            let result = await_live_asr_start(
+                std::future::pending::<Result<(), String>>(),
+                &mut receiver,
+                Duration::from_millis(1),
+            )
+            .await;
+            assert_eq!(result, Err("实时语音服务启动超时，请检查网络后重试".into()));
+        });
+    }
+
+    #[test]
+    fn successful_startup_returns_connection() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .expect("test runtime");
+        runtime.block_on(async {
+            let (_sender, mut receiver) = mpsc::unbounded_channel();
+            assert_eq!(
+                await_live_asr_start(async { Ok(42) }, &mut receiver, Duration::from_secs(15))
+                    .await,
+                Ok(42)
+            );
+        });
+    }
 }

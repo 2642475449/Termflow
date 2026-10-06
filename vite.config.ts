@@ -1,12 +1,31 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
+import { appendFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { fileViewerRenderers } from "@file-viewer/vite-plugin";
 
 const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig(async () => ({
   plugins: [
+    {
+      name: "termflow-runtime-diagnostics",
+      apply: "serve",
+      configureServer(server) {
+        server.ws.on("termflow:runtime-error", (data: unknown) => {
+          if (!data || typeof data !== "object") return;
+          const error = data as { message?: unknown; stack?: unknown };
+          if (typeof error.message !== "string") return;
+          const entry = {
+            time: new Date().toISOString(),
+            message: error.message.slice(0, 2000),
+            stack: typeof error.stack === "string" ? error.stack.slice(0, 12000) : undefined,
+          };
+          appendFileSync(path.join(tmpdir(), "termflow-dev-runtime-errors.log"), `${JSON.stringify(entry)}\n`);
+        });
+      },
+    },
     react(),
     fileViewerRenderers({
       formats: [
