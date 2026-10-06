@@ -459,8 +459,8 @@ pub fn resolve_recent_codex_session_id(
     project_path: String,
     since_timestamp_ms: Option<i64>,
 ) -> Result<Option<String>, String> {
-    let home_dir = dirs_next::home_dir().ok_or("无法获取用户主目录")?;
-    let sessions_root = home_dir.join(".codex").join("sessions");
+    let sessions_root =
+        crate::agent_paths::user_path(crate::agent_paths::AgentPath::Codex)?.join("sessions");
     if !sessions_root.exists() {
         return Ok(None);
     }

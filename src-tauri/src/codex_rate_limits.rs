@@ -1,7 +1,6 @@
 use crate::commands::agents::find_agent_executable;
 use serde::Serialize;
 use serde_json::{json, Value};
-use std::env;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
@@ -110,10 +109,7 @@ fn error_result(error: String, identity: CodexIdentity) -> CodexRateLimits {
 }
 
 fn codex_home_path() -> Option<PathBuf> {
-    env::var_os("CODEX_HOME")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-        .or_else(|| dirs_next::home_dir().map(|home| home.join(".codex")))
+    crate::agent_paths::user_path(crate::agent_paths::AgentPath::Codex).ok()
 }
 
 fn codex_auth_path() -> Option<PathBuf> {

@@ -1013,6 +1013,9 @@
     "notInstalled": "Not installed"
   },
   "newSession": {
+    "codexApprovalOnRequest": "Approval on request",
+    "codexApprovalNever": "Never ask (sandbox still applies)",
+    "codexApprovalHint": "Legacy untrusted mode is migrated to on-request. Never asking for approval does not disable the sandbox.",
     "title": "New Session",
     "name": "Session name",
     "namePlaceholder": "Enter a session name",
@@ -1803,6 +1806,20 @@
       }
     },
     "hooks": {
+      "health": {
+        "title": "Codex status connection",
+        "unknown": "Not checked",
+        "pending": "Configured, awaiting verification",
+        "observed": "Callback received this app run",
+        "disabled": "Hooks disabled in user config",
+        "error": "Configuration check failed",
+        "unknownHint": "Check the configuration, then run a Codex session in Termflow to verify callbacks.",
+        "pendingHint": "Enter /hooks in Codex and review and trust the Termflow hooks. Submit a message to verify a real callback. Project or administrator policies may also prevent hooks from running.",
+        "observedHint": "A Codex session sent a status callback during this app run. This does not confirm hook approval in every project. Verify again after configuration changes.",
+        "disabledHint": "Hooks are disabled in the current user configuration. Check features.hooks (or legacy codex_hooks) in config.toml, enable it if appropriate, restart the Codex session, and check again.",
+        "errorHint": "Configuration could not be verified. Check the error below and retry.",
+        "check": "Check configuration again"
+      },
       "matchAll": "Match All",
       "default": "Default",
       "defaultHook": "Default Hook",

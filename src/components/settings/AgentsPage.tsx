@@ -10,6 +10,7 @@ import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
 import { useAppStore } from "@/store";
 import { useAgentVersionsStore } from "@/store/slices/agentVersions";
 import { compareAgentVersion } from "@/lib/agentVersions";
+import { CodexHookStatus } from "./CodexHookStatus";
 
 type Quotas = { claude: ClaudeRateLimits | null; codex: CodexRateLimits | null; antigravity: AntigravityUsage | null; qoder: QoderUsage | null };
 const EMPTY_QUOTAS: Quotas = { claude: null, codex: null, antigravity: null, qoder: null };
@@ -365,6 +366,7 @@ function AgentDetailsDrawer({ agent, open, onClose, quotas, quotaLoading, refres
           </div>
           {isDefault ? <p className="mb-0 mt-3 text-xs leading-5 text-[var(--cs-text-tertiary)]">{t("settings.agents.defaultCurrent", { name: definition.displayName })}</p> : null}
         </section>
+        {agent.id === "codex" && agent.installed ? <CodexHookStatus /> : null}
         <AgentDetailSection title={t("settings.agents.details.installation")}>
         <div className="grid grid-cols-2 gap-4">
         <AgentDetail label={t("settings.agents.version")}>{formatAgentVersion(agent.version, definition.displayName) || t("settings.agents.unknown")}</AgentDetail>

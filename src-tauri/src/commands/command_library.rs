@@ -397,10 +397,9 @@ fn resolve_command_dir(
                     .join("commands"),
             ))
         }
-        CommandScope::User => {
-            let home = dirs_next::home_dir().ok_or_else(|| "无法获取用户主目录".to_string())?;
-            Ok(Some(home.join(".claude").join("commands")))
-        }
+        CommandScope::User => Ok(Some(
+            crate::agent_paths::user_path(crate::agent_paths::AgentPath::Claude)?.join("commands"),
+        )),
     }
 }
 

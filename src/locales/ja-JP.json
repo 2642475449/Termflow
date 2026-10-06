@@ -1013,6 +1013,9 @@
     "notInstalled": "未インストール"
   },
   "newSession": {
+    "codexApprovalOnRequest": "必要に応じて承認",
+    "codexApprovalNever": "承認を求めない（サンドボックスは適用）",
+    "codexApprovalHint": "旧 untrusted モードは on-request に移行されます。承認を求めない設定でもサンドボックスは無効になりません。",
     "title": "新規セッション",
     "name": "セッション名",
     "namePlaceholder": "セッション名を入力",
@@ -1798,6 +1801,20 @@
       }
     },
     "hooks": {
+      "health": {
+        "title": "Codex ステータス接続",
+        "unknown": "未確認",
+        "pending": "設定済み・動作確認待ち",
+        "observed": "今回の起動でコールバックを受信",
+        "disabled": "ユーザー設定で Hook が無効",
+        "error": "設定の確認に失敗",
+        "unknownHint": "設定を確認し、Termflow で Codex セッションを実行してコールバックを確認してください。",
+        "pendingHint": "Codex で /hooks を入力し、Termflow の Hook を確認して信頼してください。その後メッセージを送信すると、実際のコールバック受信時に表示が更新されます。プロジェクトや管理者のポリシーによって Hook が制限される場合もあります。",
+        "observedHint": "今回のアプリ起動中に Codex セッションからコールバックを受信しました。すべてのプロジェクトで Hook が承認されたことを示すものではありません。設定変更後は再確認してください。",
+        "disabledHint": "現在のユーザー設定で Hook が無効です。config.toml の features.hooks（または旧 codex_hooks）を確認し、必要に応じて有効にして Codex セッションを再起動した後、再確認してください。",
+        "errorHint": "設定を確認できませんでした。以下のエラーを確認して再試行してください。",
+        "check": "設定を再確認"
+      },
       "matchAll": "すべて一致",
       "default": "デフォルト",
       "defaultHook": "デフォルト Hook",

@@ -1013,6 +1013,9 @@
     "notInstalled": "未安装"
   },
   "newSession": {
+    "codexApprovalOnRequest": "按需审批",
+    "codexApprovalNever": "不询问审批（仍受沙箱限制）",
+    "codexApprovalHint": "旧版“仅不可信命令询问”已迁移为按需审批；不询问审批不会关闭沙箱。",
     "title": "新建会话",
     "name": "会话名称",
     "namePlaceholder": "输入会话名称",
@@ -1803,6 +1806,20 @@
       }
     },
     "hooks": {
+      "health": {
+        "title": "Codex 状态连接",
+        "unknown": "尚未检查",
+        "pending": "配置已写入，待验证",
+        "observed": "本次运行已收到回调",
+        "disabled": "用户配置已禁用 Hook",
+        "error": "配置检查失败",
+        "unknownHint": "检查配置后，在 Termflow 中运行一个 Codex 会话以验证状态回调。",
+        "pendingHint": "在 Codex 中输入 /hooks，审阅并信任 Termflow 的 Hook。随后提交一条消息，收到实际回调后此处会更新。项目或管理员策略也可能阻止 Hook。",
+        "observedHint": "本次应用运行已收到 Codex 会话的状态回调。这不代表每个项目的 Hook 都已获准；修改配置后需要重新验证。",
+        "disabledHint": "当前用户配置关闭了 Hook。请检查 config.toml 中的 features.hooks（或旧版 codex_hooks），按需启用并重启 Codex 会话后重新检查。",
+        "errorHint": "未能确认配置，请检查下方错误并重试。",
+        "check": "重新检查配置"
+      },
       "matchAll": "匹配全部",
       "default": "默认",
       "defaultHook": "默认 Hook",

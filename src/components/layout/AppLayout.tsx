@@ -14,6 +14,7 @@ import { NewSessionDialog } from "@/components/NewSessionDialog";
 import GlobalTextSearchDialog from "@/components/GlobalTextSearchDialog";
 import { VoiceTrigger } from "@/components/VoiceButton";
 import { useAppStore, type LayoutNode } from "@/store";
+import { useAgentHookHealthStore } from "@/store/slices/agentHookHealth";
 import { REMOTE_NOTIFICATION_PROVIDERS } from "@/lib/remoteNotifications";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useResumeSession } from "@/hooks/useResumeSession";
@@ -547,6 +548,19 @@ function AppLayout() {
 
   useEffect(() => startScheduledTaskSync(), []);
 
+  useEffect(() => {
+    const migratePermissions = () => {
+      const store = useAppStore.getState();
+      const codex = store.agentPermissionDefaults.codex;
+      if (codex?.approvalMode === "untrusted") {
+        store.setAgentPermissionDefaults("codex", { ...codex, approvalMode: "on-request", effort: "inherit" });
+      }
+    };
+    migratePermissions();
+    // SQLite 设置可能晚于首屏载入；沿用现有双轨持久化，不改写主 store。
+    return useAppStore.subscribe(migratePermissions);
+  }, []);
+
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const visibleTerminalSessionKey = Object.values(panesById)
     .map((pane) => pane.activeTabId)
@@ -566,6 +580,7 @@ function AppLayout() {
       for (const agentId of STATUS_AGENT_IDS) {
         try {
           const status = await ensureAgentStatusHook(agentId);
+          useAgentHookHealthStore.getState().setConfiguration(status);
           useAppStore.getState().setAgentHookDiagnostic({
             agentId,
             configured: status.configured,
@@ -589,6 +604,7 @@ function AppLayout() {
           if (!cancelled) {
             console.warn(`Failed to preinstall ${agentId} status hook:`, error);
             const errorText = error instanceof Error ? error.message : String(error);
+            if (agentId === "codex") useAgentHookHealthStore.getState().setError(errorText);
             useAppStore.getState().setAgentHookDiagnostic({
               agentId,
               configured: false,
@@ -618,6 +634,7 @@ function AppLayout() {
       (event) => {
         const { agentId, error } = event.payload;
         if (isAiAgentId(agentId)) {
+          if (agentId === "codex") useAgentHookHealthStore.getState().setError(error);
           useAppStore.getState().setAgentHookDiagnostic({
             agentId,
             configured: false,
@@ -703,6 +720,7 @@ function AppLayout() {
       if (STATUS_AGENT_IDS.includes(agent.id)) {
         try {
           const hookStatus = await ensureAgentStatusHook(agent.id);
+          useAgentHookHealthStore.getState().setConfiguration(hookStatus);
           useAppStore.getState().setAgentHookDiagnostic({
             agentId: agent.id,
             configured: hookStatus.configured,
@@ -1321,6 +1339,7 @@ function AppLayout() {
         });
         return;
       }
+      if (payload.agent === "codex") useAgentHookHealthStore.getState().setObserved(Date.now());
       updateSession(payload.sessionId, {
         status: payload.state,
         active: true,

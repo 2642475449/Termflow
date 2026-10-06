@@ -1013,6 +1013,9 @@
     "notInstalled": "未安裝"
   },
   "newSession": {
+    "codexApprovalOnRequest": "按需審批",
+    "codexApprovalNever": "不詢問審批（仍受沙箱限制）",
+    "codexApprovalHint": "舊版「僅不可信命令詢問」已遷移為按需審批；不詢問審批不會關閉沙箱。",
     "title": "新建工作階段",
     "name": "工作階段名稱",
     "namePlaceholder": "輸入工作階段名稱",
@@ -1798,6 +1801,20 @@
       }
     },
     "hooks": {
+      "health": {
+        "title": "Codex 狀態連線",
+        "unknown": "尚未檢查",
+        "pending": "設定已寫入，待驗證",
+        "observed": "本次執行已收到回呼",
+        "disabled": "使用者設定已停用 Hook",
+        "error": "設定檢查失敗",
+        "unknownHint": "檢查設定後，在 Termflow 中執行一個 Codex 工作階段以驗證狀態回呼。",
+        "pendingHint": "在 Codex 中輸入 /hooks，審閱並信任 Termflow 的 Hook。接著提交一則訊息，收到實際回呼後此處會更新。專案或管理員原則也可能阻止 Hook。",
+        "observedHint": "本次應用程式執行已收到 Codex 工作階段的狀態回呼。這不代表每個專案的 Hook 都已獲准；修改設定後需要重新驗證。",
+        "disabledHint": "目前使用者設定關閉了 Hook。請檢查 config.toml 中的 features.hooks（或舊版 codex_hooks），視需要啟用並重新啟動 Codex 工作階段後再檢查。",
+        "errorHint": "未能確認設定，請檢查下方錯誤並重試。",
+        "check": "重新檢查設定"
+      },
       "matchAll": "符合全部",
       "default": "預設",
       "defaultHook": "預設 Hook",

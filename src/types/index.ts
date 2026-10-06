@@ -327,6 +327,7 @@ export interface ClaudeSessionLaunchOptions {
 
 export interface CodexSessionLaunchOptions {
   yolo: boolean;
+  /** untrusted 仅用于读取旧设置；启动和保存时迁移为 on-request。 */
   approvalMode: "untrusted" | "on-request" | "never";
   sandboxMode: "workspace-write" | "read-only";
   effort: "inherit" | "low" | "medium" | "high";

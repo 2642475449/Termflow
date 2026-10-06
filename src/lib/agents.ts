@@ -12,6 +12,11 @@ import {
 
 export type AgentCapabilityLevel = "full" | "partial" | "unsupported" | "unknown";
 
+/** 旧版 untrusted 已从新版 CLI 移除；在所有启动/保存入口显式迁移。 */
+export function normalizeCodexApprovalMode(value: unknown): "on-request" | "never" {
+  return value === "never" ? "never" : "on-request";
+}
+
 export type AgentCapabilityKey =
   | "interactiveTerminal"
   | "initialPrompt"
@@ -256,7 +261,7 @@ export function getDefaultAgentLaunchOptions(
     case "codex":
       return {
         yolo: permissionDefaults.codex?.yolo ?? false,
-        approvalMode: permissionDefaults.codex?.approvalMode ?? "on-request",
+        approvalMode: normalizeCodexApprovalMode(permissionDefaults.codex?.approvalMode),
         sandboxMode: permissionDefaults.codex?.sandboxMode ?? "workspace-write",
         effort: "inherit",
       };
@@ -296,7 +301,7 @@ export function getPermissionDefaultsForLaunch(
       return {
         codex: {
           yolo: options?.yolo ?? false,
-          approvalMode: options?.approvalMode ?? "on-request",
+          approvalMode: normalizeCodexApprovalMode(options?.approvalMode),
           sandboxMode: options?.sandboxMode ?? "workspace-write",
         },
       };
@@ -385,6 +390,7 @@ export function getAgentStartupCommand(
       // commands, and resumed sessions consistent.
       const command = AGENT_DEFINITIONS.codex.command;
       
+      // 显示与滚动交给 Codex 原生界面，遵循其默认值及用户配置。
       const parts = [command];
       // Windows 上共享 app-server daemon 执行命令和 Hook 时可能弹出独立终端窗口。
       if (typeof navigator !== "undefined" && /Win/i.test(navigator.platform)) {
@@ -394,8 +400,8 @@ export function getAgentStartupCommand(
       if (codexOptions?.yolo) {
         parts.push("--dangerously-bypass-approvals-and-sandbox");
       } else {
-        if (codexOptions?.approvalMode && codexOptions.approvalMode !== "untrusted") {
-          parts.push(`--ask-for-approval ${codexOptions.approvalMode}`);
+        if (codexOptions?.approvalMode) {
+          parts.push(`--ask-for-approval ${normalizeCodexApprovalMode(codexOptions.approvalMode)}`);
         }
         if (codexOptions?.sandboxMode && codexOptions.sandboxMode !== "workspace-write") {
           parts.push(`--sandbox ${codexOptions.sandboxMode}`);

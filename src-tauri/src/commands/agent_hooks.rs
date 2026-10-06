@@ -1,6 +1,7 @@
 use crate::qoder_config::qoder_user_config_root;
 use serde::Serialize;
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
@@ -43,6 +44,37 @@ pub struct AgentHookStatus {
     pub configured: bool,
     pub config_path: String,
     pub detail: Option<String>,
+    pub codex_activation: Option<CodexHookActivation>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexHookActivation {
+    pub disabled: bool,
+    pub configuration_id: String,
+}
+
+fn codex_hook_activation(
+    root: &Path,
+    hooks: &Value,
+    toml_text: &str,
+) -> Result<CodexHookActivation, String> {
+    let config: toml::Value = toml::from_str(toml_text).map_err(|error| error.to_string())?;
+    let features = config.get("features");
+    let disabled = features
+        .and_then(|value| value.get("hooks").or_else(|| value.get("codex_hooks")))
+        .and_then(toml::Value::as_bool)
+        == Some(false);
+    // 配置/脚本变化使旧回调证据失效；不修改 CLI 的信任记录，也不推测信任结果。
+    let mut hash = Sha256::new();
+    hash.update(root.to_string_lossy().as_bytes());
+    hash.update(hooks.to_string().as_bytes());
+    hash.update(toml_text.as_bytes());
+    hash.update(managed_hook_script().as_bytes());
+    Ok(CodexHookActivation {
+        disabled,
+        configuration_id: format!("{:x}", hash.finalize()),
+    })
 }
 
 #[tauri::command]
@@ -53,6 +85,7 @@ pub fn ensure_agent_status_hook(agent_id: String) -> Result<AgentHookStatus, Str
         .map_err(|_| "Agent Hook 安装锁不可用".to_string())?;
     match agent_id.as_str() {
         "claude" => super::claude_config::configure_claude_hook().map(|status| AgentHookStatus {
+            codex_activation: None,
             agent: agent_id,
             configured: status.configured,
             config_path: status.config_path,
@@ -64,6 +97,7 @@ pub fn ensure_agent_status_hook(agent_id: String) -> Result<AgentHookStatus, Str
         "opencode" => install_opencode_plugin(),
         "pi" => install_pi_extension(),
         _ => Ok(AgentHookStatus {
+            codex_activation: None,
             agent: agent_id,
             configured: false,
             config_path: String::new(),
@@ -90,9 +124,9 @@ fn write_managed_script() -> Result<PathBuf, String> {
 }
 
 fn install_codex_hook() -> Result<AgentHookStatus, String> {
-    let home = dirs_next::home_dir().ok_or("无法读取用户主目录")?;
-    let config_path = home.join(".codex").join("hooks.json");
-    let toml_path = home.join(".codex").join("config.toml");
+    let root = crate::agent_paths::user_path(crate::agent_paths::AgentPath::Codex)?;
+    let config_path = root.join("hooks.json");
+    let toml_path = root.join("config.toml");
     let script_path = write_managed_script()?;
     let command = node_command(&script_path, "codex", None);
     let events = [
@@ -107,12 +141,19 @@ fn install_codex_hook() -> Result<AgentHookStatus, String> {
     install_json_hooks(&mut config, &events, &command, 10, "")?;
     write_json(&config_path, &config)?;
     remove_legacy_codex_trust(&toml_path)?;
+    let toml_text = match fs::read_to_string(&toml_path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(error) => return Err(error.to_string()),
+    };
+    let activation = codex_hook_activation(&root, &config, &toml_text)?;
     Ok(AgentHookStatus {
+        codex_activation: Some(activation),
         agent: "codex".into(),
         configured: true,
         config_path: config_path.to_string_lossy().into_owned(),
         detail: Some(
-            "已通过原生 Hooks 接入完整授权生命周期，并按 tool_use_id/执行者关联恢复状态".into(),
+            "Hook 配置已写入；请在 Codex /hooks 中审阅并信任，实际生效以收到回调为准".into(),
         ),
     })
 }
@@ -125,6 +166,7 @@ fn install_qoder_hook() -> Result<AgentHookStatus, String> {
     install_json_hooks(&mut config, &QODER_HOOK_EVENTS, &command, 10, "*")?;
     write_json(&config_path, &config)?;
     Ok(AgentHookStatus {
+        codex_activation: None,
         agent: "qoder".into(),
         configured: true,
         config_path: config_path.to_string_lossy().into_owned(),
@@ -147,6 +189,7 @@ fn install_antigravity_hook() -> Result<AgentHookStatus, String> {
     install_antigravity_statusline(&home)?;
     remove_legacy_gemini_hook()?;
     Ok(AgentHookStatus {
+        codex_activation: None,
         agent: "antigravity".into(),
         configured: true,
         config_path: config_path.to_string_lossy().into_owned(),
@@ -323,6 +366,7 @@ fn install_opencode_plugin() -> Result<AgentHookStatus, String> {
     write_if_changed(&plugin_path, opencode_plugin_source().as_bytes())?;
     remove_legacy_opencode_plugin(&plugin_path);
     Ok(AgentHookStatus {
+        codex_activation: None,
         agent: "opencode".into(),
         configured: true,
         config_path: plugin_path.to_string_lossy().into_owned(),
@@ -334,10 +378,7 @@ fn install_opencode_plugin() -> Result<AgentHookStatus, String> {
 }
 
 fn install_pi_extension() -> Result<AgentHookStatus, String> {
-    let home = dirs_next::home_dir().ok_or("无法读取用户主目录")?;
-    let extension_path = home
-        .join(".pi")
-        .join("agent")
+    let extension_path = crate::agent_paths::user_path(crate::agent_paths::AgentPath::Pi)?
         .join("extensions")
         .join(PI_EXTENSION_SCRIPT_NAME);
     if let Ok(existing) = fs::read_to_string(&extension_path) {
@@ -350,6 +391,7 @@ fn install_pi_extension() -> Result<AgentHookStatus, String> {
     }
     write_if_changed(&extension_path, pi_extension_source().as_bytes())?;
     Ok(AgentHookStatus {
+        codex_activation: None,
         agent: "pi".into(),
         configured: true,
         config_path: extension_path.to_string_lossy().into_owned(),
@@ -408,29 +450,7 @@ export default function (pi) {
 }
 
 fn opencode_config_root() -> Result<PathBuf, String> {
-    resolve_opencode_config_root(
-        std::env::var_os("OPENCODE_CONFIG_DIR").map(PathBuf::from),
-        std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from),
-        dirs_next::home_dir(),
-    )
-}
-
-fn resolve_opencode_config_root(
-    explicit: Option<PathBuf>,
-    xdg_config_home: Option<PathBuf>,
-    home: Option<PathBuf>,
-) -> Result<PathBuf, String> {
-    if let Some(path) = explicit {
-        return Ok(path);
-    }
-    if let Some(path) = xdg_config_home {
-        return Ok(path.join("opencode"));
-    }
-    // OpenCode uses the XDG-style ~/.config/opencode location on Windows too.
-    // dirs_next::config_dir() resolves to AppData/Roaming there, which looks
-    // plausible but is not scanned by OpenCode.
-    home.map(|home| home.join(".config").join("opencode"))
-        .ok_or_else(|| "无法读取 OpenCode 配置目录".to_string())
+    crate::agent_paths::user_path(crate::agent_paths::AgentPath::OpenCode)
 }
 
 fn remove_legacy_opencode_plugin(active_plugin_path: &Path) {
@@ -816,16 +836,61 @@ export const TermflowStatusPlugin = async () => ({
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn codex_activation_checks_feature_flags_without_claiming_trust() {
+        let hooks = serde_json::json!({"hooks": {}});
+        let root = std::path::Path::new("custom-codex");
+        let initial = super::codex_hook_activation(root, &hooks, "").unwrap();
+        assert!(!initial.disabled);
+        for config in [
+            "[features]\nhooks = false",
+            "[features]\ncodex_hooks = false",
+        ] {
+            assert!(
+                super::codex_hook_activation(root, &hooks, config)
+                    .unwrap()
+                    .disabled
+            );
+        }
+        assert!(
+            !super::codex_hook_activation(
+                root,
+                &hooks,
+                "[features]\nhooks = true\ncodex_hooks = false"
+            )
+            .unwrap()
+            .disabled
+        );
+        assert!(super::codex_hook_activation(root, &hooks, "[invalid").is_err());
+        assert_eq!(
+            initial.configuration_id,
+            super::codex_hook_activation(root, &hooks, "")
+                .unwrap()
+                .configuration_id
+        );
+        assert_ne!(
+            initial.configuration_id,
+            super::codex_hook_activation(root, &hooks, "[hooks.state.reviewed]\ntrusted = true")
+                .unwrap()
+                .configuration_id
+        );
+        assert_ne!(
+            initial.configuration_id,
+            super::codex_hook_activation(std::path::Path::new("other-codex"), &hooks, "")
+                .unwrap()
+                .configuration_id
+        );
+    }
+
     use super::{
         antigravity_statusline_script, definition_contains_owned_command,
         hook_action_contains_owned_command, install_antigravity_hook_group,
         install_antigravity_statusline_config, install_json_hooks, managed_hook_script,
         opencode_plugin_source, pi_extension_source, remove_legacy_codex_trust,
-        remove_owned_json_hooks, resolve_opencode_config_root, supports_agent_status_hook,
-        ANTIGRAVITY_HOOK_GROUP, QODER_HOOK_EVENTS,
+        remove_owned_json_hooks, supports_agent_status_hook, ANTIGRAVITY_HOOK_GROUP,
+        QODER_HOOK_EVENTS,
     };
     use serde_json::json;
-    use std::path::PathBuf;
 
     #[test]
     #[cfg(windows)]
@@ -983,24 +1048,6 @@ mod tests {
         assert!(!migrated.contains("TERMFLOW AGENT STATUS HOOKS"));
         assert!(!migrated.contains("[hooks.state.\"managed\"]"));
         let _ = std::fs::remove_file(path);
-    }
-
-    #[test]
-    fn opencode_defaults_to_xdg_style_home_on_windows_too() {
-        let home = PathBuf::from(r"C:\Users\tester");
-        assert_eq!(
-            resolve_opencode_config_root(None, None, Some(home)).unwrap(),
-            PathBuf::from(r"C:\Users\tester\.config\opencode")
-        );
-    }
-
-    #[test]
-    fn opencode_honors_explicit_config_directory() {
-        let explicit = PathBuf::from(r"D:\custom-opencode");
-        assert_eq!(
-            resolve_opencode_config_root(Some(explicit.clone()), None, None).unwrap(),
-            explicit
-        );
     }
 
     #[test]

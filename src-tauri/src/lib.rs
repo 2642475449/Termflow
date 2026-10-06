@@ -1,3 +1,4 @@
+mod agent_paths;
 mod antigravity_usage;
 mod claude_rate_limits;
 mod claude_usage;

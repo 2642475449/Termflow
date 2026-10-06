@@ -378,7 +378,7 @@ fn find_session_telemetry(session_id: &str) -> Option<TelemetrySessionInfo> {
 }
 
 fn claude_root_dir() -> Option<PathBuf> {
-    dirs_next::home_dir().map(|home| home.join(".claude"))
+    crate::agent_paths::user_path(crate::agent_paths::AgentPath::Claude).ok()
 }
 
 fn claude_project_dir_name(project_path: &str) -> String {

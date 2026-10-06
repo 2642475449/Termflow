@@ -15,7 +15,7 @@ use std::sync::Arc;
 use std::time::UNIX_EPOCH;
 use tauri::State;
 
-const CLAUDE_REQUIRED_STATUS_EVENTS: [&str; 9] = [
+const CLAUDE_REQUIRED_STATUS_EVENTS: [&str; 14] = [
     "SessionStart",
     "UserPromptSubmit",
     "PreToolUse",
@@ -25,6 +25,11 @@ const CLAUDE_REQUIRED_STATUS_EVENTS: [&str; 9] = [
     "SubagentStart",
     "SubagentStop",
     "Stop",
+    "StopFailure",
+    "PermissionDenied",
+    "Elicitation",
+    "ElicitationResult",
+    "SessionEnd",
 ];
 
 #[derive(Debug, Serialize)]
@@ -274,8 +279,7 @@ fn normalize_hook_agent(agent: &str) -> Result<&'static str, String> {
 }
 
 fn get_user_codex_hooks_path() -> Result<PathBuf, String> {
-    let home_dir = dirs_next::home_dir().ok_or("无法获取用户主目录")?;
-    Ok(home_dir.join(".codex").join("hooks.json"))
+    Ok(crate::agent_paths::user_path(crate::agent_paths::AgentPath::Codex)?.join("hooks.json"))
 }
 
 fn get_user_qoder_settings_path() -> Result<PathBuf, String> {
@@ -288,12 +292,11 @@ fn get_user_antigravity_hooks_path() -> Result<PathBuf, String> {
 }
 
 fn get_user_opencode_plugin_path() -> Result<PathBuf, String> {
-    let home_dir = dirs_next::home_dir().ok_or("无法获取用户主目录")?;
-    Ok(home_dir
-        .join(".config")
-        .join("opencode")
-        .join("plugins")
-        .join("termflow-status.js"))
+    Ok(
+        crate::agent_paths::user_path(crate::agent_paths::AgentPath::OpenCode)?
+            .join("plugins")
+            .join("termflow-status.js"),
+    )
 }
 
 fn get_agent_scope_config_path(
@@ -483,8 +486,7 @@ struct ParsedAgentUsageEvent {
 }
 
 fn get_user_claude_config_path() -> Result<PathBuf, String> {
-    let home_dir = dirs_next::home_dir().ok_or("无法获取用户主目录")?;
-    Ok(home_dir.join(".claude").join("settings.json"))
+    Ok(crate::agent_paths::user_path(crate::agent_paths::AgentPath::Claude)?.join("settings.json"))
 }
 
 pub(crate) fn get_scope_config_path(
@@ -511,13 +513,14 @@ fn get_local_claude_config_path(project_path: &str) -> PathBuf {
 }
 
 fn get_user_claude_md_path() -> Result<PathBuf, String> {
-    let home_dir = dirs_next::home_dir().ok_or("无法获取用户主目录")?;
-    Ok(home_dir.join(".claude").join("CLAUDE.md"))
+    Ok(crate::agent_paths::user_path(crate::agent_paths::AgentPath::Claude)?.join("CLAUDE.md"))
 }
 
 fn get_claude_stats_cache_path() -> Result<PathBuf, String> {
-    let home_dir = dirs_next::home_dir().ok_or("无法获取用户主目录")?;
-    Ok(home_dir.join(".claude").join("stats-cache.json"))
+    Ok(
+        crate::agent_paths::user_path(crate::agent_paths::AgentPath::Claude)?
+            .join("stats-cache.json"),
+    )
 }
 
 fn get_workspace_claude_md_root_path(project_path: &str) -> PathBuf {
@@ -576,8 +579,7 @@ pub(crate) fn read_settings(config_path: &Path) -> Result<Value, String> {
 }
 
 fn get_claude_projects_path() -> Result<PathBuf, String> {
-    let home_dir = dirs_next::home_dir().ok_or("无法获取用户主目录")?;
-    Ok(home_dir.join(".claude").join("projects"))
+    Ok(crate::agent_paths::user_path(crate::agent_paths::AgentPath::Claude)?.join("projects"))
 }
 
 fn load_claude_stats_cache() -> Result<Option<ClaudeStatsCache>, String> {
@@ -2542,8 +2544,15 @@ fn build_pi_usage_stats_from_files(
 }
 
 fn build_pi_usage_stats() -> Result<AggregatedTranscriptStats, String> {
-    let home = dirs_next::home_dir().ok_or("无法获取用户主目录")?;
-    let files = collect_pi_session_files(&home.join(".pi").join("agent").join("sessions"))?;
+    let root = env::var_os("PI_CODING_AGENT_SESSION_DIR")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .map(Ok)
+        .unwrap_or_else(|| {
+            crate::agent_paths::user_path(crate::agent_paths::AgentPath::Pi)
+                .map(|root| root.join("sessions"))
+        })?;
+    let files = collect_pi_session_files(&root)?;
     build_pi_usage_stats_from_files(files)
 }
 
@@ -3355,15 +3364,17 @@ fn insert_hook(settings: &mut Value, entry: &StoredHookEntry) -> Result<(), Stri
         .as_array_mut()
         .ok_or_else(|| "Claude 配置结构异常: event hooks 不是数组".to_string())?;
 
+    let mut action = json!({
+        "type": entry.action_type,
+        "command": entry.command,
+    });
+    // 用户未指定超时时保留 CLI 默认行为；仅托管 Hook 显式使用 5 秒。
+    if let Some(timeout) = entry.timeout {
+        action["timeout"] = json!(timeout);
+    }
     event_array.push(json!({
         "matcher": entry.matcher,
-        "hooks": [
-            {
-                "type": entry.action_type,
-                "command": entry.command,
-                "timeout": entry.timeout.unwrap_or(3000),
-            }
-        ]
+        "hooks": [action]
     }));
 
     Ok(())
@@ -3385,87 +3396,44 @@ fn default_hook_entries() -> Result<Vec<StoredHookEntry>, String> {
 fn default_hook_entries_for_path(hook_script: &Path) -> Vec<StoredHookEntry> {
     let hook_script_str = hook_script.to_string_lossy().replace('\\', "\\\\");
 
-    vec![
-        StoredHookEntry {
-            event: "SessionStart".to_string(),
-            matcher: "".to_string(),
+    CLAUDE_REQUIRED_STATUS_EVENTS
+        .iter()
+        .map(|event| StoredHookEntry {
+            event: (*event).to_string(),
+            matcher: if matches!(
+                *event,
+                "PreToolUse" | "PostToolUse" | "PostToolUseFailure" | "PermissionDenied"
+            ) {
+                "*"
+            } else {
+                ""
+            }
+            .to_string(),
             action_type: "command".to_string(),
-            command: format!("node \"{}\" sessionstart", hook_script_str),
-            timeout: Some(3000),
-        },
-        StoredHookEntry {
-            event: "UserPromptSubmit".to_string(),
-            matcher: "".to_string(),
-            action_type: "command".to_string(),
-            command: format!("node \"{}\" userpromptsubmit", hook_script_str),
-            timeout: Some(3000),
-        },
-        StoredHookEntry {
-            event: "SubagentStart".to_string(),
-            matcher: "".to_string(),
-            action_type: "command".to_string(),
-            command: format!("node \"{}\" subagentstart", hook_script_str),
-            timeout: Some(3000),
-        },
-        StoredHookEntry {
-            event: "SubagentStop".to_string(),
-            matcher: "".to_string(),
-            action_type: "command".to_string(),
-            command: format!("node \"{}\" subagentstop", hook_script_str),
-            timeout: Some(3000),
-        },
-        StoredHookEntry {
-            event: "Stop".to_string(),
-            matcher: "".to_string(),
-            action_type: "command".to_string(),
-            command: format!("node \"{}\" stop", hook_script_str),
-            timeout: Some(3000),
-        },
-        StoredHookEntry {
-            event: "PermissionRequest".to_string(),
-            matcher: "".to_string(),
-            action_type: "command".to_string(),
-            command: format!("node \"{}\" permissionrequest", hook_script_str),
-            timeout: Some(3000),
-        },
-        StoredHookEntry {
-            event: "PreToolUse".to_string(),
-            matcher: "*".to_string(),
-            action_type: "command".to_string(),
-            command: format!("node \"{}\" pretooluse", hook_script_str),
-            timeout: Some(3000),
-        },
-        StoredHookEntry {
-            event: "PostToolUse".to_string(),
-            matcher: "*".to_string(),
-            action_type: "command".to_string(),
-            command: format!("node \"{}\" posttooluse", hook_script_str),
-            timeout: Some(3000),
-        },
-        StoredHookEntry {
-            event: "PostToolUseFailure".to_string(),
-            matcher: "*".to_string(),
-            action_type: "command".to_string(),
-            command: format!("node \"{}\" posttoolusefailure", hook_script_str),
-            timeout: Some(3000),
-        },
-    ]
+            command: format!(
+                "node \"{}\" {}",
+                hook_script_str,
+                event.to_ascii_lowercase()
+            ),
+            timeout: Some(5),
+        })
+        .collect()
 }
 
 fn get_claude_hook_script_path() -> Result<PathBuf, String> {
-    let home_dir = dirs_next::home_dir().ok_or("无法获取用户主目录")?;
-    Ok(home_dir
-        .join(".claude")
-        .join("hooks")
-        .join("termflow-hook.cjs"))
+    Ok(
+        crate::agent_paths::user_path(crate::agent_paths::AgentPath::Claude)?
+            .join("hooks")
+            .join("termflow-hook.cjs"),
+    )
 }
 
 // Retained for a future opt-in usage-status integration. Claude sessions must
 // not receive this settings file implicitly.
 #[allow(dead_code)]
 pub(crate) fn ensure_claude_statusline_bridge() -> Result<PathBuf, String> {
-    let home_dir = dirs_next::home_dir().ok_or("无法获取用户主目录")?;
-    let bridge_dir = home_dir.join(".claude").join("hooks");
+    let bridge_dir =
+        crate::agent_paths::user_path(crate::agent_paths::AgentPath::Claude)?.join("hooks");
     fs::create_dir_all(&bridge_dir)
         .map_err(|error| format!("创建 Claude status line bridge 目录失败: {error}"))?;
 
@@ -3521,7 +3489,7 @@ function readSettings(filePath) {
 
 function resolveOriginalStatusLine() {
   const projectDir = input?.workspace?.project_dir;
-  const candidates = [path.join(os.homedir(), '.claude', 'settings.json')];
+  const candidates = [path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude'), 'settings.json')];
   if (typeof projectDir === 'string' && projectDir.length > 0) {
     candidates.push(
       path.join(projectDir, '.claude', 'settings.json'),
@@ -3629,8 +3597,15 @@ const eventTypeByHook = {
   pretooluse: 'pre_tool_use',
   posttooluse: 'post_tool_use',
   posttoolusefailure: 'post_tool_use_failure',
+  permissiondenied: 'permission_denied',
+  stopfailure: 'process_error',
+  elicitation: 'waiting_input',
+  elicitationresult: 'working',
+  sessionend: 'session_end',
 };
 
+// A child failure must not mark the parent session as failed.
+if (input.agent_id && ['stopfailure', 'sessionend'].includes(hookName)) process.exit(0);
 const eventType = eventTypeByHook[hookName];
 const stateByHook = {
   sessionstart: 'waiting',
@@ -3642,6 +3617,11 @@ const stateByHook = {
   pretooluse: 'running',
   posttooluse: 'running',
   posttoolusefailure: 'running',
+  permissiondenied: 'running',
+  stopfailure: 'error',
+  elicitation: 'waiting',
+  elicitationresult: 'running',
+  sessionend: 'waiting',
 };
 const port = process.env.TERMFLOW_INGEST_PORT;
 const token = process.env.TERMFLOW_INGEST_TOKEN;
@@ -3670,7 +3650,7 @@ const agentType = typeof input.agent_type === 'string' ? input.agent_type : '';
 const toolName = typeof input.tool_name === 'string' ? input.tool_name : '';
 const hasExplicitActor = agentId.length > 0 || agentType.length > 0;
 const actorFingerprint = hasExplicitActor ? digest({ agentId, agentType }) : undefined;
-const hasToolContext = toolName.length > 0 && ['pretooluse', 'permissionrequest', 'posttooluse', 'posttoolusefailure'].includes(hookName);
+const hasToolContext = toolName.length > 0 && ['pretooluse', 'permissionrequest', 'permissiondenied', 'posttooluse', 'posttoolusefailure'].includes(hookName);
 const isSubagentLifecycle = ['subagentstart', 'subagentstop'].includes(hookName);
 const safePayload = hasToolContext
   ? {
@@ -4331,6 +4311,11 @@ mod tests {
             events,
             BTreeSet::from([
                 "PermissionRequest",
+                "PermissionDenied",
+                "StopFailure",
+                "Elicitation",
+                "ElicitationResult",
+                "SessionEnd",
                 "PostToolUse",
                 "PostToolUseFailure",
                 "PreToolUse",
@@ -4341,6 +4326,7 @@ mod tests {
                 "UserPromptSubmit",
             ])
         );
+        assert!(entries.iter().all(|entry| entry.timeout == Some(5)));
         assert!(entries
             .iter()
             .filter(|entry| {
@@ -4388,6 +4374,19 @@ mod tests {
         assert!(script.contains("payload: safePayload"));
         assert!(!script.contains("payload: inputData"));
         assert!(!script.contains("payload: input,"));
+    }
+
+    #[test]
+    fn restored_user_hook_preserves_timeout_policy() {
+        let mut entry = default_hook_entries_for_path(Path::new("C:/termflow-hook.cjs")).remove(0);
+        entry.command = "node user-hook.js".to_string();
+        for timeout in [None, Some(120)] {
+            entry.timeout = timeout;
+            let mut settings = json!({});
+            insert_hook(&mut settings, &entry).unwrap();
+            let action = &settings["hooks"][&entry.event][0]["hooks"][0];
+            assert_eq!(action.get("timeout").and_then(Value::as_u64), timeout);
+        }
     }
 
     #[test]

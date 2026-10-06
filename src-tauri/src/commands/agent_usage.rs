@@ -391,9 +391,10 @@ pub(crate) fn collect_codex_session_files() -> Vec<PathBuf> {
     for home in termflow_managed_codex_home_paths() {
         homes.push(home);
     }
-    if let Some(raw_home) = env::var_os("CODEX_HOME").filter(|value| !value.is_empty()) {
-        homes.push(PathBuf::from(raw_home));
+    if let Ok(home) = crate::agent_paths::user_path(crate::agent_paths::AgentPath::Codex) {
+        homes.push(home);
     }
+    // 历史用量继续包含迁移前的默认目录，活动会话和配置只使用当前目录。
     if let Some(home_dir) = dirs_next::home_dir() {
         homes.push(home_dir.join(".codex"));
     }

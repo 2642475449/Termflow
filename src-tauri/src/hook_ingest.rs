@@ -832,7 +832,9 @@ fn normalize_permission_lifecycle_event(
         "permissiondenied" => Some(PermissionLifecycleEvent::PermissionDenied),
         "posttooluse" => Some(PermissionLifecycleEvent::PostToolUse),
         "posttoolusefailure" => Some(PermissionLifecycleEvent::PostToolUseFailure),
-        "assistantcomplete" | "stop" => Some(PermissionLifecycleEvent::Stop),
+        "assistantcomplete" | "stop" | "processerror" | "sessionend" => {
+            Some(PermissionLifecycleEvent::Stop)
+        }
         _ => None,
     }
 }
@@ -1121,6 +1123,7 @@ fn normalize_event_type(state: &str, event_type: Option<&str>) -> Option<&'stati
         "processerror" | "sessionerror" => Some("process_error"),
         "hookerror" => Some("hook_error"),
         "agentaborted" => Some("agent_aborted"),
+        "sessionend" => Some("session_end"),
         _ => match state {
             "completed" => Some("assistant_complete"),
             "waiting" => Some("waiting_input"),
@@ -1135,6 +1138,7 @@ fn should_emit_attention_event(state: &str, event_type: Option<&str>) -> bool {
         && event_type.is_some()
         && event_type != Some("session_start")
         && event_type != Some("agent_aborted")
+        && event_type != Some("session_end")
 }
 
 fn normalize_agent(agent: Option<&str>) -> Option<String> {
@@ -1206,6 +1210,36 @@ fn now_ms() -> i64 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn failure_and_session_end_release_pending_permissions_without_false_completion() {
+        for (event, state) in [("process_error", "error"), ("session_end", "waiting")] {
+            let mut guard = super::SessionStatusGuard {
+                permission_pending: true,
+                last_state: Some("waiting".into()),
+                last_event_type: Some("permission_request".into()),
+                ..Default::default()
+            };
+            let lifecycle = super::normalize_permission_lifecycle_event("claude", Some(event));
+            assert!(super::reduce_provider_permission_state(
+                &mut guard, "claude", lifecycle, None, state
+            ));
+            assert!(!guard.permission_pending);
+            assert_eq!(super::normalize_event_type(state, Some(event)), Some(event));
+        }
+        assert!(!super::should_emit_attention_event(
+            "waiting",
+            Some("session_end")
+        ));
+        assert!(super::should_emit_attention_event(
+            "error",
+            Some("process_error")
+        ));
+        assert!(super::should_emit_attention_event(
+            "waiting",
+            Some("waiting_input")
+        ));
+    }
+
     use super::{
         accept_guard_event, agent_label, begin_task_generation, claim_task_completion,
         completion_candidate_if_safe, is_child_stop, normalize_agent,

@@ -3,7 +3,6 @@ use crate::qoder_config::{qoder_user_config_root, qoder_workspace_config_root};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
@@ -549,22 +548,13 @@ fn agent_workspace_directory(agent: SkillAgent) -> &'static str {
 fn agent_user_directory(agent: SkillAgent) -> Result<PathBuf, String> {
     let home = dirs_next::home_dir().ok_or("Unable to resolve the user home directory")?;
     Ok(match agent {
-        SkillAgent::Claude => home.join(".claude"),
+        SkillAgent::Claude => crate::agent_paths::user_path(crate::agent_paths::AgentPath::Claude)?,
         SkillAgent::Codex => home.join(".agents"),
         SkillAgent::Qoder => qoder_user_config_root()?,
         SkillAgent::Antigravity => home.join(".gemini").join("config"),
         SkillAgent::Pi => home.join(".agents"),
         SkillAgent::Opencode => {
-            if let Some(path) = env::var_os("OPENCODE_CONFIG_DIR").filter(|value| !value.is_empty())
-            {
-                PathBuf::from(path)
-            } else if let Some(path) =
-                env::var_os("XDG_CONFIG_HOME").filter(|value| !value.is_empty())
-            {
-                PathBuf::from(path).join("opencode")
-            } else {
-                home.join(".config").join("opencode")
-            }
+            crate::agent_paths::user_path(crate::agent_paths::AgentPath::OpenCode)?
         }
     })
 }

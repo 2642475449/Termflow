@@ -138,9 +138,14 @@ fn get_mcp_config_path(
     };
 
     match (agent, scope) {
-        (CLAUDE, "user" | "local") => Ok(home_dir()?.join(".claude.json")),
+        (CLAUDE, "user" | "local") => {
+            crate::agent_paths::user_path(crate::agent_paths::AgentPath::ClaudeState)
+        }
         (CLAUDE, "project") => Ok(project()?.join(".mcp.json")),
-        (CODEX, "user") => Ok(home_dir()?.join(".codex").join("config.toml")),
+        (CODEX, "user") => Ok(
+            crate::agent_paths::user_path(crate::agent_paths::AgentPath::Codex)?
+                .join("config.toml"),
+        ),
         (CODEX, "workspace") => Ok(project()?.join(".codex").join("config.toml")),
         (ANTIGRAVITY, "user") => Ok(home_dir()?
             .join(".gemini")
@@ -148,7 +153,7 @@ fn get_mcp_config_path(
             .join("mcp_config.json")),
         (ANTIGRAVITY, "workspace") => Ok(project()?.join(".agents").join("mcp_config.json")),
         (OPENCODE, "user") => Ok(prefer_existing_config_path(
-            home_dir()?.join(".config").join("opencode"),
+            crate::agent_paths::user_path(crate::agent_paths::AgentPath::OpenCode)?,
             &["opencode.jsonc", "opencode.json"],
             "opencode.json",
         )),

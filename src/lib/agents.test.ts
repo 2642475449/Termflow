@@ -12,6 +12,13 @@ import {
 } from "./agents";
 
 describe("getDefaultAgentLaunchOptions", () => {
+  it("migrates legacy approvals at both launch and persistence boundaries", () => {
+    const legacy = { yolo: false, approvalMode: "untrusted", sandboxMode: "read-only", effort: "inherit" } as const;
+    expect(getDefaultAgentLaunchOptions("codex", { codex: legacy })).toMatchObject({ approvalMode: "on-request", sandboxMode: "read-only" });
+    expect(getPermissionDefaultsForLaunch("codex", legacy).codex?.approvalMode).toBe("on-request");
+    expect(getAgentStartupCommand("codex", undefined, null, null, legacy)).toContain("--ask-for-approval on-request --sandbox read-only");
+    expect(getAgentStartupCommand("codex", undefined, null, null, { ...legacy, approvalMode: "never" })).toContain("--ask-for-approval never --sandbox read-only");
+  });
   it("uses the saved Claude permission mode", () => {
     expect(getDefaultAgentLaunchOptions("claude", {})).toEqual({
       skipPermissions: false,
@@ -146,7 +153,6 @@ describe("getAgentStartupCommand", () => {
       yolo: true, approvalMode: "untrusted", sandboxMode: "workspace-write", effort: "inherit",
     })).toBe("codex --no-daemon --dangerously-bypass-approvals-and-sandbox");
   });
-
   it("keeps Claude on the native session startup path", () => {
     expect(getAgentStartupCommand("claude")).toBeUndefined();
     expect(getAgentStartupCommand()).toBeUndefined();

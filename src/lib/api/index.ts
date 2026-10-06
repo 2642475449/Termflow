@@ -117,6 +117,7 @@ export interface AgentHookStatus {
   configured: boolean;
   configPath: string;
   detail?: string | null;
+  codexActivation?: { disabled: boolean; configurationId: string } | null;
 }
 
 export async function ensureAgentStatusHook(agentId: string): Promise<AgentHookStatus> {
