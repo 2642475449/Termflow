@@ -289,7 +289,7 @@ impl Default for PersistentSettingsRecord {
             editor_font_size: default_editor_font_size(),
             terminal_font_size: 14,
             terminal_cursor_blink: true,
-            terminal_line_height: 1.2,
+            terminal_line_height: 1.0,
             terminal_scrollback: default_terminal_scrollback(),
             terminal_renderer: default_terminal_renderer(),
             agent_permission_defaults: default_agent_permission_defaults(),
@@ -1008,7 +1008,7 @@ impl Database {
         &self,
         settings: &PersistentSettingsRecord,
     ) -> Result<(), String> {
-        self.save_persistent_settings_internal(settings, true, true)
+        self.save_persistent_settings_internal(settings, true, true, true)
     }
 
     /// Saves preferences owned by the settings UI without overwriting values
@@ -1019,7 +1019,19 @@ impl Database {
         &self,
         settings: &PersistentSettingsRecord,
     ) -> Result<(), String> {
-        self.save_persistent_settings_internal(settings, false, false)
+        self.save_persistent_settings_internal(settings, false, false, false)
+    }
+
+    /// 快捷命令使用独立读写，避免其他窗口的通用设置快照覆盖项目迁移或编辑。
+    pub fn load_stored_quick_commands(&self) -> Result<serde_json::Value, String> {
+        let conn = self.conn.lock();
+        Ok(read_setting(&conn, "quickCommands.terminalCommands")?
+            .unwrap_or_else(|| serde_json::Value::Array(vec![])))
+    }
+
+    pub fn save_stored_quick_commands(&self, commands: &serde_json::Value) -> Result<(), String> {
+        let conn = self.conn.lock();
+        write_setting(&conn, "quickCommands.terminalCommands", commands)
     }
 
     pub fn save_last_project_path(&self, project_path: &str) -> Result<(), String> {
@@ -1081,6 +1093,7 @@ impl Database {
         settings: &PersistentSettingsRecord,
         include_last_project: bool,
         include_explorer_context_menu: bool,
+        include_quick_commands: bool,
     ) -> Result<(), String> {
         let conn = self.conn.lock();
 
@@ -1204,11 +1217,13 @@ impl Database {
             "voice.triggerVisible",
             &settings.voice_trigger_visible,
         )?;
-        write_setting(
-            &conn,
-            "quickCommands.terminalCommands",
-            &settings.terminal_quick_commands,
-        )?;
+        if include_quick_commands {
+            write_setting(
+                &conn,
+                "quickCommands.terminalCommands",
+                &settings.terminal_quick_commands,
+            )?;
+        }
         write_setting(&conn, "agents.defaultAgentId", &settings.default_agent_id)?;
         write_setting(
             &conn,

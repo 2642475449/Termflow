@@ -24,10 +24,17 @@ pub struct CodexRateLimitWindow {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CodexRateLimitResetCredit {
+    pub expires_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CodexRateLimitResetCredits {
     pub available_count: u32,
     pub total_earned_count: Option<u32>,
     pub next_expires_at: Option<i64>,
+    pub credits: Vec<CodexRateLimitResetCredit>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -546,11 +553,25 @@ fn map_reset_credits(value: &Value) -> Option<CodexRateLimitResetCredits> {
     let available_count = json_u64(value.get("availableCount"))?;
     let total_earned_count = json_u64(value.get("totalEarnedCount")).map(|value| value as u32);
     let next_expires_at = parse_credit_timestamp_ms(value.get("nextExpiresAt"));
+    let credits = value
+        .get("credits")
+        .and_then(Value::as_array)
+        .map(|credits| {
+            credits
+                .iter()
+                .filter(|credit| credit.is_object())
+                .map(|credit| CodexRateLimitResetCredit {
+                    expires_at: parse_credit_timestamp_ms(credit.get("expiresAt")),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
 
     Some(CodexRateLimitResetCredits {
         available_count: available_count as u32,
         total_earned_count,
         next_expires_at,
+        credits,
     })
 }
 
@@ -690,6 +711,33 @@ mod tests {
         let window = map_rpc_window(&json!({ "usedPercent": 7 }), 300).expect("window");
 
         assert_eq!(window.window_minutes, 300);
+    }
+
+    #[test]
+    fn maps_each_rate_limit_reset_credit_expiry() {
+        let limits = map_rate_limits_response(
+            Some(&json!({
+                "rateLimitResetCredits": {
+                    "availableCount": 3,
+                    "nextExpiresAt": "2026-10-14T15:31:00Z",
+                    "credits": [
+                        { "expiresAt": "2026-10-14T15:31:00Z" },
+                        { "expiresAt": 1_790_000_000 },
+                        { "expiresAt": null }
+                    ]
+                }
+            })),
+            CodexIdentity::default(),
+        );
+
+        let credits = limits
+            .rate_limit_reset_credits
+            .expect("reset credits");
+        assert_eq!(credits.available_count, 3);
+        assert_eq!(credits.credits.len(), 3);
+        assert_eq!(credits.credits[0].expires_at, Some(1_791_991_860_000));
+        assert_eq!(credits.credits[1].expires_at, Some(1_790_000_000_000));
+        assert_eq!(credits.credits[2].expires_at, None);
     }
 
     #[test]

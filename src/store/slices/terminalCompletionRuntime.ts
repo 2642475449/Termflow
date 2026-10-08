@@ -1,3 +1,5 @@
+import type { TerminalCommandWatcherStatus } from "@/lib/terminalCommandWatcher";
+
 export type TerminalCompletionIntegrationShell = "powershell" | "unsupported";
 export type TerminalCompletionIntegrationStatus = "pending" | "available" | "unavailable";
 export type TerminalCompletionIntegrationReason =
@@ -16,6 +18,8 @@ export interface TerminalCompletionIntegrationState {
 
 export interface TerminalCompletionRuntimeSlice {
   terminalCompletionIntegrationBySession: Record<string, TerminalCompletionIntegrationState>;
+  terminalCommandStatusBySession: Record<string, TerminalCommandWatcherStatus>;
+  setTerminalCommandStatus: (sessionId: string, status: TerminalCommandWatcherStatus) => void;
   setTerminalCompletionIntegration: (
     sessionId: string,
     integration: TerminalCompletionIntegrationState,
@@ -29,6 +33,16 @@ export function createTerminalCompletionRuntimeSlice(
 ): TerminalCompletionRuntimeSlice {
   return {
     terminalCompletionIntegrationBySession: {},
+    terminalCommandStatusBySession: {},
+    setTerminalCommandStatus: (sessionId, status) => {
+      if (get().terminalCommandStatusBySession[sessionId] === status) return;
+      set({
+        terminalCommandStatusBySession: {
+          ...get().terminalCommandStatusBySession,
+          [sessionId]: status,
+        },
+      });
+    },
     setTerminalCompletionIntegration: (sessionId, integration) =>
       set({
         terminalCompletionIntegrationBySession: {
@@ -38,9 +52,14 @@ export function createTerminalCompletionRuntimeSlice(
       }),
     clearTerminalCompletionIntegration: (sessionId) => {
       const current = get().terminalCompletionIntegrationBySession;
-      if (!(sessionId in current)) return;
+      const commands = get().terminalCommandStatusBySession;
+      if (!(sessionId in current) && !(sessionId in commands)) return;
       const { [sessionId]: _removed, ...remaining } = current;
-      set({ terminalCompletionIntegrationBySession: remaining });
+      const { [sessionId]: _removedCommand, ...remainingCommands } = commands;
+      set({
+        terminalCompletionIntegrationBySession: remaining,
+        terminalCommandStatusBySession: remainingCommands,
+      });
     },
   };
 }

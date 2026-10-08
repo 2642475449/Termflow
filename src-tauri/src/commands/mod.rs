@@ -15,6 +15,8 @@ pub mod image;
 pub mod mcp_servers;
 pub mod network_proxy;
 pub mod notification;
+pub mod quick_commands;
+pub mod project_launchers;
 pub mod remote_notification;
 pub(crate) mod scheduled_tasks;
 pub mod search_index;

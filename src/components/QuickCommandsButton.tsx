@@ -14,9 +14,11 @@ import {
 } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "@/store";
+import { useProjectQuickCommandsStore, persistQuickCommand, deletePersistedQuickCommand } from "@/store/slices/projectQuickCommands";
 import type { AgentCliInfo, AntigravitySessionLaunchOptions, ClaudeSessionLaunchOptions, QoderSessionLaunchOptions, TerminalQuickCommand } from "@/types";
 import {
   isQuickCommandComplete,
+  isQuickCommandSessionRunning,
   flattenQuickCommand,
   createQuickCommandDraft,
   quickCommandMatchesRepository,
@@ -30,20 +32,20 @@ import {
   getDefaultAgentLaunchOptions,
 } from "@/lib/agents";
 import { QuickCommandDialog } from "./QuickCommandDialog";
-import { AgentIcon } from "@/components/AgentIcon";
+import { AgentActivityIcon } from "@/components/AgentActivityIcon";
 
 export function QuickCommandsButton() {
   const { t } = useTranslation();
   const currentProject = useAppStore((s) => s.currentProject);
   const terminalQuickCommands = useAppStore((s) => s.terminalQuickCommands);
-  const setTerminalQuickCommands = useAppStore((s) => s.setTerminalQuickCommands);
-  const removeTerminalQuickCommand = useAppStore((s) => s.removeTerminalQuickCommand);
+  const saving = useProjectQuickCommandsStore((s) => s.saving);
   const addSession = useAppStore((s) => s.addSession);
   const openTab = useAppStore((s) => s.openTab);
   const updateSession = useAppStore((s) => s.updateSession);
   const agentPermissionDefaults = useAppStore((s) => s.agentPermissionDefaults);
   const defaultTerminalShell = useAppStore((s) => s.defaultTerminalShell);
   const sessions = useAppStore((s) => s.sessions);
+  const terminalCommandStatusBySession = useAppStore((s) => s.terminalCommandStatusBySession);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -92,11 +94,6 @@ export function QuickCommandsButton() {
       ?? allVisible[0]
       ?? null;
   }, [allVisible, preferredCommandId]);
-
-  // 无仓库上下文时隐藏按钮
-  if (!repositoryId) {
-    return null;
-  }
 
   // 运行命令
   const runCommand = useCallback(
@@ -201,6 +198,7 @@ export function QuickCommandsButton() {
           }
         }
       } catch (error) {
+        updateSession(sessionId, { active: false, status: "error" });
         console.error("快速命令执行失败:", error);
         message.error(t("quickCommands.runFailed"));
       }
@@ -214,26 +212,28 @@ export function QuickCommandsButton() {
   const isCommandRunning = useCallback(
     (commandId: string) => {
       return sessions.some(
-        (s) => s.quickCommandId === commandId && s.active && s.status !== "stopped",
+        (s) => s.path === repositoryId && s.quickCommandId === commandId &&
+          isQuickCommandSessionRunning(s, terminalCommandStatusBySession[s.id]),
       );
     },
-    [sessions],
+    [sessions, terminalCommandStatusBySession, repositoryId],
   );
 
   const getRunningSession = useCallback(
     (commandId: string) => {
       return sessions.find(
-        (s) => s.quickCommandId === commandId && s.active && s.status !== "stopped",
+        (s) => s.path === repositoryId && s.quickCommandId === commandId &&
+          isQuickCommandSessionRunning(s, terminalCommandStatusBySession[s.id]),
       );
     },
-    [sessions],
+    [sessions, terminalCommandStatusBySession, repositoryId],
   );
 
   const stopCommand = useCallback(
     async (command: TerminalQuickCommand, e?: React.MouseEvent) => {
       e?.stopPropagation();
       const runningSessions = sessions.filter(
-        (s) => s.quickCommandId === command.id && s.active && s.status !== "stopped",
+        (s) => s.path === repositoryId && s.quickCommandId === command.id && s.active && s.status !== "stopped",
       );
       if (runningSessions.length === 0) return;
 
@@ -247,26 +247,22 @@ export function QuickCommandsButton() {
       }
       message.success(t("quickCommands.stopSuccess", { label: command.label }));
     },
-    [sessions, updateSession, t],
+    [sessions, updateSession, t, repositoryId],
   );
 
     // 保存命令（新增或编辑）
   const saveCommand = useCallback(
-    (command: TerminalQuickCommand) => {
-      const existing = terminalQuickCommands.findIndex((c) => c.id === command.id);
-      let updated: TerminalQuickCommand[];
-      if (existing >= 0) {
-        updated = [...terminalQuickCommands];
-        updated[existing] = command;
-      } else {
-        updated = [...terminalQuickCommands, command];
+    async (command: TerminalQuickCommand) => {
+      try {
+        await persistQuickCommand(command, editingCommand?.scope);
+        message.success(t("quickCommands.saveSuccess"));
+        setDialogOpen(false);
+        setEditingCommand(null);
+      } catch (error) {
+        message.error(t("quickCommands.saveFailed", { error: String(error) }));
       }
-      setTerminalQuickCommands(updated);
-      message.success(t("quickCommands.saveSuccess"));
-      setDialogOpen(false);
-      setEditingCommand(null);
     },
-    [terminalQuickCommands, setTerminalQuickCommands, t],
+    [editingCommand, t],
   );
 
   // 删除命令
@@ -278,21 +274,26 @@ export function QuickCommandsButton() {
     [],
   );
 
-  const confirmDeleteCommand = useCallback(() => {
+  const confirmDeleteCommand = useCallback(async () => {
     if (!deletingCommand) return;
-
-    removeTerminalQuickCommand(deletingCommand.id);
-    setSelectedIndex((index) => Math.max(0, index - 1));
-    setDeletingCommand(null);
-    message.success(t("quickCommands.deleteSuccess"));
-  }, [deletingCommand, removeTerminalQuickCommand, t]);
+    try {
+      await deletePersistedQuickCommand(deletingCommand);
+      setSelectedIndex((index) => Math.max(0, index - 1));
+      setDeletingCommand(null);
+      message.success(t("quickCommands.deleteSuccess"));
+    } catch (error) {
+      message.error(t("quickCommands.deleteFailed", { error: String(error) }));
+    }
+  }, [deletingCommand, t]);
 
   // 打开新增对话框
   const openAddDialog = useCallback(() => {
-    setEditingCommand(null);
+    setEditingCommand(createQuickCommandDraft(repositoryId
+      ? { type: "repository", repositoryId }
+      : { type: "global" }));
     setDialogOpen(true);
     setMenuOpen(false);
-  }, []);
+  }, [repositoryId]);
 
   // 打开编辑对话框
   const openEditDialog = useCallback((command: TerminalQuickCommand) => {
@@ -371,6 +372,7 @@ export function QuickCommandsButton() {
     const isSelected = index === selectedIndex;
     const running = isCommandRunning(command.id);
     const runningSession = running ? getRunningSession(command.id) : undefined;
+    const showRunningStatus = running && command.action === "terminal-command";
 
     return (
       <div
@@ -394,16 +396,21 @@ export function QuickCommandsButton() {
           scrollToSelected(index);
         }}
       >
-        {running ? (
-          <span className="quick-command-running-dot" />
-        ) : command.action === "agent-prompt" ? (
+        {command.action === "agent-prompt" ? (
           command.agentId ? (
-            <AgentIcon agentId={command.agentId} size={14} />
+            <AgentActivityIcon
+              agentId={command.agentId}
+              active={runningSession?.active}
+              status={runningSession?.status}
+              size={14}
+            />
           ) : (
             <RobotOutlined
               style={{ fontSize: 12, color: "var(--cs-primary)", flexShrink: 0 }}
             />
           )
+        ) : running ? (
+          <span className="quick-command-running-dot" />
         ) : (
           <CodeOutlined
             style={{ fontSize: 12, color: "var(--cs-text-secondary)", flexShrink: 0 }}
@@ -415,7 +422,7 @@ export function QuickCommandsButton() {
             style={{ color: "var(--cs-text-primary)" }}
           >
             <span className="truncate">{command.label}</span>
-            {running && (
+            {showRunningStatus && (
               <span
                 className="text-[10px] px-1 py-0.2 rounded font-normal shrink-0"
                 style={{
@@ -600,6 +607,9 @@ export function QuickCommandsButton() {
     </div>
   );
 
+  // 所有 Hook 都执行后再隐藏无项目上下文的入口。
+  if (!repositoryId) return null;
+
   // 空状态：显示添加按钮
   if (allVisible.length === 0) {
     return (
@@ -615,6 +625,7 @@ export function QuickCommandsButton() {
           </button>
         </Tooltip>
         <QuickCommandDialog
+          saving={saving}
           open={dialogOpen}
           command={editingCommand ?? createQuickCommandDraft({ type: "repository", repositoryId })}
           onSave={saveCommand}
@@ -630,6 +641,7 @@ export function QuickCommandsButton() {
 
   const isPreferredRunning = preferredCommand ? isCommandRunning(preferredCommand.id) : false;
   const preferredRunningSession = preferredCommand ? getRunningSession(preferredCommand.id) : undefined;
+  const showPreferredRunningStatus = isPreferredRunning && preferredCommand?.action === "terminal-command";
 
   // 非空状态：分裂按钮
   return (
@@ -639,7 +651,7 @@ export function QuickCommandsButton() {
         <Tooltip
           title={
             isPreferredRunning
-              ? `${preferredCommand?.label ?? ""} (${t("quickCommands.running")}) · ${t("quickCommands.clickToFocus")}`
+              ? `${preferredCommand?.label ?? ""}${showPreferredRunningStatus ? ` (${t("quickCommands.running")})` : ""} · ${t("quickCommands.clickToFocus")}`
               : preferredCommand
                 ? `${preferredCommand.label}: ${preferredCommand.command}`
                 : undefined
@@ -657,14 +669,19 @@ export function QuickCommandsButton() {
             }}
             disabled={!preferredCommand}
           >
-            {isPreferredRunning ? (
-              <span className="quick-command-running-dot" />
-            ) : preferredCommand?.action === "agent-prompt" ? (
+            {preferredCommand?.action === "agent-prompt" ? (
               preferredCommand.agentId ? (
-                <AgentIcon agentId={preferredCommand.agentId} size={14} />
+                <AgentActivityIcon
+                  agentId={preferredCommand.agentId}
+                  active={preferredRunningSession?.active}
+                  status={preferredRunningSession?.status}
+                  size={14}
+                />
               ) : (
                 <RobotOutlined style={{ fontSize: 12, flexShrink: 0 }} />
               )
+            ) : isPreferredRunning ? (
+              <span className="quick-command-running-dot" />
             ) : (
               <PlayCircleOutlined style={{ fontSize: 12, flexShrink: 0 }} />
             )}
@@ -709,6 +726,7 @@ export function QuickCommandsButton() {
       </div>
 
       <QuickCommandDialog
+        saving={saving}
         open={dialogOpen}
         command={editingCommand ?? createQuickCommandDraft({ type: "repository", repositoryId })}
         onSave={saveCommand}
@@ -726,6 +744,7 @@ export function QuickCommandsButton() {
         cancelText={t("common.cancel")}
         okButtonProps={{ danger: true }}
         onOk={confirmDeleteCommand}
+        confirmLoading={saving}
         onCancel={() => setDeletingCommand(null)}
         destroyOnHidden
       >

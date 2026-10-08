@@ -57,9 +57,20 @@ pub async fn spawn_pty(
     shell_type: Option<String>,
     claude_effort: Option<String>,
     agent_id: Option<String>,
+    working_directory: Option<String>,
 ) -> Result<(), String> {
     if path.is_empty() {
         return Err("项目路径不能为空".into());
+    }
+    if let Some(directory) = working_directory.as_deref() {
+        let root = std::fs::canonicalize(&path).map_err(|error| error.to_string())?;
+        let directory = std::fs::canonicalize(directory).map_err(|error| error.to_string())?;
+        if !directory.is_dir() || !directory.starts_with(&root) {
+            return Err("终端工作目录必须位于项目内".into());
+        }
+        if !matches!(agent_id.as_deref(), Some("powershell" | "cmd")) {
+            return Err("自定义工作目录仅支持普通终端".into());
+        }
     }
     // Shell sessions do not support Agent status hooks.  Do not attempt their
     // configuration here, otherwise a successful PowerShell/CMD launch emits a
@@ -119,6 +130,7 @@ pub async fn spawn_pty(
         claude_effort,
         agent_id,
         network_proxy,
+        working_directory,
     );
     let result = match result {
         Ok(Some(control)) => {

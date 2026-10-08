@@ -39,6 +39,8 @@ Thumbs.db
 *.log
 
 # Local AI tooling and workspace state
+.termflow/local/
+.termflow/*.tmp
 .agents/
 .codex-tmp/
 .claude/*

@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from "react";
-import { Button, Input, Segmented, Empty, Modal, Tag, message } from "antd";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Alert, Button, Input, Segmented, Empty, Modal, Tag, Tooltip, message } from "antd";
 import {
   PlusOutlined,
   SearchOutlined,
@@ -9,9 +9,12 @@ import {
   RobotOutlined,
   GlobalOutlined,
   FolderOutlined,
+  ReloadOutlined,
 } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "@/store";
+import { useProjectQuickCommandsStore, persistQuickCommand, deletePersistedQuickCommand, refreshQuickCommandCatalog } from "@/store/slices/projectQuickCommands";
+import { onQuickCommandsUpdated } from "@/lib/api";
 import type { TerminalQuickCommand } from "@/types";
 import {
   isQuickCommandComplete,
@@ -27,9 +30,19 @@ type FilterMode = "all" | "global" | "repository";
 export function QuickCommandsPage() {
   const { t } = useTranslation();
   const currentProject = useAppStore((s) => s.currentProject);
-  const terminalQuickCommands = useAppStore((s) => s.terminalQuickCommands);
-  const setTerminalQuickCommands = useAppStore((s) => s.setTerminalQuickCommands);
-  const removeTerminalQuickCommand = useAppStore((s) => s.removeTerminalQuickCommand);
+  const terminalQuickCommands = useProjectQuickCommandsStore((s) => s.catalog.commands);
+  const catalogErrors = useProjectQuickCommandsStore((s) => s.catalog.errors);
+  const catalogError = useProjectQuickCommandsStore((s) => s.catalogError);
+  const catalogLoading = useProjectQuickCommandsStore((s) => s.catalogLoading);
+  const recentProjects = useAppStore((s) => s.recentProjects);
+  const projectPathsKey = useAppStore((s) => JSON.stringify([
+    s.currentProject?.path,
+    ...s.recentProjects.map((project) => project.path),
+    ...Object.keys(s.projectSessions),
+    ...Object.keys(s.projectArchivedSessions),
+    ...Object.keys(s.projectWorkspaces),
+  ]));
+  const saving = useProjectQuickCommandsStore((s) => s.saving);
 
   const [filter, setFilter] = useState<FilterMode>("all");
   const [search, setSearch] = useState("");
@@ -37,6 +50,31 @@ export function QuickCommandsPage() {
   const [editingCommand, setEditingCommand] = useState<TerminalQuickCommand | null>(null);
 
   const repositoryId = currentProject?.path ?? null;
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    const reload = () => {
+      if (!disposed) void refreshQuickCommandCatalog().catch(console.error);
+    };
+    const subscription = onQuickCommandsUpdated(reload);
+    void subscription.then((stop) => {
+      if (disposed) stop();
+      else { unlisten = stop; reload(); }
+    }).catch(() => reload());
+    window.addEventListener("focus", reload);
+    return () => {
+      disposed = true;
+      window.removeEventListener("focus", reload);
+      unlisten?.();
+    };
+  }, [projectPathsKey]);
+
+  const projectName = useCallback((path: string) => {
+    return recentProjects.find((project) => project.path === path)?.name
+      ?? path.split(/[\\/]/).filter(Boolean).pop()
+      ?? path;
+  }, [recentProjects]);
 
   // 过滤和搜索
   const filteredCommands = useMemo(() => {
@@ -56,12 +94,15 @@ export function QuickCommandsPage() {
       const q = search.toLowerCase().trim();
       result = result.filter(
         (c) =>
-          c.label.toLowerCase().includes(q) || c.command.toLowerCase().includes(q),
+          c.label.toLowerCase().includes(q) || c.command.toLowerCase().includes(q)
+          || (c.scope.type === "repository" && (
+            c.scope.repositoryId.toLowerCase().includes(q) || projectName(c.scope.repositoryId).toLowerCase().includes(q)
+          )),
       );
     }
 
     return result;
-  }, [terminalQuickCommands, filter, search, repositoryId]);
+  }, [terminalQuickCommands, filter, search, repositoryId, projectName]);
 
   // 统计
   const stats = useMemo(() => {
@@ -75,21 +116,17 @@ export function QuickCommandsPage() {
 
   // 保存命令
   const saveCommand = useCallback(
-    (command: TerminalQuickCommand) => {
-      const existing = terminalQuickCommands.findIndex((c) => c.id === command.id);
-      let updated: TerminalQuickCommand[];
-      if (existing >= 0) {
-        updated = [...terminalQuickCommands];
-        updated[existing] = command;
-      } else {
-        updated = [...terminalQuickCommands, command];
+    async (command: TerminalQuickCommand) => {
+      try {
+        await persistQuickCommand(command, editingCommand?.scope);
+        message.success(t("quickCommands.saveSuccess"));
+        setDialogOpen(false);
+        setEditingCommand(null);
+      } catch (error) {
+        message.error(t("quickCommands.saveFailed", { error: String(error) }));
       }
-      setTerminalQuickCommands(updated);
-      message.success(t("quickCommands.saveSuccess"));
-      setDialogOpen(false);
-      setEditingCommand(null);
     },
-    [terminalQuickCommands, setTerminalQuickCommands, t],
+    [editingCommand, t],
   );
 
   // 删除命令
@@ -101,20 +138,30 @@ export function QuickCommandsPage() {
         okText: t("common.confirm"),
         cancelText: t("common.cancel"),
         okButtonProps: { danger: true },
-        onOk() {
-          removeTerminalQuickCommand(command.id);
-          message.success(t("quickCommands.deleteSuccess"));
+        async onOk() {
+          try {
+            await deletePersistedQuickCommand(command);
+            message.success(t("quickCommands.deleteSuccess"));
+          } catch (error) {
+            message.error(t("quickCommands.deleteFailed", { error: String(error) }));
+            throw error;
+          }
         },
       });
     },
-    [removeTerminalQuickCommand, t],
+    [t],
   );
 
   // 新增
   const openAddDialog = useCallback(() => {
-    setEditingCommand(null);
+    // 草稿只在打开时创建，后台刷新目录时不重置正在填写的表单。
+    setEditingCommand(createQuickCommandDraft(
+      filter !== "global" && repositoryId
+        ? { type: "repository", repositoryId }
+        : { type: "global" },
+    ));
     setDialogOpen(true);
-  }, []);
+  }, [filter, repositoryId]);
 
   // 编辑
   const openEditDialog = useCallback((command: TerminalQuickCommand) => {
@@ -148,7 +195,7 @@ export function QuickCommandsPage() {
                 value: "all",
               },
               {
-                label: `${t("quickCommands.scopeProject")} (${stats.repo})`,
+                label: `${t("quickCommands.currentProject")} (${stats.repo})`,
                 value: "repository",
               },
               {
@@ -166,8 +213,27 @@ export function QuickCommandsPage() {
             allowClear
             style={{ width: 200 }}
           />
+          <Button
+            size="small"
+            icon={<ReloadOutlined />}
+            loading={catalogLoading}
+            disabled={saving}
+            onClick={() => void refreshQuickCommandCatalog().catch(console.error)}
+          >
+            {t("quickCommands.refresh")}
+          </Button>
         </div>
       </SettingsPageHeader>
+
+      {catalogError && <Alert type="error" showIcon message={t("quickCommands.loadFailed", { error: catalogError })} />}
+      {catalogErrors.length > 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          message={t("quickCommands.unavailableProjects", { count: catalogErrors.length })}
+          description={<div className="whitespace-pre-wrap break-all">{catalogErrors.map((item) => `${item.projectPath}: ${item.error}`).join("\n")}</div>}
+        />
+      )}
 
       {/* 命令列表 */}
       <div className="flex-1 overflow-y-auto">
@@ -186,7 +252,7 @@ export function QuickCommandsPage() {
           <div className="flex flex-col gap-1">
             {filteredCommands.map((cmd) => (
               <div
-                key={cmd.id}
+                key={JSON.stringify([cmd.scope, cmd.id])}
                 className="flex items-center gap-3 px-3 py-2 rounded transition-colors"
                 style={{
                   background: "var(--cs-bg-card)",
@@ -236,7 +302,9 @@ export function QuickCommandsPage() {
                       ) : (
                         <>
                           <FolderOutlined style={{ marginRight: 2 }} />
-                          {t("quickCommands.scopeProject")}
+                          <Tooltip title={cmd.scope.repositoryId}>
+                            <span>{projectName(cmd.scope.repositoryId)}</span>
+                          </Tooltip>
                         </>
                       )}
                     </Tag>
@@ -279,6 +347,7 @@ export function QuickCommandsPage() {
 
       {/* 对话框 */}
       <QuickCommandDialog
+        saving={saving}
         open={dialogOpen}
         command={
           editingCommand ??
@@ -295,7 +364,7 @@ export function QuickCommandsPage() {
           setDialogOpen(false);
           setEditingCommand(null);
         }}
-        repositoryId={repositoryId ?? ""}
+        repositoryId={editingCommand?.scope.type === "repository" ? editingCommand.scope.repositoryId : repositoryId ?? ""}
       />
     </div>
   );

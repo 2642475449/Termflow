@@ -1,5 +1,6 @@
-import type { AiAgentId, QuickCommandScope, TerminalQuickCommand } from "@/types";
+import type { AiAgentId, QuickCommandScope, Session, TerminalQuickCommand } from "@/types";
 import { isAiAgentId } from "@/lib/agents";
+import type { TerminalCommandWatcherStatus } from "./terminalCommandWatcher";
 
 // ── 常量 ─────────────────────────────────────────────────────
 
@@ -7,6 +8,17 @@ export const MAX_QUICK_COMMANDS = 40;
 export const MAX_QUICK_COMMAND_LABEL_LENGTH = 80;
 export const MAX_QUICK_COMMAND_REPOSITORY_ID_LENGTH = 200;
 export const MAX_QUICK_COMMAND_TEXT_LENGTH = 4000;
+
+/** Shell 存活不代表命令仍在执行；智能体仍按会话存活状态定位。 */
+export function isQuickCommandSessionRunning(
+  session: Pick<Session, "active" | "status" | "agentId">,
+  commandStatus?: TerminalCommandWatcherStatus,
+): boolean {
+  if (!session.active || session.status === "stopped") return false;
+  if (isAiAgentId(session.agentId)) return true;
+  // 没有可靠生命周期信号的 shell 保留原有行为，不根据输出文本猜测结束。
+  return commandStatus !== "idle";
+}
 
 // ── 草稿创建 ─────────────────────────────────────────────────
 

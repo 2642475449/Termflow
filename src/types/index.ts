@@ -154,6 +154,8 @@ export interface SessionUsageUpdatePayload {
 }
 
 export interface Session {
+  /** 普通终端的初始工作目录；path 仍表示所属项目根目录。 */
+  terminalWorkingDirectory?: string;
   id: string;
   path: string;
   name: string;
@@ -478,6 +480,11 @@ export interface CodexRateLimitResetCredits {
   availableCount: number;
   totalEarnedCount?: number | null;
   nextExpiresAt?: number | null;
+  credits?: CodexRateLimitResetCredit[];
+}
+
+export interface CodexRateLimitResetCredit {
+  expiresAt: number | null;
 }
 
 export type CodexRateLimitStatus = "ok" | "error" | "unavailable";

@@ -165,6 +165,7 @@ impl PtyManager {
         claude_effort: Option<String>,
         agent_id: Option<String>,
         network_proxy: crate::network_proxy::ResolvedNetworkProxy,
+        working_directory: Option<String>,
     ) -> Result<Option<OpenCodePromptControl>, String> {
         // A restored Session reuses its stable Session ID. Invalidate and stop
         // any older PTY before creating the replacement so its delayed reader
@@ -215,7 +216,8 @@ impl PtyManager {
         for arg in &shell.args {
             cmd.arg(arg);
         }
-        cmd.cwd(&path);
+        // 项目归属保持根目录，实际工作目录可位于子目录。
+        cmd.cwd(working_directory.as_deref().unwrap_or(&path));
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
         cmd.env("TERMFLOW_SESSION_ID", &session_id);

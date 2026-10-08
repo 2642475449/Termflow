@@ -21,11 +21,13 @@ import {
   savePersistentSettings,
   setClaudeTheme,
   setExplorerContextMenuEnabled,
+  onQuickCommandsUpdated,
 } from "./lib/api";
 import i18n, { toI18nLanguage } from "./i18n";
 import { useRecentProjectSync } from "./hooks/useRecentProjectSync";
 import { startClipboardSessionSync } from "./store/slices/clipboardCache";
 import { startSessionTitleGeneration } from "./store/slices/sessionTitleSlice";
+import { loadProjectQuickCommands } from "./store/slices/projectQuickCommands";
 import { message, TOAST_NOTIFICATION_CONFIG, ToastHost } from "./lib/toast";
 
 const THEME_COLORS: Record<ThemeMode, string> = {
@@ -277,6 +279,36 @@ function App() {
     new URLSearchParams(window.location.search).get("worker") === "voice";
 
   useRecentProjectSync(!isVoiceOverlayWindow && !isVoiceWorkerWindow);
+
+  useEffect(() => {
+    if (!persistentSettingsReady || isVoiceOverlayWindow || isVoiceWorkerWindow) return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    const reload = () => {
+      if (disposed) return;
+      void loadProjectQuickCommands(projectPath).catch((error) => {
+        if (!disposed) message.error({
+          key: "quick-commands-load-error",
+          content: i18n.t("quickCommands.loadFailed", { error: String(error) }),
+        });
+      });
+    };
+    // 先订阅，再读取，避免漏掉其他窗口在初始化期间的修改。
+    void onQuickCommandsUpdated(reload).then((stop) => {
+      if (disposed) { stop(); return; }
+      unlisten = stop;
+      reload();
+    }).catch((error) => {
+      console.error("Failed to subscribe to quick commands:", error);
+      reload();
+    });
+    window.addEventListener("focus", reload);
+    return () => {
+      disposed = true;
+      unlisten?.();
+      window.removeEventListener("focus", reload);
+    };
+  }, [projectPath, persistentSettingsReady, isVoiceOverlayWindow, isVoiceWorkerWindow]);
 
   useEffect(() => {
     if (isVoiceOverlayWindow || isVoiceWorkerWindow || !persistentSettingsReady) return;

@@ -1,4 +1,4 @@
-import { CloseOutlined, DatabaseOutlined, LoadingOutlined, ReloadOutlined, WarningOutlined } from "@ant-design/icons";
+import { CloseOutlined, DatabaseOutlined, LoadingOutlined, ReloadOutlined, RightOutlined, WarningOutlined } from "@ant-design/icons";
 import { listen } from "@tauri-apps/api/event";
 import { message, Popover } from "antd";
 import type { TFunction } from "i18next";
@@ -17,7 +17,7 @@ import {
 import { formatAgentVersion, getAgentDisplayName, isAiAgentId } from "@/lib/agents";
 import { useProjectLauncher } from "@/hooks/useProjectLauncher";
 import { useAppStore } from "@/store";
-import type { AiAgentId, AntigravityQuotaWindow, AntigravityUsage, ClaudeRateLimits, ClaudeRateLimitsUpdatePayload, CodexRateLimits, CodexRateLimitWindow, GitCloneEventPayload, GitCloneTask, ProjectSearchIndexStatus, QoderQuotaBucket, QoderUsage } from "@/types";
+import type { AiAgentId, AntigravityQuotaWindow, AntigravityUsage, ClaudeRateLimits, ClaudeRateLimitsUpdatePayload, CodexRateLimitResetCredit, CodexRateLimits, CodexRateLimitWindow, GitCloneEventPayload, GitCloneTask, ProjectSearchIndexStatus, QoderQuotaBucket, QoderUsage } from "@/types";
 const GIT_CLONE_EVENT = "git-clone-task-event";
 const SEARCH_INDEX_EVENT = "search-index-status";
 
@@ -1186,7 +1186,8 @@ function RateLimitUsageStatus({
   error: string | null;
   onRefresh: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const [resetCreditsExpanded, setResetCreditsExpanded] = useState(false);
   const translationRoot = agentId === "claude" ? "statusBar.claudeUsage" : "statusBar.codexUsage";
   const codexLimits = agentId === "codex" ? limits as CodexRateLimits | null : null;
   const hasData = Boolean(limits?.session || limits?.weekly);
@@ -1195,6 +1196,7 @@ function RateLimitUsageStatus({
     ?? (limits?.status === "unavailable" ? t(`${translationRoot}.unavailable`) : null);
   const summary = formatRateLimitUsageSummary(limits, isLoading, statusError, t, translationRoot);
   const resetCredits = codexLimits?.rateLimitResetCredits?.availableCount;
+  const resetCreditDetails = codexLimits?.rateLimitResetCredits;
   // Keep the compact progress bar in sync with the first window shown in the
   // summary. Some Codex accounts only return a weekly limit, so reading the
   // session window alone incorrectly rendered a 0% gray bar next to "99% 周".
@@ -1284,12 +1286,14 @@ function RateLimitUsageStatus({
             style={{ borderColor: "color-mix(in srgb, var(--cs-border-sidebar) 76%, transparent)" }}
           >
             {resetCredits != null ? (
-              <div
-                className="font-medium"
-                style={{ color: "var(--cs-text-secondary)" }}
-              >
-                {t("statusBar.codexUsage.resetCredits", { count: resetCredits })}
-              </div>
+              <CodexResetCreditList
+                count={resetCredits}
+                credits={resetCreditDetails?.credits ?? []}
+                fallbackExpiresAt={resetCreditDetails?.nextExpiresAt ?? null}
+                locale={i18n.language}
+                expanded={resetCreditsExpanded}
+                onToggle={() => setResetCreditsExpanded((expanded) => !expanded)}
+              />
             ) : null}
 
             {agentId === "codex" ? (
@@ -1324,6 +1328,9 @@ function RateLimitUsageStatus({
       trigger={["click"]}
       placement="topLeft"
       content={popoverContent}
+      onOpenChange={(open) => {
+        if (!open) setResetCreditsExpanded(false);
+      }}
       arrow={false}
       overlayInnerStyle={{ padding: 0, background: "transparent", boxShadow: "none" }}
       styles={{ body: { padding: 0 } }}
@@ -1409,6 +1416,75 @@ function CodexUsageWindowRow({
       <div className="text-[11px]" style={{ color: "var(--cs-text-tertiary)" }}>
         {resetLabel}
       </div>
+    </div>
+  );
+}
+
+function CodexResetCreditList({
+  count,
+  credits,
+  fallbackExpiresAt,
+  locale,
+  expanded,
+  onToggle,
+}: {
+  count: number;
+  credits: CodexRateLimitResetCredit[];
+  fallbackExpiresAt: number | null;
+  locale: string;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const { t } = useTranslation();
+  const hasExpiryDetails = credits.length > 0 || fallbackExpiresAt != null;
+  const sortedCredits = [...credits].sort((left, right) => {
+    if (left.expiresAt == null) return 1;
+    if (right.expiresAt == null) return -1;
+    return left.expiresAt - right.expiresAt;
+  });
+  const formatExpiry = (expiresAt: number) => new Intl.DateTimeFormat(locale, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(expiresAt);
+
+  return (
+    <div className="space-y-1">
+      {hasExpiryDetails ? (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          className="flex w-full items-center justify-between gap-2 rounded px-1 py-0.5 text-left font-medium text-[var(--cs-text-secondary)] hover:bg-[var(--cs-bg-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--cs-text-secondary)]"
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggle();
+          }}
+        >
+          <span>{t("statusBar.codexUsage.resetCredits", { count })}</span>
+          <RightOutlined aria-hidden="true" className={`shrink-0 text-[10px] transition-transform ${expanded ? "rotate-90" : ""}`} />
+        </button>
+      ) : (
+        <div className="font-medium text-[var(--cs-text-secondary)]">
+          {t("statusBar.codexUsage.resetCredits", { count })}
+        </div>
+      )}
+      {expanded && sortedCredits.length > 0 ? (
+        <div className="space-y-0.5 border-l border-[var(--cs-border-sidebar)] pl-2 text-[var(--cs-text-tertiary)]">
+          {sortedCredits.map((credit, index) => (
+            <div key={`${credit.expiresAt ?? "unknown"}-${index}`} className="tabular-nums">
+              {credit.expiresAt == null
+                ? t("statusBar.codexUsage.resetCreditExpiryUnknown", { index: index + 1 })
+                : t("statusBar.codexUsage.resetCreditExpiresAt", {
+                  index: index + 1,
+                  time: formatExpiry(credit.expiresAt),
+                })}
+            </div>
+          ))}
+        </div>
+      ) : expanded && fallbackExpiresAt != null ? (
+        <div className="text-[var(--cs-text-tertiary)]">
+          {t("statusBar.codexUsage.resetCreditNextExpiresAt", { time: formatExpiry(fallbackExpiresAt) })}
+        </div>
+      ) : null}
     </div>
   );
 }

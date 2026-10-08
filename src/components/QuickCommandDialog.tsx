@@ -13,7 +13,8 @@ import { useDefaultInstalledAgentSelection } from "@/hooks/useDefaultInstalledAg
 interface QuickCommandDialogProps {
   open: boolean;
   command: TerminalQuickCommand;
-  onSave: (command: TerminalQuickCommand) => void;
+  onSave: (command: TerminalQuickCommand) => void | Promise<void>;
+  saving?: boolean;
   onCancel: () => void;
   repositoryId: string;
 }
@@ -24,6 +25,7 @@ export function QuickCommandDialog({
   onSave,
   onCancel,
   repositoryId,
+  saving = false,
 }: QuickCommandDialogProps) {
   const { t } = useTranslation();
 
@@ -103,7 +105,8 @@ export function QuickCommandDialog({
 
   const isEdit = command.label.length > 0 || command.command.length > 0;
   const canSave =
-    label.trim().length > 0
+    (scopeType !== "repository" || !!repositoryId)
+    && label.trim().length > 0
     && commandText.trimEnd().length > 0
     && (action !== "agent-prompt" || !!agentId);
 
@@ -168,14 +171,14 @@ export function QuickCommandDialog({
   }, [repositoryId, label, t]);
 
   const handleSave = useCallback(() => {
-    if (!canSave) return;
+    if (!canSave || saving) return;
 
     const finalScope: QuickCommandScope =
       scopeType === "repository"
         ? { type: "repository", repositoryId }
         : { type: "global" };
 
-    onSave({
+    void onSave({
       ...command,
       label: label.trim(),
       command: commandText.trimEnd(),
@@ -184,7 +187,7 @@ export function QuickCommandDialog({
       scope: finalScope,
       agentId: action === "agent-prompt" ? agentId : undefined,
     });
-  }, [canSave, label, commandText, action, appendEnter, scopeType, repositoryId, command, onSave, agentId]);
+  }, [canSave, saving, label, commandText, action, appendEnter, scopeType, repositoryId, command, onSave, agentId]);
 
   // Ctrl+Enter / Cmd+Enter 提交
   const handleKeyDown = useCallback(
@@ -202,7 +205,8 @@ export function QuickCommandDialog({
     <Modal
       open={open}
       title={isEdit ? t("quickCommands.editCommand") : t("quickCommands.addCommand")}
-      onCancel={onCancel}
+      onCancel={saving ? undefined : onCancel}
+      closable={!saving}
       destroyOnClose
       width={560}
       footer={[
@@ -215,6 +219,7 @@ export function QuickCommandDialog({
             border: "1px solid var(--cs-border-secondary)",
           }}
           onClick={onCancel}
+          disabled={saving}
         >
           {t("quickCommands.cancel")}
         </button>,
@@ -228,9 +233,9 @@ export function QuickCommandDialog({
             cursor: canSave ? "pointer" : "not-allowed",
           }}
           onClick={handleSave}
-          disabled={!canSave}
+          disabled={!canSave || saving}
         >
-          {t("quickCommands.save")}
+          {t(saving ? "quickCommands.saving" : "quickCommands.save")}
           <ShortcutHint keys="Ctrl + Enter" />
         </button>,
       ]}
@@ -408,6 +413,9 @@ export function QuickCommandDialog({
                         },
                       ]}
                     />
+                    <p className="text-xs text-[var(--cs-text-tertiary)] mt-1.5 mb-0">
+                      {t(scopeType === "repository" ? "quickCommands.projectStorageHint" : "quickCommands.globalStorageHint")}
+                    </p>
                   </div>
                 </div>
               ),

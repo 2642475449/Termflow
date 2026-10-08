@@ -1,6 +1,7 @@
 import type { StateCreator } from "zustand";
 import type { AppState } from "../types";
 import {
+  DEFAULT_TERMINAL_LINE_HEIGHT,
   DEFAULT_TERMINAL_SCROLLBACK,
   normalizeTerminalScrollback,
 } from "@/lib/terminalSettings";
@@ -24,7 +25,7 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
   editorFontSize: 14,
   terminalFontSize: 14,
   terminalCursorBlink: false,
-  terminalLineHeight: 1.2,
+  terminalLineHeight: DEFAULT_TERMINAL_LINE_HEIGHT,
   terminalScrollback: DEFAULT_TERMINAL_SCROLLBACK,
   terminalRenderer: "standard",
   setEditorFontSize: (size) => set({ editorFontSize: size }),

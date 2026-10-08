@@ -41,6 +41,7 @@ import {
   sanitizePersistedSessionEvents,
 } from "@/lib/attentionPersistence";
 import {
+  DEFAULT_TERMINAL_LINE_HEIGHT,
   DEFAULT_TERMINAL_SCROLLBACK,
   normalizeTerminalScrollback,
 } from "@/lib/terminalSettings";
@@ -339,7 +340,7 @@ export function applyPersistentSettingsToStore(settings: PersistentSettings) {
     editorFontSize: Math.max(10, Math.round(settings.editorFontSize || 14)),
     terminalFontSize: Math.max(10, Math.round(settings.terminalFontSize || 14)),
     terminalCursorBlink: settings.terminalCursorBlink ?? false,
-    terminalLineHeight: settings.terminalLineHeight || 1.2,
+    terminalLineHeight: settings.terminalLineHeight || DEFAULT_TERMINAL_LINE_HEIGHT,
     terminalScrollback: normalizeTerminalScrollback(settings.terminalScrollback),
     terminalRenderer: normalizeTerminalRendererValue(settings.terminalRenderer),
     terminalQuickCommands: normalizeQuickCommands(settings.terminalQuickCommands),
@@ -1594,7 +1595,7 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
       editorFontSize: 14,
       terminalFontSize: 14,
       terminalCursorBlink: false,
-      terminalLineHeight: 1.2,
+      terminalLineHeight: DEFAULT_TERMINAL_LINE_HEIGHT,
       terminalScrollback: DEFAULT_TERMINAL_SCROLLBACK,
       terminalRenderer: "standard",
       defaultTerminalShell: "powershell",

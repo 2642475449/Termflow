@@ -29,6 +29,8 @@ import type {
   FileTreeEntry,
   FileTreeListing,
   PersistentSettings,
+  TerminalQuickCommand,
+  QuickCommandScope,
   NetworkProxySettings,
   NetworkProxyTestResult,
   NetworkProxyTestTarget,
@@ -88,6 +90,47 @@ import type {
   ScheduledTaskSchedule,
 } from "@/types";
 
+export async function loadQuickCommands(projectPath: string | null): Promise<TerminalQuickCommand[]> {
+  return await invoke("load_quick_commands", { projectPath });
+}
+
+export interface QuickCommandCatalog {
+  commands: TerminalQuickCommand[];
+  errors: Array<{ projectPath: string; error: string }>;
+}
+
+export async function loadQuickCommandCatalog(projectPaths: string[]): Promise<QuickCommandCatalog> {
+  return await invoke("load_quick_command_catalog", { projectPaths });
+}
+
+export async function saveQuickCommand(command: TerminalQuickCommand, previousScope?: QuickCommandScope): Promise<void> {
+  await invoke("save_quick_command", { command, previousScope: previousScope ?? null });
+}
+
+export async function removeQuickCommand(id: string, scope: QuickCommandScope): Promise<void> {
+  await invoke("remove_quick_command", { id, scope });
+}
+
+export async function onQuickCommandsUpdated(handler: () => void): Promise<UnlistenFn> {
+  return await listen("quick-commands-updated", handler);
+}
+
+export async function loadProjectLaunchers(projectPath: string): Promise<import("@/lib/projectLaunchers").ProjectLauncherFile> {
+  return await invoke("load_project_launchers", { projectPath });
+}
+
+// JSON 草稿作为 unknown 传入，由后端严格校验字段和版本。
+export async function saveProjectLaunchers(projectPath: string, document: unknown): Promise<void> {
+  await invoke("save_project_launchers", { projectPath, document });
+}
+
+export async function prepareProjectLauncher(
+  projectPath: string,
+  launcher: import("@/lib/projectLaunchers").ProjectLauncher,
+): Promise<import("@/lib/projectLaunchers").LauncherTerminal[]> {
+  return await invoke("prepare_project_launcher", { projectPath, launcher });
+}
+
 export async function spawnPty(
   sessionId: string,
   path: string,
@@ -98,6 +141,7 @@ export async function spawnPty(
   shellType?: string,
   claudeEffort?: string,
   agentId?: string,
+  workingDirectory?: string,
 ): Promise<void> {
   await invoke("spawn_pty", {
     sessionId,
@@ -109,6 +153,7 @@ export async function spawnPty(
     shellType: shellType ?? null,
     claudeEffort: claudeEffort ?? null,
     agentId: agentId ?? null,
+    workingDirectory: workingDirectory ?? null,
   });
 }
 

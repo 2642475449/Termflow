@@ -61,6 +61,10 @@ import {
 } from "@/lib/agentUserResponse";
 import { createPtyResizeGate } from "@/lib/terminalResize";
 import { createTerminalImeOutputGate } from "@/lib/terminalImeOutput";
+import {
+  createTerminalOutputFrameGate,
+  writeTerminalOutputWithCursorRefresh,
+} from "@/lib/terminalOutputFrames";
 import { createTerminalInputQueue } from "@/lib/terminalInputQueue";
 import { createTerminalCommandWatcher } from "@/lib/terminalCommandWatcher";
 import {
@@ -80,7 +84,6 @@ const AGENT_FILE_DRAG_MIME = "application/x-termflow-agent-files";
 const TERMINAL_FOCUS_RETRY_DELAYS_MS = [0, 50, 150, 300];
 const TERMINAL_SCROLLBAR_HIDE_DELAY_MS = 700;
 const HIDE_CURSOR_SEQUENCE = "\x1b[?25l";
-const SHOW_CURSOR_SEQUENCE = "\x1b[?25h";
 let cachedWebglSupport: boolean | null = null;
 
 export function keepRunningCursorHidden(data: string, shouldHideCursor: boolean): string {
@@ -209,6 +212,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
   const enqueueInputRef = useRef<((operation: () => Promise<void>) => Promise<void>) | null>(null);
   const sideQuestionSubmittingRef = useRef(false);
   const hideCursorWhileRunningRef = useRef(false);
+  const outputFrameGateRef = useRef<ReturnType<typeof createTerminalOutputFrameGate> | null>(null);
   const suppressedFocusSequenceUntilRef = useRef(0);
   const processedResourceDropStartedAtRef = useRef<number | null>(null);
   const [isImageDragOver, setIsImageDragOver] = useState(false);
@@ -224,6 +228,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
   const captureInputForAutoTitleRef = useRef<((data: string) => void) | undefined>(undefined);
   const isDropPositionInsideTerminalRef = useRef<((position: { x: number; y: number }) => boolean) | undefined>(undefined);
   const currentSessionPathRef = useRef("");
+  const currentTerminalDirectoryRef = useRef("");
   const currentSessionNameRef = useRef("");
   const isNativePowerShellTerminalRef = useRef(false);
   const terminalIntegrationReportedRef = useRef(false);
@@ -262,6 +267,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
   hideCursorWhileRunningRef.current = hideCursorWhileRunning;
   const termTheme = getTerminalTheme(activeTheme);
   const currentSessionPath = currentSession?.path ?? "";
+  currentTerminalDirectoryRef.current = currentSession?.terminalWorkingDirectory ?? currentSessionPath;
 
   useEffect(() => {
     if (currentSession?.agentId !== "powershell") {
@@ -564,7 +570,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       const projectPath = currentSessionPathRef.current;
       if (!projectPath) return;
 
-      const resolvedPath = resolveTerminalFilePath(link.path.filePath, projectPath);
+      const resolvedPath = resolveTerminalFilePath(link.path.filePath, currentTerminalDirectoryRef.current);
       const target = await resolveProjectLink(projectPath, resolvedPath);
       if (!target) return;
 
@@ -785,7 +791,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
     cancelImagePreviewDismissal();
     const requestId = imagePreviewRequestRef.current + 1;
     imagePreviewRequestRef.current = requestId;
-    void readImagePreview(resolveTerminalFilePath(path.filePath, currentSessionPathRef.current))
+    void readImagePreview(resolveTerminalFilePath(path.filePath, currentTerminalDirectoryRef.current))
       .then(({ dataUrl }) => {
         if (imagePreviewRequestRef.current === requestId) {
           setImagePreview({ src: dataUrl, alt: path.filePath, ...position });
@@ -847,7 +853,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       const projectPath = currentSessionPathRef.current;
       if (!projectPath) return Promise.resolve(null);
 
-      const resolvedPath = resolveTerminalFilePath(parsed.filePath, projectPath);
+      const resolvedPath = resolveTerminalFilePath(parsed.filePath, currentTerminalDirectoryRef.current);
       const cacheKey = `${projectPath}\u0000${resolvedPath}`;
       const cached = linkTargetCache.get(cacheKey);
       if (cached && cached.expiresAt > Date.now()) {
@@ -902,6 +908,12 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       }
 
       const completion = terminalCommandWatcherRef.current.consumeOsc133(data, performance.now());
+      if (isNativePowerShellTerminalRef.current && (marker === "C" || completion)) {
+        useAppStore.getState().setTerminalCommandStatus(
+          sessionId,
+          terminalCommandWatcherRef.current.getStatus(),
+        );
+      }
       const projectPath = currentSessionPathRef.current;
       const lifecycleCapability = data.split(";").find((part) =>
         part.startsWith("command-lifecycle="),
@@ -1018,6 +1030,31 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
 
     activateWebglRenderer();
 
+    // 帧保护在 IME 门控之前，兜底定时器也不会绕过输入法的输出暂停。
+    let frameNeedsCursorRefresh = false;
+    const imeOutputGate = createTerminalImeOutputGate((data) => {
+      const refreshCursor = frameNeedsCursorRefresh;
+      frameNeedsCursorRefresh = false;
+      writeTerminalOutputWithCursorRefresh(
+        term,
+        data,
+        refreshCursor
+          ? () => !isTerminalDisposed && Boolean(containerRef.current?.getClientRects().length)
+          : undefined,
+      );
+    });
+    const outputFrameGate = createTerminalOutputFrameGate(
+      (data, synchronizedFrame) => {
+        frameNeedsCursorRefresh ||= synchronizedFrame;
+        imeOutputGate.write(data);
+      },
+      {
+        enabled: /Windows/i.test(navigator.userAgent),
+        shouldHideCursor: () => hideCursorWhileRunningRef.current,
+      },
+    );
+    outputFrameGateRef.current = outputFrameGate;
+
     const enqueueInput = createTerminalInputQueue();
     enqueueInputRef.current = enqueueInput;
     let processingClipboardPaste = false;
@@ -1033,6 +1070,8 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       ) {
         return;
       }
+
+      outputFrameGate.markUserInput();
 
       // Ctrl+C interrupts the foreground agent turn but keeps the interactive
       // PTY alive. Some providers do not emit their Stop hook in this path, so
@@ -1255,9 +1294,6 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
     // During IME composition xterm owns the textarea.  Its final input is
     // delivered on the next task after compositionend, so defer PTY output
     // through that boundary to keep the cursor and committed text aligned.
-    const imeOutputGate = createTerminalImeOutputGate((data) => {
-      term.write(keepRunningCursorHidden(data, hideCursorWhileRunningRef.current));
-    });
     const textarea = containerRef.current.querySelector("textarea");
     const onCompositionStart = () => {
       imeOutputGate.compositionStart();
@@ -1275,7 +1311,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       "pty-output",
       (event) => {
         if (event.payload.session_id === sessionId) {
-          imeOutputGate.write(event.payload.data);
+          outputFrameGate.write(event.payload.data);
         }
       }
     );
@@ -1298,14 +1334,16 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       "pty-exit",
       (event) => {
         if (event.payload.session_id === sessionId) {
+          outputFrameGate.flush();
           terminalCommandWatcherRef.current.reset();
+          useAppStore.getState().setTerminalCommandStatus(sessionId, "idle");
           useAppStore.getState().setTerminalCompletionIntegration(sessionId, {
             shell: isNativePowerShellTerminalRef.current ? "powershell" : "unsupported",
             status: "unavailable",
             reason: "terminal-closed",
             updatedAt: Date.now(),
           });
-          term.write(`\r\n\x1b[33m[${t("terminal.processExited")}]\x1b[0m\r\n`);
+          imeOutputGate.write(`\r\n\x1b[33m[${t("terminal.processExited")}]\x1b[0m\r\n`);
           onExitRef.current?.();
           if (onCloseRef.current) {
             setTimeout(onCloseRef.current, 1500);
@@ -1361,6 +1399,8 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
         textarea.removeEventListener("compositionend", onCompositionEnd);
       }
       imeOutputGate.dispose();
+      outputFrameGate.dispose();
+      if (outputFrameGateRef.current === outputFrameGate) outputFrameGateRef.current = null;
       pasteGate.dispose();
       inputDisposable.dispose();
       container.removeEventListener("paste", handleNativePaste, true);
@@ -1409,7 +1449,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
   useEffect(() => {
     const term = terminalRef.current;
     if (!term || !manageAgentCursorVisibility) return;
-    term.write(hideCursorWhileRunning ? HIDE_CURSOR_SEQUENCE : SHOW_CURSOR_SEQUENCE);
+    outputFrameGateRef.current?.syncCursorVisibility(hideCursorWhileRunning);
   }, [hideCursorWhileRunning, manageAgentCursorVisibility]);
 
   useEffect(() => {
