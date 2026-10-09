@@ -270,7 +270,18 @@ pub fn ensure_command_store(
 }
 
 #[tauri::command]
-pub fn run_command_test(
+pub async fn run_command_test(
+    scope: CommandScope,
+    id: String,
+    project_path: Option<String>,
+) -> Result<CommandTestResult, String> {
+    crate::commands::run_background_task("run_command_test", move || {
+        run_command_test_blocking(scope, id, project_path)
+    })
+    .await
+}
+
+pub fn run_command_test_blocking(
     scope: CommandScope,
     id: String,
     project_path: Option<String>,

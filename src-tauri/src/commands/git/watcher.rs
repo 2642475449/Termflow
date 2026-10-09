@@ -61,12 +61,12 @@ struct WatchSubscription {
 /// 位于工作树之外，因此还会通过 `git rev-parse --git-path` 监听真实元数据目录。
 pub struct GitWatcher {
     inner: Arc<Mutex<GitWatcherInner>>,
+    subscriptions: Arc<Mutex<HashMap<PathBuf, WatchSubscription>>>,
     app_handle: AppHandle,
 }
 
 struct GitWatcherInner {
     watcher: Option<RecommendedWatcher>,
-    subscriptions: HashMap<PathBuf, WatchSubscription>,
     target_ref_counts: HashMap<WatchTarget, usize>,
 }
 
@@ -76,9 +76,9 @@ impl GitWatcher {
         Self {
             inner: Arc::new(Mutex::new(GitWatcherInner {
                 watcher: None,
-                subscriptions: HashMap::new(),
                 target_ref_counts: HashMap::new(),
             })),
+            subscriptions: Arc::new(Mutex::new(HashMap::new())),
             app_handle,
         }
     }
@@ -89,7 +89,7 @@ impl GitWatcher {
         let targets = resolve_watch_targets(&project_path);
         let mut inner = self.inner.lock();
 
-        if let Some(subscription) = inner.subscriptions.get_mut(&project_path) {
+        if let Some(subscription) = self.subscriptions.lock().get_mut(&project_path) {
             subscription.ref_count += 1;
             debug!(
                 "[GitWatcher] Reused subscription: {:?}, refs={}",
@@ -113,7 +113,7 @@ impl GitWatcher {
             acquired_targets.push(target.clone());
         }
 
-        inner.subscriptions.insert(
+        self.subscriptions.lock().insert(
             project_path.clone(),
             WatchSubscription {
                 project_path: project_path.clone(),
@@ -132,7 +132,8 @@ impl GitWatcher {
         };
         let mut inner = self.inner.lock();
 
-        let Some(subscription) = inner.subscriptions.get_mut(&project_path) else {
+        let mut subscriptions = self.subscriptions.lock();
+        let Some(subscription) = subscriptions.get_mut(&project_path) else {
             return;
         };
         if subscription.ref_count > 1 {
@@ -144,11 +145,11 @@ impl GitWatcher {
             return;
         }
 
-        let targets = inner
-            .subscriptions
+        let targets = subscriptions
             .remove(&project_path)
             .map(|subscription| subscription.targets)
             .unwrap_or_default();
+        drop(subscriptions);
         for target in targets {
             release_target(&mut inner, &target);
         }
@@ -166,7 +167,7 @@ impl GitWatcher {
             }
         }
 
-        inner.subscriptions.clear();
+        self.subscriptions.lock().clear();
         inner.target_ref_counts.clear();
         debug!("[GitWatcher] Stopped watching all paths");
     }
@@ -174,7 +175,9 @@ impl GitWatcher {
     /// 创建文件系统监听器
     fn create_watcher(&self) -> Result<RecommendedWatcher, String> {
         let app_handle = self.app_handle.clone();
-        let inner = self.inner.clone();
+        // Windows notify::watch 会等待监听线程确认。回调不能获取操作锁，
+        // 否则旧项目事件与新项目注册并发时会互相等待。
+        let subscriptions = self.subscriptions.clone();
 
         RecommendedWatcher::new(
             move |result: Result<Event, notify::Error>| match result {
@@ -183,13 +186,7 @@ impl GitWatcher {
                         return;
                     }
 
-                    let affected_projects: Vec<PathBuf> = inner
-                        .lock()
-                        .subscriptions
-                        .values()
-                        .filter(|subscription| subscription_matches_event(subscription, &event))
-                        .map(|subscription| subscription.project_path.clone())
-                        .collect();
+                    let affected_projects = affected_projects(&subscriptions, &event);
 
                     for project_path in affected_projects {
                         if let Err(error) = app_handle.emit(
@@ -213,6 +210,18 @@ impl GitWatcher {
         )
         .map_err(|error| format!("Failed to create watcher: {}", error))
     }
+}
+
+fn affected_projects(
+    subscriptions: &Mutex<HashMap<PathBuf, WatchSubscription>>,
+    event: &Event,
+) -> Vec<PathBuf> {
+    subscriptions
+        .lock()
+        .values()
+        .filter(|subscription| subscription_matches_event(subscription, event))
+        .map(|subscription| subscription.project_path.clone())
+        .collect()
 }
 
 impl Drop for GitWatcher {
@@ -401,9 +410,47 @@ pub fn git_watch_stop(project_path: String, git_watcher: State<'_, Arc<GitWatche
 
 #[cfg(test)]
 mod tests {
-    use super::{path_intersects, subscription_matches_event, WatchSubscription, WatchTarget};
+    use super::{
+        affected_projects, path_intersects, subscription_matches_event, GitWatcherInner,
+        WatchSubscription, WatchTarget,
+    };
     use notify::{Event, EventKind};
+    use parking_lot::Mutex;
+    use std::collections::HashMap;
     use std::path::PathBuf;
+    use std::sync::{mpsc, Arc};
+    use std::time::Duration;
+
+    #[test]
+    fn event_routing_completes_while_registration_lock_is_held() {
+        let project = PathBuf::from("C:/repo/old-project");
+        let subscriptions = Arc::new(Mutex::new(HashMap::from([(
+            project.clone(),
+            WatchSubscription {
+                project_path: project.clone(),
+                targets: vec![WatchTarget::recursive(project.clone())],
+                ref_count: 1,
+            },
+        )])));
+        let inner = Mutex::new(GitWatcherInner {
+            watcher: None,
+            target_ref_counts: HashMap::new(),
+        });
+        let event = Event::new(EventKind::Modify(notify::event::ModifyKind::Any))
+            .add_path(project.join("README.md"));
+        let registration_guard = inner.lock();
+        let (sender, receiver) = mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            sender
+                .send(affected_projects(&subscriptions, &event))
+                .unwrap();
+        });
+        // 模拟 notify 的注册线程等待回调结束；此时仍持有注册操作锁。
+        let routed = receiver.recv_timeout(Duration::from_secs(2));
+        drop(registration_guard);
+        worker.join().unwrap();
+        assert_eq!(routed.unwrap(), vec![project]);
+    }
 
     #[test]
     fn metadata_event_is_routed_to_the_linked_worktree_subscription() {

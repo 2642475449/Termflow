@@ -78,7 +78,14 @@ fn codex_hook_activation(
 }
 
 #[tauri::command]
-pub fn ensure_agent_status_hook(agent_id: String) -> Result<AgentHookStatus, String> {
+pub async fn ensure_agent_status_hook(agent_id: String) -> Result<AgentHookStatus, String> {
+    crate::commands::run_background_task("ensure_agent_status_hook", move || {
+        ensure_agent_status_hook_blocking(agent_id)
+    })
+    .await
+}
+
+pub fn ensure_agent_status_hook_blocking(agent_id: String) -> Result<AgentHookStatus, String> {
     let _guard = INSTALL_LOCK
         .get_or_init(|| Mutex::new(()))
         .lock()

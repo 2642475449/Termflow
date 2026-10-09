@@ -4,42 +4,11 @@ import {
   flattenQuickCommand,
   quickCommandMatchesRepository,
   isQuickCommandComplete,
-  isQuickCommandSessionRunning,
   createQuickCommandDraft,
   MAX_QUICK_COMMANDS,
 } from "./quickCommands";
 import { scoreQuickCommand, searchQuickCommands, normalizeSearchText } from "./quickCommandSearch";
 import type { TerminalQuickCommand } from "@/types";
-import { createTerminalCommandWatcher } from "./terminalCommandWatcher";
-
-describe("quick command execution state", () => {
-  it.each(["D;0", "D;1", "D;"])("stops showing running after %s while PowerShell remains alive", (end) => {
-    const watcher = createTerminalCommandWatcher();
-    const session = { active: true, status: "running" as const, agentId: "powershell" as const };
-    watcher.consumeOsc133("C", 10);
-    expect(isQuickCommandSessionRunning(session, watcher.getStatus())).toBe(true);
-    watcher.consumeOsc133(end, 20);
-    // spawnPty 的异步返回仍可把 Session 标成 running，不能覆盖已确认的命令结束。
-    expect(isQuickCommandSessionRunning({ ...session, status: "running" }, watcher.getStatus())).toBe(false);
-    watcher.consumeOsc133("C", 30);
-    expect(isQuickCommandSessionRunning(session, watcher.getStatus())).toBe(true);
-  });
-
-  it("keeps a waiting agent session available for navigation", () => {
-    expect(isQuickCommandSessionRunning({ active: true, status: "waiting", agentId: "codex" }, "idle")).toBe(true);
-  });
-
-  it("does not revive closed or stopped sessions when command markers arrive late", () => {
-    expect(isQuickCommandSessionRunning({ active: false, status: "running", agentId: "powershell" }, "running")).toBe(false);
-    expect(isQuickCommandSessionRunning({ active: true, status: "stopped", agentId: "powershell" }, "running")).toBe(false);
-  });
-
-  it("preserves the fallback for shells without command lifecycle integration", () => {
-    expect(isQuickCommandSessionRunning({ active: true, agentId: "cmd" })).toBe(true);
-    expect(isQuickCommandSessionRunning({ active: true, agentId: "powershell" }, "unavailable")).toBe(true);
-  });
-});
-
 // ── 辅助函数 ─────────────────────────────────────────────────
 
 function makeCommand(overrides: Partial<TerminalQuickCommand> = {}): TerminalQuickCommand {

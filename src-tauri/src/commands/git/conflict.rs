@@ -8,7 +8,17 @@ use super::utils::{
 
 /// Get conflict details for a file.
 #[tauri::command]
-pub fn git_conflict_detail(
+pub async fn git_conflict_detail(
+    project_path: String,
+    file_path: String,
+) -> Result<GitConflictDetail, String> {
+    crate::commands::run_background_task("git_conflict_detail", move || {
+        git_conflict_detail_blocking(project_path, file_path)
+    })
+    .await
+}
+
+pub fn git_conflict_detail_blocking(
     project_path: String,
     file_path: String,
 ) -> Result<GitConflictDetail, String> {
@@ -129,7 +139,19 @@ fn contains_unresolved_conflict_markers(content: &str) -> bool {
 /// - "theirs": Accept incoming branch version
 /// - "edited": Accept the current worktree content (user has manually edited)
 #[tauri::command]
-pub fn git_resolve_conflict(
+pub async fn git_resolve_conflict(
+    project_path: String,
+    file_path: String,
+    resolution: String,
+    content: Option<String>,
+) -> Result<(), String> {
+    crate::commands::run_background_task("git_resolve_conflict", move || {
+        git_resolve_conflict_blocking(project_path, file_path, resolution, content)
+    })
+    .await
+}
+
+pub fn git_resolve_conflict_blocking(
     project_path: String,
     file_path: String,
     resolution: String,
@@ -369,7 +391,14 @@ fn run_continue_command(project_path: &str, args: [&str; 2]) -> Result<(), Strin
 
 /// Continue a merge, rebase, cherry-pick or revert after all conflicts are resolved.
 #[tauri::command]
-pub fn git_continue_operation(project_path: String) -> Result<(), String> {
+pub async fn git_continue_operation(project_path: String) -> Result<(), String> {
+    crate::commands::run_background_task("git_continue_operation", move || {
+        git_continue_operation_blocking(project_path)
+    })
+    .await
+}
+
+pub fn git_continue_operation_blocking(project_path: String) -> Result<(), String> {
     with_git_repository_access(&project_path, GitRepositoryAccess::Write, || {
         let repo = open_repo(&project_path)?;
         let index = repo
@@ -387,7 +416,14 @@ pub fn git_continue_operation(project_path: String) -> Result<(), String> {
 
 /// Abort the unfinished operation currently reported by the repository.
 #[tauri::command]
-pub fn git_abort_operation(project_path: String) -> Result<(), String> {
+pub async fn git_abort_operation(project_path: String) -> Result<(), String> {
+    crate::commands::run_background_task("git_abort_operation", move || {
+        git_abort_operation_blocking(project_path)
+    })
+    .await
+}
+
+pub fn git_abort_operation_blocking(project_path: String) -> Result<(), String> {
     with_git_repository_access(&project_path, GitRepositoryAccess::Write, || {
         let repo = open_repo(&project_path)?;
         let args = abort_args_for_state(repo.state())?;
@@ -402,7 +438,14 @@ pub fn git_abort_operation(project_path: String) -> Result<(), String> {
 /// `git_abort_operation`, which selects the correct command for rebase,
 /// cherry-pick and revert as well.
 #[tauri::command]
-pub fn git_abort_merge(project_path: String) -> Result<(), String> {
+pub async fn git_abort_merge(project_path: String) -> Result<(), String> {
+    crate::commands::run_background_task("git_abort_merge", move || {
+        git_abort_merge_blocking(project_path)
+    })
+    .await
+}
+
+pub fn git_abort_merge_blocking(project_path: String) -> Result<(), String> {
     with_git_repository_access(&project_path, GitRepositoryAccess::Write, || {
         let repo = open_repo(&project_path)?;
         if repo.state() != git2::RepositoryState::Merge {
@@ -417,7 +460,7 @@ pub fn git_abort_merge(project_path: String) -> Result<(), String> {
 mod tests {
     use super::{
         abort_args_for_state, contains_unresolved_conflict_markers, continue_args_for_state,
-        git_command, git_resolve_conflict, open_repo,
+        git_command, git_resolve_conflict_blocking, open_repo,
     };
 
     fn conflict_git(path: &std::path::Path, args: &[&str]) {
@@ -473,7 +516,7 @@ mod tests {
                     .output()
                     .unwrap();
                 assert!(!result.status.success());
-                git_resolve_conflict(
+                git_resolve_conflict_blocking(
                     path.to_str().unwrap().to_string(),
                     "file.txt".into(),
                     chosen_side.into(),
@@ -483,7 +526,7 @@ mod tests {
                 let repo = open_repo(path.to_str().unwrap()).unwrap();
                 assert!(!repo.index().unwrap().has_conflicts());
                 assert_eq!(path.join("file.txt").exists(), chosen_side != deleted_side);
-                assert!(git_resolve_conflict(
+                assert!(git_resolve_conflict_blocking(
                     path.to_str().unwrap().to_string(),
                     "file.txt".into(),
                     chosen_side.into(),

@@ -190,7 +190,14 @@ fn binary_diff_content(file_path: String, staged: bool) -> GitDiffContentResult 
 
 /// Get diff for a file.
 #[tauri::command]
-pub fn git_diff(project_path: String, file_path: String) -> Result<GitDiffResult, String> {
+pub async fn git_diff(project_path: String, file_path: String) -> Result<GitDiffResult, String> {
+    crate::commands::run_background_task("git_diff", move || {
+        git_diff_blocking(project_path, file_path)
+    })
+    .await
+}
+
+pub fn git_diff_blocking(project_path: String, file_path: String) -> Result<GitDiffResult, String> {
     with_git_repository_access(&project_path, GitRepositoryAccess::Read, || {
         let repo = open_repo(&project_path)?;
         resolve_worktree_file_path(&repo, &file_path)?;
@@ -258,7 +265,19 @@ pub fn git_diff(project_path: String, file_path: String) -> Result<GitDiffResult
 
 /// Get diff content (original vs modified).
 #[tauri::command]
-pub fn git_diff_content(
+pub async fn git_diff_content(
+    project_path: String,
+    file_path: String,
+    old_file_path: Option<String>,
+    staged: bool,
+) -> Result<GitDiffContentResult, String> {
+    crate::commands::run_background_task("git_diff_content", move || {
+        git_diff_content_blocking(project_path, file_path, old_file_path, staged)
+    })
+    .await
+}
+
+pub fn git_diff_content_blocking(
     project_path: String,
     file_path: String,
     old_file_path: Option<String>,
@@ -326,7 +345,18 @@ pub fn git_diff_content(
 
 /// Get diff hunks for a file.
 #[tauri::command]
-pub fn git_diff_hunks(
+pub async fn git_diff_hunks(
+    project_path: String,
+    file_path: String,
+    staged: bool,
+) -> Result<GitDiffHunkResult, String> {
+    crate::commands::run_background_task("git_diff_hunks", move || {
+        git_diff_hunks_blocking(project_path, file_path, staged)
+    })
+    .await
+}
+
+pub fn git_diff_hunks_blocking(
     project_path: String,
     file_path: String,
     staged: bool,
@@ -563,8 +593,19 @@ fn apply_single_hunk(
 
 /// Stage a specific hunk by its header.
 #[tauri::command]
+pub async fn git_stage_hunk(
+    project_path: String,
+    file_path: String,
+    hunk_header: String,
+) -> Result<(), String> {
+    crate::commands::run_background_task("git_stage_hunk", move || {
+        git_stage_hunk_blocking(project_path, file_path, hunk_header)
+    })
+    .await
+}
+
 #[allow(unreachable_code)]
-pub fn git_stage_hunk(
+pub fn git_stage_hunk_blocking(
     project_path: String,
     file_path: String,
     hunk_header: String,
@@ -662,8 +703,19 @@ pub fn git_stage_hunk(
 
 /// Unstage a specific hunk by its header (reverse apply).
 #[tauri::command]
+pub async fn git_unstage_hunk(
+    project_path: String,
+    file_path: String,
+    hunk_header: String,
+) -> Result<(), String> {
+    crate::commands::run_background_task("git_unstage_hunk", move || {
+        git_unstage_hunk_blocking(project_path, file_path, hunk_header)
+    })
+    .await
+}
+
 #[allow(unreachable_code)]
-pub fn git_unstage_hunk(
+pub fn git_unstage_hunk_blocking(
     project_path: String,
     file_path: String,
     hunk_header: String,
@@ -752,7 +804,7 @@ pub fn git_unstage_hunk(
 }
 #[cfg(test)]
 mod tests {
-    use super::git_diff_content;
+    use super::git_diff_content_blocking;
     use git2::{Repository, Signature};
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -796,7 +848,7 @@ mod tests {
         let (root, repo) = temp_repo("untracked");
         write_binary(&root.join("image.png"), 1);
 
-        let result = git_diff_content(
+        let result = git_diff_content_blocking(
             root.to_string_lossy().into_owned(),
             "image.png".to_string(),
             None,
@@ -823,7 +875,7 @@ mod tests {
         commit_index(&repo);
 
         write_binary(&root.join(file_name), 2);
-        let unstaged = git_diff_content(
+        let unstaged = git_diff_content_blocking(
             root.to_string_lossy().into_owned(),
             file_name.to_string(),
             None,
@@ -834,7 +886,7 @@ mod tests {
         assert_eq!(unstaged.content_kind.as_deref(), Some("image"));
 
         add_to_index(&repo, file_name);
-        let staged = git_diff_content(
+        let staged = git_diff_content_blocking(
             root.to_string_lossy().into_owned(),
             file_name.to_string(),
             None,
@@ -863,7 +915,7 @@ mod tests {
         fs::write(parent.join("outside.txt"), "must not be readable").unwrap();
         let repo = Repository::init(&root).unwrap();
 
-        let error = git_diff_content(
+        let error = git_diff_content_blocking(
             root.to_string_lossy().into_owned(),
             "../outside.txt".to_string(),
             None,

@@ -15,23 +15,50 @@ const CODEX_USAGE_PARSER_VERSION: i64 = 1;
 static CODEX_USAGE_SYNC_LOCK: Mutex<()> = Mutex::new(());
 
 #[tauri::command]
-pub fn get_agent_usage_overview(
+pub async fn get_agent_usage_overview(
     database: State<'_, Arc<Database>>,
 ) -> Result<AgentUsageOverview, String> {
-    let codex_usage = sync_codex_usage_history(&database);
-    Ok(claude_config::build_agent_usage_overview(codex_usage))
+    let database = database.inner().clone();
+    // 历史扫描、日志解析和 SQLite 访问均为阻塞操作，不能在窗口 IPC 线程执行。
+    tauri::async_runtime::spawn_blocking(move || {
+        let codex_usage = sync_codex_usage_history(&database);
+        claude_config::build_agent_usage_overview(codex_usage)
+    })
+    .await
+    .map_err(|error| format!("用量概览任务失败: {error}"))
 }
 
 #[tauri::command]
-pub fn get_agent_usage_storage_status(
+pub async fn get_agent_usage_storage_status(
     database: State<'_, Arc<Database>>,
+) -> Result<AgentUsageStorageStatus, String> {
+    let database = database.inner().clone();
+    crate::commands::run_background_task("get_agent_usage_storage_status", move || {
+        get_agent_usage_storage_status_blocking(database)
+    })
+    .await
+}
+
+pub fn get_agent_usage_storage_status_blocking(
+    database: Arc<Database>,
 ) -> Result<AgentUsageStorageStatus, String> {
     database.get_agent_usage_storage_status(CODEX_AGENT_ID)
 }
 
 #[tauri::command]
-pub fn clear_agent_usage_history(
+pub async fn clear_agent_usage_history(
     database: State<'_, Arc<Database>>,
+    scope: String,
+) -> Result<AgentUsageStorageStatus, String> {
+    let database = database.inner().clone();
+    crate::commands::run_background_task("clear_agent_usage_history", move || {
+        clear_agent_usage_history_blocking(database, scope)
+    })
+    .await
+}
+
+pub fn clear_agent_usage_history_blocking(
+    database: Arc<Database>,
     scope: String,
 ) -> Result<AgentUsageStorageStatus, String> {
     let _guard = lock_codex_usage_sync()?;
@@ -41,8 +68,19 @@ pub fn clear_agent_usage_history(
 }
 
 #[tauri::command]
-pub fn rebuild_agent_usage_history(
+pub async fn rebuild_agent_usage_history(
     database: State<'_, Arc<Database>>,
+    scope: String,
+) -> Result<AgentUsageStorageStatus, String> {
+    let database = database.inner().clone();
+    crate::commands::run_background_task("rebuild_agent_usage_history", move || {
+        rebuild_agent_usage_history_blocking(database, scope)
+    })
+    .await
+}
+
+pub fn rebuild_agent_usage_history_blocking(
+    database: Arc<Database>,
     scope: String,
 ) -> Result<AgentUsageStorageStatus, String> {
     let _guard = lock_codex_usage_sync()?;

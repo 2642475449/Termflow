@@ -68,6 +68,8 @@ import {
 } from "@/lib/terminalOutputFrames";
 import { createTerminalInputQueue } from "@/lib/terminalInputQueue";
 import { createTerminalCommandWatcher } from "@/lib/terminalCommandWatcher";
+import { installTerminalTextSelection } from "@/lib/terminalTextSelection";
+import { createTerminalWheelHandler } from "@/lib/terminalWheel";
 import {
   createTerminalPasteGate,
   encodeClipboardImage,
@@ -229,6 +231,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
   const captureInputForAutoTitleRef = useRef<((data: string) => void) | undefined>(undefined);
   const isDropPositionInsideTerminalRef = useRef<((position: { x: number; y: number }) => boolean) | undefined>(undefined);
   const currentSessionPathRef = useRef("");
+  const currentSessionAgentIdRef = useRef<string | undefined>(undefined);
   const currentTerminalDirectoryRef = useRef("");
   const currentSessionNameRef = useRef("");
   const isNativePowerShellTerminalRef = useRef(false);
@@ -755,6 +758,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
   captureInputForAutoTitleRef.current = captureInputForAutoTitle;
   isDropPositionInsideTerminalRef.current = isDropPositionInsideTerminal;
   currentSessionPathRef.current = currentSessionPath;
+  currentSessionAgentIdRef.current = currentSession?.agentId;
   currentSessionNameRef.current = currentSession?.name ?? "";
   isNativePowerShellTerminalRef.current = currentSession?.agentId === "powershell";
 
@@ -832,6 +836,8 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       cursorBlink: forceStableCursor ? false : cursorBlink,
       scrollback: terminalScrollback,
       convertEol: true,
+      // 普通拖选始终选择文字；应用鼠标交互可通过 Alt 使用。
+      mouseEventsRequireAlt: true,
       disableStdin: !currentSession?.active || currentSession?.status === "starting",
       // OSC 8 超链接优先于文本链接，必须显式接入应用的确认及原生打开流程。
       linkHandler: webLinkHandler,
@@ -896,6 +902,19 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
     );
     const filePathDisposable = term.registerLinkProvider(filePathProvider);
     term.open(containerRef.current);
+    const disposeTextSelection = installTerminalTextSelection(term);
+    term.attachCustomWheelEventHandler(createTerminalWheelHandler(() => {
+      const screen = term.element?.querySelector<HTMLElement>(".xterm-screen");
+      if (!screen) return null;
+      return {
+        agentId: currentSessionAgentIdRef.current,
+        bufferType: term.buffer.active.type,
+        mouseTrackingMode: term.modes.mouseTrackingMode,
+        rows: term.rows,
+        cols: term.cols,
+        screen: screen.getBoundingClientRect(),
+      };
+    }, (data) => term.input(data, true)));
     terminalRef.current = term;
 
     const cursorStyleDisposable = forceStableCursor
@@ -916,12 +935,6 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       }
 
       const completion = terminalCommandWatcherRef.current.consumeOsc133(data, performance.now());
-      if (isNativePowerShellTerminalRef.current && (marker === "C" || completion)) {
-        useAppStore.getState().setTerminalCommandStatus(
-          sessionId,
-          terminalCommandWatcherRef.current.getStatus(),
-        );
-      }
       const projectPath = currentSessionPathRef.current;
       const lifecycleCapability = data.split(";").find((part) =>
         part.startsWith("command-lifecycle="),
@@ -1344,7 +1357,6 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
         if (event.payload.session_id === sessionId) {
           outputFrameGate.flush();
           terminalCommandWatcherRef.current.reset();
-          useAppStore.getState().setTerminalCommandStatus(sessionId, "idle");
           useAppStore.getState().setTerminalCompletionIntegration(sessionId, {
             shell: isNativePowerShellTerminalRef.current ? "powershell" : "unsupported",
             status: "unavailable",
@@ -1417,6 +1429,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       voiceInputPromise.then((unlisten) => unlisten());
       cursorStyleDisposable?.dispose();
       commandLifecycleDisposable.dispose();
+      disposeTextSelection();
       disposeWebglAddon();
       outputPromise.then((unlisten) => unlisten());
       exitPromise.then((unlisten) => unlisten());

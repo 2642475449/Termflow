@@ -163,8 +163,6 @@ export interface Session {
   active: boolean;
   /** Runtime-only terminal tab; excluded from resumable session history. */
   ephemeral?: boolean;
-  /** Associated quick command ID if launched from quick commands */
-  quickCommandId?: string | null;
   /** Preferred presentation surface. Runtime and Agent capabilities are unchanged. */
   presentation?: "workspace" | "auxiliary";
   hasPromptHistory?: boolean;

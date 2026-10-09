@@ -10,7 +10,6 @@ import { useCallback, useEffect, useState } from "react";
 import TitleBarQuickSearch from "./TitleBarQuickSearch";
 import TitleBarProjectSwitcher from "./TitleBarProjectSwitcher";
 import { QuickCommandsButton } from "@/components/QuickCommandsButton";
-import { ProjectLaunchersButton } from "./ProjectLaunchersButton";
 import { TaskMonitorPopover } from "@/components/TaskMonitorPopover";
 import { useAuxiliaryDockStore } from "@/store/auxiliaryDock";
 import { Tooltip } from "antd";
@@ -141,7 +140,6 @@ function TitleBar() {
         {currentProject && (
           <div className="h-full shrink-0 flex items-center justify-center pl-2 pr-1">
             <QuickCommandsButton />
-            <ProjectLaunchersButton />
           </div>
         )}
         <TaskMonitorPopover />

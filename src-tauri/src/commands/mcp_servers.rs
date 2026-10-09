@@ -1242,7 +1242,19 @@ pub fn delete_mcp_server(
 }
 
 #[tauri::command]
-pub fn test_mcp_server(
+pub async fn test_mcp_server(
+    agent: String,
+    scope: String,
+    name: String,
+    project_path: Option<String>,
+) -> Result<McpServerTestResult, String> {
+    crate::commands::run_background_task("test_mcp_server", move || {
+        test_mcp_server_blocking(agent, scope, name, project_path)
+    })
+    .await
+}
+
+pub fn test_mcp_server_blocking(
     agent: String,
     scope: String,
     name: String,

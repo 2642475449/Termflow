@@ -10,13 +10,13 @@ import {
   RightOutlined,
 } from "@ant-design/icons";
 import { Button, Checkbox, Input, Modal, Popover, message } from "antd";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useProjectLauncher } from "@/hooks/useProjectLauncher";
 import CloneRepositoryModal from "@/components/layout/CloneRepositoryModal";
 import { useAppStore } from "@/store";
 import { isSessionTurnRunning } from "@/lib/sessions";
-import { createProjectDirectory, focusExistingProjectWindow } from "@/lib/api";
+import { createProjectDirectory } from "@/lib/api";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { collectOpenProjects, projectPathKey } from "@/lib/openProjects";
 import { useOpenProjectsStore } from "@/store/slices/openProjects";
@@ -65,6 +65,9 @@ function TitleBarProjectSwitcher() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [pendingProjectPath, setPendingProjectPath] = useState<string | null>(null);
   const [rememberOpenChoice, setRememberOpenChoice] = useState(false);
+  const [openingChoice, setOpeningChoice] = useState<"current_window" | "new_window" | null>(null);
+  const [projectOpenError, setProjectOpenError] = useState<string | null>(null);
+  const openingProject = useRef(false);
 
   useEffect(() => {
     if (!open) return;
@@ -122,11 +125,14 @@ function TitleBarProjectSwitcher() {
   async function requestProjectOpen(path: string) {
     if (currentProject?.path === path) return;
 
-    try {
-      if (await focusExistingProjectWindow(path)) return;
-    } catch (error) {
-      console.error("Failed to focus existing project window:", error);
-      message.error(t("sidebar.projectWindowOpenFailed"));
+    // 使用菜单已有快照识别打开的项目，最终命令再次检查并聚焦，避免额外 IPC 阻塞弹窗。
+    if (projectWindows.some((project) => project.projectPath && projectPathKey(project.projectPath) === projectPathKey(path))) {
+      try {
+        await openProject(path, "new_window");
+      } catch (error) {
+        console.error("Failed to open project window:", error);
+        message.error(t("sidebar.projectWindowOpenFailed"));
+      }
       return;
     }
 
@@ -138,6 +144,7 @@ function TitleBarProjectSwitcher() {
       (projectOpenBehavior === "current_window" && (hasRunningSessions || hasDirtyFiles))
     ) {
       setRememberOpenChoice(false);
+      setProjectOpenError(null);
       setPendingProjectPath(path);
       return;
     }
@@ -152,16 +159,21 @@ function TitleBarProjectSwitcher() {
 
   async function confirmProjectOpen(choice: "current_window" | "new_window") {
     const path = pendingProjectPath;
-    if (!path) return;
-    setPendingProjectPath(null);
-    if (rememberOpenChoice) {
-      setProjectOpenBehavior(choice);
-    }
+    if (!path || openingProject.current) return;
+    openingProject.current = true;
+    setOpeningChoice(choice);
+    setProjectOpenError(null);
     try {
       await openProject(path, choice);
+      if (rememberOpenChoice) setProjectOpenBehavior(choice);
+      setPendingProjectPath(null);
     } catch (error) {
       console.error("Failed to open project window:", error);
-      message.error(t("sidebar.projectWindowOpenFailed"));
+      const detail = error instanceof Error ? error.message : String(error);
+      setProjectOpenError(`${t("sidebar.projectWindowOpenFailed")}: ${detail}`);
+    } finally {
+      openingProject.current = false;
+      setOpeningChoice(null);
     }
   }
 
@@ -169,6 +181,7 @@ function TitleBarProjectSwitcher() {
     if (!pendingProjectPath) return;
 
     function handleKeyDown(event: KeyboardEvent) {
+      if (openingProject.current) return;
       if (event.ctrlKey || event.metaKey || event.altKey) return;
 
       const key = event.key.toLowerCase();
@@ -551,16 +564,31 @@ function TitleBarProjectSwitcher() {
         centered
         width={520}
         destroyOnHidden
-        onCancel={() => setPendingProjectPath(null)}
+        closable={openingChoice === null}
+        maskClosable={openingChoice === null}
+        keyboard={openingChoice === null}
+        onCancel={() => {
+          if (!openingProject.current) setPendingProjectPath(null);
+        }}
         footer={
           <div className="flex justify-end gap-2">
-            <Button autoFocus type="primary" onClick={() => void confirmProjectOpen("current_window")}>
+            <Button
+              autoFocus
+              type="primary"
+              loading={openingChoice === "current_window"}
+              disabled={openingChoice !== null}
+              onClick={() => void confirmProjectOpen("current_window")}
+            >
               {t("projectLauncher.openInCurrentWindow")}
             </Button>
-            <Button onClick={() => void confirmProjectOpen("new_window")}>
+            <Button
+              loading={openingChoice === "new_window"}
+              disabled={openingChoice !== null}
+              onClick={() => void confirmProjectOpen("new_window")}
+            >
               {t("projectLauncher.openInNewWindow")}
             </Button>
-            <Button onClick={() => setPendingProjectPath(null)}>{t("common.cancel")}</Button>
+            <Button disabled={openingChoice !== null} onClick={() => setPendingProjectPath(null)}>{t("common.cancel")}</Button>
           </div>
         }
       >
@@ -571,10 +599,16 @@ function TitleBarProjectSwitcher() {
           <Checkbox
             className="mt-4"
             checked={rememberOpenChoice}
+            disabled={openingChoice !== null}
             onChange={(event) => setRememberOpenChoice(event.target.checked)}
           >
             {t("projectLauncher.rememberOpenChoice")}
           </Checkbox>
+          {projectOpenError ? (
+            <div role="alert" className="mt-3 break-words text-sm text-[var(--cs-danger)]">
+              {projectOpenError}
+            </div>
+          ) : null}
         </div>
       </Modal>
     </>

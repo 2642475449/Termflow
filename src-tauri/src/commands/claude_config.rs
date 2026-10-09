@@ -3920,7 +3920,7 @@ pub fn repair_agent_hooks(
     if agent == "claude" {
         return repair_claude_hooks(scope, project_path);
     }
-    super::agent_hooks::ensure_agent_status_hook(agent.to_string())?;
+    super::agent_hooks::ensure_agent_status_hook_blocking(agent.to_string())?;
     list_agent_hooks(agent.to_string(), project_path)
 }
 
@@ -4159,8 +4159,11 @@ pub fn set_claude_theme(
 }
 
 #[tauri::command]
-pub fn get_claude_usage_overview() -> Result<AgentUsageOverview, String> {
-    build_claude_usage_overview()
+pub async fn get_claude_usage_overview() -> Result<AgentUsageOverview, String> {
+    // 兼容旧概览入口，同样避免历史文件扫描阻塞窗口响应。
+    tauri::async_runtime::spawn_blocking(build_claude_usage_overview)
+        .await
+        .map_err(|error| format!("Claude 用量概览任务失败: {error}"))?
 }
 
 #[tauri::command]

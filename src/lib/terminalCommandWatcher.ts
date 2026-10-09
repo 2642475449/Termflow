@@ -4,12 +4,9 @@ export interface TerminalCommandCompletion {
   exitCode: number | null;
 }
 
-export type TerminalCommandWatcherStatus = "unavailable" | "idle" | "running";
-
 export interface TerminalCommandWatcher {
   consumeOsc133: (data: string, nowMs: number) => TerminalCommandCompletion | null;
   reset: () => void;
-  getStatus: () => TerminalCommandWatcherStatus;
 }
 
 interface RunningCommand {
@@ -29,7 +26,6 @@ function parseExitCode(value: string | undefined): number | null {
  * or user input, because none of those observations proves a command ended.
  */
 export function createTerminalCommandWatcher(): TerminalCommandWatcher {
-  let sawIntegrationSignal = false;
   let nextCommandId = 1;
   let running: RunningCommand | null = null;
 
@@ -40,7 +36,6 @@ export function createTerminalCommandWatcher(): TerminalCommandWatcher {
         return null;
       }
 
-      sawIntegrationSignal = true;
       if (marker === "C") {
         running = { commandId: nextCommandId, startedAtMs: nowMs };
         nextCommandId += 1;
@@ -59,10 +54,6 @@ export function createTerminalCommandWatcher(): TerminalCommandWatcher {
     },
     reset: () => {
       running = null;
-    },
-    getStatus: () => {
-      if (running) return "running";
-      return sawIntegrationSignal ? "idle" : "unavailable";
     },
   };
 }

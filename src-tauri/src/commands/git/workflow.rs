@@ -422,7 +422,7 @@ mod tests {
         entered_rx.recv_timeout(Duration::from_secs(5)).unwrap();
         let (switched_tx, switched_rx) = mpsc::channel();
         let switcher = std::thread::spawn(move || {
-            super::super::branch::git_switch_branch(path, "other".into()).unwrap();
+            super::super::branch::git_switch_branch_blocking(path, "other".into()).unwrap();
             switched_tx.send(()).unwrap();
         });
         assert!(switched_rx

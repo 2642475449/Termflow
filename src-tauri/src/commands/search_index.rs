@@ -1981,10 +1981,24 @@ pub(crate) fn lookup_index_candidates(
 }
 
 #[tauri::command]
-pub fn get_search_index_status(
+pub async fn get_search_index_status(
     app: AppHandle,
     database: State<'_, Arc<Database>>,
     state: State<'_, SearchIndexState>,
+    project_path: String,
+) -> Result<ProjectSearchIndexStatus, String> {
+    let database = database.inner().clone();
+    let state = state.inner().clone();
+    crate::commands::run_background_task("get_search_index_status", move || {
+        get_search_index_status_blocking(app, database, state, project_path)
+    })
+    .await
+}
+
+pub fn get_search_index_status_blocking(
+    app: AppHandle,
+    database: Arc<Database>,
+    state: SearchIndexState,
     project_path: String,
 ) -> Result<ProjectSearchIndexStatus, String> {
     let project = resolve_project(&project_path)?;
@@ -2015,9 +2029,9 @@ pub fn get_search_index_status(
                     status,
                 },
             );
-        return start_index_build(app, state.inner().clone(), project, true);
+        return start_index_build(app, state.clone(), project, true);
     }
-    start_index_build(app, state.inner().clone(), project, false)
+    start_index_build(app, state.clone(), project, false)
 }
 
 #[tauri::command]
@@ -2152,10 +2166,24 @@ pub fn resume_project_index(
 }
 
 #[tauri::command]
-pub fn delete_project_index(
+pub async fn delete_project_index(
     app: AppHandle,
     database: State<'_, Arc<Database>>,
     state: State<'_, SearchIndexState>,
+    project_path: String,
+) -> Result<ProjectSearchIndexStatus, String> {
+    let database = database.inner().clone();
+    let state = state.inner().clone();
+    crate::commands::run_background_task("delete_project_index", move || {
+        delete_project_index_blocking(app, database, state, project_path)
+    })
+    .await
+}
+
+pub fn delete_project_index_blocking(
+    app: AppHandle,
+    database: Arc<Database>,
+    state: SearchIndexState,
     project_path: String,
 ) -> Result<ProjectSearchIndexStatus, String> {
     let project = resolve_project(&project_path)?;
@@ -2185,15 +2213,41 @@ pub fn delete_project_index(
 }
 
 #[tauri::command]
-pub fn get_search_index_storage_status(app: AppHandle) -> Result<SearchIndexStorageStatus, String> {
+pub async fn get_search_index_storage_status(
+    app: AppHandle,
+) -> Result<SearchIndexStorageStatus, String> {
+    crate::commands::run_background_task("get_search_index_storage_status", move || {
+        get_search_index_storage_status_blocking(app)
+    })
+    .await
+}
+
+pub fn get_search_index_storage_status_blocking(
+    app: AppHandle,
+) -> Result<SearchIndexStorageStatus, String> {
     storage_status(&app)
 }
 
 #[tauri::command]
-pub fn set_search_index_storage(
+pub async fn set_search_index_storage(
     app: AppHandle,
     database: State<'_, Arc<Database>>,
     state: State<'_, SearchIndexState>,
+    cache_root: Option<String>,
+    quota_bytes: u64,
+) -> Result<SearchIndexStorageStatus, String> {
+    let database = database.inner().clone();
+    let state = state.inner().clone();
+    crate::commands::run_background_task("set_search_index_storage", move || {
+        set_search_index_storage_blocking(app, database, state, cache_root, quota_bytes)
+    })
+    .await
+}
+
+pub fn set_search_index_storage_blocking(
+    app: AppHandle,
+    database: Arc<Database>,
+    state: SearchIndexState,
     cache_root: Option<String>,
     quota_bytes: u64,
 ) -> Result<SearchIndexStorageStatus, String> {
@@ -2247,9 +2301,20 @@ pub fn set_search_index_storage(
 }
 
 #[tauri::command]
-pub fn clear_search_index_cache(
+pub async fn clear_search_index_cache(
     app: AppHandle,
     state: State<'_, SearchIndexState>,
+) -> Result<SearchIndexStorageStatus, String> {
+    let state = state.inner().clone();
+    crate::commands::run_background_task("clear_search_index_cache", move || {
+        clear_search_index_cache_blocking(app, state)
+    })
+    .await
+}
+
+pub fn clear_search_index_cache_blocking(
+    app: AppHandle,
+    state: SearchIndexState,
 ) -> Result<SearchIndexStorageStatus, String> {
     if has_active_build(&state) {
         return Err(

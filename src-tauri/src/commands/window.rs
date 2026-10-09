@@ -443,6 +443,24 @@ pub async fn open_project_window(
     registry: State<'_, Arc<WindowRegistry>>,
     manager: State<'_, Arc<PtyManager>>,
 ) -> Result<WindowProjectContext, String> {
+    let registry = registry.inner().clone();
+    let manager = manager.inner().clone();
+    // WebView2 创建是同步阻塞操作，不能占用处理其他 IPC 的异步执行线程。
+    tauri::async_runtime::spawn_blocking(move || {
+        open_project_window_blocking(path, disposition, app, window, registry, manager)
+    })
+    .await
+    .map_err(|error| format!("项目窗口任务失败: {error}"))?
+}
+
+fn open_project_window_blocking(
+    path: String,
+    disposition: String,
+    app: tauri::AppHandle,
+    window: WebviewWindow,
+    registry: Arc<WindowRegistry>,
+    manager: Arc<PtyManager>,
+) -> Result<WindowProjectContext, String> {
     let project_path = ensure_existing_project_directory(&path)?;
     let project_name = project_name_from_path(&project_path);
     let launched_from_launcher = registry.is_launcher(window.label());
@@ -501,8 +519,15 @@ pub async fn open_project_window(
             .center()
             .resizable(true)
             .decorations(false)
-            .build()
-            .map_err(|e| format!("创建项目窗口失败: {}", e))?;
+            .build();
+    let project_window = match project_window {
+        Ok(window) => window,
+        Err(error) => {
+            // 创建前登记以便新窗口初始化读取；失败时必须撤销，允许再次打开。
+            registry.release_window(&label);
+            return Err(format!("创建项目窗口失败: {error}"));
+        }
+    };
     let _ = app.emit_to(project_window.label(), "window-context-updated", &context);
     if close_secondary_launcher {
         let _ = window.destroy();

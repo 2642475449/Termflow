@@ -80,7 +80,7 @@ pub async fn spawn_pty(
         .filter(|agent_id| super::agent_hooks::supports_agent_status_hook(agent_id))
     {
         let hook_error =
-            match super::agent_hooks::ensure_agent_status_hook(agent_id.to_string()) {
+            match super::agent_hooks::ensure_agent_status_hook_blocking(agent_id.to_string()) {
                 Ok(status) if !status.configured => Some(status.detail.unwrap_or_else(|| {
                     format!("Hook 配置未通过完整性检查：{}", status.config_path)
                 })),
@@ -165,12 +165,23 @@ pub async fn spawn_pty(
 
 /// 在创建会话前检查 Claude Code 是否可用
 #[tauri::command]
-pub fn check_claude_ready() -> Result<(), String> {
+pub async fn check_claude_ready() -> Result<(), String> {
+    crate::commands::run_background_task("check_claude_ready", move || {
+        check_claude_ready_blocking()
+    })
+    .await
+}
+
+pub fn check_claude_ready_blocking() -> Result<(), String> {
     check_claude_ready_in_shell()
 }
 
 #[tauri::command]
-pub fn get_claude_cli_info() -> ClaudeCliInfo {
+pub async fn get_claude_cli_info() -> Result<ClaudeCliInfo, String> {
+    super::run_background_task("get_claude_cli_info", || Ok(get_claude_cli_info_blocking())).await
+}
+
+fn get_claude_cli_info_blocking() -> ClaudeCliInfo {
     let checked_at = current_timestamp_ms();
     let executable_path = find_claude_exe().ok();
 
@@ -359,7 +370,14 @@ pub fn close_pty(session_id: String, manager: State<'_, Arc<PtyManager>>) {
 
 /// 清理残留的 claude 进程（用于会话恢复前）
 #[tauri::command]
-pub fn cleanup_stale_sessions() -> Result<(), String> {
+pub async fn cleanup_stale_sessions() -> Result<(), String> {
+    crate::commands::run_background_task("cleanup_stale_sessions", move || {
+        cleanup_stale_sessions_blocking()
+    })
+    .await
+}
+
+pub fn cleanup_stale_sessions_blocking() -> Result<(), String> {
     kill_stale_claude_processes()
 }
 
@@ -467,7 +485,17 @@ pub fn open_in_associated_application(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn resolve_recent_codex_session_id(
+pub async fn resolve_recent_codex_session_id(
+    project_path: String,
+    since_timestamp_ms: Option<i64>,
+) -> Result<Option<String>, String> {
+    crate::commands::run_background_task("resolve_recent_codex_session_id", move || {
+        resolve_recent_codex_session_id_blocking(project_path, since_timestamp_ms)
+    })
+    .await
+}
+
+pub fn resolve_recent_codex_session_id_blocking(
     project_path: String,
     since_timestamp_ms: Option<i64>,
 ) -> Result<Option<String>, String> {

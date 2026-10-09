@@ -3,7 +3,14 @@ use super::utils::{git_command, open_repo, with_git_repository_access, GitReposi
 
 /// List all branches (local and remote).
 #[tauri::command]
-pub fn git_list_branches(project_path: String) -> Result<Vec<GitBranchListItem>, String> {
+pub async fn git_list_branches(project_path: String) -> Result<Vec<GitBranchListItem>, String> {
+    crate::commands::run_background_task("git_list_branches", move || {
+        git_list_branches_blocking(project_path)
+    })
+    .await
+}
+
+pub fn git_list_branches_blocking(project_path: String) -> Result<Vec<GitBranchListItem>, String> {
     with_git_repository_access(&project_path, GitRepositoryAccess::Read, || {
         let repo = open_repo(&project_path)?;
 
@@ -107,7 +114,14 @@ pub fn git_list_branches(project_path: String) -> Result<Vec<GitBranchListItem>,
 
 /// Create a new branch from HEAD.
 #[tauri::command]
-pub fn git_create_branch(project_path: String, name: String) -> Result<(), String> {
+pub async fn git_create_branch(project_path: String, name: String) -> Result<(), String> {
+    crate::commands::run_background_task("git_create_branch", move || {
+        git_create_branch_blocking(project_path, name)
+    })
+    .await
+}
+
+pub fn git_create_branch_blocking(project_path: String, name: String) -> Result<(), String> {
     if name.trim().is_empty() {
         return Err("分支名称不能为空".to_string());
     }
@@ -128,7 +142,14 @@ pub fn git_create_branch(project_path: String, name: String) -> Result<(), Strin
 
 /// Switch to a branch.
 #[tauri::command]
-pub fn git_switch_branch(project_path: String, name: String) -> Result<(), String> {
+pub async fn git_switch_branch(project_path: String, name: String) -> Result<(), String> {
+    crate::commands::run_background_task("git_switch_branch", move || {
+        git_switch_branch_blocking(project_path, name)
+    })
+    .await
+}
+
+pub fn git_switch_branch_blocking(project_path: String, name: String) -> Result<(), String> {
     with_git_repository_access(&project_path, GitRepositoryAccess::Write, || {
         let path = crate::path_utils::normalize_input_path(&project_path);
         let repo = open_repo(&project_path)?;
@@ -165,7 +186,18 @@ pub fn git_switch_branch(project_path: String, name: String) -> Result<(), Strin
 
 /// Delete a branch.
 #[tauri::command]
-pub fn git_delete_branch(
+pub async fn git_delete_branch(
+    project_path: String,
+    name: String,
+    force: Option<bool>,
+) -> Result<(), String> {
+    crate::commands::run_background_task("git_delete_branch", move || {
+        git_delete_branch_blocking(project_path, name, force)
+    })
+    .await
+}
+
+pub fn git_delete_branch_blocking(
     project_path: String,
     name: String,
     force: Option<bool>,
@@ -199,7 +231,17 @@ pub fn git_delete_branch(
 
 /// Merge a branch into the current branch.
 #[tauri::command]
-pub fn git_merge_branch(
+pub async fn git_merge_branch(
+    project_path: String,
+    branch_name: String,
+) -> Result<GitRemoteResult, String> {
+    crate::commands::run_background_task("git_merge_branch", move || {
+        git_merge_branch_blocking(project_path, branch_name)
+    })
+    .await
+}
+
+pub fn git_merge_branch_blocking(
     project_path: String,
     branch_name: String,
 ) -> Result<GitRemoteResult, String> {

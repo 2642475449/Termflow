@@ -110,7 +110,17 @@ pub struct ProjectImagePayload {
 }
 
 #[tauri::command]
-pub fn list_project_directory(
+pub async fn list_project_directory(
+    project_path: String,
+    directory_path: Option<String>,
+) -> Result<FileTreeListing, String> {
+    crate::commands::run_background_task("list_project_directory", move || {
+        list_project_directory_blocking(project_path, directory_path)
+    })
+    .await
+}
+
+pub fn list_project_directory_blocking(
     project_path: String,
     directory_path: Option<String>,
 ) -> Result<FileTreeListing, String> {
@@ -188,7 +198,17 @@ pub fn resolve_project_link(
 }
 
 #[tauri::command]
-pub fn search_project_entries(
+pub async fn search_project_entries(
+    project_path: String,
+    query: String,
+) -> Result<Vec<FileTreeEntry>, String> {
+    crate::commands::run_background_task("search_project_entries", move || {
+        search_project_entries_blocking(project_path, query)
+    })
+    .await
+}
+
+pub fn search_project_entries_blocking(
     project_path: String,
     query: String,
 ) -> Result<Vec<FileTreeEntry>, String> {
@@ -307,7 +327,20 @@ pub fn create_project_directory(
 }
 
 #[tauri::command]
-pub fn read_project_file(project_path: String, path: String) -> Result<ProjectFileContent, String> {
+pub async fn read_project_file(
+    project_path: String,
+    path: String,
+) -> Result<ProjectFileContent, String> {
+    crate::commands::run_background_task("read_project_file", move || {
+        read_project_file_blocking(project_path, path)
+    })
+    .await
+}
+
+pub fn read_project_file_blocking(
+    project_path: String,
+    path: String,
+) -> Result<ProjectFileContent, String> {
     let root_path = normalize_input_path(&project_path);
     if !root_path.exists() {
         return Err("项目目录不存在".to_string());
@@ -348,7 +381,17 @@ pub fn read_project_file(project_path: String, path: String) -> Result<ProjectFi
 }
 
 #[tauri::command]
-pub fn read_project_image(
+pub async fn read_project_image(
+    project_path: String,
+    path: String,
+) -> Result<ProjectImagePayload, String> {
+    crate::commands::run_background_task("read_project_image", move || {
+        read_project_image_blocking(project_path, path)
+    })
+    .await
+}
+
+pub fn read_project_image_blocking(
     project_path: String,
     path: String,
 ) -> Result<ProjectImagePayload, String> {
@@ -384,7 +427,17 @@ pub fn read_project_image(
 }
 
 #[tauri::command]
-pub fn read_project_pdf(
+pub async fn read_project_pdf(
+    project_path: String,
+    path: String,
+) -> Result<tauri::ipc::Response, String> {
+    crate::commands::run_background_task("read_project_pdf", move || {
+        read_project_pdf_blocking(project_path, path)
+    })
+    .await
+}
+
+pub fn read_project_pdf_blocking(
     project_path: String,
     path: String,
 ) -> Result<tauri::ipc::Response, String> {
@@ -412,7 +465,17 @@ pub fn read_project_pdf(
 }
 
 #[tauri::command]
-pub fn read_project_office_preview(
+pub async fn read_project_office_preview(
+    project_path: String,
+    path: String,
+) -> Result<tauri::ipc::Response, String> {
+    crate::commands::run_background_task("read_project_office_preview", move || {
+        read_project_office_preview_blocking(project_path, path)
+    })
+    .await
+}
+
+pub fn read_project_office_preview_blocking(
     project_path: String,
     path: String,
 ) -> Result<tauri::ipc::Response, String> {
@@ -446,7 +509,19 @@ pub fn read_project_office_preview(
 }
 
 #[tauri::command]
-pub fn write_project_file(
+pub async fn write_project_file(
+    project_path: String,
+    path: String,
+    content: String,
+    encoding: Option<String>,
+) -> Result<(), String> {
+    crate::commands::run_background_task("write_project_file", move || {
+        write_project_file_blocking(project_path, path, content, encoding)
+    })
+    .await
+}
+
+pub fn write_project_file_blocking(
     project_path: String,
     path: String,
     content: String,
@@ -476,7 +551,17 @@ pub fn write_project_file(
 }
 
 #[tauri::command]
-pub fn inspect_project_file(
+pub async fn inspect_project_file(
+    project_path: String,
+    path: String,
+) -> Result<ProjectFileStatus, String> {
+    crate::commands::run_background_task("inspect_project_file", move || {
+        inspect_project_file_blocking(project_path, path)
+    })
+    .await
+}
+
+pub fn inspect_project_file_blocking(
     project_path: String,
     path: String,
 ) -> Result<ProjectFileStatus, String> {
@@ -511,7 +596,19 @@ pub fn inspect_project_file(
 }
 
 #[tauri::command]
-pub fn copy_external_entry(
+pub async fn copy_external_entry(
+    project_path: String,
+    source_paths: Vec<String>,
+    destination_directory: String,
+    new_name: Option<String>,
+) -> Result<Vec<String>, String> {
+    crate::commands::run_background_task("copy_external_entry", move || {
+        copy_external_entry_blocking(project_path, source_paths, destination_directory, new_name)
+    })
+    .await
+}
+
+pub fn copy_external_entry_blocking(
     project_path: String,
     source_paths: Vec<String>,
     destination_directory: String,
@@ -588,7 +685,18 @@ pub fn read_clipboard_file_paths() -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
-pub fn copy_project_entries(
+pub async fn copy_project_entries(
+    project_path: String,
+    source_paths: Vec<String>,
+    destination_directory: String,
+) -> Result<Vec<String>, String> {
+    crate::commands::run_background_task("copy_project_entries", move || {
+        copy_project_entries_blocking(project_path, source_paths, destination_directory)
+    })
+    .await
+}
+
+pub fn copy_project_entries_blocking(
     project_path: String,
     source_paths: Vec<String>,
     destination_directory: String,
@@ -608,7 +716,18 @@ pub fn copy_project_entries(
 }
 
 #[tauri::command]
-pub fn move_project_entries(
+pub async fn move_project_entries(
+    project_path: String,
+    source_paths: Vec<String>,
+    destination_directory: String,
+) -> Result<Vec<String>, String> {
+    crate::commands::run_background_task("move_project_entries", move || {
+        move_project_entries_blocking(project_path, source_paths, destination_directory)
+    })
+    .await
+}
+
+pub fn move_project_entries_blocking(
     project_path: String,
     source_paths: Vec<String>,
     destination_directory: String,
@@ -1520,9 +1639,11 @@ mod tests {
         let expected = b"PK\x03\x04minimal ooxml fixture";
         fs::write(&document_path, expected).unwrap();
 
-        let response =
-            read_project_office_preview(display_path(&directory), display_path(&document_path))
-                .unwrap();
+        let response = read_project_office_preview_blocking(
+            display_path(&directory),
+            display_path(&document_path),
+        )
+        .unwrap();
         let body = response.body().unwrap();
         assert!(matches!(body, InvokeResponseBody::Raw(bytes) if bytes == expected));
 
@@ -1539,7 +1660,8 @@ mod tests {
         let expected = b"%PDF-1.7\nminimal test payload";
         fs::write(&pdf_path, expected).unwrap();
 
-        let response = read_project_pdf(display_path(&directory), display_path(&pdf_path)).unwrap();
+        let response =
+            read_project_pdf_blocking(display_path(&directory), display_path(&pdf_path)).unwrap();
         let body = response.body().unwrap();
         assert!(matches!(body, InvokeResponseBody::Raw(bytes) if bytes == expected));
 
@@ -1589,7 +1711,8 @@ mod tests {
         fs::write(&file_path, [0xD6, 0xD0, 0xCE, 0xC4]).unwrap();
 
         let content =
-            read_project_file(display_path(directory.path()), display_path(&file_path)).unwrap();
+            read_project_file_blocking(display_path(directory.path()), display_path(&file_path))
+                .unwrap();
         assert_eq!(content.content, "中文");
         assert_eq!(content.encoding, "gbk");
     }
@@ -1600,7 +1723,7 @@ mod tests {
         let file_path = directory.path().join("keys.txt");
         fs::write(&file_path, [0xD6, 0xD0, 0xCE, 0xC4]).unwrap();
 
-        write_project_file(
+        write_project_file_blocking(
             display_path(directory.path()),
             display_path(&file_path),
             "中文追加".to_string(),
@@ -1621,7 +1744,7 @@ mod tests {
         let original = [0xD6, 0xD0, 0xCE, 0xC4];
         fs::write(&file_path, original).unwrap();
 
-        let result = write_project_file(
+        let result = write_project_file_blocking(
             display_path(directory.path()),
             display_path(&file_path),
             "中文 😀".to_string(),
@@ -1637,7 +1760,7 @@ mod tests {
         let file_path = directory.path().join("notes.txt");
         fs::write(&file_path, "old").unwrap();
 
-        write_project_file(
+        write_project_file_blocking(
             display_path(directory.path()),
             display_path(&file_path),
             "中文".to_string(),
@@ -1654,7 +1777,7 @@ mod tests {
         let file_path = directory.path().join("notes.txt");
         fs::write(&file_path, "old").unwrap();
 
-        write_project_file(
+        write_project_file_blocking(
             display_path(directory.path()),
             display_path(&file_path),
             "中文".to_string(),

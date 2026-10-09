@@ -219,6 +219,19 @@ html, body, #root {
   -webkit-user-select: text;
 }
 
+.app-terminal-text-selection {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.app-terminal-text-selection-row {
+  position: absolute;
+  background: color-mix(in srgb, var(--cs-primary) 20%, transparent);
+}
+
 .app-shell-chrome,
 .app-shell-chrome * {
   user-select: none;
@@ -2022,43 +2035,6 @@ html, body, #root {
   width: 27px;
   flex: 0 0 27px;
   border-left: 1px solid color-mix(in srgb, var(--cs-border-secondary) 80%, transparent);
-}
-
-.quick-command-trigger-stop {
-  width: 27px;
-  flex: 0 0 27px;
-  border-left: 1px solid color-mix(in srgb, var(--cs-border-secondary) 80%, transparent);
-  color: var(--cs-danger);
-}
-
-.quick-command-trigger-stop:hover {
-  background: var(--cs-danger-hover) !important;
-  color: var(--cs-danger) !important;
-}
-
-.quick-command-running-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background-color: var(--cs-success);
-  box-shadow: 0 0 0 0 color-mix(in srgb, var(--cs-success) 70%, transparent);
-  animation: qc-pulse 2s infinite;
-  flex-shrink: 0;
-}
-
-@keyframes qc-pulse {
-  0% {
-    transform: scale(0.95);
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--cs-success) 70%, transparent);
-  }
-  70% {
-    transform: scale(1);
-    box-shadow: 0 0 0 5px color-mix(in srgb, var(--cs-success) 0%, transparent);
-  }
-  100% {
-    transform: scale(0.95);
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--cs-success) 0%, transparent);
-  }
 }
 
 .quick-command-trigger:focus-visible,
