@@ -8,6 +8,72 @@ import {
 } from "./FilePathLinkProvider";
 
 describe("terminal file path links", () => {
+  it("detects a Markdown target with spaces and nested filename parentheses", () => {
+    const path = "folder with spaces/report (final).pdf";
+    const text = `[示例](${path})`;
+    expect(detectTerminalFilePaths(text)).toEqual([
+      expect.objectContaining({ filePath: path, text: path, startIndex: 5 }),
+    ]);
+  });
+
+  it("passes the complete quoted path to validation and maps only its content", async () => {
+    const path = String.raw`E:\7.project\shengzhi\folder with spaces\report (final).pdf`;
+    const terminal = {
+      cols: 100,
+      buffer: {
+        active: {
+          length: 1,
+          getLine: () => ({ isWrapped: false, translateToString: () => `"${path}"` }),
+        },
+      },
+    } as unknown as Terminal;
+    const validated: string[] = [];
+    const provider = new FilePathLinkProvider(terminal, () => undefined, async (candidate) => {
+      validated.push(candidate.filePath);
+      return candidate.filePath === path;
+    });
+    const links = await new Promise<Parameters<Parameters<typeof provider.provideLinks>[1]>[0]>((resolve) => {
+      provider.provideLinks(1, resolve);
+    });
+    expect(validated).toEqual([path]);
+    expect(links).toHaveLength(1);
+    expect(links?.[0]?.range).toEqual({ start: { x: 2, y: 1 }, end: { x: path.length + 1, y: 1 } });
+  });
+
+  it("preserves quoted paths with Chinese, spaces and parentheses", () => {
+    const paths = [
+      String.raw`E:\7.project\shengzhi\中文目录\测试文件.txt`,
+      String.raw`E:\7.project\shengzhi\folder with spaces\report (final).pdf`,
+      String.raw`C:\Users\26424\Documents\测试报告（最终版）.docx`,
+      "folder with spaces/report (final).pdf",
+    ];
+    for (const path of paths) {
+      for (const quote of ['"', "'", "`"]) {
+        const line = `文件 ${quote}${path}${quote} 后面文字`;
+        expect(detectTerminalFilePaths(line)).toEqual([
+          expect.objectContaining({ filePath: path, text: path, startIndex: 4 }),
+        ]);
+      }
+    }
+  });
+
+  it("detects complete unquoted Windows and UNC files containing spaces", () => {
+    const paths = [
+      String.raw`E:\7.project\shengzhi\folder with spaces\report (final).pdf`,
+      String.raw`\\localhost\share\中文目录\test file.txt`,
+      String.raw`C:\Users\26424\Documents\测试报告（最终版）.docx`,
+    ];
+    for (const path of paths) {
+      expect(detectTerminalFilePaths(path)).toEqual([
+        expect.objectContaining({ filePath: path, text: path, startIndex: 0 }),
+      ]);
+    }
+  });
+
+  it("does not expose suffixes inside quoted URLs as file paths", () => {
+    expect(detectTerminalFilePaths('"https://example.com/folder with spaces/report.pdf"')).toEqual([]);
+  });
+
   it("detects common file path formats", () => {
     const cases = [
       "src/components/Terminal.tsx:361:10",

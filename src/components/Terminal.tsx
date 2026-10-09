@@ -26,8 +26,9 @@ import {
   readImagePreview,
   saveTerminalClipboardImage,
   retainClipboardImage,
+  openExternalUrl,
 } from "@/lib/api";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { createTerminalWebLinkHandler, TERMINAL_WEB_URL_PATTERN } from "@/lib/terminalWebLinks";
 import {
   FilePathLinkProvider,
   resolveTerminalFilePath,
@@ -563,7 +564,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
     setOpeningTerminalLink(true);
     try {
       if (link.kind === "external") {
-        await openUrl(link.href);
+        await openExternalUrl(link.href);
         return;
       }
 
@@ -816,6 +817,11 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
   useEffect(() => {
     if (!containerRef.current) return;
     const container = containerRef.current;
+    const webLinkHandler = createTerminalWebLinkHandler(
+      (uri) => setPendingTerminalLink({ kind: "external", href: uri }),
+      showExternalImagePreview,
+      scheduleImagePreviewDismissal,
+    );
 
     const term = new XTerm({
       fontFamily: "'Cascadia Code', 'Fira Code', Consolas, monospace",
@@ -827,6 +833,8 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       scrollback: terminalScrollback,
       convertEol: true,
       disableStdin: !currentSession?.active || currentSession?.status === "starting",
+      // OSC 8 超链接优先于文本链接，必须显式接入应用的确认及原生打开流程。
+      linkHandler: webLinkHandler,
     });
 
     const fitAddon = new FitAddon();
@@ -834,9 +842,9 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
     // URL 链接：单击后先确认，再使用 Tauri 原生方式打开系统浏览器。
     term.loadAddon(
       new WebLinksAddon((event, uri) => {
-        if (event.button !== 0) return;
-        setPendingTerminalLink({ kind: "external", href: uri });
+        webLinkHandler.activate(event, uri);
       }, {
+        urlRegex: TERMINAL_WEB_URL_PATTERN,
         hover: (event, uri) => showExternalImagePreview(uri, event),
         leave: scheduleImagePreviewDismissal,
       }),

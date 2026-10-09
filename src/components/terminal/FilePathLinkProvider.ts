@@ -32,6 +32,7 @@ const FILE_EXTENSIONS = [
   "json", "jsonc", "yaml", "yml", "toml", "xml", "md", "mdx", "txt",
   "sh", "bash", "zsh", "ps1", "sql", "graphql", "gql", "proto", "env", "lock", "pdf",
   "png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "avif",
+  "doc", "docx", "xls", "xlsx", "ppt", "pptx", "csv", "rtf", "odt", "ods", "odp",
 ];
 
 const EXTENSION_PATTERN = [...FILE_EXTENSIONS]
@@ -59,6 +60,16 @@ const FILE_PATH_PATTERN = new RegExp(
   "gi",
 );
 
+// 带引号的路径使用引号确定边界，避免空格和括号把一个文件拆成多个链接。
+const QUOTED_PATH_PATTERN = /(["'`])([^\r\n]+?)\1/g;
+const QUOTED_PATH_START = /^(?:[a-zA-Z]:[\\/]|\\\\|\/|\.\.?[\\/]|[^\s:*?"<>|]+[\\/])/;
+const FILE_SUFFIX_PATTERN = new RegExp(String.raw`\.(?:${EXTENSION_PATTERN})(?::\d+)?(?::\d+)?$`, "i");
+// 无引号时，仅对具有明确 Windows/UNC 起点和文件扩展名的候选放宽空格及括号。
+const SPACED_ABSOLUTE_FILE_PATTERN = new RegExp(
+  String.raw`(?<![\w])(?:[a-zA-Z]:[\\/]|\\\\)[^\r\n\t:*?"'\x60<>|，。；：！？、]+?\.(?:${EXTENSION_PATTERN})(?::\d+)?(?::\d+)?(?=$|[\s"'\x60),，。；：！？、\]])`,
+  "gi",
+);
+
 export function parseTerminalFilePath(text: string): ParsedPath {
   const lineAndColumn = text.match(/^(.+):(\d+):(\d+)$/);
   if (lineAndColumn) {
@@ -79,22 +90,64 @@ export function parseTerminalFilePath(text: string): ParsedPath {
 
 export function detectTerminalFilePaths(line: string): DetectedFilePath[] {
   const matches: DetectedFilePath[] = [];
+  const reservedRanges: Array<{ start: number; end: number }> = [];
+  const overlapsReservedRange = (start: number, length: number) => reservedRanges.some(
+    (range) => start < range.end && start + length > range.start,
+  );
+  const addPath = (text: string, startIndex: number) => {
+    matches.push({ text, startIndex, ...parseTerminalFilePath(text) });
+  };
+
+  for (const quoted of line.matchAll(QUOTED_PATH_PATTERN)) {
+    const text = quoted[2];
+    const start = quoted.index;
+    // 整段引号内容占位，防止 URL 或无效引用中的后半段被误识别成文件。
+    reservedRanges.push({ start, end: start + quoted[0].length });
+    if (text.includes("://") || (!QUOTED_PATH_START.test(text) && !FILE_SUFFIX_PATTERN.test(text))) continue;
+    addPath(text, start + 1);
+  }
+
+  // Markdown/终端展示常用外层括号包住路径；内部括号属于文件名。
+  let parenthesisStart = -1;
+  let parenthesisDepth = 0;
+  for (let index = 0; index < line.length; index += 1) {
+    if (overlapsReservedRange(index, 1)) continue;
+    if (line[index] === "(") {
+      if (parenthesisDepth === 0) parenthesisStart = index;
+      parenthesisDepth += 1;
+    } else if (line[index] === ")" && parenthesisDepth > 0) {
+      parenthesisDepth -= 1;
+      if (parenthesisDepth !== 0) continue;
+      const text = line.slice(parenthesisStart + 1, index);
+      if (text.includes("://")) {
+        reservedRanges.push({ start: parenthesisStart, end: index + 1 });
+      } else if (QUOTED_PATH_START.test(text) || FILE_SUFFIX_PATTERN.test(text)) {
+        addPath(text, parenthesisStart + 1);
+        reservedRanges.push({ start: parenthesisStart, end: index + 1 });
+      }
+    }
+  }
+
+  for (const absolute of line.matchAll(SPACED_ABSOLUTE_FILE_PATTERN)) {
+    if (absolute[0].includes("://")) continue;
+    if (overlapsReservedRange(absolute.index, absolute[0].length)) continue;
+    addPath(absolute[0], absolute.index);
+    reservedRanges.push({ start: absolute.index, end: absolute.index + absolute[0].length });
+  }
+
   const pattern = new RegExp(FILE_PATH_PATTERN.source, FILE_PATH_PATTERN.flags);
   let match: RegExpExecArray | null;
 
   while ((match = pattern.exec(line)) !== null) {
+    if (overlapsReservedRange(match.index, match[0].length)) continue;
     // WebLinksAddon owns URLs; do not claim a path-looking suffix from one.
     const tokenStart = line.lastIndexOf(" ", match.index - 1) + 1;
     if (line.slice(tokenStart, match.index + match[0].length).includes("://")) continue;
 
-    matches.push({
-      text: match[0],
-      startIndex: match.index,
-      ...parseTerminalFilePath(match[0]),
-    });
+    addPath(match[0], match.index);
   }
 
-  return matches;
+  return matches.sort((left, right) => left.startIndex - right.startIndex);
 }
 
 export function resolveTerminalFilePath(filePath: string, workingDirectory: string): string {
