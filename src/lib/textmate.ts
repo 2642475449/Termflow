@@ -111,15 +111,30 @@ export function createTextmateProvider(grammar: Grammar): Monaco.languages.Token
 }
 export async function installTextmate(monaco: typeof Monaco) {
   const highlighter = await createTextmateHighlighter();
+  const installers = new Map<string, () => void>();
+  const pending = new Map<string, Promise<void>>();
   for (const [id, grammar] of Object.entries(TEXTMATE_LANGUAGES)) {
     const entry = monaco.languages.getLanguages().find((language) => language.id === id);
     if (!entry) monaco.languages.register({ id });
     // 等内置 provider 完成注册后再替换，防止首次打开文件时被覆盖。
     const lazyEntry = entry as (Monaco.languages.ILanguageExtensionPoint & { loader?: () => Promise<unknown> }) | undefined;
-    monaco.languages.onLanguage(id, () => {
-      void Promise.resolve(lazyEntry?.loader?.()).then(() => {
+    const install = () => {
+      if (pending.has(id)) return;
+      const task = Promise.resolve().then(() => lazyEntry?.loader?.()).then(() => {
         monaco.languages.setTokensProvider(id, createTextmateProvider(highlighter.getLanguage(grammar[0].name)));
-      }).catch((error: unknown) => { console.error(`TextMate language initialization failed: ${id}`, error); });
-    });
+      }).catch((error: unknown) => {
+        pending.delete(id);
+        console.error(`TextMate language initialization failed: ${id}`, error);
+      });
+      pending.set(id, task);
+    };
+    installers.set(id, install);
+    monaco.languages.onLanguage(id, install);
   }
+  // onLanguage 只触发一次，不会补发异步加载高亮前已经激活的语言。
+  // 同时覆盖现有模型、重新打开的模型以及语言切换，并按语言去重安装。
+  const installForModel = (model: Monaco.editor.ITextModel) => installers.get(model.getLanguageId())?.();
+  monaco.editor.onDidCreateModel(installForModel);
+  monaco.editor.onDidChangeModelLanguage(({ model }) => installForModel(model));
+  monaco.editor.getModels().forEach(installForModel);
 }

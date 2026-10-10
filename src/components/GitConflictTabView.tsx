@@ -8,7 +8,7 @@ import { useTranslation } from "react-i18next";
 import { gitConflictDetail, gitResolveConflict } from "@/lib/api";
 import { getGitConflictResolutionLabelKeys, getGitOperationLabelKey } from "@/lib/gitOperationState";
 import { requestGitStatusRefresh } from "@/lib/gitStatusEvents";
-import { getMonacoLanguage, getMonacoThemeName, getMonacoTypography } from "@/lib/monaco";
+import { getMonacoLanguage, getMonacoThemeName, getMonacoTypography, observeMonacoTheme } from "@/lib/monaco";
 import { useAppStore } from "@/store";
 import { useGitStatusStore } from "@/store/slices/gitStatus";
 import type { GitConflictDetail } from "@/types";
@@ -119,6 +119,10 @@ export function GitConflictTabView({ projectPath, filePath, isBinary }: GitConfl
   }, [darkTheme, lightTheme, systemPrefersDark, themeCategory]);
   const language = useMemo(() => getMonacoLanguage(filePath), [filePath]);
   const theme = useMemo(() => getMonacoThemeName(isDark), [isDark]);
+  useEffect(() => {
+    const observer = observeMonacoTheme(isDark);
+    return () => observer.dispose();
+  }, [isDark]);
   const typography = useMemo(() => getMonacoTypography(Math.max(13, editorFontSize)), [editorFontSize]);
   const resolutionLabels = getGitConflictResolutionLabelKeys(operationState);
   const oursLabel = t(resolutionLabels.ours);

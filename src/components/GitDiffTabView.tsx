@@ -22,6 +22,7 @@ import {
   getMonacoLanguage,
   getMonacoThemeName,
   getMonacoTypography,
+  observeMonacoTheme,
 } from "@/lib/monaco";
 import { useAppStore } from "@/store";
 import { useTranslation } from "react-i18next";
@@ -71,6 +72,10 @@ function GitDiffTabView({ tabId }: GitDiffTabViewProps) {
     [document]
   );
   const theme = useMemo(() => getMonacoThemeName(isDark), [isDark]);
+  useEffect(() => {
+    const observer = observeMonacoTheme(isDark);
+    return () => observer.dispose();
+  }, [isDark]);
   const typography = getMonacoTypography(Math.max(13, editorFontSize));
 
   const revealChange = useCallback((index: number) => {

@@ -8,6 +8,7 @@ import {
   getMonacoLanguage,
   getMonacoThemeName,
   getMonacoTypography,
+  observeMonacoTheme,
 } from "@/lib/monaco";
 import { useAppStore } from "@/store";
 import { useFileEditorStatusStore } from "@/store/slices/fileEditorStatus";
@@ -103,6 +104,10 @@ function MonacoTextEditor({
 
   const language = useMemo(() => getMonacoLanguage(filePath), [filePath]);
   const theme = useMemo(() => getMonacoThemeName(isDark), [isDark]);
+  useEffect(() => {
+    const observer = observeMonacoTheme(isDark);
+    return () => observer.dispose();
+  }, [isDark]);
   const typography = getMonacoTypography(Math.max(13, editorFontSize));
 
   const handleMount: OnMount = (editor, monaco) => {
