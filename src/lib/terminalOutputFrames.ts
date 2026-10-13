@@ -31,9 +31,10 @@ export function writeTerminalOutputWithCursorRefresh(
   terminal: FrameOutputTerminal,
   data: string,
   shouldRefresh: (() => boolean) | undefined,
+  onParsed?: () => void,
 ): void {
   if (!shouldRefresh) {
-    terminal.write(data);
+    terminal.write(data, onParsed);
     return;
   }
   const before = terminal.buffer.active;
@@ -56,6 +57,8 @@ export function writeTerminalOutputWithCursorRefresh(
       if (start <= end) terminal.refresh(start, end);
     } catch {
       // 终端卸载或渲染器切换可与解析回调交错。
+    } finally {
+      onParsed?.();
     }
   });
 }
@@ -144,6 +147,7 @@ function createOutputScanner() {
     },
     canInsertControl: () => mode !== "string" && !streamedCsi,
     hasPendingSequence: () => pending.length > 0,
+    getBufferedChars: () => pending.length,
     finish() {
       const tail = pending;
       const incomplete = mode !== "text" || streamedCsi;
@@ -311,6 +315,7 @@ export function createTerminalOutputFrameGate(
         drain();
       }
     },
+    getBufferedChars: () => queuedChars + scanner.getBufferedChars(),
     markUserInput() {
       if (disposed) return;
       lastInputAt = now();

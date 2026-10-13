@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useEffect, useRef, useCallback, useState, useId } from "react";
 import type { DragEvent as ReactDragEvent } from "react";
 import { Dropdown, Modal, message } from "antd";
 import type { MenuProps } from "antd";
@@ -67,6 +67,9 @@ import {
   writeTerminalOutputWithCursorRefresh,
 } from "@/lib/terminalOutputFrames";
 import { createTerminalInputQueue } from "@/lib/terminalInputQueue";
+import { terminalRenderingPool } from "@/lib/terminalRendering";
+import { createTerminalOutputMonitor } from "@/lib/terminalOutputMonitor";
+import { useTerminalDiagnosticsStore } from "@/store/slices/terminalDiagnosticsSlice";
 import { createTerminalCommandWatcher } from "@/lib/terminalCommandWatcher";
 import { installTerminalTextSelection } from "@/lib/terminalTextSelection";
 import { createTerminalWheelHandler } from "@/lib/terminalWheel";
@@ -97,7 +100,8 @@ export function shouldHideRunningAgentCursor(
   agentId: unknown,
   isTurnRunning: boolean,
 ): boolean {
-  return isAiAgentId(agentId) && isTurnRunning;
+  // Antigravity 运行期间仍可编辑输入，光标可见性由 CLI 自身控制。
+  return isAiAgentId(agentId) && agentId !== "antigravity" && isTurnRunning;
 }
 
 function canUseWebglRenderer(): boolean {
@@ -123,6 +127,8 @@ function canUseWebglRenderer(): boolean {
       powerPreference: "high-performance",
     });
     cachedWebglSupport = Boolean(context);
+    // 探测上下文不参与终端渲染，立即归还 GPU 资源。
+    context?.getExtension("WEBGL_lose_context")?.loseContext();
   } catch {
     cachedWebglSupport = false;
   }
@@ -202,6 +208,7 @@ export function normalizeDecscusrCursorStyle(param: number | undefined): {
 
 function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
   const { t } = useTranslation();
+  const runtimeId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<XTerm | null>(null);
   const onExitRef = useRef(onExit);
@@ -263,7 +270,8 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
   );
   const terminalBehavior = getAgentTerminalBehavior(currentSession?.agentId);
   const forceStableCursor = terminalBehavior.forceStableCursor === true;
-  const manageAgentCursorVisibility = isAiAgentId(currentSession?.agentId);
+  const manageAgentCursorVisibility = isAiAgentId(currentSession?.agentId)
+    && currentSession.agentId !== "antigravity";
   const hideCursorWhileRunning = shouldHideRunningAgentCursor(
     currentSession?.agentId,
     Boolean(currentSession && isSessionTurnRunning(currentSession)),
@@ -994,21 +1002,25 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
     let webglContextLossListener: { dispose(): void } | null = null;
     let fallbackAnimationFrame: number | null = null;
     let isTerminalDisposed = false;
+    let rendererFailed = false;
 
     const disposeWebglAddon = () => {
       webglContextLossListener?.dispose();
       webglContextLossListener = null;
-      webglAddon?.dispose();
+      const addon = webglAddon;
       webglAddon = null;
+      addon?.dispose();
     };
 
     const fallbackToStandardRenderer = (reason: string, error?: unknown) => {
+      rendererFailed = true;
       if (error) {
         console.warn(`[terminal:${sessionId}] WebGL renderer fallback (${reason})`, error);
       } else {
         console.warn(`[terminal:${sessionId}] WebGL renderer fallback (${reason})`);
       }
       disposeWebglAddon();
+      rendering.contextLost();
       if (fallbackAnimationFrame !== null) {
         window.cancelAnimationFrame(fallbackAnimationFrame);
       }
@@ -1029,11 +1041,13 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
     };
 
     const activateWebglRenderer = () => {
+      if (rendererFailed || isTerminalDisposed) return false;
+      if (webglAddon) return true;
       if (!shouldAttemptWebgl(terminalRenderer)) {
         if (terminalRenderer === "webgl") {
           console.warn(`[terminal:${sessionId}] WebGL renderer unavailable, using standard renderer`);
         }
-        return;
+        return false;
       }
 
       try {
@@ -1041,28 +1055,51 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
         const contextLossListener = addon.onContextLoss(() => {
           fallbackToStandardRenderer("context-loss");
         });
-        term.loadAddon(addon);
         webglAddon = addon;
         webglContextLossListener = contextLossListener;
+        term.loadAddon(addon);
+        return !rendererFailed;
       } catch (error) {
         fallbackToStandardRenderer("activation-failed", error);
+        return false;
       }
     };
 
-    activateWebglRenderer();
+    const rendering = terminalRenderingPool.register({
+      attachWebgl: activateWebglRenderer,
+      disposeWebgl: disposeWebglAddon,
+      cursorBlink: forceStableCursor ? false : cursorBlink,
+      setCursorBlink: (enabled) => { term.options.cursorBlink = enabled; },
+      blur: () => term.blur(),
+      refresh: () => scheduleSync(),
+    });
+
+    const setDiagnostics = useTerminalDiagnosticsStore.getState().setTerminalDiagnostics;
+    const outputMonitor = createTerminalOutputMonitor({
+      bufferedChars: () => imeOutputGate.getBufferedChars() + outputFrameGate.getBufferedChars(),
+      onSnapshot: (snapshot) => setDiagnostics(runtimeId, { sessionId, ...snapshot }),
+      onPressureChange: (snapshot) => {
+        // 只记录数量与耗时，不把终端文本或用户输入写入诊断日志。
+        if (snapshot.overloaded) console.warn(`[terminal:${sessionId}] output backlog`, snapshot);
+        else console.info(`[terminal:${sessionId}] output backlog cleared`, snapshot);
+      },
+    });
 
     // 帧保护在 IME 门控之前，兜底定时器也不会绕过输入法的输出暂停。
     let frameNeedsCursorRefresh = false;
     const imeOutputGate = createTerminalImeOutputGate((data) => {
       const refreshCursor = frameNeedsCursorRefresh;
       frameNeedsCursorRefresh = false;
-      writeTerminalOutputWithCursorRefresh(
-        term,
-        data,
-        refreshCursor
-          ? () => !isTerminalDisposed && Boolean(containerRef.current?.getClientRects().length)
-          : undefined,
-      );
+      outputMonitor.write(data, (output, onParsed) => {
+        writeTerminalOutputWithCursorRefresh(
+          term,
+          output,
+          refreshCursor
+            ? () => !isTerminalDisposed && Boolean(containerRef.current?.getClientRects().length)
+            : undefined,
+          onParsed,
+        );
+      });
     });
     const outputFrameGate = createTerminalOutputFrameGate(
       (data, synchronizedFrame) => {
@@ -1075,6 +1112,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       },
     );
     outputFrameGateRef.current = outputFrameGate;
+    setDiagnostics(runtimeId, { sessionId, ...outputMonitor.snapshot() });
 
     const enqueueInput = createTerminalInputQueue();
     enqueueInputRef.current = enqueueInput;
@@ -1094,12 +1132,9 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
 
       outputFrameGate.markUserInput();
 
-      // Ctrl+C interrupts the foreground agent turn but keeps the interactive
-      // PTY alive. Some providers do not emit their Stop hook in this path, so
-      // converge the UI to input-waiting immediately instead of leaving the
-      // activity indicator breathing until another provider event arrives.
-      if (containsTerminalInterrupt(data)) {
-        const session = useAppStore.getState().sessions.find((item) => item.id === sessionId);
+      // Ctrl+C 与 Antigravity 的独立 Esc 中断不一定有 Stop Hook，先回退到等待输入。
+      const session = useAppStore.getState().sessions.find((item) => item.id === sessionId);
+      if (containsTerminalInterrupt(data, session?.agentId)) {
         if (
           session &&
           isAiAgentId(session.agentId) &&
@@ -1265,14 +1300,14 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
     });
 
     const syncSize = () => {
-      if (!containerRef.current || containerRef.current.clientWidth === 0) return;
+      if (document.hidden || !containerRef.current || containerRef.current.clientWidth === 0) return;
       fitAddon.fit();
       requestPtyResize(term.rows, term.cols);
     };
 
     // Full refresh: resize + force canvas redraw (for display:none → block transitions)
     const fullRefresh = () => {
-      if (!containerRef.current || containerRef.current.clientWidth === 0) return;
+      if (document.hidden || !containerRef.current || containerRef.current.clientWidth === 0) return;
       fitAddon.fit();
       requestPtyResize(term.rows, term.cols);
       // Force xterm.js to redraw the canvas after container becomes visible
@@ -1288,18 +1323,30 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       });
     };
 
+    let intersectsViewport = true;
+    const syncRenderingVisibility = () => {
+      const visible = !document.hidden && intersectsViewport
+        && container.clientWidth > 0 && container.clientHeight > 0;
+      rendering.setVisible(visible);
+    };
+    syncRenderingVisibility();
+    document.addEventListener("visibilitychange", syncRenderingVisibility);
+
     // Initial fit after DOM is ready
     const fitTimeout = setTimeout(syncSize, 100);
 
-    const observer = new ResizeObserver(() => scheduleSync());
+    const observer = new ResizeObserver(() => {
+      syncRenderingVisibility();
+      scheduleSync();
+    });
     observer.observe(containerRef.current);
 
     // Re-fit when container becomes visible (e.g. tab switch from display:none to display:block)
     const intersectionObserver = new IntersectionObserver(
       (entries) => {
-        if (entries.some((e) => e.isIntersecting)) {
-          scheduleSync();
-        }
+        intersectsViewport = entries.some((entry) => entry.isIntersecting);
+        syncRenderingVisibility();
+        if (intersectsViewport) scheduleSync();
       },
       { threshold: 0 }
     );
@@ -1412,6 +1459,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       clearTimeout(fitTimeout);
       observer.disconnect();
       intersectionObserver.disconnect();
+      document.removeEventListener("visibilitychange", syncRenderingVisibility);
       window.removeEventListener(TERMINAL_LAYOUT_SYNC_EVENT, handleLayoutSync as EventListener);
       // 清理 composition 事件监听器
       if (textarea) {
@@ -1420,6 +1468,8 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       }
       imeOutputGate.dispose();
       outputFrameGate.dispose();
+      outputMonitor.dispose();
+      setDiagnostics(runtimeId, null);
       if (outputFrameGateRef.current === outputFrameGate) outputFrameGateRef.current = null;
       pasteGate.dispose();
       inputDisposable.dispose();
@@ -1430,7 +1480,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       cursorStyleDisposable?.dispose();
       commandLifecycleDisposable.dispose();
       disposeTextSelection();
-      disposeWebglAddon();
+      rendering.dispose();
       outputPromise.then((unlisten) => unlisten());
       exitPromise.then((unlisten) => unlisten());
       dropPromise.then((unlisten) => unlisten());
@@ -1442,6 +1492,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
     };
   }, [
     sessionId,
+    runtimeId,
     termTheme,
     fontSize,
     cursorBlink,

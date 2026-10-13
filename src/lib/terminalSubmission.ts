@@ -16,6 +16,10 @@ export function consumeTerminalSubmissionInput(
   data: string,
   pendingSequence = "",
 ): TerminalSubmissionCapture {
+  // xterm 单独发送的 Esc 是一次完整按键，不能吞掉下次输入的首字符。
+  if (data === "\x1b" && !pendingSequence) {
+    return { nextValue: currentValue, pendingSequence: "", submittedText: null };
+  }
   const source = `${pendingSequence}${data}`;
   let nextValue = currentValue;
   let index = 0;
@@ -88,12 +92,11 @@ export function terminalInputContainsInsertedText(
 }
 
 /**
- * Ctrl+C is delivered to a terminal PTY as ETX (SIGINT).  Agent CLIs do not
- * consistently emit a lifecycle hook when that interrupts an in-flight turn,
- * so callers can use this as a local, conservative status fallback.
+ * CLI 中断不一定发出生命周期 Hook，因此使用按键作为本地状态兜底。
+ * Antigravity 用独立 Esc 中断；方向键等含 Esc 的序列不能误判为中断。
  */
-export function containsTerminalInterrupt(data: string): boolean {
-  return data.includes("\x03");
+export function containsTerminalInterrupt(data: string, agentId?: unknown): boolean {
+  return data.includes("\x03") || (agentId === "antigravity" && data === "\x1b");
 }
 
 function consumeTerminalEscapeSequence(source: string, start: number): number | null {

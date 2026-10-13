@@ -24,6 +24,7 @@ export function createTerminalImeOutputGate(
   };
 
   return {
+    getBufferedChars: () => pendingOutput.length,
     compositionStart() {
       isComposing = true;
     },

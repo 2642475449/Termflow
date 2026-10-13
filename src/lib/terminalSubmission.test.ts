@@ -48,6 +48,34 @@ describe("terminal submission tracking", () => {
     expect(containsTerminalInterrupt("draft")).toBe(false);
   });
 
+  it("recognizes standalone Esc as an Antigravity interrupt only", () => {
+    expect(containsTerminalInterrupt("\x1b", "antigravity")).toBe(true);
+    expect(containsTerminalInterrupt("\x1b", "claude")).toBe(false);
+    expect(containsTerminalInterrupt("\x1b")).toBe(false);
+    expect(containsTerminalInterrupt("\x03", "antigravity")).toBe(true);
+  });
+
+  it.each(["\x1b[A", "\x1b[B", "\x1bOP", "\x1b[200~text\x1b[201~", "\x1bx"])(
+    "does not treat the input sequence %j as an Antigravity interrupt",
+    (input) => expect(containsTerminalInterrupt(input, "antigravity")).toBe(false),
+  );
+
+  it("keeps the next prompt's first character after standalone Esc", () => {
+    const escape = consumeTerminalSubmissionInput("", "\x1b");
+    expect(escape.pendingSequence).toBe("");
+    const typing = consumeTerminalSubmissionInput(escape.nextValue, "你", escape.pendingSequence);
+    const submission = consumeTerminalSubmissionInput(typing.nextValue, "\r", typing.pendingSequence);
+    expect(submission.submittedText).toBe("你");
+  });
+
+  it("preserves a draft on Esc and still consumes split navigation sequences", () => {
+    expect(consumeTerminalSubmissionInput("draft", "\x1b").nextValue).toBe("draft");
+    const prefix = consumeTerminalSubmissionInput("draft", "\x1b[");
+    const navigation = consumeTerminalSubmissionInput(prefix.nextValue, "A", prefix.pendingSequence);
+    expect(navigation.nextValue).toBe("draft");
+    expect(navigation.pendingSequence).toBe("");
+  });
+
   it("tracks bracketed paste content without counting its control sequences", () => {
     const paste = consumeTerminalSubmissionInput("", "\x1b[200~hello\x1b[201~");
     const submission = consumeTerminalSubmissionInput(paste.nextValue, "\r");

@@ -15,8 +15,9 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::mpsc::{sync_channel, Receiver, RecvTimeoutError};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
 
 #[derive(Serialize, Clone)]
@@ -81,6 +82,85 @@ impl PtyOutputDecoder {
         let remaining = String::from_utf8_lossy(&self.pending).into_owned();
         self.pending.clear();
         remaining
+    }
+}
+
+const PTY_OUTPUT_BATCH_BYTES: usize = 64 * 1024;
+const PTY_OUTPUT_BATCH_DELAY: Duration = Duration::from_millis(5);
+// 读线程与发送线程之间使用有界队列，避免发送繁忙时无限积攒原始输出。
+const PTY_OUTPUT_QUEUE_CHUNKS: usize = 32;
+
+fn read_pty_output(mut reader: impl Read, mut send: impl FnMut(String) -> bool) {
+    let mut buf = [0u8; 8192];
+    let mut decoder = PtyOutputDecoder::default();
+    loop {
+        match reader.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => {
+                let data = decoder.decode(&buf[..n]);
+                if !data.is_empty() && !send(data) {
+                    return;
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(_) => break,
+        }
+    }
+    let tail = decoder.finish();
+    if !tail.is_empty() {
+        send(tail);
+    }
+}
+
+/// 短窗口合并 IPC 事件；持续输出也必须按首块的截止时间发送，不能不断推迟。
+fn forward_pty_output(receiver: Receiver<String>, mut emit: impl FnMut(String) -> bool) {
+    let mut pending = String::new();
+    let mut deadline: Option<Instant> = None;
+    loop {
+        let received = match deadline {
+            Some(at) => receiver.recv_timeout(at.saturating_duration_since(Instant::now())),
+            None => receiver.recv().map_err(|_| RecvTimeoutError::Disconnected),
+        };
+        match received {
+            Ok(data) => {
+                let mut remaining = data.as_str();
+                while !remaining.is_empty() {
+                    let mut end = remaining.len().min(PTY_OUTPUT_BATCH_BYTES - pending.len());
+                    while !remaining.is_char_boundary(end) {
+                        end -= 1;
+                    }
+                    if end > 0 {
+                        pending.push_str(&remaining[..end]);
+                        remaining = &remaining[end..];
+                        deadline.get_or_insert_with(|| Instant::now() + PTY_OUTPUT_BATCH_DELAY);
+                    }
+                    if end == 0 || pending.len() == PTY_OUTPUT_BATCH_BYTES {
+                        if !emit(std::mem::take(&mut pending)) {
+                            return;
+                        }
+                        deadline = None;
+                    }
+                }
+                if deadline.is_some_and(|at| Instant::now() >= at) {
+                    if !emit(std::mem::take(&mut pending)) {
+                        return;
+                    }
+                    deadline = None;
+                }
+            }
+            Err(RecvTimeoutError::Timeout) => {
+                if !pending.is_empty() && !emit(std::mem::take(&mut pending)) {
+                    return;
+                }
+                deadline = None;
+            }
+            Err(RecvTimeoutError::Disconnected) => {
+                if !pending.is_empty() {
+                    emit(pending);
+                }
+                return;
+            }
+        }
     }
 }
 
@@ -314,47 +394,30 @@ impl PtyManager {
             },
         );
 
-        // Background thread: read PTY output → emit to frontend
+        // 阻塞读取独立运行，发送线程可在空闲 5ms 后刷新最后一小块输出。
+        let (output_sender, output_receiver) = sync_channel(PTY_OUTPUT_QUEUE_CHUNKS);
+        std::thread::spawn(move || {
+            read_pty_output(reader, |data| output_sender.send(data).is_ok());
+        });
         let manager = Arc::clone(self);
         let sid = session_id.clone();
         let app_clone = app.clone();
         std::thread::spawn(move || {
-            let mut reader = reader;
-            let mut buf = [0u8; 8192];
-            let mut decoder = PtyOutputDecoder::default();
-            loop {
-                match reader.read(&mut buf) {
-                    Ok(0) => break,
-                    Ok(n) => {
-                        if !manager.is_session_instance_current(&sid, instance_id) {
-                            return;
-                        }
-                        let data = decoder.decode(&buf[..n]);
-                        if !data.is_empty() {
-                            let _ = app_clone.emit(
-                                "pty-output",
-                                PtyOutputPayload {
-                                    session_id: sid.clone(),
-                                    data,
-                                },
-                            );
-                        }
-                    }
-                    Err(_) => break,
+            forward_pty_output(output_receiver, |data| {
+                if !manager.is_session_instance_current(&sid, instance_id) {
+                    return false;
                 }
-            }
-            if manager.is_session_instance_current(&sid, instance_id) {
-                let data = decoder.finish();
-                if !data.is_empty() {
-                    let _ = app_clone.emit(
-                        "pty-output",
-                        PtyOutputPayload {
-                            session_id: sid.clone(),
-                            data,
-                        },
-                    );
+                if let Err(error) = app_clone.emit(
+                    "pty-output",
+                    PtyOutputPayload {
+                        session_id: sid.clone(),
+                        data,
+                    },
+                ) {
+                    log::warn!("Failed to emit PTY output for {sid}: {error}");
                 }
-            }
+                true
+            });
             if !manager.remove_session_instance(&sid, instance_id) {
                 return;
             }
@@ -968,6 +1031,102 @@ fn runtime_agent_label(agent_id: Option<&str>) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pty_output_batches_preserve_order_and_flush_tail_before_exit() {
+        let (sender, receiver) = sync_channel(8);
+        for data in ["hello", "中文🙂", "\x1b[?2026h", "frame", "\x1b[?2026l"] {
+            sender.send(data.to_string()).expect("send fixture");
+        }
+        drop(sender);
+        let mut events = Vec::new();
+        forward_pty_output(receiver, |data| {
+            events.push(data);
+            true
+        });
+        events.push("EXIT".to_string());
+        assert_eq!(events.last().map(String::as_str), Some("EXIT"));
+        // 系统调度可能跨过合并窗口；块数可变，但内容和退出顺序不能改变。
+        assert_eq!(
+            events[..events.len() - 1].concat(),
+            "hello中文🙂\x1b[?2026hframe\x1b[?2026l"
+        );
+    }
+
+    #[test]
+    fn pty_output_batches_limit_bytes_without_splitting_unicode() {
+        let expected = format!(
+            "{}🙂中文{}",
+            "a".repeat(PTY_OUTPUT_BATCH_BYTES - 1),
+            "b".repeat(PTY_OUTPUT_BATCH_BYTES)
+        );
+        let (sender, receiver) = sync_channel(1);
+        sender.send(expected.clone()).expect("send fixture");
+        drop(sender);
+        let mut batches = Vec::new();
+        forward_pty_output(receiver, |data| {
+            assert!(data.len() <= PTY_OUTPUT_BATCH_BYTES);
+            assert!(!data.is_empty());
+            batches.push(data);
+            true
+        });
+        assert_eq!(batches.concat(), expected);
+        assert!(batches.len() >= 3);
+    }
+
+    #[test]
+    fn pty_output_flushes_a_quiet_prompt_without_waiting_for_eof() {
+        let (sender, receiver) = sync_channel(1);
+        let (delivered, output) = sync_channel(1);
+        sender.send("prompt> ".to_string()).expect("send fixture");
+        let worker = std::thread::spawn(move || {
+            forward_pty_output(receiver, |data| delivered.send(data).is_ok());
+        });
+        // sender 仍存活，证明刷新由截止时间触发，而非 EOF 或下一次读取。
+        assert_eq!(
+            output
+                .recv_timeout(Duration::from_secs(2))
+                .expect("prompt flushed"),
+            "prompt> "
+        );
+        drop(sender);
+        worker.join().expect("join output forwarder");
+    }
+
+    #[test]
+    fn pty_output_stops_forwarding_when_session_is_replaced() {
+        let (sender, receiver) = sync_channel(1);
+        sender
+            .send("x".repeat(PTY_OUTPUT_BATCH_BYTES * 3))
+            .expect("send fixture");
+        drop(sender);
+        let mut calls = 0;
+        forward_pty_output(receiver, |_| {
+            calls += 1;
+            false
+        });
+        assert_eq!(calls, 1);
+    }
+
+    #[test]
+    fn pty_output_reader_keeps_split_utf8_and_flushes_incomplete_tail() {
+        let expected = format!("{}中文🙂", "a".repeat(8191));
+        let mut bytes = expected.as_bytes().to_vec();
+        bytes.extend_from_slice(&[0xe4, 0xb8]);
+        let mut chunks = Vec::new();
+        read_pty_output(std::io::Cursor::new(bytes), |data| {
+            chunks.push(data);
+            true
+        });
+        assert_eq!(chunks.concat(), format!("{expected}\u{FFFD}"));
+    }
+
+    #[test]
+    fn pty_output_does_not_emit_empty_batches_on_disconnect() {
+        let (sender, receiver) = sync_channel(1);
+        drop(sender);
+        forward_pty_output(receiver, |_| panic!("empty output must not be emitted"));
+    }
 
     #[test]
     fn test_now_ms_returns_positive_value() {
