@@ -15,6 +15,7 @@ export interface VoicePolishConfig {
   authMode: "api" | "token-plan";
   region: "beijing" | "singapore" | "us";
   style: VoicePolishStyle;
+  instructions?: string;
 }
 
 export function normalizeVoicePolishProvider(provider: string | undefined): VoicePolishProvider {

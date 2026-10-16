@@ -1322,11 +1322,13 @@ it("round-trips voice cleanup model and switch through persistent settings", () 
       voicePolishApiKey: "polish-test-key",
       voicePolishModel: "qwen-plus",
       voicePolishStyle: "structured",
+      voicePolishInstructions: "中文使用简体，其他语言保持原样。",
     });
     expect(useAppStore.getState().voicePolishEnabled).toBe(false);
     expect(getPersistentSettingsSnapshot().voicePolishModel).toBe("qwen-plus");
     expect(getPersistentSettingsSnapshot().voicePolishApiKey).toBe("polish-test-key");
     expect(getPersistentSettingsSnapshot().voicePolishStyle).toBe("structured");
+    expect(getPersistentSettingsSnapshot().voicePolishInstructions).toBe("中文使用简体，其他语言保持原样。");
     useAppStore.getState().setAsrModel("mimo-v2.5-asr");
     expect(useAppStore.getState().voicePolishProvider).toBe("dashscope");
     expect(useAppStore.getState().voicePolishModel).toBe("qwen-plus");
@@ -1355,11 +1357,16 @@ it("restores independent cleanup credentials and presets through Zustand persist
   first.getState().setVoicePolishModel("deepseek-v4-pro");
   first.getState().setVoicePolishEnabled(false);
   first.getState().setVoicePolishStyle("continuous");
+  first.getState().setVoicePolishInstructions("中文使用简体。\n保留 API 名称。");
   const restored = createAppStore(storage).getState();
   expect(restored.voicePolishApiKey).toBe("test-only-credential");
   expect(restored.voicePolishModel).toBe("deepseek-v4-pro");
   expect(restored.voicePolishEnabled).toBe(false);
   expect(restored.voicePolishStyle).toBe("continuous");
+  expect(restored.voicePolishInstructions).toBe("中文使用简体。\n保留 API 名称。");
+  const second = createAppStore(storage);
+  second.getState().setVoicePolishInstructions("");
+  expect(createAppStore(storage).getState().voicePolishInstructions).toBe("");
   expect(restored.asrApiKey).toBe("");
 });
 
@@ -1395,6 +1402,7 @@ it("retires saved custom voice prompts when migrating local settings", () => {
   };
   const restored = createAppStore(storage).getState();
   expect(restored.voicePolishStyle).toBe("paragraphs");
+  expect(restored.voicePolishInstructions).toBe("");
   const persisted = JSON.parse(values.get("termflow-settings") ?? "{}") as {
     version?: number;
     state?: { voicePolishCustomPrompt?: string };

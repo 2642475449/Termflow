@@ -2050,6 +2050,9 @@
       "polishingModelLabel": "整理モデル",
       "polishingModelDesc": "用意されたモデルのみ選択できます。DeepSeek は非思考モードを使用します。テストを含め、サービスの利用料金が適用されます。",
       "polishingStyleLabel": "整理方法",
+      "polishingInstructionsLabel": "カスタム整理プロンプト（任意）",
+      "polishingInstructionsPlaceholder": "例：日本語は元の表記を保ち、他の言語に翻訳しないでください。",
+      "polishingInstructionsHint": "自動保存されます。整理が有効な場合、選択した整理方法と併用します。空欄では既定のルールを使います。整理に失敗した場合は元の文字起こしを保持します。上のプレビューは整理方法のみの例です。",
       "polishingStyleDesc": "選択した方法が音声入力に適用されます。すべての方法で冗長な表現を削除し、文法を修正して原意を保ちます。",
       "polishingStyles": {
         "continuous": "元の順序でつなげる",

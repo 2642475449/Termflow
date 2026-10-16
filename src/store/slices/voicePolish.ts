@@ -14,6 +14,8 @@ export interface VoicePolishSlice {
   voicePolishAuthMode: VoicePolishConfig["authMode"];
   voicePolishRegion: VoicePolishConfig["region"];
   voicePolishStyle: VoicePolishConfig["style"];
+  voicePolishInstructions: string;
+  setVoicePolishInstructions: (instructions: string) => void;
   setVoicePolishProvider: (provider: VoicePolishProvider) => void;
   setVoicePolishApiKey: (key: string) => void;
   setVoicePolishAuthMode: (mode: VoicePolishConfig["authMode"]) => void;
@@ -34,6 +36,8 @@ export function createVoicePolishSlice(
     voicePolishAuthMode: "api",
     voicePolishRegion: "beijing",
     voicePolishStyle: "paragraphs",
+    voicePolishInstructions: "",
+    setVoicePolishInstructions: (instructions) => set({ voicePolishInstructions: instructions }),
     // 切换服务商时清除旧 Key，避免将凭据发送给另一个服务。
     setVoicePolishProvider: (provider) => set({
       voicePolishProvider: provider,

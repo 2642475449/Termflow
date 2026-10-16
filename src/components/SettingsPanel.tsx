@@ -743,6 +743,8 @@ function VoiceRecognitionPage() {
   const voicePolishAuthMode = useAppStore((s) => s.voicePolishAuthMode);
   const voicePolishRegion = useAppStore((s) => s.voicePolishRegion);
   const voicePolishStyle = useAppStore((s) => s.voicePolishStyle);
+  const voicePolishInstructions = useAppStore((s) => s.voicePolishInstructions);
+  const setVoicePolishInstructions = useAppStore((s) => s.setVoicePolishInstructions);
   const voiceShortcut = useAppStore((s) => s.voiceShortcut);
   const voiceTriggerVisible = useAppStore((s) => s.voiceTriggerVisible);
   const setAsrApiKey = useAppStore((s) => s.setAsrApiKey);
@@ -843,6 +845,7 @@ function VoiceRecognitionPage() {
         voicePolishAuthMode,
         voicePolishRegion,
         voicePolishStyle,
+        voicePolishInstructions,
       );
       Modal.info({
         title: t("settings.voiceRecognition.polishingTestSuccess"),
@@ -1133,6 +1136,24 @@ function VoiceRecognitionPage() {
           </Tooltip>
         </SettingRow>
         <VoicePolishModePicker value={voicePolishStyle} onChange={setVoicePolishStyle} />
+        <div className="app-voice-polish-instructions px-4 py-3">
+          <label htmlFor="voice-polish-instructions" className="mb-2 block text-sm text-[var(--cs-text-primary)]">
+            {t("settings.voiceRecognition.polishingInstructionsLabel")}
+          </label>
+          <Input.TextArea
+            id="voice-polish-instructions"
+            value={voicePolishInstructions}
+            onChange={(event) => setVoicePolishInstructions(event.target.value)}
+            placeholder={t("settings.voiceRecognition.polishingInstructionsPlaceholder")}
+            autoSize={{ minRows: 3, maxRows: 8 }}
+            maxLength={2000}
+            showCount
+            aria-describedby="voice-polish-instructions-hint"
+          />
+          <p id="voice-polish-instructions-hint" className="mt-6 text-xs text-[var(--cs-text-secondary)]">
+            {t("settings.voiceRecognition.polishingInstructionsHint")}
+          </p>
+        </div>
         <SettingRow label={t("settings.voiceRecognition.serviceProvider")}>
           <Select
             className="w-64"

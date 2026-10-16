@@ -1369,8 +1369,9 @@ export async function polishVoiceText(
   authMode: string,
   region: string,
   style: string,
+  instructions = "",
 ): Promise<string> {
-  return await invoke<string>("polish_voice_text", { text, provider, polishModel, apiKey, authMode, region, style });
+  return await invoke<string>("polish_voice_text", { text, provider, polishModel, apiKey, authMode, region, style, instructions });
 }
 
 // Git API

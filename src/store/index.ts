@@ -308,6 +308,7 @@ export function getPersistentSettingsSnapshot(): PersistentSettings {
     voicePolishAuthMode: state.voicePolishAuthMode,
     voicePolishRegion: state.voicePolishRegion,
     voicePolishStyle: state.voicePolishStyle,
+    voicePolishInstructions: state.voicePolishInstructions,
     voiceShortcut: state.voiceShortcut,
     voiceInputTarget: state.voiceInputTarget,
     voiceTriggerVisible: state.voiceTriggerVisible,
@@ -375,6 +376,7 @@ export function applyPersistentSettingsToStore(settings: PersistentSettings) {
     voicePolishAuthMode: settings.voicePolishAuthMode === "token-plan" ? "token-plan" : "api",
     voicePolishRegion: normalizeDashScopeRegion(settings.voicePolishRegion),
     voicePolishStyle: normalizeVoicePolishStyle(settings.voicePolishStyle),
+    voicePolishInstructions: settings.voicePolishInstructions ?? "",
     voicePolishModel: resolveVoicePolishModel(normalizeVoicePolishProvider(settings.voicePolishProvider), settings.voicePolishModel ?? ""),
     voiceShortcut: settings.voiceShortcut ?? DEFAULT_VOICE_SHORTCUT,
     voiceInputTarget: normalizeVoiceInputTarget(settings.voiceInputTarget),
@@ -2795,6 +2797,7 @@ function createPersistOptions(storage?: StateStorage) {
         voicePolishAuthMode: state.voicePolishAuthMode,
         voicePolishRegion: state.voicePolishRegion,
         voicePolishStyle: state.voicePolishStyle,
+        voicePolishInstructions: state.voicePolishInstructions,
       };
     },
     onRehydrateStorage: () => (state?: AppState) => {

@@ -2481,7 +2481,7 @@ html, body, #root {
 }
 
 .app-global-search-modal .ant-modal-content {
-  box-shadow: 0 24px 80px color-mix(in srgb, var(--cs-text-primary) 24%, transparent);
+  box-shadow: var(--cs-shadow-floating);
 }
 
 .app-global-search-query {

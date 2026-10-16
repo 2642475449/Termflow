@@ -2055,6 +2055,9 @@
       "polishingModelLabel": "整理模型",
       "polishingModelDesc": "仅可选择提供的预设模型。DeepSeek 使用非思考模式；调用按服务商规则计费，测试也会发起请求。",
       "polishingStyleLabel": "整理方式",
+      "polishingInstructionsLabel": "自定义整理提示词（可选）",
+      "polishingInstructionsPlaceholder": "例如：中文使用简体，其他语言保持原样，不要翻译。",
+      "polishingInstructionsHint": "自动保存。开启智能整理后，会将这些要求与所选整理方式一起应用；留空使用默认规则。整理失败时保留原始转写。上方示例仅展示整理方式。",
       "polishingStyleDesc": "选择后持续用于语音输入。三种方式均去口癖、修语病、保留原意，只编辑转写文本。",
       "polishingStyles": {
         "continuous": "按原有顺序连贯",

@@ -28,6 +28,7 @@ interface VoiceWorkerConfigPayload {
   polishAuthMode: VoicePolishConfig["authMode"];
   polishRegion: VoicePolishConfig["region"];
   polishStyle: VoicePolishConfig["style"];
+  polishInstructions: string;
   shortcut: string;
   inputTarget: VoiceInputTarget;
 }
@@ -69,6 +70,7 @@ function VoiceWorkerWindow() {
   const voicePolishAuthMode = useAppStore((s) => s.voicePolishAuthMode);
   const voicePolishRegion = useAppStore((s) => s.voicePolishRegion);
   const voicePolishStyle = useAppStore((s) => s.voicePolishStyle);
+  const voicePolishInstructions = useAppStore((s) => s.voicePolishInstructions);
   const voiceShortcut = useAppStore((s) => s.voiceShortcut);
   const voiceInputTarget = useAppStore((s) => s.voiceInputTarget);
   const [config, setConfig] = useState<VoiceWorkerConfigPayload>({
@@ -83,6 +85,7 @@ function VoiceWorkerWindow() {
     polishAuthMode: voicePolishAuthMode,
     polishRegion: voicePolishRegion,
     polishStyle: voicePolishStyle,
+    polishInstructions: voicePolishInstructions,
     shortcut: voiceShortcut,
     inputTarget: voiceInputTarget,
   });
@@ -101,6 +104,7 @@ function VoiceWorkerWindow() {
       authMode: config.polishAuthMode,
       region: config.polishRegion,
       style: config.polishStyle,
+      instructions: config.polishInstructions,
     },
     onResult: (text) => {
       if (config.inputTarget === "system") {
@@ -172,11 +176,12 @@ function VoiceWorkerWindow() {
       polishAuthMode: voicePolishAuthMode,
       polishRegion: voicePolishRegion,
       polishStyle: voicePolishStyle,
+      polishInstructions: voicePolishInstructions,
       shortcut: voiceShortcut,
       inputTarget: voiceInputTarget,
     };
     setConfig(nextConfig);
-  }, [asrApiKey, asrAuthMode, asrModel, asrRegion, voiceInputTarget, voicePolishEnabled, voicePolishModel, voicePolishProvider, voicePolishApiKey, voicePolishAuthMode, voicePolishRegion, voicePolishStyle, voiceShortcut]);
+  }, [asrApiKey, asrAuthMode, asrModel, asrRegion, voiceInputTarget, voicePolishEnabled, voicePolishModel, voicePolishProvider, voicePolishApiKey, voicePolishAuthMode, voicePolishRegion, voicePolishStyle, voicePolishInstructions, voiceShortcut]);
 
   useEffect(() => {
     let disposed = false;

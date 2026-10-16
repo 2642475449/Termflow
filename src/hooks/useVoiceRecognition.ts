@@ -579,6 +579,7 @@ export function useVoiceRecognition(
           config.authMode,
           config.region,
           config.style,
+          config.instructions,
         );
       }
     } catch (error) {

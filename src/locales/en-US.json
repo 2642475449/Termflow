@@ -2055,6 +2055,9 @@
       "polishingModelLabel": "Cleanup model",
       "polishingModelDesc": "Choose from the provided models only. DeepSeek uses non-thinking mode. Provider usage charges apply, including test requests.",
       "polishingStyleLabel": "Organization",
+      "polishingInstructionsLabel": "Custom cleanup prompt (optional)",
+      "polishingInstructionsPlaceholder": "For example: Use Simplified Chinese for Chinese text. Preserve other languages without translating.",
+      "polishingInstructionsHint": "Saved automatically. Applied alongside the selected organization mode when cleanup is enabled; leave blank for default rules. If cleanup fails, the original transcript is used. The preview above only illustrates the organization mode.",
       "polishingStyleDesc": "Your selection applies to voice input. All modes remove fillers, fix wording, and preserve meaning while editing the transcript.",
       "polishingStyles": {
         "continuous": "Keep the original order",

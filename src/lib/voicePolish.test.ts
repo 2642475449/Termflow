@@ -1,6 +1,10 @@
 import { expect, it } from "vitest";
 import { availableVoicePolishModels, defaultVoicePolishModel, normalizeVoicePolishProvider, normalizeVoicePolishStyle, resolveVoicePolishModel, VOICE_POLISH_STYLES } from "./voicePolish";
 import { createVoicePolishSlice, type VoicePolishSlice } from "@/store/slices/voicePolish";
+import zh from "@/locales/zh-CN.json";
+import en from "@/locales/en-US.json";
+import tw from "@/locales/zh-TW.json";
+import ja from "@/locales/ja-JP.json";
 
 it("defaults to DeepSeek independently of ASR", () => {
   expect(normalizeVoicePolishProvider(undefined)).toBe("deepseek");
@@ -45,4 +49,24 @@ it("only offers the three organization modes", () => {
   expect(normalizeVoicePolishStyle("casual")).toBe("paragraphs");
   state.setVoicePolishStyle("structured");
   expect(state.voicePolishStyle).toBe("structured");
+});
+
+it("keeps user instructions independent of provider and organization mode", () => {
+  let state: VoicePolishSlice = createVoicePolishSlice((partial) => { state = { ...state, ...partial }; });
+  expect(state.voicePolishInstructions).toBe("");
+  state.setVoicePolishInstructions("中文使用简体。\nDon't translate Japanese: 良い天気。");
+  state.setVoicePolishProvider("dashscope");
+  state.setVoicePolishStyle("structured");
+  expect(state.voicePolishInstructions).toBe("中文使用简体。\nDon't translate Japanese: 良い天気。");
+  state.setVoicePolishInstructions("");
+  expect(state.voicePolishInstructions).toBe("");
+});
+
+it("provides the custom prompt label, example and behavior in every UI language", () => {
+  for (const locale of [zh, en, tw, ja]) {
+    const voice = locale.settings.voiceRecognition;
+    expect(voice.polishingInstructionsLabel.trim()).not.toBe("");
+    expect(voice.polishingInstructionsPlaceholder.trim()).not.toBe("");
+    expect(voice.polishingInstructionsHint.trim()).not.toBe("");
+  }
 });

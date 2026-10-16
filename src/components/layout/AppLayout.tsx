@@ -980,6 +980,7 @@ function AppLayout() {
   const voicePolishAuthMode = useAppStore((s) => s.voicePolishAuthMode);
   const voicePolishRegion = useAppStore((s) => s.voicePolishRegion);
   const voicePolishStyle = useAppStore((s) => s.voicePolishStyle);
+  const voicePolishInstructions = useAppStore((s) => s.voicePolishInstructions);
   const voiceShortcut = useAppStore((s) => s.voiceShortcut);
   const voiceInputTarget = useAppStore((s) => s.voiceInputTarget);
   const [hasGlobalVoiceShortcut, setHasGlobalVoiceShortcut] = useState(false);
@@ -1025,11 +1026,12 @@ function AppLayout() {
       polishAuthMode: voicePolishAuthMode,
       polishRegion: voicePolishRegion,
       polishStyle: voicePolishStyle,
+      polishInstructions: voicePolishInstructions,
       shortcut: voiceShortcut,
       inputTarget: voiceInputTarget,
     };
     void emit("voice-worker-config", payload).catch(() => undefined);
-  }, [asrApiKey, asrAuthMode, asrModel, asrRegion, voiceInputTarget, voicePolishEnabled, voicePolishModel, voicePolishProvider, voicePolishApiKey, voicePolishAuthMode, voicePolishRegion, voicePolishStyle, voiceShortcut]);
+  }, [asrApiKey, asrAuthMode, asrModel, asrRegion, voiceInputTarget, voicePolishEnabled, voicePolishModel, voicePolishProvider, voicePolishApiKey, voicePolishAuthMode, voicePolishRegion, voicePolishStyle, voicePolishInstructions, voiceShortcut]);
   useEffect(() => {
     const unlistenPromise = listen<{ text: string }>("voice-worker-result", (event) => {
       const text = event.payload?.text;

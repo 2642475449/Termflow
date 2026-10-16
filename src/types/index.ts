@@ -115,6 +115,7 @@ export interface PersistentSettings {
   voicePolishAuthMode: VoicePolishConfig["authMode"];
   voicePolishRegion: VoicePolishConfig["region"];
   voicePolishStyle: VoicePolishConfig["style"];
+  voicePolishInstructions: string;
   voiceShortcut: string;
   voiceInputTarget: string;
   voiceTriggerVisible: boolean;
