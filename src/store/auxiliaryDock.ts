@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type AuxiliaryTabKind = "terminal" | "task" | "file" | "review";
+export type AuxiliaryTabKind = "terminal" | "task" | "file" | "review" | "task-monitor";
 
 export interface AuxiliaryTab {
   id: string;
@@ -34,6 +34,7 @@ interface AuxiliaryDockState {
     preview?: boolean;
   }) => void;
   openReview: (input: { sessionId: string; projectPath: string; title: string }) => void;
+  openTaskMonitor: (input: { title: string; projectPath?: string }) => void;
   pinTab: (tabId: string) => void;
   closeTab: (tabId: string, preferredTabId?: string) => void;
   reset: () => void;
@@ -52,13 +53,40 @@ function fileName(path: string) {
   return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 }
 
+function createTaskMonitorTab(title = "", projectPath = ""): AuxiliaryTab {
+  return {
+    id: "aux:task-monitor",
+    kind: "task-monitor",
+    title,
+    projectPath,
+    resourceId: "task-monitor",
+    preview: false,
+    createdAt: Date.now(),
+  };
+}
+
 export const useAuxiliaryDockStore = create<AuxiliaryDockState>((set) => ({
   open: false,
   width: DEFAULT_AUXILIARY_DOCK_WIDTH,
   tabs: [],
   activeTabId: null,
-  setOpen: (open) => set({ open }),
-  toggle: () => set((state) => ({ open: !state.open })),
+  setOpen: (open) =>
+    set((state) => {
+      if (open && state.tabs.length === 0) {
+        const tab = createTaskMonitorTab();
+        return { open: true, tabs: [tab], activeTabId: tab.id };
+      }
+      return { open };
+    }),
+  toggle: () =>
+    set((state) => {
+      const nextOpen = !state.open;
+      if (nextOpen && state.tabs.length === 0) {
+        const tab = createTaskMonitorTab();
+        return { open: true, tabs: [tab], activeTabId: tab.id };
+      }
+      return { open: nextOpen };
+    }),
   setWidth: (width) => set({ width: clampAuxiliaryDockWidth(width) }),
   activateTab: (activeTabId) => set({ activeTabId, open: true }),
   openSession: ({ sessionId, projectPath, title, kind }) =>
@@ -115,6 +143,27 @@ export const useAuxiliaryDockStore = create<AuxiliaryDockState>((set) => ({
         title,
         projectPath,
         resourceId: sessionId,
+        preview: false,
+        createdAt: Date.now(),
+      };
+      return {
+        open: true,
+        activeTabId: id,
+        tabs: existing
+          ? state.tabs.map((item) => (item.id === id ? { ...item, title } : item))
+          : [...state.tabs, tab],
+      };
+    }),
+  openTaskMonitor: ({ title, projectPath = "" }) =>
+    set((state) => {
+      const id = "aux:task-monitor";
+      const existing = state.tabs.find((tab) => tab.id === id);
+      const tab: AuxiliaryTab = existing ?? {
+        id,
+        kind: "task-monitor",
+        title,
+        projectPath,
+        resourceId: "task-monitor",
         preview: false,
         createdAt: Date.now(),
       };

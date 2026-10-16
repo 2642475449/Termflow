@@ -2,16 +2,19 @@ import {
   CloseOutlined,
   CodeOutlined,
   FileOutlined,
+  FileSearchOutlined,
   FolderOpenOutlined,
+  PlusOutlined,
   RobotOutlined,
   SafetyCertificateOutlined,
 } from "@ant-design/icons";
-import { Empty, Input, List, Modal, Spin, message } from "antd";
+import { Dropdown, Empty, Input, List, Modal, Spin, Tooltip, message } from "antd";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AgentActivityIcon } from "@/components/AgentActivityIcon";
 import CheckpointReviewDrawer from "@/components/CheckpointReviewDrawer";
 import SessionCheckpointSummaryBar from "@/components/SessionCheckpointSummaryBar";
+import { TaskMonitorPanel } from "@/components/TaskMonitorPopover";
 import { cleanupSessionProcess, searchProjectEntries } from "@/lib/api";
 import {
   OPEN_AUXILIARY_FILE_EVENT,
@@ -41,6 +44,7 @@ function tabIcon(kind: AuxiliaryTab["kind"]) {
   if (kind === "terminal") return <CodeOutlined />;
   if (kind === "task") return <RobotOutlined />;
   if (kind === "review") return <SafetyCertificateOutlined />;
+  if (kind === "task-monitor") return <FileSearchOutlined />;
   return <FileOutlined />;
 }
 
@@ -61,6 +65,7 @@ export default function AuxiliaryDock({
   const activateTab = useAuxiliaryDockStore((state) => state.activateTab);
   const openFile = useAuxiliaryDockStore((state) => state.openFile);
   const openReview = useAuxiliaryDockStore((state) => state.openReview);
+  const openTaskMonitor = useAuxiliaryDockStore((state) => state.openTaskMonitor);
   const pinTab = useAuxiliaryDockStore((state) => state.pinTab);
   const closeTab = useAuxiliaryDockStore((state) => state.closeTab);
   const reset = useAuxiliaryDockStore((state) => state.reset);
@@ -273,7 +278,9 @@ export default function AuxiliaryDock({
                 ? session.name
                 : tab.kind === "review"
                   ? `${t("auxiliaryDock.reviewPrefix")} · ${sessions.find((item) => item.id === tab.resourceId)?.name ?? tab.title}`
-                  : tab.title;
+                  : tab.kind === "task-monitor"
+                    ? t("taskMonitor.title")
+                    : tab.title;
               const fileVisual = tab.kind === "file" ? getFileIconByName(tab.title) : null;
               return (
                 <div
@@ -320,6 +327,51 @@ export default function AuxiliaryDock({
                 </div>
               );
             })}
+            <Dropdown
+              trigger={["click"]}
+              menu={{
+                items: [
+                  {
+                    key: "file",
+                    icon: <FolderOpenOutlined />,
+                    label: t("auxiliaryDock.file"),
+                    onClick: () => setFilePickerOpen(true),
+                  },
+                  {
+                    key: "task",
+                    icon: <RobotOutlined />,
+                    label: t("auxiliaryDock.sideTask"),
+                    onClick: onRequestTask,
+                  },
+                  {
+                    key: "terminal",
+                    icon: <CodeOutlined />,
+                    label: t("auxiliaryDock.terminal"),
+                    onClick: onRequestTerminal,
+                  },
+                  {
+                    key: "task-monitor",
+                    icon: <FileSearchOutlined />,
+                    label: t("taskMonitor.title"),
+                    onClick: () =>
+                      openTaskMonitor({
+                        title: t("taskMonitor.title"),
+                        projectPath: currentProject?.path ?? "",
+                      }),
+                  },
+                ],
+              }}
+            >
+              <Tooltip title={t("auxiliaryDock.add")}>
+                <button
+                  type="button"
+                  aria-label={t("auxiliaryDock.add")}
+                  className="app-file-toolbar-button mx-1 my-auto shrink-0"
+                >
+                  <PlusOutlined style={{ fontSize: 12 }} />
+                </button>
+              </Tooltip>
+            </Dropdown>
           </div>
         ) : null}
 
@@ -350,6 +402,19 @@ export default function AuxiliaryDock({
                 >
                   <CodeOutlined />
                   <span>{t("auxiliaryDock.terminal")}</span>
+                </button>
+                <button
+                  type="button"
+                  className="app-auxiliary-launcher-action"
+                  onClick={() =>
+                    openTaskMonitor({
+                      title: t("taskMonitor.title"),
+                      projectPath: currentProject?.path ?? "",
+                    })
+                  }
+                >
+                  <FileSearchOutlined />
+                  <span>{t("taskMonitor.title")}</span>
                 </button>
               </div>
             </div>
@@ -404,6 +469,8 @@ export default function AuxiliaryDock({
                       onPromoteToWorkspace={() => closeTab(tab.id)}
                     />
                   </Suspense>
+                ) : tab.kind === "task-monitor" ? (
+                  <TaskMonitorPanel active={open && active} embedded />
                 ) : (
                   <CheckpointReviewDrawer
                     embedded

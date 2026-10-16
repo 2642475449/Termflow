@@ -277,11 +277,16 @@ const definitions = {
   '3p-weekly': ['Claude and GPT', 'weekly'],
 };
 const windows = [];
-for (const [id, definition] of Object.entries(definitions)) {
-  const value = input.quota && input.quota[id];
-  const fraction = Number(value && value.remaining_fraction);
-  if (!Number.isFinite(fraction) || fraction < 0 || fraction > 1) continue;
-  windows.push({ id, scope: definition[0], window: definition[1], remainingPercent: Math.round(fraction * 10000) / 100, resetDescription: typeof value.reset_time === 'string' ? value.reset_time : null });
+const quota = input.quota && typeof input.quota === 'object' && !Array.isArray(input.quota) ? input.quota : {};
+for (const [id, value] of Object.entries(quota).slice(0, 32)) {
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(id) || !value || typeof value !== 'object') continue;
+  const fraction = value.remaining_fraction;
+  if (typeof fraction !== 'number' || !Number.isFinite(fraction) || fraction < 0 || fraction > 1) continue;
+  const suffix = id.match(/-(5h|weekly|daily|monthly)$/i);
+  const groupId = suffix ? id.slice(0, -suffix[0].length) : id;
+  const scope = definitions[id]?.[0] ?? (groupId.toLowerCase() === 'argon' ? 'Gemini 4 Argon' : groupId.replace(/[-_.]+/g, ' '));
+  const window = definitions[id]?.[1] ?? (suffix?.[1].toLowerCase() === '5h' ? 'session' : suffix?.[1].toLowerCase() ?? 'quota');
+  windows.push({ id, scope, window, remainingPercent: Math.round(fraction * 10000) / 100, resetDescription: typeof value.reset_time === 'string' && value.reset_time.length <= 64 ? value.reset_time : null });
 }
 if (input.quota && typeof input.quota === 'object' && snapshotPath) {
   const snapshot = {
@@ -1022,6 +1027,7 @@ mod tests {
         let source = antigravity_statusline_script();
         assert!(source.contains("input.quota"));
         assert!(source.contains("remaining_fraction"));
+        assert!(source.contains("Object.entries(quota)"));
         assert!(source.contains("createHash('sha256')"));
         assert!(source.contains("fs.renameSync(temporary, snapshotPath)"));
         assert!(!source.contains("email: input.email"));

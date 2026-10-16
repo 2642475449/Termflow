@@ -1358,7 +1358,7 @@
       },
       "quota": {
         "loading": "Loading quota…", "installFirst": "Install and sign in to view quota", "unsupported": "Quota reading is not supported", "unavailable": "Quota is temporarily unavailable", "startSession": "Start a session to view quota", "refreshFailed": "Quota update failed; showing the last successful result",
-        "healthy": "Quota available", "low": "Quota running low", "exhausted": "Quota nearly exhausted", "session": "5-hour {{value}}%", "weekly": "Weekly {{value}}%", "remainingPercent": "{{value}}% remaining", "remainingCredits": "{{value}} remaining", "signInAntigravity": "Sign in to Antigravity CLI", "timeout": "Quota query timed out", "gemini": "Gemini", "claudeGpt": "Claude/GPT", "sessionShort": "5h", "weeklyShort": "weekly"
+        "healthy": "Quota available", "low": "Quota running low", "exhausted": "Quota nearly exhausted", "session": "5-hour {{value}}%", "weekly": "Weekly {{value}}%", "remainingPercent": "{{value}}% remaining", "remainingCredits": "{{value}} remaining", "signInAntigravity": "Sign in to Antigravity CLI", "timeout": "Quota query timed out", "gemini": "Gemini", "claudeGpt": "Claude/GPT", "argon": "Gemini 4 Argon", "sessionShort": "5h", "weeklyShort": "weekly"
       },
       "viewDetails": "View details",
       "pathHint": "Detection uses the system PATH currently available to Termflow. If a newly installed or updated agent is not detected, restart your computer and try again."

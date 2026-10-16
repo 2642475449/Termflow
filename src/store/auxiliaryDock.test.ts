@@ -106,4 +106,27 @@ describe("auxiliary dock store", () => {
     expect(useAuxiliaryDockStore.getState().activeTabId).toBe(sessionTabId);
   });
 
+  it("reuses a single task monitor tab in the auxiliary dock", () => {
+    const store = useAuxiliaryDockStore.getState();
+    store.openTaskMonitor({ title: "任务监控", projectPath: "D:/repo" });
+    store.openFile({ projectPath: "D:/repo", path: "D:/repo/one.md", preview: false });
+    store.openTaskMonitor({ title: "Task Monitor", projectPath: "D:/repo" });
+
+    const state = useAuxiliaryDockStore.getState();
+    expect(state.tabs.filter((tab) => tab.kind === "task-monitor")).toHaveLength(1);
+    expect(state.activeTabId).toBe("aux:task-monitor");
+    expect(state.tabs.find((tab) => tab.id === "aux:task-monitor")?.title).toBe("Task Monitor");
+  });
+
+  it("opens the task monitor tab by default when toggled open with no existing tabs", () => {
+    const store = useAuxiliaryDockStore.getState();
+    store.toggle();
+
+    const state = useAuxiliaryDockStore.getState();
+    expect(state.open).toBe(true);
+    expect(state.activeTabId).toBe("aux:task-monitor");
+    expect(state.tabs).toHaveLength(1);
+    expect(state.tabs[0].kind).toBe("task-monitor");
+  });
+
 });

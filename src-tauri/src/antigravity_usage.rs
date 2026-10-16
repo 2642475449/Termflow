@@ -88,18 +88,25 @@ fn read_snapshot(path: &Path) -> AntigravityUsage {
         .filter(|item| {
             item.remaining_percent.is_finite()
                 && (0.0..=100.0).contains(&item.remaining_percent)
-                && matches!(
-                    item.id.as_str(),
-                    "gemini-5h" | "gemini-weekly" | "3p-5h" | "3p-weekly"
-                )
+                && !item.id.is_empty()
+                && item.id.len() <= 64
+                && item.id.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+                && !item.scope.is_empty()
+                && item.scope.len() <= 64
+                && item.scope.chars().all(|character| !character.is_control())
+                && !item.window.is_empty()
+                && item.window.len() <= 24
+                && item.window.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+                && item.reset_description.as_ref().is_none_or(|reset| reset.len() <= 64)
         })
+        .take(32)
         .collect::<Vec<_>>();
     windows.sort_by_key(|item| {
-        (
-            if item.scope == "Gemini" { 0 } else { 1 },
-            if item.window == "session" { 0 } else { 1 },
-        )
+        let group = match item.scope.as_str() { "Gemini" => 0, "Claude and GPT" => 1, _ => 2 };
+        let period = match item.window.as_str() { "session" => 0, "weekly" => 1, _ => 2 };
+        (group, item.scope.clone(), period, item.id.clone())
     });
+    windows.dedup_by(|left, right| left.id == right.id);
     if windows.is_empty() {
         return result(
             "unavailable",
@@ -149,11 +156,31 @@ mod tests {
     }
 
     #[test]
-    fn rejects_unknown_and_out_of_range_buckets() {
+    fn rejects_invalid_and_out_of_range_buckets() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join(SNAPSHOT_NAME);
-        fs::write(&path, r#"{"windows":[{"id":"future-bucket","scope":"Gemini","window":"weekly","remainingPercent":50,"resetDescription":null},{"id":"gemini-weekly","scope":"Gemini","window":"weekly","remainingPercent":101,"resetDescription":null}],"updatedAt":1234}"#).unwrap();
+        fs::write(&path, r#"{"windows":[{"id":"bad bucket","scope":"Gemini","window":"weekly","remainingPercent":50,"resetDescription":null},{"id":"gemini-weekly","scope":"Gemini","window":"weekly","remainingPercent":101,"resetDescription":null}],"updatedAt":1234}"#).unwrap();
         assert_eq!(read_snapshot(&path).status, "unavailable");
+    }
+
+    #[test]
+    fn accepts_separate_argon_weekly_bucket() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join(SNAPSHOT_NAME);
+        fs::write(&path, r#"{"windows":[{"id":"argon-weekly","scope":"Argon","window":"weekly","remainingPercent":56.04,"resetDescription":"2026-10-23T03:47:23Z"}],"updatedAt":1234}"#).unwrap();
+        let usage = read_snapshot(&path);
+        assert_eq!(usage.status, "ok");
+        assert_eq!(usage.windows[0].remaining_percent, 56.04);
+    }
+
+    #[test]
+    fn accepts_future_quota_bucket_without_a_code_change() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join(SNAPSHOT_NAME);
+        fs::write(&path, r#"{"windows":[{"id":"new-model-monthly","scope":"new model","window":"monthly","remainingPercent":72,"resetDescription":null}],"updatedAt":1234}"#).unwrap();
+        let usage = read_snapshot(&path);
+        assert_eq!(usage.status, "ok");
+        assert_eq!(usage.windows[0].id, "new-model-monthly");
     }
 
     #[test]

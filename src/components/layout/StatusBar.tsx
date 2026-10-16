@@ -18,6 +18,7 @@ import { formatAgentVersion, getAgentDisplayName, isAiAgentId } from "@/lib/agen
 import { useProjectLauncher } from "@/hooks/useProjectLauncher";
 import { useAppStore } from "@/store";
 import type { AiAgentId, AntigravityQuotaWindow, AntigravityUsage, ClaudeRateLimits, ClaudeRateLimitsUpdatePayload, CodexRateLimitResetCredit, CodexRateLimits, CodexRateLimitWindow, GitCloneEventPayload, GitCloneTask, ProjectSearchIndexStatus, QoderQuotaBucket, QoderUsage } from "@/types";
+import { antigravityQuotaLabel, antigravityQuotaPeriodLabel, antigravityQuotaScopeLabel } from "@/lib/antigravityQuota";
 const GIT_CLONE_EVENT = "git-clone-task-event";
 const SEARCH_INDEX_EVENT = "search-index-status";
 
@@ -1030,14 +1031,16 @@ function AntigravityUsageStatus({
 }) {
   const { t } = useTranslation();
   const hasData = usage?.status === "ok" && usage.windows.length > 0;
-  const compactGroups = hasData ? ["Gemini"].map((scope) => ({
+  const compactScope = hasData && usage.windows.some((window) => window.scope === "Gemini")
+    ? "Gemini" : usage?.windows[0]?.scope;
+  const compactGroups = hasData && compactScope ? [compactScope].map((scope) => ({
     scope,
-    label: t("settings.agents.quota.gemini"),
-    periods: ["session", "weekly"].map((period) => {
+    label: antigravityQuotaScopeLabel(scope, t),
+    periods: (scope === "Gemini" ? ["session", "weekly"] : usage.windows.filter((window) => window.scope === scope).slice(0, 2).map((window) => window.window)).map((period) => {
       const window = usage.windows.find((item) => item.scope === scope && item.window === period);
       return {
         period,
-        label: t(period === "session" ? "settings.agents.quota.sessionShort" : "settings.agents.quota.weeklyShort"),
+        label: antigravityQuotaPeriodLabel(period, t),
         remaining: window ? Math.max(0, Math.min(100, Math.round(window.remainingPercent))) : null,
       };
     }),
@@ -1146,12 +1149,6 @@ function AntigravityUsageStatus({
 function AntigravityUsageWindowRow({ window }: { window: AntigravityQuotaWindow }) {
   const { t } = useTranslation();
   const remaining = Math.max(0, Math.min(100, Math.round(window.remainingPercent)));
-  const scope = window.scope === "Gemini"
-    ? t("settings.agents.quota.gemini")
-    : t("settings.agents.quota.claudeGpt");
-  const period = window.window === "session"
-    ? t("settings.agents.quota.sessionShort")
-    : t("settings.agents.quota.weeklyShort");
   const color = codexUsageBarColor(remaining);
   const reset = window.resetDescription ? new Date(window.resetDescription) : null;
   const resetLabel = reset && Number.isFinite(reset.getTime())
@@ -1160,7 +1157,7 @@ function AntigravityUsageWindowRow({ window }: { window: AntigravityQuotaWindow 
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-3 text-[12px]">
-        <span className="font-medium" style={{ color: "var(--cs-text-primary)" }}>{scope} · {period}</span>
+        <span className="font-medium" style={{ color: "var(--cs-text-primary)" }}>{antigravityQuotaLabel(window, t)}</span>
         <span className="tabular-nums" style={{ color: "var(--cs-text-secondary)" }}>
           {t("statusBar.codexUsage.remaining", { value: remaining })}
         </span>

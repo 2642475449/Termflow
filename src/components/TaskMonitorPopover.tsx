@@ -15,10 +15,18 @@ import {
   useTaskMonitorStore,
 } from "@/store/slices/taskMonitor";
 
-export function TaskMonitorPopover() {
+interface TaskMonitorPanelProps {
+  active: boolean;
+  embedded?: boolean;
+  onBeforeCloseProject?: () => void;
+}
+
+export function TaskMonitorPanel({
+  active,
+  embedded = false,
+  onBeforeCloseProject,
+}: TaskMonitorPanelProps) {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const [tooltipOpen, setTooltipOpen] = useState(false);
   const currentProject = useAppStore((s) => s.currentProject);
   const sessions = useAppStore((s) => s.sessions);
   const panes = useAppStore((s) => s.panesById);
@@ -30,12 +38,8 @@ export function TaskMonitorPopover() {
   const snapshots = useTaskMonitorStore((s) => s.snapshots);
   const projects = collectOpenProjects(windows, currentProject);
 
-  useEffect(() => startTaskMonitorSync((error) => {
-    message.error(error instanceof Error && error.message === "application-update-in-progress"
-      ? t("updater.keepOpenDuringDownload") : t("taskMonitor.closeProjectFailed"));
-  }), [t]);
   useEffect(() => {
-    if (!open) return;
+    if (!active) return;
     const refresh = () => {
       void refreshWindows();
       void requestTaskMonitorSnapshots().catch((error) => console.error("Task monitor refresh failed:", error));
@@ -43,7 +47,7 @@ export function TaskMonitorPopover() {
     refresh();
     const interval = window.setInterval(refresh, 2000);
     return () => window.clearInterval(interval);
-  }, [open, refreshWindows]);
+  }, [active, refreshWindows]);
 
   async function navigate(projectPath: string, tab: TaskMonitorTab) {
     if (currentProject && projectPathKey(currentProject.path) === projectPathKey(projectPath)) {
@@ -71,7 +75,7 @@ export function TaskMonitorPopover() {
   }
 
   async function closeProject(targetWindowLabel: string, projectPath: string) {
-    setOpen(false);
+    onBeforeCloseProject?.();
     try {
       // 先恢复目标窗口，让常驻关闭对话框在用户可见的窗口中展示。
       if (!await focusProjectWindow(projectPath, "")) throw new Error("Project window unavailable");
@@ -82,11 +86,13 @@ export function TaskMonitorPopover() {
     }
   }
 
-  const content = (
-    <div className="app-task-monitor">
-      <div className="app-task-monitor-header">
-        <span>{t("taskMonitor.title")}</span>
-      </div>
+  return (
+    <div className={`app-task-monitor ${embedded ? "app-task-monitor-embedded" : ""}`}>
+      {!embedded && (
+        <div className="app-task-monitor-header">
+          <span>{t("taskMonitor.title")}</span>
+        </div>
+      )}
       <div className="app-task-monitor-projects">
         {projects.length === 0 && <p className="app-task-monitor-empty">{t("taskMonitor.noProjects")}</p>}
         {projects.map((project) => {
@@ -143,11 +149,28 @@ export function TaskMonitorPopover() {
       </div>
     </div>
   );
+}
+
+export function TaskMonitorPopover() {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const [tooltipOpen, setTooltipOpen] = useState(false);
+
+  useEffect(() => startTaskMonitorSync((error) => {
+    message.error(error instanceof Error && error.message === "application-update-in-progress"
+      ? t("updater.keepOpenDuringDownload") : t("taskMonitor.closeProjectFailed"));
+  }), [t]);
 
   return (
     <div className="app-task-monitor-trigger-wrap">
-      <Popover open={open} trigger={[]} placement="bottomRight" arrow={false} content={content}
-        overlayClassName="app-task-monitor-popover">
+      <Popover
+        open={open}
+        trigger={[]}
+        placement="bottomRight"
+        arrow={false}
+        content={<TaskMonitorPanel active={open} onBeforeCloseProject={() => setOpen(false)} />}
+        overlayClassName="app-task-monitor-popover"
+      >
         <Tooltip title={t("taskMonitor.title")} mouseEnterDelay={0.4}
           open={!open && tooltipOpen} onOpenChange={setTooltipOpen}>
           <button type="button"

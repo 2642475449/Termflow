@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { getAntigravityUsage, getClaudeRateLimits, getCodexRateLimits, getQoderUsage, inspectAgentClis } from "@/lib/api";
 import { AGENT_DEFINITIONS, AI_AGENT_ORDER, formatAgentVersion } from "@/lib/agents";
 import type { AgentCliInfo, AiAgentId, AntigravityQuotaWindow, AntigravityUsage, ClaudeRateLimits, CodexRateLimitWindow, CodexRateLimits, QoderUsage } from "@/types";
+import { antigravityQuotaLabel } from "@/lib/antigravityQuota";
 import { AgentIcon } from "@/components/AgentIcon";
 import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
 import { useAppStore } from "@/store";
@@ -247,17 +248,8 @@ function AgentQuota({ agent, quota, loading, expanded = false }: { agent: AgentC
     const usage = quota as AntigravityUsage | null;
     if (usage?.status !== "ok" || usage.windows.length === 0) return <QuotaUnavailable agentId={agent.id} />;
     const percentages = usage.windows.map((window) => clampPercent(window.remainingPercent));
-    const quotaPair = (scope: string) => {
-      const session = usage.windows.find((window) => window.scope === scope && window.window === "session");
-      const weekly = usage.windows.find((window) => window.scope === scope && window.window === "weekly");
-      const value = (window: typeof session) => window ? clampPercent(window.remainingPercent) : "–";
-      return `${value(session)} / ${value(weekly)}%`;
-    };
-    const detail = [
-      `${t("settings.agents.quota.sessionShort")}/${t("settings.agents.quota.weeklyShort")}`,
-      `${t("settings.agents.quota.gemini")} ${quotaPair("Gemini")}`,
-      `${t("settings.agents.quota.claudeGpt")} ${quotaPair("Claude and GPT")}`,
-    ].join(" · ");
+    const detail = usage.windows.map((window) =>
+      `${antigravityQuotaLabel(window, t)} ${clampPercent(window.remainingPercent)}%`).join(" · ");
     const minimum = Math.min(...percentages);
     return <QuotaSummary headline={quotaHeadline(minimum, t)} detail={detail} percentages={[minimum]} />;
   }
@@ -414,9 +406,7 @@ function AntigravityQuotaDetails({ usage, loading }: { usage: AntigravityUsage |
 function AntigravityQuotaWindowDetail({ window }: { window: AntigravityQuotaWindow }) {
   const { t } = useTranslation();
   const remaining = clampPercent(window.remainingPercent);
-  const scope = window.scope === "Gemini" ? t("settings.agents.quota.gemini") : t("settings.agents.quota.claudeGpt");
-  const period = window.window === "session" ? t("settings.agents.quota.sessionShort") : t("settings.agents.quota.weeklyShort");
-  return <QuotaWindowDetail label={`${scope} · ${period}`} remaining={remaining} resetDescription={window.resetDescription} />;
+  return <QuotaWindowDetail label={antigravityQuotaLabel(window, t)} remaining={remaining} resetDescription={window.resetDescription} />;
 }
 
 function QuotaDetailsHeader({ headline, updatedAt }: { headline: string; updatedAt: number }) {

@@ -10,9 +10,9 @@ import { useCallback, useEffect, useState } from "react";
 import TitleBarQuickSearch from "./TitleBarQuickSearch";
 import TitleBarProjectSwitcher from "./TitleBarProjectSwitcher";
 import { QuickCommandsButton } from "@/components/QuickCommandsButton";
-import { TaskMonitorPopover } from "@/components/TaskMonitorPopover";
+import { startTaskMonitorSync } from "@/store/slices/taskMonitor";
 import { useAuxiliaryDockStore } from "@/store/auxiliaryDock";
-import { Tooltip } from "antd";
+import { Tooltip, message } from "antd";
 import { useTranslation } from "react-i18next";
 import { ApplicationUpdateBadge } from "@/components/updater/ApplicationUpdateBadge";
 
@@ -57,6 +57,18 @@ function TitleBar() {
   useEffect(() => {
     getCurrentWindow().setTitle(titleText).catch(() => {});
   }, [titleText]);
+
+  useEffect(
+    () =>
+      startTaskMonitorSync((error) => {
+        message.error(
+          error instanceof Error && error.message === "application-update-in-progress"
+            ? t("updater.keepOpenDuringDownload")
+            : t("taskMonitor.closeProjectFailed")
+        );
+      }),
+    [t]
+  );
 
   useEffect(() => {
     let disposed = false;
@@ -142,7 +154,6 @@ function TitleBar() {
             <QuickCommandsButton />
           </div>
         )}
-        <TaskMonitorPopover />
         {currentProject && (
           <>
             <Tooltip title={t("auxiliaryDock.toggle")}>
