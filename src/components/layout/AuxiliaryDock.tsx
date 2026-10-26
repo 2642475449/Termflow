@@ -25,6 +25,7 @@ import { useAppStore } from "@/store";
 import { getFileIconByName } from "@/lib/fileIcon";
 import {
   clampAuxiliaryDockWidth,
+  DEFAULT_AUXILIARY_DOCK_WIDTH,
   MIN_AUXILIARY_DOCK_WIDTH,
   type AuxiliaryTab,
   useAuxiliaryDockStore,
@@ -238,7 +239,7 @@ export default function AuxiliaryDock({
   );
 
   const resetWidth = useCallback(() => {
-    const nextWidth = clampAuxiliaryDockWidth(480);
+    const nextWidth = DEFAULT_AUXILIARY_DOCK_WIDTH;
     preferredWidthRatioRef.current = nextWidth / hostWidth;
     setWidth(nextWidth);
   }, [hostWidth, setWidth]);

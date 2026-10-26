@@ -40,7 +40,7 @@ interface AuxiliaryDockState {
   reset: () => void;
 }
 
-export const DEFAULT_AUXILIARY_DOCK_WIDTH = 480;
+export const DEFAULT_AUXILIARY_DOCK_WIDTH = 360;
 export const MIN_AUXILIARY_DOCK_WIDTH = 360;
 export const MAX_AUXILIARY_DOCK_WIDTH = 880;
 
