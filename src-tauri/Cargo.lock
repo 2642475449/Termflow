@@ -4954,7 +4954,7 @@ dependencies = [
 
 [[package]]
 name = "termflow"
-version = "1.8.34"
+version = "1.8.35"
 dependencies = [
  "base64 0.22.1",
  "chrono",
