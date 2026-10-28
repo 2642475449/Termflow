@@ -1,10 +1,25 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_AUXILIARY_DOCK_WIDTH,
   MAX_AUXILIARY_DOCK_WIDTH,
   MIN_AUXILIARY_DOCK_WIDTH,
   useAuxiliaryDockStore,
 } from "./auxiliaryDock";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.resetModules();
+});
+
+function stubDockStorage() {
+  const values = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => { values.set(key, value); },
+    removeItem: (key: string) => { values.delete(key); },
+  });
+  return values;
+}
 
 describe("auxiliary dock store", () => {
   beforeEach(() => {
@@ -129,4 +144,38 @@ describe("auxiliary dock store", () => {
     expect(state.tabs[0].kind).toBe("task-monitor");
   });
 
+});
+
+it("starts at 280px and remembers the chosen width across reopening, project resets and restarts", async () => {
+  const values = stubDockStorage();
+  vi.resetModules();
+  const { useAuxiliaryDockStore: store } = await import("./auxiliaryDock");
+  store.getState().toggle();
+  expect(store.getState().width).toBe(280);
+
+  store.getState().setWidth(250);
+  store.getState().toggle();
+  store.getState().toggle();
+  expect(store.getState().width).toBe(250);
+  store.getState().reset();
+  store.getState().toggle();
+  expect(store.getState().width).toBe(250);
+  expect(JSON.parse(values.get("termflow-auxiliary-dock") ?? "{}").state).toEqual({ width: 250 });
+
+  vi.resetModules();
+  const { useAuxiliaryDockStore: reloaded } = await import("./auxiliaryDock");
+  expect(reloaded.getState()).toMatchObject({ width: 250, open: false, tabs: [], activeTabId: null });
+});
+
+it.each([
+  [10, 220],
+  [10_000, MAX_AUXILIARY_DOCK_WIDTH],
+  ["invalid", 280],
+  [null, 280],
+])("normalizes saved width %j to %i on startup", async (savedWidth, expectedWidth) => {
+  const values = stubDockStorage();
+  values.set("termflow-auxiliary-dock", JSON.stringify({ state: { width: savedWidth }, version: 0 }));
+  vi.resetModules();
+  const { useAuxiliaryDockStore: store } = await import("./auxiliaryDock");
+  expect(store.getState().width).toBe(expectedWidth);
 });

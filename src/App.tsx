@@ -13,10 +13,15 @@ import {
   applyPersistentSettingsToStore,
   getPersistentSettingsSnapshot as getAppSettingsSnapshot,
   useAppStore,
-  type ThemeMode,
 } from "./store";
+import {
+  isPersistentThemeUpdate,
+  PERSISTENT_THEME_UPDATED_EVENT,
+  startVoiceOverlayThemeSync,
+} from "./lib/persistentTheme";
 import type { NetworkProxyMode } from "./types";
 import { useShortcutStore } from "./store/slices/shortcutSlice";
+import { useAuxiliaryDockStore } from "./store/auxiliaryDock";
 import { normalizeShortcutOverrides } from "./lib/appShortcuts";
 import {
   initializePersistentSettings,
@@ -37,39 +42,11 @@ import {
 } from "./lib/antdTheme";
 
 const STARTUP_THEME_STORAGE_KEY = "termflow-startup-theme";
-const PERSISTENT_THEME_UPDATED_EVENT = "persistent-theme-updated";
 const PERSISTENT_NETWORK_PROXY_UPDATED_EVENT = "persistent-network-proxy-updated";
 const PERSISTENT_EXPLORER_CONTEXT_MENU_UPDATED_EVENT =
   "persistent-explorer-context-menu-updated";
 const PERSISTENT_SETTINGS_LOAD_ERROR_KEY = "persistent-settings-load-error";
 const PERSISTENT_SETTINGS_SAVE_ERROR_KEY = "persistent-settings-save-error";
-
-interface PersistentThemeUpdate {
-  lightTheme: ThemeMode;
-  darkTheme: ThemeMode;
-  themeCategory: "light" | "dark" | "system";
-}
-
-function isPersistentThemeUpdate(value: unknown): value is PersistentThemeUpdate {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const update = value as Record<string, unknown>;
-  const isThemeMode = (theme: unknown): theme is ThemeMode =>
-    theme === "light-glass" ||
-    theme === "light-warm" ||
-    theme === "dark-starry" ||
-    theme === "dark-mocha";
-
-  return (
-    isThemeMode(update.lightTheme) &&
-    isThemeMode(update.darkTheme) &&
-    (update.themeCategory === "light" ||
-      update.themeCategory === "dark" ||
-      update.themeCategory === "system")
-  );
-}
 
 interface PersistentNetworkProxyUpdate {
   networkProxyMode: NetworkProxyMode;
@@ -106,11 +83,16 @@ function isPersistentExplorerContextMenuUpdate(
 }
 
 function getPersistentSettingsSnapshot() {
-  return { ...getAppSettingsSnapshot(), keyboardShortcuts: useShortcutStore.getState().overrides };
+  return {
+    ...getAppSettingsSnapshot(),
+    keyboardShortcuts: useShortcutStore.getState().overrides,
+    auxiliaryDockWidth: useAuxiliaryDockStore.getState().width,
+  };
 }
 
 function App() {
   const keyboardShortcuts = useShortcutStore((s) => s.overrides);
+  const auxiliaryDockWidth = useAuxiliaryDockStore((s) => s.width);
   const lightTheme = useAppStore((s) => s.lightTheme);
   const darkTheme = useAppStore((s) => s.darkTheme);
   const themeCategory = useAppStore((s) => s.themeCategory);
@@ -185,8 +167,15 @@ function App() {
 
   const currentTheme = isDark ? darkTheme : lightTheme;
   const primaryColor = ANTD_PRIMARY_COLORS[currentTheme];
+  const isVoiceOverlayWindow =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("overlay") === "voice";
+  const isVoiceWorkerWindow =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("worker") === "voice";
   const persistentSettings = useMemo(
     () => ({
+      auxiliaryDockWidth: isVoiceWorkerWindow ? undefined : auxiliaryDockWidth,
       lightTheme,
       darkTheme,
       themeCategory,
@@ -234,6 +223,8 @@ function App() {
       keyboardShortcuts,
     }),
     [
+      auxiliaryDockWidth,
+      isVoiceWorkerWindow,
       keyboardShortcuts,
       asrApiKey,
       asrAuthMode,
@@ -281,12 +272,6 @@ function App() {
       voiceTriggerVisible,
     ]
   );
-  const isVoiceOverlayWindow =
-    typeof window !== "undefined" &&
-    new URLSearchParams(window.location.search).get("overlay") === "voice";
-  const isVoiceWorkerWindow =
-    typeof window !== "undefined" &&
-    new URLSearchParams(window.location.search).get("worker") === "voice";
 
   useRecentProjectSync(!isVoiceOverlayWindow && !isVoiceWorkerWindow);
 
@@ -332,6 +317,8 @@ function App() {
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", currentTheme);
+    // 悬浮窗加载主题前的默认值不能覆盖主窗口的启动主题缓存。
+    if (isVoiceOverlayWindow) return;
     try {
       localStorage.setItem(
         STARTUP_THEME_STORAGE_KEY,
@@ -340,7 +327,12 @@ function App() {
     } catch (error) {
       console.warn("Failed to cache the startup theme:", error);
     }
-  }, [currentTheme, darkTheme, lightTheme, themeCategory]);
+  }, [currentTheme, darkTheme, lightTheme, themeCategory, isVoiceOverlayWindow]);
+
+  useEffect(() => {
+    if (!isVoiceOverlayWindow) return;
+    return startVoiceOverlayThemeSync((nextTheme) => useAppStore.setState(nextTheme));
+  }, [isVoiceOverlayWindow]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -359,11 +351,16 @@ function App() {
     }
 
     let disposed = false;
+    const initialDockWidth = useAuxiliaryDockStore.getState().width;
     initializePersistentSettings(getPersistentSettingsSnapshot())
       .then((settings) => {
         if (!disposed) {
           message.destroy(PERSISTENT_SETTINGS_LOAD_ERROR_KEY);
           applyPersistentSettingsToStore(settings);
+          if (!isVoiceWorkerWindow && typeof settings.auxiliaryDockWidth === "number"
+            && useAuxiliaryDockStore.getState().width === initialDockWidth) {
+            useAuxiliaryDockStore.getState().setWidth(settings.auxiliaryDockWidth);
+          }
           useShortcutStore.getState().setPersistedOverrides(settings.keyboardShortcuts);
           lastPersistedShortcutsRef.current = JSON.stringify(normalizeShortcutOverrides(settings.keyboardShortcuts));
           lastPersistedSnapshotRef.current = JSON.stringify(settings);

@@ -57,7 +57,6 @@ import type {
   MarketplaceSkill,
   MarketplaceSkillSummary,
   MarketplaceSkillDetail,
-  MarketplaceSkillInstallRequest,
   SkillMarketSearch,
   CommandCatalog,
   CommandDetail,
@@ -642,6 +641,10 @@ export async function generateSessionTitle(
   return await invoke("generate_session_title", { prompt, path, sessionKind });
 }
 
+export async function readCodexSessionTitles(sessionIds: string[]): Promise<Record<string, string>> {
+  return await invoke("read_codex_session_titles", { sessionIds });
+}
+
 export async function submitAgentTurnInput(
   sessionId: string,
   data: string,
@@ -905,8 +908,8 @@ export async function moveProjectEntries(
 }
 
 // Skills API
-export async function searchSkillMarketplace(query: string): Promise<SkillMarketSearch> {
-  return await invoke("search_skill_marketplace", { query });
+export async function searchSkillMarketplace(query: string, page = 0): Promise<SkillMarketSearch> {
+  return await invoke("search_skill_marketplace", { query, page });
 }
 
 export async function getMarketplaceSkillSummaries(skills: MarketplaceSkill[]): Promise<MarketplaceSkillSummary[]> {
@@ -915,10 +918,6 @@ export async function getMarketplaceSkillSummaries(skills: MarketplaceSkill[]): 
 
 export async function getMarketplaceSkillDetail(skill: MarketplaceSkill, refresh = false): Promise<MarketplaceSkillDetail> {
   return await invoke("get_marketplace_skill_detail", { skill, refresh });
-}
-
-export async function installMarketplaceSkill(request: MarketplaceSkillInstallRequest): Promise<SkillInfo[]> {
-  return await invoke("install_marketplace_skill", { request });
 }
 
 export async function listSkills(projectPath?: string | null): Promise<SkillCatalog> {

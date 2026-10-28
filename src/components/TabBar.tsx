@@ -22,7 +22,6 @@ import { getFileIconByName } from "@/lib/fileIcon";
 import { useTranslation } from "react-i18next";
 import { ShortcutHint } from "@/components/ui/ShortcutHint";
 import { useShortcutStore } from "@/store/slices/shortcutSlice";
-import { useSkillMarketplaceStore } from "@/store/slices/skillMarketplaceSlice";
 import { getAppShortcut } from "@/lib/appShortcuts";
 import { closeTabRuntime, confirmCloseTab } from "@/lib/tabClose";
 import { AgentIcon } from "@/components/AgentIcon";
@@ -118,7 +117,6 @@ interface TabBarProps {
 
 function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
   const closeKeys = useShortcutStore((s) => getAppShortcut(s.overrides, "closeTab"));
-  const marketInstalling = useSkillMarketplaceStore((state) => state.installing);
   const { t } = useTranslation();
   const openTabs = tabIds;
   const activeSessionId = activeTabId;
@@ -710,7 +708,6 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
                   size="small"
                   icon={<CloseOutlined style={{ fontSize: 10 }} />}
                   className="tab-close-btn ml-auto shrink-0 !p-0 !w-4 !h-4 !min-w-0 flex items-center justify-center"
-                  disabled={isSkillMarket && marketInstalling}
                   style={{ color: "var(--cs-text-tertiary)" }}
                   onClick={(e) => {
                     e.stopPropagation();

@@ -1,29 +1,10 @@
 import { expect, it } from "vitest";
-import type { SkillCatalog } from "@/types";
-import { filterMarketplaceCategory, marketplaceBrowseView, marketplaceCategory, marketplaceConflicts, marketplaceDetailErrorKind, marketplaceRepositoryUrl, marketplaceSkillKey, marketplaceSkillUrl } from "./skillMarketplace";
+import { filterMarketplaceCategory, marketplaceBrowseView, marketplaceInstallCommand, marketplaceCategory, marketplaceDetailErrorKind, marketplaceRepositoryUrl, marketplaceSkillKey, marketplaceSkillUrl, marketplaceIsGitHubSource } from "./skillMarketplace";
 
 it("keeps skills from different repositories and folders distinct", () => {
   const skill = { repository: "owner/skills", slug: "review", name: "Review", description: "", installs: null };
   expect(marketplaceSkillKey(skill)).not.toBe(marketplaceSkillKey({ ...skill, slug: "other" }));
   expect(marketplaceSkillKey(skill)).not.toBe(marketplaceSkillKey({ ...skill, repository: "other/skills" }));
-});
-
-it("checks physical target paths rather than assuming a matching name is installed", () => {
-  const catalog: SkillCatalog = { roots: [
-    { agent: "codex", scope: "workspace", enabledDir: "C:\\project\\.agents\\skills" },
-    { agent: "pi", scope: "workspace", enabledDir: "C:\\project\\.agents\\skills" },
-  ], skills: [] };
-  const existing: SkillCatalog["skills"][number] = {
-    id: "review", name: "Review", description: "", enabled: true, scope: "workspace", agent: "codex",
-    effectiveAgents: ["codex", "pi"], conflictStatus: "none", conflictAgents: [], conflictingPaths: [],
-    contentFingerprint: "hash", folderName: "review", filePath: "c:/PROJECT/.agents/skills/review/SKILL.md",
-    resolvedFilePath: "c:/PROJECT/.agents/skills/review/SKILL.md", entryIsLink: false, sourceDir: "c:/project/.agents/skills",
-  };
-  catalog.skills.push(existing);
-  expect(marketplaceConflicts(catalog, "review", ["codex", "pi"], "workspace")).toEqual([existing.filePath]);
-  expect(marketplaceConflicts(catalog, "review", ["claude"], "workspace")).toEqual([]);
-  expect(marketplaceConflicts(catalog, "review", ["codex"], "user")).toEqual([]);
-  expect(marketplaceConflicts(null, "review", ["codex"], "user")).toEqual([]);
 });
 
 it("distinguishes unavailable skills from ambiguous directories and network failures", () => {
@@ -67,4 +48,29 @@ it("recognizes codebase and merge workflows as development tools", () => {
   for (const slug of ["improve-codebase-architecture", "resolving-merge-conflicts", "software-engineering", "tdd"]) {
     expect(marketplaceCategory({ repository: "owner/skills", slug, name: slug, description: "", installs: null })).toBe("development");
   }
+});
+
+it("separates unrecognized names from explicit productivity skills", () => {
+  const make = (slug: string) => ({ repository: "owner/skills", slug, name: slug, description: "", installs: null });
+  const cases = { "wizard": "other", "grill-me": "other", "planning-tasks": "productivity", "azure-rbac": "development", "lark-doc": "content", "lark-base": "data", "redesign-existing-projects": "design" };
+  for (const [slug, category] of Object.entries(cases)) expect(marketplaceCategory(make(slug))).toBe(category);
+  const view = marketplaceBrowseView(Object.keys(cases).map(make), "all", 1);
+  expect(view.counts.other).toBe(2);
+  expect(view.counts.productivity).toBe(1);
+  expect(view.sections.reduce((count, section) => count + section.total, 0)).toBe(view.total);
+});
+
+it("links domain sources without treating them as GitHub installations", () => {
+  const skill = { repository: "open.feishu.cn", slug: "lark-doc", name: "lark-doc", description: "", installs: null };
+  expect(marketplaceSkillUrl(skill)).toBe("https://skills.sh/open.feishu.cn/lark-doc");
+  expect(marketplaceIsGitHubSource(skill)).toBe(false);
+  expect(marketplaceIsGitHubSource({ repository: "vercel-labs/agent-skills" })).toBe(true);
+  for (const repository of ["owner/../repo", "https://example.com", "owner/.repo", "/repo", "owner/"]) expect(marketplaceIsGitHubSource({ repository })).toBe(false);
+});
+
+it("provides copyable commands for GitHub and domain sources without executing them", () => {
+  expect(marketplaceInstallCommand({ repository: "vercel-labs/agent-skills", slug: "react" })).toBe("npx skills add vercel-labs/agent-skills --skill react");
+  expect(marketplaceInstallCommand({ repository: "open.feishu.cn", slug: "lark-doc" })).toBe("npx skills add https://open.feishu.cn --skill lark-doc");
+  for (const slug of ["--all", "review;whoami", "$(whoami)", "review`id`", "a & b", "../outside"]) expect(marketplaceInstallCommand({ repository: "owner/repo", slug })).toBeNull();
+  for (const repository of ["https://evil.example", "owner/repo;id", "a/b/c", "-source", "x$(whoami)"]) expect(marketplaceInstallCommand({ repository, slug: "review" })).toBeNull();
 });

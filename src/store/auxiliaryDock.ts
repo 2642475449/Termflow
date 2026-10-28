@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { createJSONStorage, persist } from "zustand/middleware";
 
 export type AuxiliaryTabKind = "terminal" | "task" | "file" | "review" | "task-monitor";
 
@@ -40,8 +41,8 @@ interface AuxiliaryDockState {
   reset: () => void;
 }
 
-export const DEFAULT_AUXILIARY_DOCK_WIDTH = 360;
-export const MIN_AUXILIARY_DOCK_WIDTH = 360;
+export const DEFAULT_AUXILIARY_DOCK_WIDTH = 280;
+export const MIN_AUXILIARY_DOCK_WIDTH = 220;
 export const MAX_AUXILIARY_DOCK_WIDTH = 880;
 
 export function clampAuxiliaryDockWidth(width: number) {
@@ -65,7 +66,7 @@ function createTaskMonitorTab(title = "", projectPath = ""): AuxiliaryTab {
   };
 }
 
-export const useAuxiliaryDockStore = create<AuxiliaryDockState>((set) => ({
+export const useAuxiliaryDockStore = create<AuxiliaryDockState>()(persist((set) => ({
   open: false,
   width: DEFAULT_AUXILIARY_DOCK_WIDTH,
   tabs: [],
@@ -194,6 +195,22 @@ export const useAuxiliaryDockStore = create<AuxiliaryDockState>((set) => ({
       };
     }),
   reset: () => set({ open: false, tabs: [], activeTabId: null }),
+}), {
+  name: "termflow-auxiliary-dock",
+  storage: createJSONStorage(() => typeof localStorage !== "undefined" ? localStorage : {
+    getItem: () => null, setItem: () => {}, removeItem: () => {},
+  }),
+  // 只记住用户选择的宽度，标签与展开状态仍随项目重置。
+  partialize: (state) => ({ width: state.width }),
+  merge: (persistedState, currentState) => {
+    const savedWidth = persistedState && typeof persistedState === "object" && "width" in persistedState
+      ? persistedState.width
+      : currentState.width;
+    return {
+      ...currentState,
+      width: clampAuxiliaryDockWidth(typeof savedWidth === "number" ? savedWidth : DEFAULT_AUXILIARY_DOCK_WIDTH),
+    };
+  },
 }));
 
 export function isSessionVisibleInAuxiliaryDock(sessionId: string) {

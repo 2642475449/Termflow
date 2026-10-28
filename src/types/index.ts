@@ -73,6 +73,7 @@ export interface NetworkProxyTestResult {
 }
 
 export interface PersistentSettings {
+  auxiliaryDockWidth?: number | null;
   lightTheme: string;
   darkTheme: string;
   themeCategory: string;
@@ -176,6 +177,8 @@ export interface Session {
   /** 独立保存标题来源；name 仅作为最终显示值。 */
   temporaryTitle?: string;
   generatedTitle?: string;
+  /** Codex 原生标题只对绑定的真实会话 ID 生效。 */
+  nativeTitle?: { sessionId: string; title: string };
   manualTitle?: string;
   titleGeneration?: {
     prompt: string;
@@ -184,6 +187,7 @@ export interface Session {
     requestId?: string;
     error?: string;
     nextRetryAt?: number;
+    notBefore?: number;
   };
   status?: "starting" | "running" | "waiting" | "completed" | "error" | "stopped";
   unreadCount?: number;
@@ -732,6 +736,7 @@ export interface MarketplaceSkill {
 export interface SkillMarketSearch {
   skills: MarketplaceSkill[];
   limited: boolean;
+  nextPage: number | null;
 }
 
 export interface MarketplaceSkillSummary {
@@ -742,9 +747,6 @@ export interface MarketplaceSkillSummary {
 
 export interface MarketplaceSkillDetail {
   skill: MarketplaceSkill;
-  revision: string;
-  directory: string;
-  folderName: string;
   content: string;
   fileCount: number;
   files: string[];
@@ -752,14 +754,6 @@ export interface MarketplaceSkillDetail {
   sourceUrl: string;
 }
 
-export interface MarketplaceSkillInstallRequest {
-  skill: MarketplaceSkill;
-  revision: string;
-  directory: string;
-  agents: SkillAgent[];
-  scope: SkillScope;
-  projectPath: string | null;
-}
 export type SkillAgent = AiAgentId;
 export type SkillConflictStatus = "none" | "identical-copy" | "diverged-copy" | "runtime-conflict";
 

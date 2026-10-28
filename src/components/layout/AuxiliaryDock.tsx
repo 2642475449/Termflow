@@ -77,8 +77,6 @@ export default function AuxiliaryDock({
   const [hostWidth, setHostWidth] = useState(() => window.innerWidth);
   const dockRef = useRef<HTMLElement>(null);
   const closingSessionIdsRef = useRef(new Set<string>());
-  const preferredWidthRatioRef = useRef<number | null>(null);
-  const previousHostWidthRef = useRef<number | null>(null);
 
   useEffect(() => {
     const host = dockRef.current?.parentElement;
@@ -87,15 +85,6 @@ export default function AuxiliaryDock({
     const updateWidth = (nextHostWidth: number) => {
       if (nextHostWidth <= 0) return;
       setHostWidth(nextHostWidth);
-
-      const currentWidth = useAuxiliaryDockStore.getState().width;
-      if (preferredWidthRatioRef.current === null) {
-        preferredWidthRatioRef.current = currentWidth / nextHostWidth;
-      } else if (previousHostWidthRef.current !== null
-        && Math.abs(previousHostWidthRef.current - nextHostWidth) > 0.5) {
-        setWidth(preferredWidthRatioRef.current * nextHostWidth);
-      }
-      previousHostWidthRef.current = nextHostWidth;
     };
 
     updateWidth(host.getBoundingClientRect().width);
@@ -104,7 +93,7 @@ export default function AuxiliaryDock({
     });
     observer.observe(host);
     return () => observer.disconnect();
-  }, [setWidth]);
+  }, []);
 
   useEffect(() => {
     reset();
@@ -177,9 +166,7 @@ export default function AuxiliaryDock({
   const handleResizeStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     const startX = event.clientX;
-    const startWidth = width;
-    const referenceWidth = dockRef.current?.parentElement?.getBoundingClientRect().width
-      ?? hostWidth;
+    const startWidth = dockRef.current?.getBoundingClientRect().width ?? width;
     const previousCursor = document.body.style.cursor;
     const previousUserSelect = document.body.style.userSelect;
     document.body.style.cursor = "col-resize";
@@ -187,7 +174,6 @@ export default function AuxiliaryDock({
 
     const onMove = (moveEvent: PointerEvent) => {
       const nextWidth = clampAuxiliaryDockWidth(startWidth + startX - moveEvent.clientX);
-      preferredWidthRatioRef.current = nextWidth / referenceWidth;
       setWidth(nextWidth);
       syncTerminalLayouts();
     };
@@ -200,7 +186,7 @@ export default function AuxiliaryDock({
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onEnd, { once: true });
-  }, [hostWidth, setWidth, syncTerminalLayouts, width]);
+  }, [setWidth, syncTerminalLayouts, width]);
 
   useEffect(() => {
     if (!open) return;
@@ -239,10 +225,8 @@ export default function AuxiliaryDock({
   );
 
   const resetWidth = useCallback(() => {
-    const nextWidth = DEFAULT_AUXILIARY_DOCK_WIDTH;
-    preferredWidthRatioRef.current = nextWidth / hostWidth;
-    setWidth(nextWidth);
-  }, [hostWidth, setWidth]);
+    setWidth(DEFAULT_AUXILIARY_DOCK_WIDTH);
+  }, [setWidth]);
 
   return (
     <>

@@ -1,9 +1,7 @@
 import { Modal } from "antd";
-import { message } from "@/lib/toast";
 import type { TFunction } from "i18next";
 import type { TabEntity } from "@/store";
 import { closePty } from "@/lib/api";
-import { useSkillMarketplaceStore } from "@/store/slices/skillMarketplaceSlice";
 
 export async function closeTabRuntime(
   tab: TabEntity | undefined,
@@ -24,10 +22,6 @@ export async function archiveSessionRuntime(
 }
 
 export async function confirmCloseTab(tab: TabEntity | undefined, t: TFunction): Promise<boolean> {
-  if (tab?.kind === "skill-market" && useSkillMarketplaceStore.getState().installing) {
-    message.info(t("settings.skillMarket.installing"));
-    return false;
-  }
   if (!tab || tab.kind !== "file" || !tab.dirty) {
     return true;
   }

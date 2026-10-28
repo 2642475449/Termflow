@@ -1,4 +1,6 @@
-use crate::commands::search_index::{lookup_index_candidates, IndexCandidateLookup};
+use crate::commands::search_index::{
+    begin_content_search, lookup_index_candidates, IndexCandidateLookup,
+};
 use crate::path_utils::{display_path, normalize_input_path};
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
 use grep_regex::{RegexMatcher, RegexMatcherBuilder};
@@ -176,6 +178,7 @@ fn run_content_search(
     request: ContentSearchRequest,
     cancelled_searches: Arc<Mutex<HashSet<String>>>,
 ) -> Result<ContentSearchSummary, String> {
+    let _search_activity = begin_content_search(&app, &request.project_path);
     let lookup = lookup_index_candidates(
         &app,
         &request.project_path,
@@ -1367,6 +1370,37 @@ mod tests {
         assert_eq!(summary.scanned_files, 1);
         assert_eq!(summary.match_count, 1);
         assert_eq!(summary.index_generation, Some(7));
+    }
+
+    #[test]
+    fn stale_candidates_are_verified_against_current_file_contents() {
+        let fixture = tempdir().unwrap();
+        let modified = fixture.path().join("modified.txt");
+        let deleted = fixture.path().join("deleted.txt");
+        let created = fixture.path().join("created.txt");
+        fs::write(&modified, "oldneedle").unwrap();
+        fs::write(&deleted, "oldneedle").unwrap();
+        let paths = vec![modified.clone(), deleted.clone(), created.clone()];
+        fs::write(&modified, "newneedle").unwrap();
+        fs::remove_file(&deleted).unwrap();
+        fs::write(&created, "newneedle").unwrap();
+        for (query, expected) in [("oldneedle", 0), ("newneedle", 2)] {
+            let mut search_request = request(query);
+            search_request.project_path = fixture.path().to_string_lossy().to_string();
+            let summary = run_content_search_core_with_plan(
+                search_request,
+                Arc::new(Mutex::new(HashSet::new())),
+                Arc::new(|_| {}),
+                Some(paths.clone()),
+                "index".into(),
+                None,
+                Some(1),
+                "ready".into(),
+            )
+            .unwrap();
+            assert_eq!(summary.match_count, expected);
+            assert_eq!(summary.backend, "index");
+        }
     }
 
     #[test]

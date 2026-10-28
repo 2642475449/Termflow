@@ -1,11 +1,11 @@
 import { afterEach, expect, it, vi } from "vitest";
 import type { Session } from "@/types";
-import { completeSessionTitle, normalizeSessionTitles, queueSessionTitle, startTitleGeneration } from "./sessionTitles";
+import { CODEX_NATIVE_TITLE_WAIT_MS, completeSessionTitle, normalizeSessionTitles, queueSessionTitle, startTitleGeneration } from "./sessionTitles";
 import { updateSessionCollection } from "@/store/utils/session";
 import { toPersistedSession } from "./sessions";
 
 const session = (patch: Partial<Session> = {}): Session => ({
-  id: "s1", path: "E:/project", name: "会话 12:00", active: true, createdAt: 1, agentId: "codex", ...patch,
+  id: "s1", path: "E:/project", name: "会话 12:00", active: true, createdAt: 1, agentId: "claude", ...patch,
 });
 afterEach(() => vi.useRealTimers());
 
@@ -95,4 +95,38 @@ it("recovers interrupted persisted requests and ignores completion after shutdow
   resolve("系统修复");
   await Promise.resolve();
   expect(current.generatedTitle).toBeUndefined();
+});
+
+it("prefers a native Codex name over AI and temporary titles while preserving manual names", () => {
+  const current = session({ agentId: "codex", agentSessionId: "thread-1", temporaryTitle: "临时名称",
+    generatedTitle: "AI 名称", nativeTitle: { sessionId: "thread-1", title: "原生：保留标点与完整长度的 Codex 会话名称" } });
+  expect(normalizeSessionTitles(current).name).toBe(current.nativeTitle?.title);
+  expect(queueSessionTitle(current, "另一个问题", true).titleGeneration).toBeUndefined();
+  expect(normalizeSessionTitles({ ...current, titleSource: "manual", name: "手动名称" }).name).toBe("手动名称");
+  expect(normalizeSessionTitles({ ...current, agentSessionId: "thread-2" }).name).toBe("AI 名称");
+});
+
+it("waits for the native Codex title before generating an AI fallback", async () => {
+  vi.useFakeTimers();
+  let current = queueSessionTitle(session({ agentId: "codex" }), "修复登录问题");
+  const generate = vi.fn().mockResolvedValue("登录流程修复");
+  const stop = startTitleGeneration({ sessions: () => [current],
+    update: (_, change) => { current = change(current); }, generate, subscribe: () => () => {},
+  });
+  await vi.advanceTimersByTimeAsync(CODEX_NATIVE_TITLE_WAIT_MS - 1);
+  expect(generate).not.toHaveBeenCalled();
+  expect(current.name).toBe("修复登录问题");
+  await vi.advanceTimersByTimeAsync(2);
+  expect(generate).toHaveBeenCalledOnce();
+  expect(current.name).toBe("登录流程修复");
+  stop();
+});
+
+it("does not queue AI for an existing native title or apply AI after native arrival", () => {
+  const current = session({ agentId: "codex", agentSessionId: "thread-1",
+    nativeTitle: { sessionId: "thread-1", title: "原生名称" },
+    titleGeneration: { prompt: "修复 bug", status: "generating", attempts: 1, requestId: "r" },
+  });
+  expect(completeSessionTitle(current, "r", { title: "AI 名称" }, 0)).toBe(current);
+  expect(queueSessionTitle(current, "修复 bug").name).toBe("原生名称");
 });

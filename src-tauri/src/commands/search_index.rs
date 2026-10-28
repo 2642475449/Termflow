@@ -18,15 +18,16 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use crate::database::{Database, SearchIndexStorageSettings};
 use crate::path_utils::{display_path, normalize_input_path};
 
+mod scheduling;
+use scheduling::{ProjectRuntime, SearchActivityGuard, UpdateBatch};
+
 // Schema v2 retains a row for non-text candidates.  That makes a watcher-driven
 // update able to account for a file moving between indexed and skipped without
 // rescanning the project.
 const INDEX_SCHEMA_VERSION: u32 = 2;
 const MAX_FILE_BYTES: u64 = 5 * 1024 * 1024;
 const STATUS_EMIT_INTERVAL: Duration = Duration::from_millis(150);
-const WATCHER_DEBOUNCE: Duration = Duration::from_millis(500);
-const MAX_INCREMENTAL_CHANGE_PATHS: usize = 1_024;
-const LARGE_RECONCILIATION_QUIET_PERIOD: Duration = Duration::from_secs(2);
+const SCHEDULER_TICK: Duration = Duration::from_millis(250);
 const IGNORED_DIRECTORIES: &[&str] = &[
     ".git",
     ".svn",
@@ -76,13 +77,18 @@ struct ActiveEntry {
     job_id: u64,
     cancel: Arc<AtomicBool>,
     pause: Arc<AtomicBool>,
-    revision: Arc<AtomicU64>,
     status: ProjectSearchIndexStatus,
 }
 
 struct ProjectIndexWatcher {
     _watcher: Box<dyn Watcher + Send>,
-    _sender: mpsc::Sender<Result<Event, notify::Error>>,
+    stop: Arc<AtomicBool>,
+}
+
+impl Drop for ProjectIndexWatcher {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+    }
 }
 
 #[derive(Clone, Default)]
@@ -90,6 +96,32 @@ pub struct SearchIndexState {
     entries: Arc<Mutex<HashMap<String, ActiveEntry>>>,
     watchers: Arc<Mutex<HashMap<String, ProjectIndexWatcher>>>,
     next_job_id: Arc<AtomicU64>,
+    runtimes: Arc<Mutex<HashMap<String, Arc<ProjectRuntime>>>>,
+}
+
+impl SearchIndexState {
+    fn runtime(&self, key: &str) -> Result<Arc<ProjectRuntime>, String> {
+        Ok(self
+            .runtimes
+            .lock()
+            .map_err(|_| "Failed to access search index runtime".to_string())?
+            .entry(key.to_string())
+            .or_default()
+            .clone())
+    }
+}
+
+pub(crate) fn begin_content_search(
+    app: &AppHandle,
+    project_path: &str,
+) -> Option<SearchActivityGuard> {
+    let project = resolve_project(project_path).ok()?;
+    Some(
+        app.state::<SearchIndexState>()
+            .runtime(&project.preference_key)
+            .ok()?
+            .begin_search(),
+    )
 }
 
 #[derive(Clone)]
@@ -379,17 +411,33 @@ fn enforce_storage_quota(app: &AppHandle, keep: &Path) -> Result<(), String> {
 }
 
 fn has_active_build(state: &SearchIndexState) -> bool {
-    state.entries.lock().ok().is_some_and(|entries| {
+    let building = state.entries.lock().ok().is_some_and(|entries| {
         entries
             .values()
             .any(|entry| matches!(entry.status.state.as_str(), "preflight" | "building"))
-    })
+    });
+    building
+        || state.runtimes.lock().ok().is_some_and(|runtimes| {
+            runtimes.values().any(|runtime| {
+                runtime
+                    .changes
+                    .lock()
+                    .map_or(true, |changes| changes.writing)
+            })
+        })
 }
 
 fn project_has_active_index_write(state: &SearchIndexState, key: &str) -> bool {
-    get_active_status(state, key).is_some_and(|status| {
+    let building = get_active_status(state, key).is_some_and(|status| {
         matches!(status.state.as_str(), "preflight" | "building" | "updating")
-    })
+    });
+    building
+        || state.runtime(key).is_ok_and(|runtime| {
+            runtime
+                .changes
+                .lock()
+                .map_or(true, |changes| changes.writing)
+        })
 }
 
 fn copy_directory(source: &Path, destination: &Path) -> Result<(), String> {
@@ -507,14 +555,6 @@ fn wait_while_paused(pause: &AtomicBool, cancel: &AtomicBool) -> bool {
     !cancel.load(Ordering::Relaxed)
 }
 
-fn active_revision(state: &SearchIndexState, key: &str) -> Option<Arc<AtomicU64>> {
-    state
-        .entries
-        .lock()
-        .ok()
-        .and_then(|entries| entries.get(key).map(|entry| entry.revision.clone()))
-}
-
 fn event_requires_rebuild(project_path: &Path, event: &Event) -> bool {
     if matches!(event.kind, EventKind::Access(_)) {
         return false;
@@ -522,15 +562,31 @@ fn event_requires_rebuild(project_path: &Path, event: &Event) -> bool {
     if event.need_rescan() || event.paths.is_empty() {
         return true;
     }
+    if matches!(
+        event.kind,
+        EventKind::Remove(notify::event::RemoveKind::Folder)
+    ) {
+        return event
+            .paths
+            .iter()
+            .any(|path| !is_under_ignored_directory(project_path, path));
+    }
     event.paths.iter().any(|path| {
         let Ok(relative) = path.strip_prefix(project_path) else {
             return false;
         };
         let relative = relative.to_string_lossy().replace('\\', "/");
-        if matches!(
-            relative.as_str(),
-            ".gitignore" | ".ignore" | ".rgignore" | ".git/info/exclude"
-        ) {
+        if relative == ".git/info/exclude" {
+            return true;
+        }
+        if is_under_ignored_directory(project_path, path) {
+            return false;
+        }
+        if path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| matches!(name, ".gitignore" | ".ignore" | ".rgignore"))
+        {
             return true;
         }
         if path.is_dir() {
@@ -612,35 +668,6 @@ fn watcher_event_paths(
     Some(paths)
 }
 
-fn begin_incremental_update(
-    app: &AppHandle,
-    state: &SearchIndexState,
-    key: &str,
-) -> Option<(u64, ProjectSearchIndexStatus)> {
-    let status = state.entries.lock().ok().and_then(|mut entries| {
-        let entry = entries.get_mut(key)?;
-        entry.revision.fetch_add(1, Ordering::Relaxed);
-        if matches!(entry.status.state.as_str(), "preflight" | "building") {
-            return None;
-        }
-        if entry.status.state != "ready" {
-            return Some((entry.job_id, None));
-        }
-        entry.status.state = "updating".to_string();
-        entry.status.phase = "applying_changes".to_string();
-        entry.status.backend = "scan".to_string();
-        entry.status.updated_at = Some(now_ms());
-        Some((entry.job_id, Some(entry.status.clone())))
-    });
-    match status {
-        Some((job_id, Some(status))) => {
-            let _ = app.emit("search-index-status", status.clone());
-            Some((job_id, status))
-        }
-        _ => None,
-    }
-}
-
 fn mark_index_for_rebuild(
     app: &AppHandle,
     state: &SearchIndexState,
@@ -649,7 +676,6 @@ fn mark_index_for_rebuild(
 ) {
     let status = state.entries.lock().ok().and_then(|mut entries| {
         let entry = entries.get_mut(key)?;
-        entry.revision.fetch_add(1, Ordering::Relaxed);
         entry.status.state = "stale".to_string();
         entry.status.backend = "scan".to_string();
         entry.status.phase = "reconciling".to_string();
@@ -666,77 +692,119 @@ fn apply_watcher_updates(
     app: &AppHandle,
     state: &SearchIndexState,
     project: &ResolvedProject,
-    paths: &[PathBuf],
+    batch: &UpdateBatch,
 ) -> Result<bool, String> {
-    let Some((job_id, _)) = begin_incremental_update(app, state, &project.preference_key) else {
-        // A build already in progress observes the revision change and replays
-        // with a full build. A stale/failed index needs the same recovery.
+    let runtime = state.runtime(&project.preference_key)?;
+    let _writer = runtime
+        .writer
+        .lock()
+        .map_err(|_| "Failed to lock index writer")?;
+    if !get_active_status(state, &project.preference_key)
+        .is_some_and(|status| status.enabled && status.state == "ready")
+        || runtime
+            .changes
+            .lock()
+            .map_err(|_| "Failed to access pending changes")?
+            .searches_active()
+    {
         return Ok(false);
-    };
+    }
+    let job_id = state
+        .entries
+        .lock()
+        .map_err(|_| "Failed to access index state")?
+        .get(&project.preference_key)
+        .map(|entry| entry.job_id);
     let database_path = index_directory(app, project)?.join("index.sqlite3");
-    let summary = apply_incremental_updates(&database_path, project, paths)?;
-    let final_path = database_path;
-    let status = state.entries.lock().ok().and_then(|mut entries| {
+    let paths = if batch.reconcile {
+        reconciliation_paths(&database_path, project, &batch.paths)?
+    } else {
+        batch.paths.clone()
+    };
+    let summary = apply_incremental_updates(&database_path, project, &paths)?;
+    let next_status = state.entries.lock().ok().and_then(|mut entries| {
         let entry = entries.get_mut(&project.preference_key)?;
-        if entry.job_id != job_id || entry.status.state != "updating" {
+        if Some(entry.job_id) != job_id || entry.status.state != "ready" {
             return None;
         }
-        entry.status.state = "ready".to_string();
-        entry.status.phase = "ready".to_string();
-        entry.status.backend = "fts5".to_string();
         entry.status.total_files = Some(summary.total_files);
         entry.status.indexed_files = summary.indexed_files;
         entry.status.skipped_files = summary.skipped_files;
         entry.status.processed_files = summary.total_files;
         entry.status.total_bytes = Some(summary.total_bytes);
         entry.status.processed_bytes = summary.total_bytes;
-        entry.status.index_size_bytes = fs::metadata(&final_path)
+        entry.status.index_size_bytes = fs::metadata(&database_path)
             .map(|meta| meta.len())
             .unwrap_or(0);
         entry.status.updated_at = Some(now_ms());
         entry.status.error = None;
         Some(entry.status.clone())
     });
-    if let Some(status) = status {
-        touch_index_usage(final_path.parent().unwrap_or_else(|| Path::new("")));
-        let _ = app.emit("search-index-status", status);
+    if let Some(next_status) = next_status {
+        touch_index_usage(database_path.parent().unwrap_or_else(|| Path::new("")));
+        let _ = app.emit("search-index-status", next_status);
         return Ok(true);
     }
     Ok(false)
 }
 
-fn collect_watcher_result(
+// 大量事件或目录变化先核对文件元数据，只重新索引实际变化的文件。
+fn reconciliation_paths(
+    database_path: &Path,
+    project: &ResolvedProject,
+    pending_paths: &[PathBuf],
+) -> Result<Vec<PathBuf>, String> {
+    let candidates = discover_candidates(
+        project,
+        &AtomicBool::new(false),
+        &AtomicBool::new(false),
+        |_, _, _| {},
+    )?;
+    let connection =
+        Connection::open_with_flags(database_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .map_err(|error| format!("Failed to open index for reconciliation: {error}"))?;
+    let mut statement = connection
+        .prepare("SELECT relative_path, size, modified_ns FROM indexed_files")
+        .map_err(|error| format!("Failed to read indexed file metadata: {error}"))?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                (row.get::<_, i64>(1)? as u64, row.get::<_, i64>(2)?),
+            ))
+        })
+        .map_err(|error| format!("Failed to query indexed file metadata: {error}"))?;
+    let mut old = rows
+        .collect::<rusqlite::Result<HashMap<_, _>>>()
+        .map_err(|error| format!("Failed to collect indexed file metadata: {error}"))?;
+    let mut paths: HashSet<PathBuf> = pending_paths.iter().cloned().collect();
+    for candidate in candidates {
+        if old.remove(&candidate.relative_path) != Some((candidate.size, candidate.modified_ns)) {
+            paths.insert(candidate.path);
+        }
+    }
+    paths.extend(old.into_keys().map(|relative| project.path.join(relative)));
+    Ok(paths.into_iter().collect())
+}
+
+fn record_watcher_result(
     app: &AppHandle,
     state: &SearchIndexState,
     project: &ResolvedProject,
     result: Result<Event, notify::Error>,
-    changed_paths: &mut Vec<PathBuf>,
-) -> bool {
-    match result {
+) {
+    let (paths, reconcile) = match result {
         Ok(event) => match watcher_event_paths(app, project, &event) {
-            Some(paths) => {
-                changed_paths.extend(paths);
-                false
-            }
-            None => {
-                mark_index_for_rebuild(app, state, &project.preference_key, None);
-                true
-            }
+            Some(paths) => (paths, false),
+            None => (Vec::new(), true),
         },
-        Err(error) => {
-            mark_index_for_rebuild(
-                app,
-                state,
-                &project.preference_key,
-                Some(format!("Search index watcher failed: {error}")),
-            );
-            true
+        Err(_) => (Vec::new(), true),
+    };
+    if let Ok(runtime) = state.runtime(&project.preference_key) {
+        if let Ok(mut changes) = runtime.changes.lock() {
+            changes.record(paths, reconcile, Instant::now());
         }
     }
-}
-
-fn needs_full_reconciliation(rebuild_requested: bool, changed_path_count: usize) -> bool {
-    rebuild_requested || changed_path_count > MAX_INCREMENTAL_CHANGE_PATHS
 }
 
 fn ensure_project_watcher(
@@ -751,124 +819,110 @@ fn ensure_project_watcher(
     if watchers.contains_key(&project.preference_key) {
         return Ok(());
     }
-
-    let (sender, receiver) = mpsc::channel::<Result<Event, notify::Error>>();
+    // 唤醒信号也合并，避免批量 checkout 时事件队列无限增长。
+    let (sender, receiver) = mpsc::sync_channel::<()>(1);
     let watcher_config = Config::default()
         .with_poll_interval(Duration::from_secs(2))
         .with_compare_contents(false);
-    let recommended_sender = sender.clone();
-    let watcher: Box<dyn Watcher + Send> = match RecommendedWatcher::new(
+    let make_callback = || {
+        let app = app.clone();
+        let state = state.clone();
+        let project = project.clone();
+        let sender = sender.clone();
         move |result| {
-            let _ = recommended_sender.send(result);
-        },
-        watcher_config.clone(),
-    )
-    .and_then(|mut watcher| {
-        watcher.watch(&project.path, RecursiveMode::Recursive)?;
-        Ok(watcher)
-    }) {
-        Ok(watcher) => Box::new(watcher),
-        Err(recommended_error) => {
-            let poll_sender = sender.clone();
-            let mut watcher = notify::PollWatcher::new(
-                move |result| {
-                    let _ = poll_sender.send(result);
-                },
-                watcher_config,
-            )
-            .map_err(|poll_error| {
-                format!(
-                    "Failed to create search index watcher: native={recommended_error}; poll={poll_error}"
-                )
-            })?;
-            watcher
-                .watch(&project.path, RecursiveMode::Recursive)
-                .map_err(|poll_error| {
-                    format!(
-                        "Failed to watch project for index changes: native={recommended_error}; poll={poll_error}"
-                    )
-                })?;
-            Box::new(watcher)
+            // 在通知回调中立即登记，调度等待期间搜索也能补查最新文件。
+            record_watcher_result(&app, &state, &project, result);
+            let _ = sender.try_send(());
         }
     };
-
+    let watcher: Box<dyn Watcher + Send> =
+        match RecommendedWatcher::new(make_callback(), watcher_config.clone()).and_then(
+            |mut watcher| {
+                watcher.watch(&project.path, RecursiveMode::Recursive)?;
+                Ok(watcher)
+            },
+        ) {
+            Ok(watcher) => Box::new(watcher),
+            Err(recommended_error) => {
+                let mut watcher = notify::PollWatcher::new(make_callback(), watcher_config)
+                    .map_err(|error| {
+                        format!(
+                        "Failed to create index watcher: native={recommended_error}; poll={error}"
+                    )
+                    })?;
+                watcher
+                    .watch(&project.path, RecursiveMode::Recursive)
+                    .map_err(|error| format!("Failed to watch project: {error}"))?;
+                Box::new(watcher)
+            }
+        };
     let worker_app = app.clone();
     let worker_state = state.clone();
     let worker_project = project.clone();
+    let runtime = state.runtime(&project.preference_key)?;
+    let stop = Arc::new(AtomicBool::new(false));
+    let worker_stop = stop.clone();
     std::thread::Builder::new()
         .name(format!("termflow-index-watch-{}", project_hash(project)))
         .spawn(move || {
-            while let Ok(result) = receiver.recv() {
-                let mut changed_paths = Vec::new();
-                let mut rebuild_requested = collect_watcher_result(
-                    &worker_app,
-                    &worker_state,
-                    &worker_project,
-                    result,
-                    &mut changed_paths,
-                );
-                while let Ok(result) = receiver.recv_timeout(WATCHER_DEBOUNCE) {
-                    rebuild_requested |= collect_watcher_result(
-                        &worker_app,
-                        &worker_state,
-                        &worker_project,
-                        result,
-                        &mut changed_paths,
-                    );
+            while !worker_stop.load(Ordering::Relaxed) {
+                match receiver.recv_timeout(SCHEDULER_TICK) {
+                    Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                    _ => {}
                 }
-                if needs_full_reconciliation(rebuild_requested, changed_paths.len()) {
-                    if !rebuild_requested {
-                        mark_index_for_rebuild(
-                            &worker_app,
-                            &worker_state,
-                            &worker_project.preference_key,
-                            None,
-                        );
-                        rebuild_requested = true;
+                if worker_stop.load(Ordering::Relaxed) {
+                    break;
+                }
+                if !get_active_status(&worker_state, &worker_project.preference_key)
+                    .is_some_and(|status| status.enabled && status.state == "ready")
+                {
+                    continue;
+                }
+                let batch = runtime
+                    .changes
+                    .lock()
+                    .ok()
+                    .and_then(|mut changes| changes.scheduled_batch(Instant::now()));
+                let Some(batch) = batch else {
+                    continue;
+                };
+                let app = worker_app.clone();
+                let state = worker_state.clone();
+                let project = worker_project.clone();
+                let runtime = runtime.clone();
+                let stop = worker_stop.clone();
+                tauri::async_runtime::spawn_blocking(move || {
+                    let result = if stop.load(Ordering::Relaxed) {
+                        Ok(false)
+                    } else {
+                        apply_watcher_updates(&app, &state, &project, &batch)
+                    };
+                    if let Ok(mut changes) = runtime.changes.lock() {
+                        if matches!(result, Ok(true)) {
+                            changes.acknowledge(batch.revision, Instant::now());
+                        }
+                        changes.writing = false;
                     }
-                    // Git checkout/clone can emit thousands of events while
-                    // the working tree is still changing. Wait for a longer
-                    // quiet period before doing one complete reconciliation.
-                    while receiver
-                        .recv_timeout(LARGE_RECONCILIATION_QUIET_PERIOD)
-                        .is_ok()
-                    {}
-                }
-                if !rebuild_requested && !changed_paths.is_empty() {
-                    if let Err(error) = apply_watcher_updates(
-                        &worker_app,
-                        &worker_state,
-                        &worker_project,
-                        &changed_paths,
-                    ) {
-                        mark_index_for_rebuild(
-                            &worker_app,
-                            &worker_state,
-                            &worker_project.preference_key,
-                            Some(error),
-                        );
+                    if let Err(error) = result {
+                        if !stop.load(Ordering::Relaxed) {
+                            mark_index_for_rebuild(
+                                &app,
+                                &state,
+                                &project.preference_key,
+                                Some(error),
+                            );
+                            let _ = start_index_build(app, state, project, true);
+                        }
                     }
-                }
-                let should_rebuild =
-                    get_active_status(&worker_state, &worker_project.preference_key)
-                        .is_some_and(|status| status.enabled && status.state == "stale");
-                if should_rebuild {
-                    let _ = start_index_build(
-                        worker_app.clone(),
-                        worker_state.clone(),
-                        worker_project.clone(),
-                        true,
-                    );
-                }
+                });
             }
         })
         .map_err(|error| format!("Failed to start search index watcher worker: {error}"))?;
-
     watchers.insert(
         project.preference_key.clone(),
         ProjectIndexWatcher {
             _watcher: watcher,
-            _sender: sender,
+            stop,
         },
     );
     Ok(())
@@ -898,7 +952,6 @@ fn start_index_build(
     let job_id = state.next_job_id.fetch_add(1, Ordering::Relaxed) + 1;
     let cancel = Arc::new(AtomicBool::new(false));
     let pause = Arc::new(AtomicBool::new(false));
-    let revision = Arc::new(AtomicU64::new(0));
     let status = initial_build_status(project.display_path.clone());
     state
         .entries
@@ -910,7 +963,6 @@ fn start_index_build(
                 job_id,
                 cancel: cancel.clone(),
                 pause: pause.clone(),
-                revision: revision.clone(),
                 status: status.clone(),
             },
         );
@@ -926,19 +978,10 @@ fn start_index_build(
         }
         return Err(error);
     }
-    let start_revision = revision.load(Ordering::Relaxed);
     let _ = app.emit("search-index-status", status.clone());
 
     tauri::async_runtime::spawn_blocking(move || {
-        let result = build_project_index(
-            &app,
-            &state,
-            &project,
-            job_id,
-            start_revision,
-            &cancel,
-            &pause,
-        );
+        let result = build_project_index(&app, &state, &project, job_id, &cancel, &pause);
         if let Err(error) = result {
             if cancel.load(Ordering::Relaxed) {
                 return;
@@ -969,13 +1012,36 @@ fn build_project_index(
     state: &SearchIndexState,
     project: &ResolvedProject,
     job_id: u64,
-    start_revision: u64,
     cancel: &AtomicBool,
     pause: &AtomicBool,
 ) -> Result<(), String> {
+    let runtime = state.runtime(&project.preference_key)?;
+    let _writer = runtime
+        .writer
+        .lock()
+        .map_err(|_| "Failed to lock index writer")?;
+    if cancel.load(Ordering::Relaxed) {
+        return Ok(());
+    }
+    let start_revision = runtime
+        .changes
+        .lock()
+        .map_err(|_| "Failed to read pending index changes")?
+        .revision;
     let index_dir = index_directory(app, project)?;
     fs::create_dir_all(&index_dir)
         .map_err(|error| format!("Failed to create search index directory: {error}"))?;
+    let existing_path = index_dir.join("index.sqlite3");
+    if existing_path.exists() {
+        match inspect_index_health(&existing_path) {
+            IndexHealth::Healthy => {}
+            IndexHealth::Corrupt(reason) => {
+                quarantine_corrupt_index(&existing_path)
+                    .map_err(|error| format!("{reason}; {error}"))?;
+            }
+            IndexHealth::Unavailable(reason) => return Err(reason),
+        }
+    }
     cleanup_temporary_indexes(&index_dir);
     let temp_path = index_dir.join(format!("index.build-{job_id}.sqlite3"));
     if temp_path.exists() {
@@ -1048,16 +1114,8 @@ fn build_project_index(
     set_status(app, state, &project.preference_key, job_id, status.clone());
     replace_index_atomically(&index_dir, &temp_path)?;
 
-    let changed_during_build = active_revision(state, &project.preference_key)
-        .is_some_and(|revision| revision.load(Ordering::Relaxed) != start_revision);
-    if changed_during_build {
-        status.state = "stale".to_string();
-        status.phase = "replaying_changes".to_string();
-        status.backend = "scan".to_string();
-        status.updated_at = Some(now_ms());
-        set_status(app, state, &project.preference_key, job_id, status);
-        let _ = start_index_build(app.clone(), state.clone(), project.clone(), true);
-        return Ok(());
+    if let Ok(mut changes) = runtime.changes.lock() {
+        changes.acknowledge(start_revision, Instant::now());
     }
 
     let final_path = index_dir.join("index.sqlite3");
@@ -1185,7 +1243,7 @@ fn candidate_for_existing_path(
         Some(relative_path) if !relative_path.is_empty() => relative_path,
         _ => return Ok(None),
     };
-    let metadata = match fs::metadata(path) {
+    let metadata = match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.is_file() && metadata.len() <= MAX_FILE_BYTES => metadata,
         Ok(_) | Err(_) => return Ok(None),
     };
@@ -1699,12 +1757,7 @@ fn recover_unusable_index(
     project: &ResolvedProject,
     reason: String,
 ) {
-    if let Ok(index_dir) = index_directory(app, project) {
-        let final_path = index_dir.join("index.sqlite3");
-        if matches!(inspect_index_health(&final_path), IndexHealth::Corrupt(_)) {
-            let _ = quarantine_corrupt_index(&final_path);
-        }
-    }
+    // 检查和隔离由持有 writer 锁的构建任务完成，避免与增量提交争用文件。
     mark_index_for_rebuild(app, state, &project.preference_key, Some(reason));
     let _ = start_index_build(app.clone(), state.clone(), project.clone(), true);
 }
@@ -1764,6 +1817,47 @@ fn load_ready_status(
     })
 }
 
+// 重启后核对离线变更，健康缓存无需重新生成整份全文索引。
+fn restore_project_index(
+    app: &AppHandle,
+    state: &SearchIndexState,
+    project: &ResolvedProject,
+) -> Result<Option<ProjectSearchIndexStatus>, String> {
+    let Some(status) = load_ready_status(app, project) else {
+        return Ok(None);
+    };
+    ensure_project_watcher(app, state, project)?;
+    state
+        .runtime(&project.preference_key)?
+        .changes
+        .lock()
+        .map_err(|_| "Failed to schedule index reconciliation")?
+        .record(Vec::new(), true, Instant::now());
+    let mut entries = state
+        .entries
+        .lock()
+        .map_err(|_| "Failed to restore search index state")?;
+    // 状态查询和搜索可能并发恢复同一项目，不能覆盖已经启动的构建任务。
+    if let Some(entry) = entries
+        .get(&project.preference_key)
+        .filter(|entry| entry.status.enabled)
+    {
+        return Ok(Some(entry.status.clone()));
+    }
+    entries.insert(
+        project.preference_key.clone(),
+        ActiveEntry {
+            job_id: state.next_job_id.fetch_add(1, Ordering::Relaxed) + 1,
+            cancel: Arc::new(AtomicBool::new(false)),
+            pause: Arc::new(AtomicBool::new(false)),
+            status: status.clone(),
+        },
+    );
+    drop(entries);
+    let _ = app.emit("search-index-status", status.clone());
+    Ok(Some(status))
+}
+
 fn quote_fts5_literal(query: &str) -> String {
     format!("\"{}\"", query.replace('"', "\"\""))
 }
@@ -1772,24 +1866,59 @@ fn query_candidate_relative_paths(
     connection: &Connection,
     query: &str,
     limit: usize,
-) -> Result<Vec<String>, String> {
-    let mut statement = connection
-        .prepare(
-            "SELECT indexed_files.relative_path
-             FROM content_fts
-             JOIN indexed_files ON indexed_files.id = content_fts.rowid
-             WHERE content_fts MATCH ?1
-             LIMIT ?2",
-        )
-        .map_err(|error| format!("index_query_prepare_failed: {error}"))?;
-    let rows = statement
-        .query_map(
-            params![quote_fts5_literal(query), (limit + 1) as i64],
-            |row| row.get::<_, String>(0),
-        )
-        .map_err(|error| format!("index_query_failed: {error}"))?;
-    rows.collect::<rusqlite::Result<Vec<_>>>()
-        .map_err(|error| format!("index_result_failed: {error}"))
+) -> rusqlite::Result<Vec<String>> {
+    let mut statement = connection.prepare(
+        "SELECT indexed_files.relative_path
+         FROM content_fts
+         JOIN indexed_files ON indexed_files.id = content_fts.rowid
+         WHERE content_fts MATCH ?1 LIMIT ?2",
+    )?;
+    let rows = statement.query_map(
+        params![quote_fts5_literal(query), (limit + 1) as i64],
+        |row| row.get::<_, String>(0),
+    )?;
+    rows.collect()
+}
+
+fn pending_search_paths(runtime: &ProjectRuntime) -> Result<HashSet<PathBuf>, String> {
+    let changes = runtime
+        .changes
+        .lock()
+        .map_err(|_| "index_state_unavailable")?;
+    if changes.reconcile.is_some() {
+        return Err("index_reconciling".to_string());
+    }
+    Ok(changes.paths.keys().cloned().collect())
+}
+
+fn merge_search_candidates(
+    project: &ResolvedProject,
+    relative_paths: Vec<String>,
+    pending: HashSet<PathBuf>,
+) -> Vec<PathBuf> {
+    let mut paths: HashSet<PathBuf> = relative_paths
+        .into_iter()
+        .filter(|relative| {
+            Path::new(relative)
+                .components()
+                .all(|component| matches!(component, std::path::Component::Normal(_)))
+        })
+        .map(|relative| project.path.join(relative))
+        .collect();
+    paths.extend(pending.into_iter().filter(|path| {
+        candidate_for_existing_path(project, path)
+            .ok()
+            .flatten()
+            .is_some()
+    }));
+    paths.into_iter().collect()
+}
+
+fn sqlite_is_busy(error: &rusqlite::Error) -> bool {
+    matches!(
+        error.sqlite_error_code(),
+        Some(rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked)
+    )
 }
 
 pub(crate) fn lookup_index_candidates(
@@ -1837,25 +1966,10 @@ pub(crate) fn lookup_index_candidates(
     }
 
     let state = app.state::<SearchIndexState>();
-    if get_active_status(&state, &project.preference_key).is_none() {
-        if let Some(mut status) = load_ready_status(app, &project) {
-            status.state = "stale".to_string();
-            status.backend = "scan".to_string();
-            status.phase = "reconciling".to_string();
-            if let Ok(mut entries) = state.entries.lock() {
-                entries.insert(
-                    project.preference_key.clone(),
-                    ActiveEntry {
-                        job_id: 0,
-                        cancel: Arc::new(AtomicBool::new(false)),
-                        pause: Arc::new(AtomicBool::new(false)),
-                        revision: Arc::new(AtomicU64::new(0)),
-                        status,
-                    },
-                );
-            }
-        }
-        let _ = start_index_build(app.clone(), state.inner().clone(), project.clone(), true);
+    if get_active_status(&state, &project.preference_key).is_none()
+        && !matches!(restore_project_index(app, &state, &project), Ok(Some(_)))
+    {
+        let _ = start_index_build(app.clone(), state.inner().clone(), project.clone(), false);
     }
 
     let snapshot = state.entries.lock().ok().and_then(|entries| {
@@ -1863,9 +1977,9 @@ pub(crate) fn lookup_index_candidates(
         if entry.status.state != "ready" {
             return None;
         }
-        Some((entry.job_id, entry.revision.load(Ordering::Relaxed)))
+        Some(entry.job_id)
     });
-    let Some((job_id, revision)) = snapshot else {
+    let Some(job_id) = snapshot else {
         let index_state = get_active_status(&state, &project.preference_key)
             .map(|status| status.state)
             .unwrap_or_else(|| "unavailable".to_string());
@@ -1884,33 +1998,25 @@ pub(crate) fn lookup_index_candidates(
             }
         }
     };
-    match inspect_index_health(&final_path) {
-        IndexHealth::Healthy => {}
-        IndexHealth::Corrupt(reason) => {
-            recover_unusable_index(
-                app,
-                state.inner(),
-                &project,
-                format!("Search index is corrupt: {reason}"),
-            );
+    let runtime = match state.runtime(&project.preference_key) {
+        Ok(runtime) => runtime,
+        Err(reason) => {
             return IndexCandidateLookup::Fallback {
-                reason: "index_corrupt_rebuilding".to_string(),
-                index_state: "corrupt".to_string(),
-            };
+                reason,
+                index_state: "unavailable".into(),
+            }
         }
-        IndexHealth::Unavailable(reason) => {
-            recover_unusable_index(
-                app,
-                state.inner(),
-                &project,
-                format!("Search index is unavailable: {reason}"),
-            );
+    };
+    // 查询前后都保留脏路径；已经开始的提交可能在查询期间清理自己的批次。
+    let mut pending = match pending_search_paths(&runtime) {
+        Ok(paths) => paths,
+        Err(reason) => {
             return IndexCandidateLookup::Fallback {
-                reason: "index_unavailable_rebuilding".to_string(),
-                index_state: "unavailable".to_string(),
-            };
+                reason,
+                index_state: "reconciling".into(),
+            }
         }
-    }
+    };
     let connection =
         match Connection::open_with_flags(&final_path, OpenFlags::SQLITE_OPEN_READ_ONLY) {
             Ok(connection) => connection,
@@ -1927,9 +2033,22 @@ pub(crate) fn lookup_index_candidates(
                 };
             }
         };
+    if let Err(error) = connection.busy_timeout(Duration::from_millis(50)) {
+        return IndexCandidateLookup::Fallback {
+            reason: error.to_string(),
+            index_state: "ready".into(),
+        };
+    }
     const CANDIDATE_LIMIT: usize = 50_000;
     let relative_paths = match query_candidate_relative_paths(&connection, query, CANDIDATE_LIMIT) {
         Ok(paths) => paths,
+        Err(error) if sqlite_is_busy(&error) => {
+            // 短暂锁竞争不代表损坏，不能因此触发全量重建。
+            return IndexCandidateLookup::Fallback {
+                reason: "index_busy".into(),
+                index_state: "ready".into(),
+            };
+        }
         Err(reason) => {
             recover_unusable_index(
                 app,
@@ -1951,11 +2070,9 @@ pub(crate) fn lookup_index_candidates(
     }
 
     let still_current = state.entries.lock().ok().is_some_and(|entries| {
-        entries.get(&project.preference_key).is_some_and(|entry| {
-            entry.job_id == job_id
-                && entry.status.state == "ready"
-                && entry.revision.load(Ordering::Relaxed) == revision
-        })
+        entries
+            .get(&project.preference_key)
+            .is_some_and(|entry| entry.job_id == job_id && entry.status.state == "ready")
     });
     if !still_current {
         return IndexCandidateLookup::Fallback {
@@ -1964,15 +2081,16 @@ pub(crate) fn lookup_index_candidates(
         };
     }
 
-    let paths = relative_paths
-        .into_iter()
-        .filter(|relative| {
-            Path::new(relative)
-                .components()
-                .all(|component| matches!(component, std::path::Component::Normal(_)))
-        })
-        .map(|relative| project.path.join(relative))
-        .collect();
+    match pending_search_paths(&runtime) {
+        Ok(paths) => pending.extend(paths),
+        Err(reason) => {
+            return IndexCandidateLookup::Fallback {
+                reason,
+                index_state: "reconciling".into(),
+            }
+        }
+    }
+    let paths = merge_search_candidates(&project, relative_paths, pending);
     touch_index_usage(final_path.parent().unwrap_or_else(|| Path::new("")));
     IndexCandidateLookup::Ready {
         paths,
@@ -2011,25 +2129,8 @@ pub fn get_search_index_status_blocking(
     if let Some(status) = get_active_status(&state, &project.preference_key) {
         return Ok(status);
     }
-    if let Some(mut status) = load_ready_status(&app, &project) {
-        status.state = "stale".to_string();
-        status.backend = "scan".to_string();
-        status.phase = "reconciling".to_string();
-        state
-            .entries
-            .lock()
-            .map_err(|_| "Failed to restore search index state".to_string())?
-            .insert(
-                project.preference_key.clone(),
-                ActiveEntry {
-                    job_id: 0,
-                    cancel: Arc::new(AtomicBool::new(false)),
-                    pause: Arc::new(AtomicBool::new(false)),
-                    revision: Arc::new(AtomicU64::new(0)),
-                    status,
-                },
-            );
-        return start_index_build(app, state.clone(), project, true);
+    if let Some(status) = restore_project_index(&app, &state, &project)? {
+        return Ok(status);
     }
     start_index_build(app, state.clone(), project, false)
 }
@@ -2059,32 +2160,19 @@ pub fn set_project_index_enabled(
                     job_id,
                     cancel: Arc::new(AtomicBool::new(true)),
                     pause: Arc::new(AtomicBool::new(false)),
-                    revision: Arc::new(AtomicU64::new(0)),
                     status: status.clone(),
                 },
             );
         let _ = app.emit("search-index-status", status.clone());
         return Ok(status);
     }
-    if let Some(mut status) = load_ready_status(&app, &project) {
-        status.state = "stale".to_string();
-        status.backend = "scan".to_string();
-        status.phase = "reconciling".to_string();
-        state
-            .entries
-            .lock()
-            .map_err(|_| "Failed to restore search index state".to_string())?
-            .insert(
-                project.preference_key.clone(),
-                ActiveEntry {
-                    job_id: 0,
-                    cancel: Arc::new(AtomicBool::new(false)),
-                    pause: Arc::new(AtomicBool::new(false)),
-                    revision: Arc::new(AtomicU64::new(0)),
-                    status,
-                },
-            );
-        return start_index_build(app, state.inner().clone(), project, true);
+    if let Some(status) = get_active_status(&state, &project.preference_key).filter(|status| {
+        status.enabled && matches!(status.state.as_str(), "ready" | "preflight" | "building")
+    }) {
+        return Ok(status);
+    }
+    if let Some(status) = restore_project_index(&app, &state, &project)? {
+        return Ok(status);
     }
     start_index_build(app, state.inner().clone(), project, false)
 }
@@ -2443,19 +2531,141 @@ mod tests {
         let git_exclude_event = Event::new(EventKind::Modify(notify::event::ModifyKind::Any))
             .add_path(root.path().join(".git").join("info").join("exclude"));
         assert!(event_requires_rebuild(root.path(), &git_exclude_event));
+
+        let generated = root.path().join("target").join("debug");
+        fs::create_dir_all(&generated).unwrap();
+        let directory_event =
+            Event::new(EventKind::Create(notify::event::CreateKind::Folder)).add_path(generated);
+        assert!(!event_requires_rebuild(root.path(), &directory_event));
+
+        let nested_ignore = Event::new(EventKind::Modify(notify::event::ModifyKind::Any))
+            .add_path(root.path().join("src").join(".gitignore"));
+        assert!(event_requires_rebuild(root.path(), &nested_ignore));
     }
 
     #[test]
-    fn large_watcher_batches_reconcile_instead_of_incrementally_writing_every_path() {
-        assert!(!needs_full_reconciliation(
+    fn pending_files_fill_stale_index_candidates_and_respect_ignores() {
+        let fixture = tempdir().unwrap();
+        let root = fixture.path().join("project");
+        fs::create_dir_all(&root).unwrap();
+        let project = test_project(&root);
+        let source = root.join("source.txt");
+        let deleted = root.join("deleted.txt");
+        fs::write(&source, "oldneedle").unwrap();
+        fs::write(&deleted, "oldneedle").unwrap();
+        let database_path = fixture.path().join("index.sqlite3");
+        let candidates = discover_candidates(
+            &project,
+            &AtomicBool::new(false),
+            &AtomicBool::new(false),
+            |_, _, _| {},
+        )
+        .unwrap();
+        write_index_database(
+            &database_path,
+            &project,
+            &candidates,
+            &AtomicBool::new(false),
+            &AtomicBool::new(false),
+            |_, _, _, _| {},
+        )
+        .unwrap();
+
+        fs::write(&source, "newneedle").unwrap();
+        fs::remove_file(&deleted).unwrap();
+        let created = root.join("created.txt");
+        fs::write(&created, "newneedle").unwrap();
+        fs::write(root.join(".ignore"), "ignored.txt\n").unwrap();
+        let ignored = root.join("ignored.txt");
+        fs::write(&ignored, "newneedle").unwrap();
+        let runtime = ProjectRuntime::default();
+        runtime.changes.lock().unwrap().record(
+            vec![source.clone(), created.clone(), deleted, ignored],
             false,
-            MAX_INCREMENTAL_CHANGE_PATHS
-        ));
-        assert!(needs_full_reconciliation(
-            false,
-            MAX_INCREMENTAL_CHANGE_PATHS.saturating_add(1)
-        ));
-        assert!(needs_full_reconciliation(true, 0));
+            Instant::now(),
+        );
+        let connection = Connection::open(&database_path).unwrap();
+        let indexed = query_candidate_relative_paths(&connection, "newneedle", 100).unwrap();
+        assert!(indexed.is_empty());
+        let merged: HashSet<_> =
+            merge_search_candidates(&project, indexed, pending_search_paths(&runtime).unwrap())
+                .into_iter()
+                .collect();
+        assert_eq!(merged, HashSet::from([source.clone(), created.clone()]));
+        // 同一路径同时出现在旧索引与脏文件集合中时只搜索一次。
+        let stale = query_candidate_relative_paths(&connection, "oldneedle", 100).unwrap();
+        let merged =
+            merge_search_candidates(&project, stale, pending_search_paths(&runtime).unwrap());
+        assert_eq!(merged.iter().filter(|path| **path == source).count(), 1);
+        runtime
+            .changes
+            .lock()
+            .unwrap()
+            .record(Vec::new(), true, Instant::now());
+        assert!(pending_search_paths(&runtime).is_err());
+    }
+
+    #[test]
+    fn reconciliation_updates_only_changed_new_deleted_and_explicitly_dirty_files() {
+        let fixture = tempdir().unwrap();
+        let root = fixture.path().join("project");
+        fs::create_dir_all(&root).unwrap();
+        let project = test_project(&root);
+        let unchanged = root.join("unchanged.txt");
+        let changed = root.join("changed.txt");
+        let deleted = root.join("deleted.txt");
+        let explicit = root.join("explicit.txt");
+        for path in [&unchanged, &changed, &deleted, &explicit] {
+            fs::write(path, "oldneedle").unwrap();
+        }
+        let database_path = fixture.path().join("index.sqlite3");
+        let candidates = discover_candidates(
+            &project,
+            &AtomicBool::new(false),
+            &AtomicBool::new(false),
+            |_, _, _| {},
+        )
+        .unwrap();
+        write_index_database(
+            &database_path,
+            &project,
+            &candidates,
+            &AtomicBool::new(false),
+            &AtomicBool::new(false),
+            |_, _, _, _| {},
+        )
+        .unwrap();
+        fs::write(&changed, "newneedle changed length").unwrap();
+        fs::remove_file(&deleted).unwrap();
+        let created = root.join("created.txt");
+        fs::write(&created, "newneedle").unwrap();
+        let paths = reconciliation_paths(&database_path, &project, &[explicit.clone()]).unwrap();
+        assert_eq!(
+            paths.iter().cloned().collect::<HashSet<_>>(),
+            HashSet::from([changed, deleted, explicit, created])
+        );
+        apply_incremental_updates(&database_path, &project, &paths).unwrap();
+        let connection = Connection::open(&database_path).unwrap();
+        assert_eq!(
+            query_candidate_relative_paths(&connection, "newneedle", 100)
+                .unwrap()
+                .len(),
+            2
+        );
+    }
+
+    #[test]
+    fn database_lock_contention_is_not_classified_as_corruption() {
+        let fixture = tempdir().unwrap();
+        let path = fixture.path().join("index.sqlite3");
+        let writer = Connection::open(&path).unwrap();
+        writer
+            .execute_batch("CREATE TABLE example(value TEXT); BEGIN EXCLUSIVE;")
+            .unwrap();
+        let reader = Connection::open(&path).unwrap();
+        reader.busy_timeout(Duration::ZERO).unwrap();
+        let error = reader.prepare("SELECT * FROM example").unwrap_err();
+        assert!(sqlite_is_busy(&error));
     }
 
     #[test]

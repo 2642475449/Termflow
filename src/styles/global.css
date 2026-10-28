@@ -2790,10 +2790,13 @@ html, body, #root {
 .app-task-monitor-project + .app-task-monitor-project { margin-top: 12px; }
 .app-task-monitor-project-name { display: flex; align-items: center; gap: 9px; min-height: 32px; padding: 5px 8px; color: var(--cs-text-secondary); }
 .app-task-monitor-project-name > .anticon { flex-shrink: 0; font-size: 14px; }
+.app-task-monitor-project-close { opacity: 0; pointer-events: none; transition: opacity 120ms ease; }
+.app-task-monitor-project-name:hover .app-task-monitor-project-close,
+.app-task-monitor-project-name:focus-within .app-task-monitor-project-close { opacity: 1; pointer-events: auto; }
 .app-task-monitor-row { position: relative; display: flex; align-items: center; width: calc(100% - 23px); min-height: 32px; margin-left: 23px; border-radius: 5px; color: var(--cs-text-secondary); }
 .app-task-monitor-row:hover, .app-task-monitor-row[data-active="true"] { background: var(--cs-bg-hover); color: var(--cs-text-primary); }
 .app-task-monitor-row-main { display: flex; min-width: 0; flex: 1; align-items: center; gap: 10px; align-self: stretch; padding: 5px 8px; border: 0; border-radius: 5px; background: transparent; color: inherit; cursor: pointer; }
-.app-task-monitor-row-main:focus-visible, .app-task-monitor-close:focus-visible { outline: 2px solid var(--cs-primary); outline-offset: -2px; }
+.app-task-monitor-row-main:focus-visible, .app-task-monitor-close:focus-visible, .app-task-monitor-project-close:focus-visible { outline: 2px solid var(--cs-primary); outline-offset: -2px; }
 .app-task-monitor-close { position: absolute; top: 0; right: 0; bottom: 0; display: flex; width: 24px; align-items: center; justify-content: center; border: 0; border-radius: 5px; background: transparent; color: var(--cs-text-tertiary); cursor: pointer; opacity: 0; pointer-events: none; transition: opacity 120ms ease, color 120ms ease; }
 .app-task-monitor-close:hover { color: var(--cs-text-primary); background: var(--cs-bg-hover); }
 .app-task-monitor-row:hover .app-task-monitor-close, .app-task-monitor-row:focus-within .app-task-monitor-close { opacity: 1; pointer-events: auto; }
@@ -3322,6 +3325,22 @@ html, body, #root {
 .app-skill-market-page { background: var(--cs-bg-card); color: var(--cs-text-primary); scrollbar-gutter: stable; container-type: inline-size; }
 .app-skill-market-page-inner { max-width: 1320px; min-height: 100%; margin: 0 auto; padding: 28px 32px 40px; }
 .app-skill-market-results { min-height: 220px; }
+.app-skill-market-loading-status { margin-bottom: 20px; color: var(--cs-text-secondary); background: var(--cs-bg-card); font-size: 12px; }
+.app-skill-market-loading-slow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding: 10px 12px; border: 1px solid var(--cs-border-card); border-radius: 8px; background: var(--cs-bg-hover); color: var(--cs-text-primary); }
+.app-skill-market-skeleton-block { display: block; position: relative; flex-shrink: 0; overflow: hidden; border-radius: 4px; background: var(--cs-border-card); }
+.app-skill-market-skeleton-block::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, var(--cs-bg-card), transparent); animation: app-skill-market-shimmer 1.6s ease-in-out infinite; }
+.app-skill-market-skeleton-heading { width: 116px; height: 16px; margin: 0 0 12px; }
+.app-skill-market-skeleton-avatar { width: 48px; height: 48px; border-radius: 12px; }
+.app-skill-market-skeleton-title { width: 70%; height: 14px; }
+.app-skill-market-description-placeholder { display: flex; flex-direction: column; justify-content: center; gap: 8px; min-height: 36px; }
+.app-skill-market-skeleton-line { width: 100%; height: 10px; }
+.app-skill-market-skeleton-line-short { width: 85%; height: 10px; }
+.app-skill-market-skeleton-meta { width: 55%; height: 10px; }
+.app-skill-market-skeleton-action { width: 60px; height: 24px; border-radius: 6px; }
+@keyframes app-skill-market-shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) {
+  .app-skill-market-skeleton-block::after { animation: none; }
+}
 .app-skill-market-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
 .app-skill-market-controls .app-skills-search { flex: 0 1 340px; }
 .app-skill-market-categories { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -3341,17 +3360,17 @@ html, body, #root {
 .app-skill-market-card-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: var(--cs-text-secondary); }
 .app-skill-market-card-action.ant-btn { font-size: 12px; }
 .app-skill-market-detail { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; }
-.app-skill-market-install { position: sticky; top: 24px; align-self: start; min-width: 0; }
+.app-skill-market-guide { position: sticky; top: 24px; align-self: start; min-width: 0; }
 @media (max-width: 850px) {
   .app-skill-market-page-inner { padding: 20px 16px 32px; }
   .app-skill-market-detail { grid-template-columns: minmax(0, 1fr); }
   .app-skill-market-content { max-height: 35vh; overflow-y: auto; }
-  .app-skill-market-install { position: static; }
+  .app-skill-market-guide { position: static; }
 }
 @container (max-width: 760px) {
   .app-skill-market-page-inner { padding: 20px 16px 32px; }
   .app-skill-market-controls .app-skills-search { flex: 1 1 100%; }
   .app-skill-market-detail { grid-template-columns: minmax(0, 1fr); }
   .app-skill-market-content { max-height: 35vh; overflow-y: auto; }
-  .app-skill-market-install { position: static; }
+  .app-skill-market-guide { position: static; }
 }

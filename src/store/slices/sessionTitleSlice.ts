@@ -1,5 +1,6 @@
 import { useAppStore } from "@/store";
-import { generateSessionTitle } from "@/lib/api";
+import { generateSessionTitle, readCodexSessionTitles } from "@/lib/api";
+import { startCodexTitleSync } from "@/lib/codexSessionTitles";
 import { queueSessionTitle, startTitleGeneration } from "@/lib/sessionTitles";
 import type { Session } from "@/types";
 import { syncWorkspaceSnapshot } from "../utils/workspace";
@@ -42,10 +43,12 @@ export function retrySessionTitle(id: string) {
 }
 
 export function startSessionTitleGeneration() {
-  return startTitleGeneration({
+  const shared = {
     sessions: () => Object.values(useAppStore.getState().projectSessions).flat(),
     update: setSessionTitleState,
-    generate: generateSessionTitle,
-    subscribe: (listener) => useAppStore.subscribe(listener),
-  });
+    subscribe: (listener: () => void) => useAppStore.subscribe(listener),
+  };
+  const stopNative = startCodexTitleSync({ ...shared, read: readCodexSessionTitles });
+  const stopGeneration = startTitleGeneration({ ...shared, generate: generateSessionTitle });
+  return () => { stopNative(); stopGeneration(); };
 }

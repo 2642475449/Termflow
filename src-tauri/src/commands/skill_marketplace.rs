@@ -1,14 +1,11 @@
-use super::skills::{
-    install_skill, parse_skill_frontmatter, SkillAgent, SkillInfo, SkillInstallRequest, SkillScope,
-};
+use super::skills::parse_skill_frontmatter;
 use crate::database::Database;
 use futures_util::{stream, StreamExt, TryStreamExt};
 use reqwest::Client;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
-    fs,
-    path::Path,
     sync::{Arc, LazyLock, Mutex},
     time::{Duration, Instant},
 };
@@ -21,6 +18,7 @@ const MAX_FILES: usize = 1024;
 const COMMUNITY_LIMIT: usize = 50;
 const SKILL_NOT_FOUND: &str = "marketplace_skill_not_found";
 const SKILL_AMBIGUOUS: &str = "marketplace_skill_ambiguous";
+const PREVIEW_UNAVAILABLE: &str = "marketplace_preview_unavailable";
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -37,6 +35,7 @@ pub struct MarketSkill {
 pub struct MarketSearch {
     skills: Vec<MarketSkill>,
     limited: bool,
+    next_page: Option<u32>,
 }
 
 #[derive(Serialize)]
@@ -51,25 +50,11 @@ pub struct MarketSummary {
 #[serde(rename_all = "camelCase")]
 pub struct MarketDetail {
     pub skill: MarketSkill,
-    pub revision: String,
-    pub directory: String,
-    pub folder_name: String,
     pub content: String,
     pub file_count: usize,
     pub files: Vec<String>,
     pub total_bytes: u64,
     pub source_url: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MarketInstallRequest {
-    pub skill: MarketSkill,
-    pub revision: String,
-    pub directory: String,
-    pub agents: Vec<SkillAgent>,
-    pub scope: SkillScope,
-    pub project_path: Option<String>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -233,6 +218,24 @@ fn validate_path(path: &str) -> Result<(), String> {
 
 fn validate_skill(skill: &MarketSkill) -> Result<(), String> {
     validate_repository(&skill.repository)?;
+    validate_listing_skill(skill)
+}
+
+// 目录允许域名来源；GitHub 内容预览另行验证仓库格式。
+fn validate_listing_skill(skill: &MarketSkill) -> Result<(), String> {
+    let parts: Vec<_> = skill.repository.split('/').collect();
+    if !(1..=2).contains(&parts.len())
+        || parts.iter().any(|part| {
+            part.is_empty()
+                || part.len() > 100
+                || part.starts_with('.')
+                || !part
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
+        })
+    {
+        return Err("Invalid skill source".into());
+    }
     validate_path(&skill.slug)?;
     if skill.slug.contains('/') {
         return Err("Invalid skill identifier".into());
@@ -350,8 +353,6 @@ fn community_skills(results: CommunityResults) -> Vec<MarketSkill> {
         .skills
         .into_iter()
         .filter_map(|entry| {
-            // 公开 CLI 搜索接口也会返回 well-known 来源；本版只安装可验证的 GitHub 目录。
-            validate_repository(&entry.source).ok()?;
             let slug = if entry.id.is_empty() {
                 entry.skill_id
             } else {
@@ -367,19 +368,24 @@ fn community_skills(results: CommunityResults) -> Vec<MarketSkill> {
                 description: entry.description,
                 installs: Some(entry.installs),
             };
-            validate_skill(&skill).ok()?;
+            validate_listing_skill(&skill).ok()?;
             Some(skill)
         })
         .collect()
 }
 
-fn community_url(query: &str) -> Result<reqwest::Url, String> {
+fn community_url(query: &str, page: u32) -> Result<reqwest::Url, String> {
     let mut url = reqwest::Url::parse(if query.is_empty() {
         "https://skills.sh/api/skills/all-time/0"
     } else {
         "https://skills.sh/api/search"
     })
     .map_err(|error| error.to_string())?;
+    if query.is_empty() {
+        url.set_path(&format!("/api/skills/all-time/{page}"));
+    } else if page != 0 {
+        return Err("Search pagination is not supported".into());
+    }
     if !query.is_empty() {
         url.query_pairs_mut()
             .append_pair("q", query)
@@ -388,8 +394,8 @@ fn community_url(query: &str) -> Result<reqwest::Url, String> {
     Ok(url)
 }
 
-async fn search_community(client: &Client, query: &str) -> Result<MarketSearch, String> {
-    let url = community_url(query)?;
+async fn search_community(client: &Client, query: &str, page: u32) -> Result<MarketSearch, String> {
+    let url = community_url(query, page)?;
     let results = serde_json::from_slice::<CommunityResults>(
         &read_bytes(client, url, 2 * 1024 * 1024).await?,
     )
@@ -399,22 +405,33 @@ async fn search_community(client: &Client, query: &str) -> Result<MarketSearch, 
     } else {
         results.skills.len() >= COMMUNITY_LIMIT
     };
+    let next_page = if query.is_empty() && results.has_more {
+        page.checked_add(1)
+    } else {
+        None
+    };
     Ok(MarketSearch {
         skills: community_skills(results),
         limited,
+        next_page,
     })
 }
 
 #[tauri::command]
 pub async fn search_skill_marketplace(
     query: String,
+    page: Option<u32>,
     database: State<'_, Arc<Database>>,
 ) -> Result<MarketSearch, String> {
     let client = client(&database)?;
-    search_with_client(&client, &query).await
+    search_with_client(&client, &query, page.unwrap_or(0)).await
 }
 
-async fn search_with_client(client: &Client, query: &str) -> Result<MarketSearch, String> {
+async fn search_with_client(
+    client: &Client,
+    query: &str,
+    page: u32,
+) -> Result<MarketSearch, String> {
     let query = query.trim();
     let query_length = query.chars().count();
     if query_length > 200 {
@@ -424,9 +441,10 @@ async fn search_with_client(client: &Client, query: &str) -> Result<MarketSearch
         return Ok(MarketSearch {
             skills: Vec::new(),
             limited: false,
+            next_page: None,
         });
     }
-    let mut results = search_community(client, query).await?;
+    let mut results = search_community(client, query, page).await?;
     results.skills.sort_by(|a, b| {
         b.installs
             .unwrap_or(0)
@@ -503,7 +521,7 @@ pub async fn get_marketplace_skill_summaries(
         return Err("Too many skill summaries requested".into());
     }
     for skill in &skills {
-        validate_skill(skill)?;
+        validate_listing_skill(skill)?;
     }
     let client = client(&database)?;
     let summaries = stream::iter(skills.into_iter().map(|skill| {
@@ -557,7 +575,7 @@ fn skill_resources<'a>(
         }
         validate_path(relative)?;
         if entry.kind != "blob" || !matches!(entry.mode.as_str(), "100644" | "100755") {
-            return Err("Skills containing symlinks or submodules cannot be installed".into());
+            return Err("Skill contains unsupported resource links or submodules".into());
         }
         if !paths.insert(relative.to_lowercase()) {
             return Err("Skill contains conflicting resource paths".into());
@@ -648,6 +666,10 @@ async fn detail_with_client(
     client: &Client,
     mut skill: MarketSkill,
 ) -> Result<MarketDetail, String> {
+    validate_listing_skill(&skill)?;
+    if !skill.repository.contains('/') {
+        return well_known_detail(client, skill).await;
+    }
     validate_skill(&skill)?;
     let repo = snapshot(client, &skill.repository, None).await?;
     let (entry, content) = resolve_manifest(client, &skill, &repo).await?;
@@ -662,27 +684,167 @@ async fn detail_with_client(
         skill.name = name;
     }
     skill.description = description;
-    let folder_name = if directory.is_empty() {
-        skill.slug.clone()
-    } else {
-        directory.rsplit('/').next().unwrap_or_default().to_string()
-    };
-    validate_path(&folder_name)?;
     let source_url = format!(
         "https://github.com/{}/tree/{}/{}",
         skill.repository, repo.revision, directory
     );
     Ok(MarketDetail {
         skill,
-        revision: repo.revision.clone(),
-        directory,
-        folder_name,
         content,
         file_count: files.len(),
         files: files.iter().map(|(_, path)| path.clone()).collect(),
         total_bytes: files.iter().map(|(entry, _)| entry.size).sum(),
         source_url,
     })
+}
+
+fn preview_url(url: reqwest::Url) -> Result<reqwest::Url, String> {
+    if url.scheme() != "https"
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || !url
+            .host_str()
+            .is_some_and(|host| host.contains('.') && host.parse::<std::net::IpAddr>().is_err())
+    {
+        return Err("Unsupported skill preview URL".into());
+    }
+    Ok(url)
+}
+
+// 只读取索引和 SKILL.md，不写文件、不下载资源包，也不执行 CLI。
+fn well_known_manifest(
+    index: serde_json::Value,
+    index_url: &reqwest::Url,
+    slug: &str,
+) -> Result<(reqwest::Url, Vec<String>, Option<String>), String> {
+    let entries = index
+        .get("skills")
+        .and_then(|value| value.as_array())
+        .ok_or("Invalid skill index")?;
+    let mut matches = entries
+        .iter()
+        .filter(|entry| entry.get("name").and_then(|name| name.as_str()) == Some(slug));
+    let entry = matches.next().ok_or(SKILL_NOT_FOUND)?;
+    if matches.next().is_some() {
+        return Err(SKILL_AMBIGUOUS.into());
+    }
+    if let Some(schema) = index.get("$schema") {
+        if schema.as_str() != Some("https://schemas.agentskills.io/discovery/0.2.0/schema.json")
+            || entry.get("type").and_then(|value| value.as_str()) != Some("skill-md")
+        {
+            return Err(PREVIEW_UNAVAILABLE.into());
+        }
+        let artifact = entry
+            .get("url")
+            .and_then(|value| value.as_str())
+            .ok_or("Missing skill URL")?;
+        let digest = entry
+            .get("digest")
+            .and_then(|value| value.as_str())
+            .ok_or("Missing skill digest")?;
+        let hash = digest
+            .strip_prefix("sha256:")
+            .ok_or("Invalid skill digest")?;
+        if hash.len() != 64 || !hash.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err("Invalid skill digest".into());
+        }
+        return Ok((
+            preview_url(
+                index_url
+                    .join(artifact)
+                    .map_err(|error| error.to_string())?,
+            )?,
+            vec!["SKILL.md".into()],
+            Some(digest.to_ascii_lowercase()),
+        ));
+    }
+    let files = entry
+        .get("files")
+        .and_then(|value| value.as_array())
+        .ok_or("Missing skill file list")?;
+    if files.len() > MAX_FILES {
+        return Err("Too many skill resources".into());
+    }
+    let files = files
+        .iter()
+        .map(|file| {
+            let path = file.as_str().ok_or("Invalid skill resource path")?;
+            validate_path(path)?;
+            Ok(path.to_string())
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    let manifest = files
+        .iter()
+        .find(|path| path.eq_ignore_ascii_case("SKILL.md"))
+        .ok_or(SKILL_NOT_FOUND)?;
+    let mut url = index_url.join("./").map_err(|error| error.to_string())?;
+    url.path_segments_mut()
+        .map_err(|_| "Invalid skill URL")?
+        .pop_if_empty()
+        .push(slug)
+        .push(manifest);
+    Ok((preview_url(url)?, files, None))
+}
+
+async fn well_known_detail(
+    client: &Client,
+    mut skill: MarketSkill,
+) -> Result<MarketDetail, String> {
+    let root = preview_url(
+        reqwest::Url::parse(&format!("https://{}/", skill.repository))
+            .map_err(|error| error.to_string())?,
+    )?;
+    let mut last_error = SKILL_NOT_FOUND.to_string();
+    for path in [
+        ".well-known/agent-skills/index.json",
+        ".well-known/skills/index.json",
+    ] {
+        let index_url = root.join(path).map_err(|error| error.to_string())?;
+        let bytes = match read_bytes(client, index_url.clone(), 2 * 1024 * 1024).await {
+            Ok(bytes) => bytes,
+            Err(reason) => {
+                last_error = reason;
+                continue;
+            }
+        };
+        let index = match serde_json::from_slice(&bytes) {
+            Ok(index) => index,
+            Err(_) => {
+                last_error = "Invalid skill index".into();
+                continue;
+            }
+        };
+        let (url, files, digest) = match well_known_manifest(index, &index_url, &skill.slug) {
+            Ok(manifest) => manifest,
+            Err(reason) if reason == SKILL_NOT_FOUND => {
+                last_error = reason;
+                continue;
+            }
+            Err(reason) => return Err(reason),
+        };
+        let bytes = read_bytes(client, url.clone(), MAX_FILE).await?;
+        if digest.is_some_and(|expected| expected != format!("sha256:{:x}", Sha256::digest(&bytes)))
+        {
+            return Err("Skill preview failed integrity verification".into());
+        }
+        let total_bytes = bytes.len() as u64;
+        let content = String::from_utf8(bytes).map_err(|_| "SKILL.md must be UTF-8 text")?;
+        let (name, description) = parse_skill_frontmatter(&content);
+        if name.is_empty() {
+            return Err("Invalid SKILL.md content".into());
+        }
+        skill.name = name;
+        skill.description = description;
+        return Ok(MarketDetail {
+            skill,
+            content,
+            file_count: files.len(),
+            files,
+            total_bytes,
+            source_url: url.to_string(),
+        });
+    }
+    Err(last_error)
 }
 
 #[tauri::command]
@@ -695,97 +857,6 @@ pub async fn get_marketplace_skill_detail(
         invalidate_latest_snapshot(&skill.repository);
     }
     detail_with_client(&client(&database)?, skill).await
-}
-
-#[tauri::command]
-pub async fn install_marketplace_skill(
-    request: MarketInstallRequest,
-    database: State<'_, Arc<Database>>,
-) -> Result<Vec<SkillInfo>, String> {
-    install_with_client(&client(&database)?, request).await
-}
-
-async fn install_with_client(
-    client: &Client,
-    request: MarketInstallRequest,
-) -> Result<Vec<SkillInfo>, String> {
-    validate_skill(&request.skill)?;
-    if request.agents.is_empty() {
-        return Err("Select at least one agent".into());
-    }
-    let repo = snapshot(client, &request.skill.repository, Some(&request.revision)).await?;
-    let entries = skill_resources(&repo.entries, &request.directory)?
-        .into_iter()
-        .map(|(entry, path)| (entry.clone(), path))
-        .collect::<Vec<_>>();
-    let folder = if request.directory.is_empty() {
-        request.skill.slug.clone()
-    } else {
-        request
-            .directory
-            .rsplit('/')
-            .next()
-            .unwrap_or_default()
-            .to_string()
-    };
-    validate_path(&folder)?;
-    // 临时目录只存本次下载，验证完成后复用本地安装器的预检和事务回滚。
-    let staging = tempfile::tempdir().map_err(|error| error.to_string())?;
-    let source = staging.path().join(&folder);
-    fs::create_dir(&source).map_err(|error| error.to_string())?;
-    let repository = &request.skill.repository;
-    let revision = &repo.revision;
-    let downloaded = stream::iter(entries.into_iter().map(|(entry, path)| async move {
-        let bytes = resource(client, repository, revision, &entry).await?;
-        Ok::<_, String>((path, bytes, entry.mode.clone()))
-    }))
-    .buffer_unordered(6)
-    .try_collect::<Vec<_>>()
-    .await?;
-    if downloaded
-        .iter()
-        .map(|(_, bytes, _)| bytes.len())
-        .sum::<usize>()
-        > MAX_SKILL
-    {
-        return Err("Skill exceeds the download size limit".into());
-    }
-    let install = SkillInstallRequest {
-        agents: request.agents,
-        scope: request.scope,
-        name: request.skill.name,
-        description: request.skill.description,
-        source_directory: Some(source.to_string_lossy().into()),
-        project_path: request.project_path,
-    };
-    super::run_background_task("安装在线技能", move || {
-        for (relative, bytes, mode) in downloaded {
-            let path = source.join(&relative);
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-            }
-            fs::write(&path, bytes).map_err(|error| error.to_string())?;
-            set_executable(&path, &mode)?;
-        }
-        let result = install_skill(install);
-        drop(staging);
-        result
-    })
-    .await
-}
-
-#[cfg(unix)]
-fn set_executable(path: &Path, mode: &str) -> Result<(), String> {
-    use std::os::unix::fs::PermissionsExt;
-    fs::set_permissions(
-        path,
-        fs::Permissions::from_mode(if mode == "100755" { 0o755 } else { 0o644 }),
-    )
-    .map_err(|error| error.to_string())
-}
-#[cfg(not(unix))]
-fn set_executable(_path: &Path, _mode: &str) -> Result<(), String> {
-    Ok(())
 }
 
 #[cfg(test)]
@@ -812,11 +883,16 @@ mod tests {
     #[test]
     fn default_browse_uses_the_public_leaderboard_and_preserves_its_skill_ids() {
         assert_eq!(
-            community_url("").expect("browse URL").path(),
+            community_url("", 0).expect("browse URL").path(),
             "/api/skills/all-time/0"
         );
         assert_eq!(
-            community_url("react native")
+            community_url("", 3).expect("next browse URL").path(),
+            "/api/skills/all-time/3"
+        );
+        assert!(community_url("react", 1).is_err());
+        assert_eq!(
+            community_url("react native", 0)
                 .expect("search URL")
                 .query_pairs()
                 .find(|(key, _)| key == "q")
@@ -838,6 +914,44 @@ mod tests {
             Some("Build UI")
         );
         assert!(listing_description("<h1>No description</h1>").is_none());
+    }
+
+    #[test]
+    fn domain_previews_resolve_legacy_manifests_and_v2_artifacts_without_installing() {
+        let index_url = reqwest::Url::parse("https://example.com/.well-known/skills/index.json")
+            .expect("index URL");
+        let legacy = serde_json::json!({"skills":[{"name":"review", "files":["SKILL.md", "references/check.md"]}]});
+        let (url, files, digest) =
+            well_known_manifest(legacy, &index_url, "review").expect("legacy preview");
+        assert_eq!(
+            url.as_str(),
+            "https://example.com/.well-known/skills/review/SKILL.md"
+        );
+        assert_eq!(files.len(), 2);
+        assert!(digest.is_none());
+        let v2 = serde_json::json!({"$schema":"https://schemas.agentskills.io/discovery/0.2.0/schema.json", "skills":[{"name":"review", "type":"skill-md", "url":"./review.md", "digest":format!("sha256:{}", "a".repeat(64))}]});
+        let (url, _, digest) =
+            well_known_manifest(v2.clone(), &index_url, "review").expect("v2 preview");
+        assert_eq!(
+            url.as_str(),
+            "https://example.com/.well-known/skills/review.md"
+        );
+        assert!(digest.is_some());
+        let mut archive = v2;
+        archive["skills"][0]["type"] = serde_json::json!("archive");
+        assert_eq!(
+            well_known_manifest(archive, &index_url, "review").expect_err("unsupported archive"),
+            PREVIEW_UNAVAILABLE
+        );
+        let unsafe_files =
+            serde_json::json!({"skills":[{"name":"review", "files":["SKILL.md", "../outside"]}]});
+        assert!(well_known_manifest(unsafe_files, &index_url, "review").is_err());
+        assert!(
+            preview_url(reqwest::Url::parse("http://example.com/SKILL.md").expect("URL")).is_err()
+        );
+        assert!(
+            preview_url(reqwest::Url::parse("https://127.0.0.1/SKILL.md").expect("URL")).is_err()
+        );
     }
 
     #[test]
@@ -938,13 +1052,15 @@ mod tests {
         tauri::async_runtime::block_on(async {
             let client = Client::new();
             for query in ["a", " 🦀 "] {
-                let result = search_with_client(&client, query)
+                let result = search_with_client(&client, query, 0)
                     .await
                     .expect("empty search");
                 assert!(result.skills.is_empty());
                 assert!(!result.limited);
             }
-            assert!(search_with_client(&client, &"a".repeat(201)).await.is_err());
+            assert!(search_with_client(&client, &"a".repeat(201), 0)
+                .await
+                .is_err());
         });
     }
 
@@ -1012,14 +1128,26 @@ mod tests {
             ],
         };
         let skills = community_skills(results);
-        assert_eq!(skills.len(), 1);
+        assert_eq!(skills.len(), 2);
         assert_eq!(skills[0].slug, "vercel-react-best-practices");
         assert_eq!(skills[0].installs, Some(42));
+        assert!(validate_listing_skill(&skills[1]).is_ok());
+        assert!(validate_skill(&skills[1]).is_err());
+        for source in [
+            "https://example.com",
+            "../repo",
+            "owner/repo/extra",
+            "example.com?redirect=evil",
+        ] {
+            let mut invalid = skills[1].clone();
+            invalid.repository = source.into();
+            assert!(validate_listing_skill(&invalid).is_err(), "{source}");
+        }
     }
 
     #[test]
-    #[ignore = "访问真实 GitHub / skills.sh，只写入临时项目目录"]
-    fn live_marketplace_search_preview_and_install() {
+    #[ignore = "只读访问真实 GitHub / skills.sh 和域名技能目录"]
+    fn live_marketplace_search_and_preview() {
         tauri::async_runtime::block_on(async {
             let proxy = crate::network_proxy::resolve_network_proxy(
                 &crate::network_proxy::NetworkProxySettings::default(),
@@ -1035,14 +1163,29 @@ mod tests {
             .expect("builder")
             .build()
             .expect("client");
-            let browse = search_with_client(&client, "")
+            let browse = search_with_client(&client, "", 0)
                 .await
                 .expect("default popular skills");
             assert!(
                 browse.skills.len() > 24,
                 "default page has a browsable catalog"
             );
-            let results = search_with_client(&client, "react").await.expect("search");
+            let next =
+                search_with_client(&client, "", browse.next_page.expect("more popular skills"))
+                    .await
+                    .expect("second popular batch");
+            assert!(!next.skills.is_empty());
+            assert_ne!(browse.skills[0].slug, next.skills[0].slug);
+            assert!(
+                browse
+                    .skills
+                    .iter()
+                    .any(|skill| validate_repository(&skill.repository).is_err()),
+                "domain sources remain visible"
+            );
+            let results = search_with_client(&client, "react", 0)
+                .await
+                .expect("search");
             let community = results
                 .skills
                 .into_iter()
@@ -1055,48 +1198,17 @@ mod tests {
                 .await
                 .expect("resolve frontmatter name to folder");
             assert!(detail.file_count > 1, "supporting resources are included");
-            let repo = snapshot(&client, &detail.skill.repository, Some(&detail.revision))
+            assert!(detail.content.contains("---"));
+            let external = browse
+                .skills
+                .into_iter()
+                .find(|skill| skill.repository == "open.feishu.cn" && skill.slug == "lark-doc")
+                .expect("domain source");
+            let preview = detail_with_client(&client, external)
                 .await
-                .expect("pinned snapshot");
-            let resources =
-                skill_resources(&repo.entries, &detail.directory).expect("resource manifest");
-            let project = tempfile::tempdir().expect("temporary project");
-            let request = MarketInstallRequest {
-                skill: detail.skill,
-                revision: detail.revision,
-                directory: detail.directory,
-                agents: vec![SkillAgent::Codex, SkillAgent::Pi, SkillAgent::Claude],
-                scope: SkillScope::Workspace,
-                project_path: Some(project.path().to_string_lossy().into()),
-            };
-            let installed = install_with_client(&client, request)
-                .await
-                .expect("install full skill");
-            assert_eq!(
-                installed.len(),
-                2,
-                "shared Codex / Pi destination is written once"
-            );
-            for skill in installed {
-                let content = fs::read_to_string(&skill.file_path).expect("installed manifest");
-                assert_eq!(
-                    content, detail.content,
-                    "installation matches preview revision"
-                );
-                let directory = Path::new(&skill.file_path)
-                    .parent()
-                    .expect("skill directory");
-                for (entry, relative) in &resources {
-                    let bytes =
-                        fs::read(directory.join(relative)).expect("installed supporting resource");
-                    assert_eq!(
-                        git2::Oid::hash_object(git2::ObjectType::Blob, &bytes)
-                            .expect("hash")
-                            .to_string(),
-                        entry.sha
-                    );
-                }
-            }
+                .expect("domain skill preview");
+            assert!(preview.content.contains("lark-doc"));
+            assert!(preview.files.iter().any(|file| file == "SKILL.md"));
         });
     }
 
@@ -1118,7 +1230,7 @@ mod tests {
             .expect("builder")
             .build()
             .expect("client");
-            let results = search_with_client(&client, "resolving-merge-conflicts")
+            let results = search_with_client(&client, "resolving-merge-conflicts", 0)
                 .await
                 .expect("listing");
             let skill = results

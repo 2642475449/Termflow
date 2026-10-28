@@ -6,6 +6,7 @@ pub mod agents;
 pub mod background;
 pub mod claude_config;
 pub mod command_library;
+pub mod codex_titles;
 pub mod content_search;
 pub mod explorer_context_menu;
 pub mod feishu;

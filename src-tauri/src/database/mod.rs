@@ -195,6 +195,8 @@ fn infer_asr_auth_mode(api_key: &str) -> String {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PersistentSettingsRecord {
+    #[serde(default)]
+    pub auxiliary_dock_width: Option<f64>,
     pub light_theme: String,
     pub dark_theme: String,
     pub theme_category: String,
@@ -279,6 +281,7 @@ pub struct PersistentSettingsRecord {
 impl Default for PersistentSettingsRecord {
     fn default() -> Self {
         Self {
+            auxiliary_dock_width: None,
             light_theme: "light-glass".into(),
             dark_theme: "dark-starry".into(),
             theme_category: "dark".into(),
@@ -937,6 +940,7 @@ impl Database {
             read_setting(&conn, "general.lastProjectPath")?.unwrap_or(settings.last_project_path);
         settings.editor_font_size =
             read_setting(&conn, "editor.fontSize")?.unwrap_or(settings.editor_font_size);
+        settings.auxiliary_dock_width = read_setting(&conn, "layout.auxiliaryDockWidth")?;
         settings.terminal_font_size =
             read_setting(&conn, "terminal.fontSize")?.unwrap_or(settings.terminal_font_size);
         settings.terminal_cursor_blink =
@@ -1143,6 +1147,9 @@ impl Database {
             )?;
         }
         write_setting(&conn, "editor.fontSize", &settings.editor_font_size)?;
+        if let Some(width) = settings.auxiliary_dock_width.filter(|width| width.is_finite()) {
+            write_setting(&conn, "layout.auxiliaryDockWidth", &width.clamp(220.0, 880.0))?;
+        }
         write_setting(&conn, "terminal.fontSize", &settings.terminal_font_size)?;
         write_setting(
             &conn,
@@ -1665,6 +1672,31 @@ mod tests {
     #[test]
     fn persistent_settings_default_to_beijing_asr_region() {
         assert_eq!(PersistentSettingsRecord::default().asr_region, "beijing");
+    }
+
+    #[test]
+    fn auxiliary_dock_width_round_trips_and_preserves_older_settings() -> Result<(), String> {
+        let database = Database::open_in_memory();
+        assert_eq!(database.load_persistent_settings()?.auxiliary_dock_width, None);
+        let mut settings = PersistentSettingsRecord {
+            auxiliary_dock_width: Some(250.5),
+            ..PersistentSettingsRecord::default()
+        };
+        database.save_general_persistent_settings(&settings)?;
+        assert_eq!(database.load_persistent_settings()?.auxiliary_dock_width, Some(250.5));
+
+        settings.auxiliary_dock_width = None;
+        database.save_general_persistent_settings(&settings)?;
+        assert_eq!(database.load_persistent_settings()?.auxiliary_dock_width, Some(250.5));
+
+        let mut legacy = serde_json::to_value(&settings).map_err(|error| error.to_string())?;
+        if let Some(object) = legacy.as_object_mut() {
+            object.remove("auxiliaryDockWidth");
+        }
+        let restored: PersistentSettingsRecord =
+            serde_json::from_value(legacy).map_err(|error| error.to_string())?;
+        assert_eq!(restored.auxiliary_dock_width, None);
+        Ok(())
     }
 
     #[test]

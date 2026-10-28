@@ -8,7 +8,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   useAppStore.setState(useAppStore.getInitialState(), true);
   useAppStore.getState().setCurrentProject({ name: "A", path: "E:/A" });
-  useAppStore.getState().addSession({ id: "a", path: "E:/A", name: "会话", createdAt: 1, active: true, agentId: "codex" });
+  useAppStore.getState().addSession({ id: "a", path: "E:/A", name: "会话", createdAt: 1, active: true, agentId: "claude" });
 });
 afterEach(() => {
   stop?.();
@@ -64,4 +64,40 @@ it("round-trips retry state and separate titles through actual Zustand persisten
   expect(restored.temporaryTitle).toBe("临时标题");
   expect(restored.generatedTitle).toBeUndefined();
   expect(restored.titleGeneration).toMatchObject({ status: "failed", error: "offline", attempts: 2, nextRetryAt: 12345 });
+});
+
+it("syncs the Codex native title to the owning project's session and tab without launching AI", async () => {
+  let resolve!: (titles: Record<string, string>) => void;
+  const read = vi.spyOn(api, "readCodexSessionTitles").mockImplementation(() => new Promise((done) => { resolve = done; }));
+  const generate = vi.spyOn(api, "generateSessionTitle").mockResolvedValue("不应生成");
+  useAppStore.getState().updateSession("a", { agentId: "codex", agentSessionId: "thread-a" });
+  setSessionTitlePrompt("a", "修复登录问题");
+  stop = startSessionTitleGeneration();
+  await vi.advanceTimersByTimeAsync(1);
+  useAppStore.getState().setCurrentProject({ name: "B", path: "E:/B" });
+  resolve({ "thread-a": "Codex 原生：登录流程修复" });
+  await vi.advanceTimersByTimeAsync(60_001);
+  const state = useAppStore.getState();
+  expect(read).toHaveBeenCalledWith(["thread-a"]);
+  expect(generate).not.toHaveBeenCalled();
+  expect(state.projectSessions["E:/A"][0].name).toBe("Codex 原生：登录流程修复");
+  expect(state.projectWorkspaces["E:/A"].tabsById.a.title).toBe("Codex 原生：登录流程修复");
+  expect(state.sessions).toEqual([]);
+});
+
+it("round-trips native Codex names and AI fallback deadlines through Zustand persistence", () => {
+  let saved: string | null = null;
+  const storage = { getItem: () => saved, setItem: (_: string, value: string) => { saved = value; }, removeItem: () => {} };
+  const store = createAppStore(storage);
+  store.getState().setCurrentProject({ name: "A", path: "E:/A" });
+  store.getState().addSession({ id: "a", path: "E:/A", name: "原生名称", createdAt: 1, active: true,
+    agentId: "codex", agentSessionId: "thread-a", nativeTitle: { sessionId: "thread-a", title: "原生名称" },
+    temporaryTitle: "临时名称", titleGeneration: {
+      prompt: "检查系统 bug", status: "pending", attempts: 0, notBefore: 12345,
+    },
+  });
+  const restored = createAppStore(storage).getState().projectSessions["E:/A"][0];
+  expect(restored.nativeTitle).toEqual({ sessionId: "thread-a", title: "原生名称" });
+  expect(restored.name).toBe("原生名称");
+  expect(restored.titleGeneration?.notBefore).toBe(12345);
 });
