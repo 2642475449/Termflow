@@ -17,7 +17,7 @@ export function filterMarketplaceCategory(skills: MarketplaceSkill[], category: 
   return category === "all" ? skills : skills.filter((skill) => marketplaceCategory(skill) === category);
 }
 
-export function marketplaceSkillKey(skill: MarketplaceSkill): string {
+export function marketplaceSkillKey(skill: Pick<MarketplaceSkill, "repository" | "slug">): string {
   return `${skill.repository}:${skill.slug}`;
 }
 

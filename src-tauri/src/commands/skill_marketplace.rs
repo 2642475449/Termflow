@@ -41,7 +41,11 @@ pub struct MarketSearch {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct MarketSummary { repository: String, slug: String, description: String }
+pub struct MarketSummary {
+    repository: String,
+    slug: String,
+    description: String,
+}
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -348,8 +352,14 @@ fn community_skills(results: CommunityResults) -> Vec<MarketSkill> {
         .filter_map(|entry| {
             // 公开 CLI 搜索接口也会返回 well-known 来源；本版只安装可验证的 GitHub 目录。
             validate_repository(&entry.source).ok()?;
-            let slug = if entry.id.is_empty() { entry.skill_id }
-                else { entry.id.strip_prefix(&format!("{}/", entry.source))?.to_string() };
+            let slug = if entry.id.is_empty() {
+                entry.skill_id
+            } else {
+                entry
+                    .id
+                    .strip_prefix(&format!("{}/", entry.source))?
+                    .to_string()
+            };
             let skill = MarketSkill {
                 repository: entry.source,
                 slug,
@@ -364,9 +374,17 @@ fn community_skills(results: CommunityResults) -> Vec<MarketSkill> {
 }
 
 fn community_url(query: &str) -> Result<reqwest::Url, String> {
-    let mut url = reqwest::Url::parse(if query.is_empty() { "https://skills.sh/api/skills/all-time/0" }
-        else { "https://skills.sh/api/search" }).map_err(|error| error.to_string())?;
-    if !query.is_empty() { url.query_pairs_mut().append_pair("q", query).append_pair("limit", &COMMUNITY_LIMIT.to_string()); }
+    let mut url = reqwest::Url::parse(if query.is_empty() {
+        "https://skills.sh/api/skills/all-time/0"
+    } else {
+        "https://skills.sh/api/search"
+    })
+    .map_err(|error| error.to_string())?;
+    if !query.is_empty() {
+        url.query_pairs_mut()
+            .append_pair("q", query)
+            .append_pair("limit", &COMMUNITY_LIMIT.to_string());
+    }
     Ok(url)
 }
 
@@ -376,8 +394,15 @@ async fn search_community(client: &Client, query: &str) -> Result<MarketSearch, 
         &read_bytes(client, url, 2 * 1024 * 1024).await?,
     )
     .map_err(|error| format!("Invalid skills.sh search response: {error}"))?;
-    let limited = if query.is_empty() { results.has_more } else { results.skills.len() >= COMMUNITY_LIMIT };
-    Ok(MarketSearch { skills: community_skills(results), limited })
+    let limited = if query.is_empty() {
+        results.has_more
+    } else {
+        results.skills.len() >= COMMUNITY_LIMIT
+    };
+    Ok(MarketSearch {
+        skills: community_skills(results),
+        limited,
+    })
 }
 
 #[tauri::command]
@@ -413,48 +438,98 @@ async fn search_with_client(client: &Client, query: &str) -> Result<MarketSearch
 
 fn listing_description(html: &str) -> Option<String> {
     let tags = regex::Regex::new(r"(?is)<meta\s+[^>]*>").ok()?;
-    let attributes = regex::Regex::new(r#"(?is)([\w:-]+)\s*=\s*["']([^"']*)["']"#).ok()?;
-    let entities = regex::Regex::new(r"&(?:#x[0-9a-fA-F]+|#[0-9]+|amp|quot|apos|lt|gt);" ).ok()?;
+    let attributes = regex::Regex::new(r#"(?is)([\w:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')"#).ok()?;
+    let entities = regex::Regex::new(r"&(?:#x[0-9a-fA-F]+|#[0-9]+|amp|quot|apos|lt|gt);").ok()?;
     for tag in tags.find_iter(html) {
-        let attrs = attributes.captures_iter(tag.as_str()).map(|capture| (capture[1].to_lowercase(), capture[2].to_string())).collect::<HashMap<_, _>>();
-        if attrs.get("name").or_else(|| attrs.get("property")).is_some_and(|value| value == "description" || value == "og:description") {
+        let attrs = attributes
+            .captures_iter(tag.as_str())
+            .filter_map(|capture| {
+                Some((
+                    capture[1].to_lowercase(),
+                    capture
+                        .get(2)
+                        .or_else(|| capture.get(3))?
+                        .as_str()
+                        .to_string(),
+                ))
+            })
+            .collect::<HashMap<_, _>>();
+        if attrs
+            .get("name")
+            .or_else(|| attrs.get("property"))
+            .is_some_and(|value| value == "description" || value == "og:description")
+        {
             let content = attrs.get("content")?;
-            let decoded = entities.replace_all(content, |capture: &regex::Captures<'_>| {
-                match &capture[0] {
-                    "&amp;" => "&".into(), "&quot;" => "\"".into(), "&apos;" => "'".into(), "&lt;" => "<".into(), "&gt;" => ">".into(),
+            let decoded =
+                entities.replace_all(content, |capture: &regex::Captures<'_>| match &capture[0] {
+                    "&amp;" => "&".into(),
+                    "&quot;" => "\"".into(),
+                    "&apos;" => "'".into(),
+                    "&lt;" => "<".into(),
+                    "&gt;" => ">".into(),
                     entity => {
                         let value = entity.trim_start_matches("&#").trim_end_matches(';');
-                        let number = if let Some(hex) = value.strip_prefix('x') { u32::from_str_radix(hex, 16).ok() } else { value.parse::<u32>().ok() };
-                        number.and_then(char::from_u32).map(|c| c.to_string()).unwrap_or_else(|| entity.to_string())
+                        let number = if let Some(hex) = value.strip_prefix('x') {
+                            u32::from_str_radix(hex, 16).ok()
+                        } else {
+                            value.parse::<u32>().ok()
+                        };
+                        number
+                            .and_then(char::from_u32)
+                            .map(|c| c.to_string())
+                            .unwrap_or_else(|| entity.to_string())
                     }
-                }
-            });
-            let description = decoded.trim().chars().filter(|c| *c != '\u{fffd}').take(500).collect::<String>();
-            if !description.is_empty() { return Some(description); }
+                });
+            let description = decoded
+                .trim()
+                .chars()
+                .filter(|c| *c != '\u{fffd}')
+                .take(500)
+                .collect::<String>();
+            if !description.is_empty() {
+                return Some(description);
+            }
         }
     }
     None
 }
 
 #[tauri::command]
-pub async fn get_marketplace_skill_summaries(skills: Vec<MarketSkill>, database: State<'_, Arc<Database>>) -> Result<Vec<MarketSummary>, String> {
-    if skills.len() > 24 { return Err("Too many skill summaries requested".into()); }
-    for skill in &skills { validate_skill(skill)?; }
+pub async fn get_marketplace_skill_summaries(
+    skills: Vec<MarketSkill>,
+    database: State<'_, Arc<Database>>,
+) -> Result<Vec<MarketSummary>, String> {
+    if skills.len() > 24 {
+        return Err("Too many skill summaries requested".into());
+    }
+    for skill in &skills {
+        validate_skill(skill)?;
+    }
     let client = client(&database)?;
     let summaries = stream::iter(skills.into_iter().map(|skill| {
         let client = &client;
         async move {
             let key = format!("{}/{}", skill.repository, skill.slug);
-            let description = if let Some(description) = cached(&SUMMARIES, &key) { Some(description) } else {
+            let description = if let Some(description) = cached(&SUMMARIES, &key) {
+                Some(description)
+            } else {
                 let url = reqwest::Url::parse(&format!("https://skills.sh/{key}")).ok()?;
-                let html = String::from_utf8(read_bytes(client, url, 2 * 1024 * 1024).await.ok()?).ok()?;
+                let html =
+                    String::from_utf8(read_bytes(client, url, 2 * 1024 * 1024).await.ok()?).ok()?;
                 let description = listing_description(&html)?;
                 remember(&SUMMARIES, key, description.clone());
                 Some(description)
             }?;
-            Some(MarketSummary { repository: skill.repository, slug: skill.slug, description })
+            Some(MarketSummary {
+                repository: skill.repository,
+                slug: skill.slug,
+                description,
+            })
         }
-    })).buffer_unordered(6).collect::<Vec<_>>().await;
+    }))
+    .buffer_unordered(6)
+    .collect::<Vec<_>>()
+    .await;
     Ok(summaries.into_iter().flatten().collect())
 }
 
@@ -735,6 +810,37 @@ mod tests {
     }
 
     #[test]
+    fn default_browse_uses_the_public_leaderboard_and_preserves_its_skill_ids() {
+        assert_eq!(
+            community_url("").expect("browse URL").path(),
+            "/api/skills/all-time/0"
+        );
+        assert_eq!(
+            community_url("react native")
+                .expect("search URL")
+                .query_pairs()
+                .find(|(key, _)| key == "q")
+                .map(|(_, value)| value.to_string()),
+            Some("react native".into())
+        );
+        let results: CommunityResults = serde_json::from_str(r#"{"skills":[{"source":"vercel-labs/skills","skillId":"find-skills","name":"find-skills","installs":123}],"hasMore":true}"#).expect("leaderboard response");
+        assert!(results.has_more);
+        let skills = community_skills(results);
+        assert_eq!(skills.len(), 1);
+        assert_eq!(skills[0].slug, "find-skills");
+    }
+
+    #[test]
+    fn listing_metadata_is_plain_text_and_decodes_quotes_and_entities() {
+        assert_eq!(listing_description(r#"<meta content="React's &quot;patterns&quot; &amp; APIs &#x2014; guide" name="description"/>"#).as_deref(), Some("React's \"patterns\" & APIs — guide"));
+        assert_eq!(
+            listing_description("<meta property='og:description' content='Build UI'/>").as_deref(),
+            Some("Build UI")
+        );
+        assert!(listing_description("<h1>No description</h1>").is_none());
+    }
+
+    #[test]
     fn missing_and_ambiguous_manifests_have_distinct_errors() {
         assert_eq!(
             matching_manifest("review", Vec::new()).err().as_deref(),
@@ -828,10 +934,10 @@ mod tests {
     }
 
     #[test]
-    fn empty_and_short_queries_do_not_request_a_catalog() {
+    fn one_character_queries_do_not_send_search_requests() {
         tauri::async_runtime::block_on(async {
             let client = Client::new();
-            for query in ["", " ", "a", " 🦀 "] {
+            for query in ["a", " 🦀 "] {
                 let result = search_with_client(&client, query)
                     .await
                     .expect("empty search");
@@ -885,15 +991,20 @@ mod tests {
     #[test]
     fn normalizes_community_ids_without_guessing_repository_paths() {
         let results = CommunityResults {
+            has_more: false,
             skills: vec![
                 CommunitySkill {
                     id: "vercel-labs/agent-skills/vercel-react-best-practices".into(),
+                    skill_id: String::new(),
+                    description: String::new(),
                     source: "vercel-labs/agent-skills".into(),
                     name: "React".into(),
                     installs: 42,
                 },
                 CommunitySkill {
                     id: "example.com/review".into(),
+                    skill_id: String::new(),
+                    description: String::new(),
                     source: "example.com".into(),
                     name: "Review".into(),
                     installs: 1,
@@ -924,6 +1035,13 @@ mod tests {
             .expect("builder")
             .build()
             .expect("client");
+            let browse = search_with_client(&client, "")
+                .await
+                .expect("default popular skills");
+            assert!(
+                browse.skills.len() > 24,
+                "default page has a browsable catalog"
+            );
             let results = search_with_client(&client, "react").await.expect("search");
             let community = results
                 .skills

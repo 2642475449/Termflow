@@ -1,11 +1,11 @@
 import { useCallback, useEffect } from "react";
-import { ArrowLeftOutlined, DownloadOutlined, LinkOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
-import { Alert, Button, Empty, Input, Segmented, Select, Spin, message } from "antd";
+import { ArrowLeftOutlined, DownloadOutlined, GithubOutlined, LinkOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
+import { Alert, Avatar, Button, Empty, Input, Pagination, Segmented, Select, Spin, message } from "antd";
 import { useTranslation } from "react-i18next";
 import { AgentIcon } from "@/components/AgentIcon";
 import { getAgentIdsWithCapability } from "@/lib/agents";
 import { installMarketplaceSkill, openExternalUrl } from "@/lib/api";
-import { marketplaceConflicts, marketplaceDetailErrorKind, marketplaceRepositoryUrl, marketplaceSkillKey, marketplaceSkillUrl } from "@/lib/skillMarketplace";
+import { filterMarketplaceCategory, MARKETPLACE_CATEGORIES, marketplaceCategory, marketplaceConflicts, marketplaceDetailErrorKind, marketplaceRepositoryUrl, marketplaceSkillKey, marketplaceSkillUrl } from "@/lib/skillMarketplace";
 import { skillInstallTargets } from "@/lib/skills";
 import { useSkillMarketplaceStore } from "@/store/slices/skillMarketplaceSlice";
 import { useSkillsStore } from "@/store/slices/skillsSlice";
@@ -13,29 +13,41 @@ import { useAppStore } from "@/store";
 import type { SkillScope } from "@/types";
 
 const SKILL_AGENTS = getAgentIdsWithCapability("skills");
+const PAGE_SIZE = 24;
 
 interface Props {
   isActive: boolean;
 }
 
 export default function SkillMarketplacePage({ isActive }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const projectPath = useAppStore((state) => state.currentProject?.path ?? null);
   const market = useSkillMarketplaceStore();
   const catalog = useSkillsStore((state) => state.catalog);
   const catalogError = useSkillsStore((state) => state.error);
-  const canSearch = [...market.query.trim()].length >= 2;
+  const isSearch = [...market.query.trim()].length >= 2;
   const detail = market.detail;
   const detailErrorKind = marketplaceDetailErrorKind(market.detailError);
   const targets = skillInstallTargets(catalog, market.agents, market.scope);
   const conflicts = detail ? marketplaceConflicts(catalog, detail.folderName, market.agents, market.scope) : [];
   const consumers = [...new Set(targets.flatMap((target) => target.consumers))];
+  const filtered = filterMarketplaceCategory(market.results?.skills ?? [], market.category);
+  const page = Math.min(market.page, Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)));
+  const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const visibleKey = visible.map(marketplaceSkillKey).join("\n");
+  const groups = MARKETPLACE_CATEGORIES.filter((category) => category !== "all" && (market.category === "all" || category === market.category))
+    .map((category) => ({ category, skills: visible.filter((skill) => marketplaceCategory(skill) === category) })).filter((group) => group.skills.length);
+  const formatInstalls = (count: number) => new Intl.NumberFormat(i18n.language, { notation: "compact", maximumFractionDigits: 1 }).format(count);
 
   useEffect(() => {
     if (!isActive) return;
     const timer = window.setTimeout(() => { void useSkillMarketplaceStore.getState().search(); }, 400);
     return () => window.clearTimeout(timer);
   }, [isActive, market.query]);
+
+  useEffect(() => {
+    if (isActive && !market.selected && visible.length) void useSkillMarketplaceStore.getState().loadSummaries(visible);
+  }, [isActive, market.selected, visibleKey]);
 
   const refreshCatalog = useCallback(async () => {
     await useSkillsStore.getState().refreshCatalog(projectPath);
@@ -69,7 +81,11 @@ export default function SkillMarketplacePage({ isActive }: Props) {
 
   return <div className="app-skill-market-page app-skills-library h-full overflow-auto">
     <div className="app-skill-market-page-inner">
-      <div className="app-skills-toolbar"><h2 className="app-skills-title">{t("settings.skillMarket.title")}</h2></div>
+      <div className="app-skills-toolbar">
+        <div><h2 className="app-skills-title">{t("settings.skillMarket.title")}</h2>
+          <p className="app-skills-secondary text-xs mt-1">{t("settings.skillMarket.description")}</p></div>
+        {!market.selected && <Button icon={<ReloadOutlined spin={market.loading} />} disabled={market.loading} onClick={() => void market.search(true)}>{t("common.refresh")}</Button>}
+      </div>
       {catalogError && <Alert type="error" showIcon className="mb-3" message={t("settings.skills.loadFailed")}
         action={<Button onClick={() => void refreshCatalog().catch(() => message.error(t("settings.skills.loadFailed")))}>{t("common.refresh")}</Button>} />}
     {market.selected ? <div>
@@ -129,31 +145,42 @@ export default function SkillMarketplacePage({ isActive }: Props) {
           </aside>
         </div>}
     </div> : <div>
-      <p className="app-skills-secondary text-sm mb-4">{t("settings.skillMarket.description")}</p>
-      <div className="flex flex-wrap items-center gap-3 mb-3">
+      <div className="app-skill-market-controls">
+        <nav className="app-skill-market-categories" aria-label={t("settings.skillMarket.categoryFilter")}>
+          {MARKETPLACE_CATEGORIES.map((category) => <button key={category} type="button" className="app-skill-market-category"
+            aria-pressed={market.category === category} onClick={() => market.setCategory(category)}>{t(`settings.skillMarket.categories.${category}`)}</button>)}
+        </nav>
         <Input className="app-skills-search" allowClear prefix={<SearchOutlined />} placeholder={t("settings.skillMarket.searchPlaceholder")}
           maxLength={200} value={market.query} onChange={(event) => market.setQuery(event.target.value)} />
-        <Button icon={<ReloadOutlined spin={market.loading} />} disabled={market.loading || !canSearch} onClick={() => void market.search()}>{t("common.refresh")}</Button>
       </div>
       {market.error && <Alert type="error" showIcon className="mb-3" message={t("settings.skillMarket.loadFailed")} description={market.error}
         action={<Button onClick={() => void market.search()}>{t("common.refresh")}</Button>} />}
       <div className="app-skill-market-results" aria-busy={market.loading}>
-        {!canSearch ? <div className="py-12"><Empty description={t("settings.skillMarket.searchHint")} /></div> :
-          market.loading ? <div className="flex justify-center py-20"><Spin /></div> : market.results && !market.results.skills.length ?
+        {market.loading ? <div className="flex justify-center py-20"><Spin /></div> : market.results && !filtered.length ?
           <div className="py-12"><Empty description={t("settings.skillMarket.empty")} /></div> :
-          <div className="app-skills-list">
-            {(market.results?.skills ?? []).map((skill) => <button key={marketplaceSkillKey(skill)} type="button" className="app-skills-row"
-              onClick={() => void market.selectSkill(skill)}>
-              <div className="app-skills-row-body">
-                <div className="font-medium text-sm">{skill.name}</div>
-                <p className="app-skills-secondary text-xs mt-2 line-clamp-2">{skill.description || t("settings.skillMarket.previewHint")}</p>
-                <p className="app-skills-muted text-xs mt-2">{skill.repository}</p>
-              </div>
-              {skill.installs !== null && <span className="app-skills-secondary text-xs shrink-0">{t("settings.skillMarket.installs", { count: skill.installs })}</span>}
-            </button>)}
+          <div>
+            <div className="app-skill-market-result-heading">{t(`settings.skillMarket.${isSearch ? "searchResults" : "popular"}`)}
+              <span className="app-skills-muted ml-2">{filtered.length}</span></div>
+            {groups.map((group) => <section className="app-skill-market-section" key={group.category}>
+              <h3 className="app-skill-market-section-title">{t(`settings.skillMarket.categories.${group.category}`)}</h3>
+              <div className="app-skill-market-grid">{group.skills.map((skill) => <article key={marketplaceSkillKey(skill)} className="app-skill-market-card">
+                <Avatar className="app-skill-market-avatar" shape="square" size={48}
+                  src={`https://github.com/${encodeURIComponent(skill.repository.split("/")[0])}.png?size=96`} icon={<GithubOutlined />} />
+                <button type="button" className="app-skill-market-card-main" aria-label={t("settings.skillMarket.previewSkill", { name: skill.name })}
+                  onClick={() => void market.selectSkill(skill)}>
+                  <span className="app-skill-market-card-title" title={skill.name}>{skill.name}</span>
+                  <span className="app-skill-market-card-description">{skill.description || t("settings.skillMarket.cardHint", { repository: skill.repository })}</span>
+                  <span className="app-skill-market-card-meta" title={skill.repository}>{skill.repository}
+                    {skill.installs !== null && <> · {t("settings.skillMarket.installCount", { value: formatInstalls(skill.installs) })}</>}</span>
+                </button>
+                <Button size="small" className="app-skill-market-card-action" icon={<PlusOutlined />} onClick={() => void market.selectSkill(skill)}>{t("settings.skillMarket.installShort")}</Button>
+              </article>)}</div>
+            </section>)}
+            {filtered.length > PAGE_SIZE && <div className="flex justify-end mt-6"><Pagination current={page} total={filtered.length} pageSize={PAGE_SIZE}
+              showSizeChanger={false} onChange={market.setPage} /></div>}
           </div>}
       </div>
-      {market.results?.limited && <p className="app-skills-muted text-xs mt-3">{t("settings.skillMarket.limited")}</p>}
+      {market.results?.limited && <p className="app-skills-muted text-xs mt-3">{t(`settings.skillMarket.${isSearch ? "limited" : "browseLimited"}`)}</p>}
     </div>}
     </div>
   </div>;

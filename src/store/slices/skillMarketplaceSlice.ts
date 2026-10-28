@@ -65,7 +65,7 @@ export const useSkillMarketplaceStore = create<SkillMarketplaceState>((set, get)
     if (!pending.length) return;
     try {
       const summaries = await getMarketplaceSkillSummaries(pending);
-      const descriptions = new Map(summaries.map((summary) => [marketplaceSkillKey({ ...summary, name: "", installs: null }), summary.description]));
+      const descriptions = new Map(summaries.map((summary) => [marketplaceSkillKey(summary), summary.description]));
       const merge = (results: SkillMarketSearch | null) => results ? { ...results, skills: results.skills.map((skill) => {
         const description = descriptions.get(marketplaceSkillKey(skill));
         return description ? { ...skill, description } : skill;
