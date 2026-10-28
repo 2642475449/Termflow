@@ -6,13 +6,6 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-#[serde(rename_all = "snake_case")]
-pub enum CommandScope {
-    Workspace,
-    User,
-}
-
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum CommandShell {
@@ -50,7 +43,6 @@ pub struct CommandInfo {
     pub id: String,
     pub name: String,
     pub description: String,
-    pub scope: CommandScope,
     pub format: String,
     pub allowed_tools: Vec<String>,
     pub supports_test_run: bool,
@@ -72,7 +64,6 @@ pub struct CommandInfo {
 pub struct CommandCatalog {
     pub commands: Vec<CommandInfo>,
     pub workspace_dir: Option<String>,
-    pub user_dir: String,
 }
 
 #[derive(Serialize)]
@@ -133,39 +124,27 @@ struct NormalizedDraft {
 
 #[tauri::command]
 pub fn list_commands(project_path: Option<String>) -> Result<CommandCatalog, String> {
-    let workspace_dir = resolve_command_dir(CommandScope::Workspace, project_path.as_deref())?;
-    let user_dir = resolve_command_dir(CommandScope::User, None)?;
-
-    let mut commands = Vec::new();
-    commands.extend(scan_scope_commands(
-        CommandScope::Workspace,
-        workspace_dir.as_ref(),
-    )?);
-    commands.extend(scan_scope_commands(CommandScope::User, user_dir.as_ref())?);
+    let workspace_dir = resolve_command_dir(project_path.as_deref());
+    let mut commands = scan_commands(workspace_dir.as_ref())?;
     commands.sort_by(|a, b| {
-        a.scope
-            .cmp(&b.scope)
-            .then_with(|| b.updated_at.cmp(&a.updated_at))
+        b.updated_at
+            .cmp(&a.updated_at)
             .then_with(|| a.name.cmp(&b.name))
     });
 
     Ok(CommandCatalog {
         commands,
         workspace_dir: workspace_dir.map(path_to_string),
-        user_dir: user_dir
-            .map(path_to_string)
-            .ok_or_else(|| "无法解析全局命令目录".to_string())?,
     })
 }
 
 #[tauri::command]
 pub fn get_command_detail(
-    scope: CommandScope,
     id: String,
     project_path: Option<String>,
 ) -> Result<CommandDetail, String> {
-    let stored = find_command(scope, &id, project_path.as_deref())?;
-    let info = to_command_info(scope, stored.clone());
+    let stored = find_command(&id, project_path.as_deref())?;
+    let info = to_command_info(stored.clone());
     Ok(CommandDetail {
         command: info,
         content: stored.raw_content,
@@ -174,11 +153,10 @@ pub fn get_command_detail(
 
 #[tauri::command]
 pub fn create_command(
-    scope: CommandScope,
     draft: CommandDraft,
     project_path: Option<String>,
 ) -> Result<CommandInfo, String> {
-    let directory = ensure_command_store_dir(scope, project_path.as_deref())?;
+    let directory = ensure_command_store_dir(project_path.as_deref())?;
     let normalized = normalize_draft(draft)?;
     let slug = slugify(&normalized.name);
     let file_path = directory.join(format!("{}.md", slug));
@@ -200,21 +178,20 @@ pub fn create_command(
         run_in_new_session: Some(normalized.run_in_new_session),
     };
 
-    let raw_content = build_markdown_content(None, &frontmatter, scope, &normalized.template)?;
+    let raw_content = build_markdown_content(None, &frontmatter, &normalized.template)?;
     fs::write(&file_path, raw_content.as_bytes()).map_err(|e| e.to_string())?;
     let stored = load_command_markdown(&file_path)?;
-    Ok(to_command_info(scope, stored))
+    Ok(to_command_info(stored))
 }
 
 #[tauri::command]
 pub fn update_command(
-    scope: CommandScope,
     id: String,
     draft: CommandDraft,
     project_path: Option<String>,
 ) -> Result<CommandInfo, String> {
-    let directory = ensure_command_store_dir(scope, project_path.as_deref())?;
-    let existing = find_command(scope, &id, project_path.as_deref())?;
+    let directory = ensure_command_store_dir(project_path.as_deref())?;
+    let existing = find_command(&id, project_path.as_deref())?;
     let normalized = normalize_draft(draft)?;
     let next_slug = slugify(&normalized.name);
     let next_path = directory.join(format!("{}.md", next_slug));
@@ -239,7 +216,6 @@ pub fn update_command(
     let raw_content = build_markdown_content(
         Some(&existing.raw_frontmatter),
         &frontmatter,
-        scope,
         &normalized.template,
     )?;
     fs::write(&next_path, raw_content.as_bytes()).map_err(|e| e.to_string())?;
@@ -247,52 +223,40 @@ pub fn update_command(
         fs::remove_file(&existing.file_path).map_err(|e| e.to_string())?;
     }
     let stored = load_command_markdown(&next_path)?;
-    Ok(to_command_info(scope, stored))
+    Ok(to_command_info(stored))
 }
 
 #[tauri::command]
-pub fn delete_command(
-    scope: CommandScope,
-    id: String,
-    project_path: Option<String>,
-) -> Result<(), String> {
-    let stored = find_command(scope, &id, project_path.as_deref())?;
+pub fn delete_command(id: String, project_path: Option<String>) -> Result<(), String> {
+    let stored = find_command(&id, project_path.as_deref())?;
     fs::remove_file(&stored.file_path).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn ensure_command_store(
-    scope: CommandScope,
-    project_path: Option<String>,
-) -> Result<String, String> {
-    let directory = ensure_command_store_dir(scope, project_path.as_deref())?;
+pub fn ensure_command_store(project_path: Option<String>) -> Result<String, String> {
+    let directory = ensure_command_store_dir(project_path.as_deref())?;
     Ok(path_to_string(directory))
 }
 
 #[tauri::command]
 pub async fn run_command_test(
-    scope: CommandScope,
     id: String,
     project_path: Option<String>,
 ) -> Result<CommandTestResult, String> {
     crate::commands::run_background_task("run_command_test", move || {
-        run_command_test_blocking(scope, id, project_path)
+        run_command_test_blocking(id, project_path)
     })
     .await
 }
 
 pub fn run_command_test_blocking(
-    scope: CommandScope,
     id: String,
     project_path: Option<String>,
 ) -> Result<CommandTestResult, String> {
-    let stored = find_command(scope, &id, project_path.as_deref())?;
+    let stored = find_command(&id, project_path.as_deref())?;
 
     let working_directory = resolve_working_directory(
-        stored
-            .frontmatter
-            .cwd
-            .unwrap_or(default_cwd_mode_for_scope(scope)),
+        stored.frontmatter.cwd.unwrap_or(CommandCwdMode::Project),
         stored.frontmatter.cwd_path.as_deref(),
         project_path.as_deref(),
     )?;
@@ -331,10 +295,7 @@ pub fn run_command_test_blocking(
     })
 }
 
-fn scan_scope_commands(
-    scope: CommandScope,
-    root: Option<&PathBuf>,
-) -> Result<Vec<CommandInfo>, String> {
+fn scan_commands(root: Option<&PathBuf>) -> Result<Vec<CommandInfo>, String> {
     let Some(root) = root else {
         return Ok(Vec::new());
     };
@@ -350,7 +311,7 @@ fn scan_scope_commands(
             continue;
         }
         match load_command_markdown(&path) {
-            Ok(stored) => commands.push(to_command_info(scope, stored)),
+            Ok(stored) => commands.push(to_command_info(stored)),
             Err(error) => {
                 eprintln!(
                     "skip invalid command markdown '{}': {}",
@@ -363,12 +324,8 @@ fn scan_scope_commands(
     Ok(commands)
 }
 
-fn find_command(
-    scope: CommandScope,
-    id: &str,
-    project_path: Option<&str>,
-) -> Result<StoredCommand, String> {
-    let directory = ensure_command_store_dir(scope, project_path)?;
+fn find_command(id: &str, project_path: Option<&str>) -> Result<StoredCommand, String> {
+    let directory = ensure_command_store_dir(project_path)?;
     for entry in fs::read_dir(&directory).map_err(|e| e.to_string())? {
         let entry = entry.map_err(|e| e.to_string())?;
         let path = entry.path();
@@ -383,35 +340,17 @@ fn find_command(
     Err("未找到指定命令".to_string())
 }
 
-fn ensure_command_store_dir(
-    scope: CommandScope,
-    project_path: Option<&str>,
-) -> Result<PathBuf, String> {
-    let directory = resolve_command_dir(scope, project_path)?
-        .ok_or_else(|| "当前没有可用的命令目录".to_string())?;
+fn ensure_command_store_dir(project_path: Option<&str>) -> Result<PathBuf, String> {
+    let directory = resolve_command_dir(project_path)
+        .ok_or_else(|| "请先打开项目，再管理项目命令".to_string())?;
     fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
     Ok(directory)
 }
 
-fn resolve_command_dir(
-    scope: CommandScope,
-    project_path: Option<&str>,
-) -> Result<Option<PathBuf>, String> {
-    match scope {
-        CommandScope::Workspace => {
-            let Some(project_path) = project_path.filter(|path| !path.trim().is_empty()) else {
-                return Ok(None);
-            };
-            Ok(Some(
-                normalize_path(project_path)
-                    .join(".claude")
-                    .join("commands"),
-            ))
-        }
-        CommandScope::User => Ok(Some(
-            crate::agent_paths::user_path(crate::agent_paths::AgentPath::Claude)?.join("commands"),
-        )),
-    }
+fn resolve_command_dir(project_path: Option<&str>) -> Option<PathBuf> {
+    project_path
+        .filter(|path| !path.trim().is_empty())
+        .map(|path| normalize_path(path).join(".claude").join("commands"))
 }
 
 fn load_command_markdown(path: &Path) -> Result<StoredCommand, String> {
@@ -515,10 +454,9 @@ fn default_frontmatter_from_file(_path: &Path) -> CommandFrontmatter {
 fn build_markdown_content(
     base_frontmatter: Option<&Mapping>,
     frontmatter: &CommandFrontmatter,
-    scope: CommandScope,
     template: &str,
 ) -> Result<String, String> {
-    let yaml_mapping = build_frontmatter_mapping(base_frontmatter, frontmatter, scope);
+    let yaml_mapping = build_frontmatter_mapping(base_frontmatter, frontmatter);
     let yaml = serde_yaml::to_string(&yaml_mapping).map_err(|e| e.to_string())?;
     let yaml = yaml
         .lines()
@@ -582,13 +520,10 @@ fn normalize_draft(draft: CommandDraft) -> Result<NormalizedDraft, String> {
     })
 }
 
-fn to_command_info(scope: CommandScope, stored: StoredCommand) -> CommandInfo {
+fn to_command_info(stored: StoredCommand) -> CommandInfo {
     let stem = file_stem(&stored.file_path);
     let shell = stored.frontmatter.shell.unwrap_or(CommandShell::Default);
-    let cwd_mode = stored
-        .frontmatter
-        .cwd
-        .unwrap_or(default_cwd_mode_for_scope(scope));
+    let cwd_mode = stored.frontmatter.cwd.unwrap_or(CommandCwdMode::Project);
     let requires_confirm = stored.frontmatter.requires_confirm.unwrap_or(true);
     let run_in_new_session = stored.frontmatter.run_in_new_session.unwrap_or(false);
     let supports_test_run = stored.frontmatter.shell.is_some()
@@ -614,7 +549,6 @@ fn to_command_info(scope: CommandScope, stored: StoredCommand) -> CommandInfo {
             .unwrap_or_else(|| stem.clone()),
         name: stored.frontmatter.name.unwrap_or_else(|| stem.clone()),
         description: stored.frontmatter.description.unwrap_or_default(),
-        scope,
         format: format.to_string(),
         allowed_tools: stored.frontmatter.allowed_tools,
         supports_test_run,
@@ -657,7 +591,6 @@ fn resolve_working_directory(
 fn build_frontmatter_mapping(
     base_frontmatter: Option<&Mapping>,
     frontmatter: &CommandFrontmatter,
-    scope: CommandScope,
 ) -> Mapping {
     let mut mapping = base_frontmatter.cloned().unwrap_or_default();
     set_yaml_string(
@@ -667,14 +600,18 @@ fn build_frontmatter_mapping(
     );
     set_yaml_string_list(&mut mapping, "allowed-tools", &frontmatter.allowed_tools);
 
-    let default_cwd = default_cwd_mode_for_scope(scope);
     upsert_optional_enum(
         &mut mapping,
         "shell",
         frontmatter.shell,
         CommandShell::Default,
     );
-    upsert_optional_enum(&mut mapping, "cwd", frontmatter.cwd, default_cwd);
+    upsert_optional_enum(
+        &mut mapping,
+        "cwd",
+        frontmatter.cwd,
+        CommandCwdMode::Project,
+    );
 
     if let Some(value) = frontmatter
         .cwd_path
@@ -867,13 +804,6 @@ fn command_identity(stored: &StoredCommand) -> String {
         .unwrap_or_else(|| file_stem(&stored.file_path))
 }
 
-fn default_cwd_mode_for_scope(scope: CommandScope) -> CommandCwdMode {
-    match scope {
-        CommandScope::Workspace => CommandCwdMode::Project,
-        CommandScope::User => CommandCwdMode::Current,
-    }
-}
-
 fn yaml_key(key: &str) -> Value {
     Value::String(key.to_string())
 }
@@ -999,4 +929,86 @@ fn now_ms() -> i64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as i64
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn draft(name: &str) -> CommandDraft {
+        CommandDraft {
+            name: name.to_string(),
+            description: Some("项目命令".to_string()),
+            template: "echo project".to_string(),
+            shell: None,
+            cwd_mode: None,
+            cwd_path: None,
+            tags: None,
+            requires_confirm: None,
+            run_in_new_session: None,
+        }
+    }
+
+    #[test]
+    fn no_project_has_no_catalog_or_command_store() {
+        for project_path in [None, Some(String::new()), Some("   ".to_string())] {
+            let catalog = list_commands(project_path.clone()).unwrap();
+            assert!(catalog.commands.is_empty());
+            assert!(catalog.workspace_dir.is_none());
+            assert!(ensure_command_store(project_path.clone()).is_err());
+            assert!(create_command(draft("new"), project_path.clone()).is_err());
+            assert!(get_command_detail("existing".to_string(), project_path.clone()).is_err());
+            assert!(update_command(
+                "existing".to_string(),
+                draft("updated"),
+                project_path.clone()
+            )
+            .is_err());
+            assert!(delete_command("existing".to_string(), project_path.clone()).is_err());
+            assert!(run_command_test_blocking("existing".to_string(), project_path).is_err());
+        }
+    }
+
+    #[test]
+    fn catalog_reads_only_the_selected_project() {
+        let first = tempfile::tempdir().unwrap();
+        let second = tempfile::tempdir().unwrap();
+        let first_path = Some(path_to_string(first.path()));
+        let second_path = Some(path_to_string(second.path()));
+        create_command(draft("first"), first_path.clone()).unwrap();
+        create_command(draft("second"), second_path.clone()).unwrap();
+
+        for (project_path, name) in [(first_path, "first"), (second_path, "second")] {
+            let catalog = list_commands(project_path).unwrap();
+            assert_eq!(catalog.commands.len(), 1);
+            assert_eq!(catalog.commands[0].name, name);
+            let serialized = serde_json::to_value(&catalog).unwrap();
+            assert!(serialized.get("userDir").is_none());
+            assert!(serialized["commands"][0].get("scope").is_none());
+        }
+    }
+
+    #[test]
+    fn project_command_crud_preserves_native_metadata() {
+        let project = tempfile::tempdir().unwrap();
+        let project_path = Some(path_to_string(project.path()));
+        let directory = ensure_command_store_dir(project_path.as_deref()).unwrap();
+        let original = directory.join("native.md");
+        fs::write(&original, "---\ndescription: Native\nallowed-tools: Bash\nargument-hint: file\n---\n\nReview $ARGUMENTS\n").unwrap();
+        let native = get_command_detail("native".to_string(), project_path.clone()).unwrap();
+        assert_eq!(native.command.format, "claude_native");
+        assert!(native.command.cwd_mode == CommandCwdMode::Project);
+
+        let updated =
+            update_command("native".to_string(), draft("renamed"), project_path.clone()).unwrap();
+        assert!(!original.exists());
+        let detail = get_command_detail(updated.id.clone(), project_path.clone()).unwrap();
+        assert!(detail.content.contains("argument-hint: file"));
+        assert_eq!(detail.command.allowed_tools, vec!["Bash"]);
+        assert_eq!(detail.command.template, "echo project");
+        assert!(detail.command.cwd_mode == CommandCwdMode::Project);
+
+        delete_command(updated.id, project_path.clone()).unwrap();
+        assert!(list_commands(project_path).unwrap().commands.is_empty());
+    }
 }

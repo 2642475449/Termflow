@@ -6,18 +6,19 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AgentIcon } from "@/components/AgentIcon";
 import { FileStatusDetails, FileStatusPath } from "./FileStatusBar";
-import { getAntigravityUsage, getClaudeRateLimits, getCodexRateLimits, getQoderUsage, getSearchIndexStatus, gitCancelCloneTask, inspectAgentClis } from "@/lib/api";
+import { getSearchIndexStatus, gitCancelCloneTask, inspectAgentClis } from "@/lib/api";
 import { summarizeBackgroundTasks } from "@/lib/backgroundTasks";
 import {
   shouldLoadClaudeRateLimits,
   shouldLoadCodexRateLimits,
   shouldLoadQoderUsage,
-  shouldShowClaudeRateLimits,
 } from "@/lib/codexUsage";
 import { formatAgentVersion, getAgentDisplayName, isAiAgentId } from "@/lib/agents";
 import { useProjectLauncher } from "@/hooks/useProjectLauncher";
 import { useAppStore } from "@/store";
-import type { AiAgentId, AntigravityQuotaWindow, AntigravityUsage, ClaudeRateLimits, ClaudeRateLimitsUpdatePayload, CodexRateLimitResetCredit, CodexRateLimits, CodexRateLimitWindow, GitCloneEventPayload, GitCloneTask, ProjectSearchIndexStatus, QoderQuotaBucket, QoderUsage } from "@/types";
+import { useAgentUsage } from "@/hooks/useAgentUsage";
+import { hasUsageData } from "@/lib/agentUsage";
+import type { AiAgentId, AntigravityQuotaWindow, AntigravityUsage, ClaudeRateLimits, CodexRateLimitResetCredit, CodexRateLimits, CodexRateLimitWindow, GitCloneEventPayload, GitCloneTask, ProjectSearchIndexStatus, QoderQuotaBucket, QoderUsage } from "@/types";
 import { antigravityQuotaLabel, antigravityQuotaPeriodLabel, antigravityQuotaScopeLabel } from "@/lib/antigravityQuota";
 const GIT_CLONE_EVENT = "git-clone-task-event";
 const SEARCH_INDEX_EVENT = "search-index-status";
@@ -40,18 +41,6 @@ function StatusBar() {
   const upsertGitCloneTask = useAppStore((state) => state.upsertGitCloneTask);
   const removeGitCloneTask = useAppStore((state) => state.removeGitCloneTask);
   const [agentVersion, setAgentVersion] = useState<string | null>(null);
-  const [codexRateLimits, setCodexRateLimits] = useState<CodexRateLimits | null>(null);
-  const [codexUsageLoading, setCodexUsageLoading] = useState(false);
-  const [codexUsageError, setCodexUsageError] = useState<string | null>(null);
-  const [claudeRateLimits, setClaudeRateLimits] = useState<ClaudeRateLimits | null>(null);
-  const [claudeUsageLoading, setClaudeUsageLoading] = useState(false);
-  const [claudeUsageError, setClaudeUsageError] = useState<string | null>(null);
-  const [qoderUsage, setQoderUsage] = useState<QoderUsage | null>(null);
-  const [qoderUsageLoading, setQoderUsageLoading] = useState(false);
-  const [qoderUsageError, setQoderUsageError] = useState<string | null>(null);
-  const [antigravityUsage, setAntigravityUsage] = useState<AntigravityUsage | null>(null);
-  const [antigravityUsageLoading, setAntigravityUsageLoading] = useState(false);
-  const [antigravityUsageError, setAntigravityUsageError] = useState<string | null>(null);
   const [cancellingTaskIds, setCancellingTaskIds] = useState<string[]>([]);
   const [searchIndexStatus, setSearchIndexStatus] = useState<ProjectSearchIndexStatus | null>(null);
   const [searchIndexStatusProjectPath, setSearchIndexStatusProjectPath] = useState<string | null>(null);
@@ -71,9 +60,13 @@ function StatusBar() {
   const activeSession = !fileTab ? sessions.find((session) => session.id === activeSessionId) ?? null : null;
   const showCodexUsage = shouldLoadCodexRateLimits(activeSession);
   const loadClaudeUsage = shouldLoadClaudeRateLimits(activeSession);
-  const showClaudeUsage = loadClaudeUsage && shouldShowClaudeRateLimits(claudeRateLimits);
+  const showClaudeUsage = loadClaudeUsage;
   const showQoderUsage = shouldLoadQoderUsage(activeSession);
-  const showAntigravityUsage = activeSession?.agentId === "antigravity";
+  const showAntigravityUsage = activeSession?.active === true && activeSession.agentId === "antigravity";
+  const { value: codexRateLimits, loading: codexUsageLoading, error: codexUsageError, refresh: handleRefreshCodexUsage } = useAgentUsage("codex", showCodexUsage);
+  const { value: claudeRateLimits, loading: claudeUsageLoading, error: claudeUsageError, refresh: handleRefreshClaudeUsage } = useAgentUsage("claude", showClaudeUsage, activeSession?.id);
+  const { value: qoderUsage, loading: qoderUsageLoading, error: qoderUsageError, refresh: handleRefreshQoderUsage } = useAgentUsage("qoder", showQoderUsage);
+  const { value: antigravityUsage, loading: antigravityUsageLoading, error: antigravityUsageError, refresh: handleRefreshAntigravityUsage } = useAgentUsage("antigravity", showAntigravityUsage);
   const effectiveAgentId = useMemo<AiAgentId | null>(() => {
     if (isAiAgentId(activeSession?.agentId)) {
       return activeSession.agentId;
@@ -121,206 +114,6 @@ function StatusBar() {
       disposed = true;
     };
   }, [claudeCliInfo?.version, effectiveAgentId]);
-
-  useEffect(() => {
-    if (!showCodexUsage) {
-      setCodexRateLimits(null);
-      setCodexUsageError(null);
-      setCodexUsageLoading(false);
-      return;
-    }
-
-    let disposed = false;
-
-    const loadCodexUsage = async (forceRefresh = false) => {
-      setCodexUsageLoading(true);
-      try {
-        const limits = await getCodexRateLimits({ forceRefresh });
-        if (disposed) return;
-        setCodexRateLimits(limits);
-        setCodexUsageError(null);
-      } catch (error) {
-        if (disposed) return;
-        setCodexUsageError(error instanceof Error ? error.message : String(error));
-      } finally {
-        if (!disposed) {
-          setCodexUsageLoading(false);
-        }
-      }
-    };
-
-    void loadCodexUsage(false);
-    const interval = window.setInterval(() => {
-      void loadCodexUsage(true);
-    }, 3 * 60 * 1000);
-
-    return () => {
-      disposed = true;
-      window.clearInterval(interval);
-    };
-  }, [showCodexUsage]);
-
-  useEffect(() => {
-    if (!showAntigravityUsage) {
-      setAntigravityUsage(null);
-      setAntigravityUsageError(null);
-      setAntigravityUsageLoading(false);
-      return;
-    }
-    let disposed = false;
-    const loadUsage = async (forceRefresh = false) => {
-      setAntigravityUsageLoading(true);
-      try {
-        const usage = await getAntigravityUsage({ forceRefresh });
-        if (!disposed) {
-          setAntigravityUsage(usage);
-          setAntigravityUsageError(null);
-        }
-      } catch (error) {
-        if (!disposed) setAntigravityUsageError(error instanceof Error ? error.message : String(error));
-      } finally {
-        if (!disposed) setAntigravityUsageLoading(false);
-      }
-    };
-    void loadUsage();
-    const interval = window.setInterval(() => void loadUsage(true), 3 * 60 * 1000);
-    return () => {
-      disposed = true;
-      window.clearInterval(interval);
-    };
-  }, [showAntigravityUsage]);
-
-  const handleRefreshAntigravityUsage = () => {
-    setAntigravityUsageLoading(true);
-    getAntigravityUsage({ forceRefresh: true })
-      .then((usage) => {
-        setAntigravityUsage(usage);
-        setAntigravityUsageError(null);
-      })
-      .catch((error) => setAntigravityUsageError(error instanceof Error ? error.message : String(error)))
-      .finally(() => setAntigravityUsageLoading(false));
-  };
-
-  useEffect(() => {
-    if (!showQoderUsage) {
-      setQoderUsage(null);
-      setQoderUsageError(null);
-      setQoderUsageLoading(false);
-      return;
-    }
-
-    let disposed = false;
-    const loadQoderUsage = async (forceRefresh = false) => {
-      setQoderUsageLoading(true);
-      try {
-        const usage = await getQoderUsage({ forceRefresh });
-        if (disposed) return;
-        setQoderUsage(usage);
-        setQoderUsageError(null);
-      } catch (error) {
-        if (disposed) return;
-        setQoderUsageError(error instanceof Error ? error.message : String(error));
-      } finally {
-        if (!disposed) setQoderUsageLoading(false);
-      }
-    };
-
-    void loadQoderUsage(false);
-    const interval = window.setInterval(() => {
-      void loadQoderUsage(true);
-    }, 3 * 60 * 1000);
-
-    return () => {
-      disposed = true;
-      window.clearInterval(interval);
-    };
-  }, [showQoderUsage]);
-
-  useEffect(() => {
-    const sessionId = loadClaudeUsage ? activeSession?.id : null;
-    if (!sessionId) {
-      setClaudeRateLimits(null);
-      setClaudeUsageError(null);
-      setClaudeUsageLoading(false);
-      return;
-    }
-
-    let disposed = false;
-    let unlisten: (() => void) | undefined;
-    const fetchClaudeUsage = async () => {
-      setClaudeUsageLoading(true);
-      try {
-        const limits = await getClaudeRateLimits(sessionId);
-        if (disposed) return;
-        setClaudeRateLimits(limits);
-        setClaudeUsageError(null);
-      } catch (error) {
-        if (disposed) return;
-        setClaudeUsageError(error instanceof Error ? error.message : String(error));
-      } finally {
-        if (!disposed) setClaudeUsageLoading(false);
-      }
-    };
-
-    void fetchClaudeUsage();
-    void listen<ClaudeRateLimitsUpdatePayload>("claude-rate-limits-update", (event) => {
-      if (disposed || event.payload.sessionId !== sessionId) return;
-      const { sessionId: _sessionId, ...limits } = event.payload;
-      setClaudeRateLimits(limits);
-      setClaudeUsageError(null);
-      setClaudeUsageLoading(false);
-    }).then((cleanup) => {
-      if (disposed) cleanup();
-      else unlisten = cleanup;
-    });
-
-    return () => {
-      disposed = true;
-      unlisten?.();
-    };
-  }, [activeSession?.id, loadClaudeUsage]);
-
-  const handleRefreshCodexUsage = () => {
-    setCodexUsageLoading(true);
-    getCodexRateLimits({ forceRefresh: true })
-      .then((limits) => {
-        setCodexRateLimits(limits);
-        setCodexUsageError(null);
-      })
-      .catch((error) => {
-        setCodexUsageError(error instanceof Error ? error.message : String(error));
-      })
-      .finally(() => {
-        setCodexUsageLoading(false);
-      });
-  };
-
-  const handleRefreshClaudeUsage = () => {
-    if (!activeSession?.id) return;
-    setClaudeUsageLoading(true);
-    getClaudeRateLimits(activeSession.id)
-      .then((limits) => {
-        setClaudeRateLimits(limits);
-        setClaudeUsageError(null);
-      })
-      .catch((error) => {
-        setClaudeUsageError(error instanceof Error ? error.message : String(error));
-      })
-      .finally(() => setClaudeUsageLoading(false));
-  };
-
-  const handleRefreshQoderUsage = () => {
-    setQoderUsageLoading(true);
-    getQoderUsage({ forceRefresh: true })
-      .then((usage) => {
-        setQoderUsage(usage);
-        setQoderUsageError(null);
-      })
-      .catch((error) => {
-        setQoderUsageError(error instanceof Error ? error.message : String(error));
-      })
-      .finally(() => setQoderUsageLoading(false));
-  };
 
   useEffect(() => {
     const projectPath = currentProject?.path ?? null;
@@ -843,18 +636,14 @@ function QoderUsageStatus({
   onRefresh: () => void;
 }) {
   const { t, i18n } = useTranslation();
-  const hasData = usage?.status === "ok" && Boolean(
-    usage.userQuota || usage.addOnQuota || usage.orgResourcePackage,
-  );
+  const hasData = hasUsageData(usage);
   const statusError = error ?? usage?.error
     ?? (usage?.status === "unavailable" ? t("statusBar.qoderUsage.unavailable") : null);
   const usedPercent = qoderUsedPercentage(usage);
   const remaining = usedPercent == null ? null : Math.max(0, Math.min(100, Math.round(100 - usedPercent)));
   const summary = hasData && remaining != null
     ? t("statusBar.qoderUsage.summary", { value: remaining })
-    : isLoading
-      ? t("statusBar.qoderUsage.loading")
-      : t("statusBar.qoderUsage.unavailableShort");
+    : t("statusBar.qoderUsage.title");
   const barColor = remaining == null ? "var(--cs-text-tertiary)" : codexUsageBarColor(remaining);
 
   const popoverContent = (
@@ -877,6 +666,7 @@ function QoderUsageStatus({
               {t("statusBar.qoderUsage.title")}
             </div>
             <div className="text-[10px]" style={{ color: "var(--cs-text-tertiary)" }}>
+              {statusError && hasData ? `${t("statusBar.usage.stale")} · ` : ""}
               {usage?.updatedAt ? formatUpdatedAt(usage.updatedAt, t) : t("statusBar.qoderUsage.pending")}
             </div>
           </div>
@@ -957,6 +747,7 @@ function QoderUsageStatus({
         title={summary}
       >
         <AgentIcon agentId="qoder" size={15} />
+        {hasData && remaining != null ? (
         <div
           aria-hidden="true"
           className="h-[6px] w-14 shrink-0 overflow-hidden rounded-full"
@@ -967,8 +758,8 @@ function QoderUsageStatus({
             style={{ width: `${remaining ?? 0}%`, background: barColor }}
           />
         </div>
+        ) : null}
         <span className="truncate tabular-nums">{summary}</span>
-        {isLoading ? <LoadingOutlined style={{ fontSize: 12 }} /> : statusError ? <WarningOutlined style={{ fontSize: 12 }} /> : null}
       </button>
     </Popover>
   );
@@ -1030,24 +821,19 @@ function AntigravityUsageStatus({
   onRefresh: () => void;
 }) {
   const { t } = useTranslation();
-  const hasData = usage?.status === "ok" && usage.windows.length > 0;
-  const compactScope = hasData && usage.windows.some((window) => window.scope === "Gemini")
+  const hasData = Boolean(usage && hasUsageData(usage));
+  const compactScope = hasData && usage && usage.windows.some((window) => window.scope === "Gemini")
     ? "Gemini" : usage?.windows[0]?.scope;
-  const compactGroups = hasData && compactScope ? [compactScope].map((scope) => ({
+  const compactGroups = hasData && usage && compactScope ? [compactScope].map((scope) => ({
     scope,
     label: antigravityQuotaScopeLabel(scope, t),
-    periods: (scope === "Gemini" ? ["session", "weekly"] : usage.windows.filter((window) => window.scope === scope).slice(0, 2).map((window) => window.window)).map((period) => {
-      const window = usage.windows.find((item) => item.scope === scope && item.window === period);
-      return {
-        period,
-        label: antigravityQuotaPeriodLabel(period, t),
-        remaining: window ? Math.max(0, Math.min(100, Math.round(window.remainingPercent))) : null,
-      };
-    }),
+    periods: usage.windows.filter((window) => window.scope === scope).slice(0, 2).map((window) => ({
+      period: window.window,
+      label: antigravityQuotaPeriodLabel(window.window, t),
+      remaining: Math.max(0, Math.min(100, Math.round(window.remainingPercent))),
+    })),
   })) : [];
-  const summary = isLoading
-    ? t("statusBar.antigravityUsage.loading")
-    : t("statusBar.antigravityUsage.unavailableShort");
+  const summary = t("statusBar.antigravityUsage.title");
   const accessibleSummary = compactGroups.map((group) => `${group.label} · ${group.periods.map((period) =>
     `${period.label} ${period.remaining == null ? t("statusBar.antigravityUsage.unavailableShort") : t("statusBar.codexUsage.remaining", { value: period.remaining })}`,
   ).join(" · ")}`).join("; ");
@@ -1073,6 +859,7 @@ function AntigravityUsageStatus({
               {t("statusBar.antigravityUsage.title")}
             </div>
             <div className="text-[10px]" style={{ color: "var(--cs-text-tertiary)" }}>
+              {statusError && hasData ? `${t("statusBar.usage.stale")} · ` : ""}
               {usage?.updatedAt ? formatUpdatedAt(usage.updatedAt, t) : t("statusBar.antigravityUsage.pending")}
             </div>
           </div>
@@ -1093,7 +880,7 @@ function AntigravityUsageStatus({
         </button>
       </div>
       <div className="space-y-3 px-3 py-3">
-        {hasData ? usage.windows.map((window) => (
+        {hasData && usage ? usage.windows.map((window) => (
           <AntigravityUsageWindowRow key={window.id} window={window} />
         )) : (
           <div className="flex items-start gap-2 text-[12px]" style={{ color: "var(--cs-text-tertiary)" }}>
@@ -1101,6 +888,9 @@ function AntigravityUsageStatus({
             <span>{statusError || t("statusBar.antigravityUsage.unavailable")}</span>
           </div>
         )}
+        {statusError && hasData ? (
+          <div className="text-[11px] text-[var(--cs-text-tertiary)]">{statusError}</div>
+        ) : null}
       </div>
     </div>
   );
@@ -1140,7 +930,6 @@ function AntigravityUsageStatus({
             ))}
           </span>
         )) : <span className="truncate">{summary}</span>}
-        {isLoading ? <LoadingOutlined /> : statusError ? <WarningOutlined /> : null}
       </button>
     </Popover>
   );
@@ -1191,7 +980,7 @@ function RateLimitUsageStatus({
   const statusError = error
     ?? limits?.error
     ?? (limits?.status === "unavailable" ? t(`${translationRoot}.unavailable`) : null);
-  const summary = formatRateLimitUsageSummary(limits, isLoading, statusError, t, translationRoot);
+  const summary = formatRateLimitUsageSummary(limits, t, translationRoot);
   const resetCredits = codexLimits?.rateLimitResetCredits?.availableCount;
   const resetCreditDetails = codexLimits?.rateLimitResetCredits;
   // Keep the compact progress bar in sync with the first window shown in the
@@ -1223,11 +1012,12 @@ function RateLimitUsageStatus({
               {t(`${translationRoot}.title`)}
             </div>
             <div className="text-[10px]" style={{ color: "var(--cs-text-tertiary)" }}>
+              {statusError && hasData ? `${t("statusBar.usage.stale")} · ` : ""}
               {limits?.updatedAt ? formatUpdatedAt(limits.updatedAt, t) : t(`${translationRoot}.pending`)}
             </div>
           </div>
         </div>
-        {agentId === "codex" ? <button
+        <button
           type="button"
           className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[5px] transition-colors"
           style={{
@@ -1245,7 +1035,7 @@ function RateLimitUsageStatus({
           }}
         >
           {isLoading ? <LoadingOutlined style={{ fontSize: 12 }} /> : <ReloadOutlined style={{ fontSize: 12 }} />}
-        </button> : null}
+        </button>
       </div>
 
       <div className="space-y-3 px-3 py-3">
@@ -1345,6 +1135,7 @@ function RateLimitUsageStatus({
         title={summary}
       >
         <AgentIcon agentId={agentId} size={15} />
+        {compactRemaining != null ? (
         <div
           aria-hidden="true"
           className="h-[6px] w-14 shrink-0 overflow-hidden rounded-full"
@@ -1364,12 +1155,9 @@ function RateLimitUsageStatus({
             }}
           />
         </div>
-        <span className="truncate tabular-nums">{summary}</span>
-        {isLoading ? (
-          <LoadingOutlined style={{ fontSize: 12, color: "var(--cs-text-tertiary)" }} />
-        ) : statusError ? (
-          <WarningOutlined style={{ fontSize: 12, color: "var(--cs-text-tertiary)" }} />
         ) : null}
+        <span className="truncate tabular-nums">{summary}</span>
+
       </button>
     </Popover>
   );
@@ -1488,8 +1276,6 @@ function CodexResetCreditList({
 
 function formatRateLimitUsageSummary(
   limits: ClaudeRateLimits | CodexRateLimits | null,
-  isLoading: boolean,
-  error: string | null,
   t: TFunction,
   translationRoot: "statusBar.claudeUsage" | "statusBar.codexUsage",
 ): string {
@@ -1503,13 +1289,7 @@ function formatRateLimitUsageSummary(
   if (parts.length > 0) {
     return parts.join(" · ");
   }
-  if (isLoading) {
-    return t(`${translationRoot}.loading`);
-  }
-  if (error) {
-    return t(`${translationRoot}.unavailableShort`);
-  }
-  return t(`${translationRoot}.pending`);
+  return t(`${translationRoot}.title`);
 }
 
 function remainingPercent(window: CodexRateLimitWindow): number {

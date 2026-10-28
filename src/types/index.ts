@@ -488,7 +488,13 @@ export interface CodexRateLimitResetCredit {
 
 export type CodexRateLimitStatus = "ok" | "error" | "unavailable";
 
-export interface CodexRateLimits {
+export interface UsageRefreshState {
+  /** 下次允许自动刷新；null 表示等待凭据/源快照变化或手动刷新。 */
+  nextRetryAt?: number | null;
+  checkedAt?: number;
+}
+
+export interface CodexRateLimits extends UsageRefreshState {
   session: CodexRateLimitWindow | null;
   weekly: CodexRateLimitWindow | null;
   rateLimitResetCredits?: CodexRateLimitResetCredits | null;
@@ -511,7 +517,7 @@ export interface QoderQuotaBucket {
 
 export type QoderUsageStatus = "ok" | "error" | "unavailable";
 
-export interface QoderUsage {
+export interface QoderUsage extends UsageRefreshState {
   userType: string | null;
   totalUsagePercentage: number | null;
   expiresAt: number | null;
@@ -536,7 +542,7 @@ export interface AntigravityQuotaWindow {
 
 export type AntigravityUsageStatus = "ok" | "error" | "unavailable";
 
-export interface AntigravityUsage {
+export interface AntigravityUsage extends UsageRefreshState {
   windows: AntigravityQuotaWindow[];
   updatedAt: number;
   error: string | null;
@@ -545,7 +551,7 @@ export interface AntigravityUsage {
 
 export type ClaudeRateLimitStatus = "ok" | "unavailable";
 
-export interface ClaudeRateLimits {
+export interface ClaudeRateLimits extends UsageRefreshState {
   session: CodexRateLimitWindow | null;
   weekly: CodexRateLimitWindow | null;
   updatedAt: number;
@@ -730,6 +736,8 @@ export interface SkillInfo {
   contentFingerprint: string;
   folderName: string;
   filePath: string;
+  resolvedFilePath: string;
+  entryIsLink: boolean;
   sourceDir: string;
   updatedAt?: number;
 }
@@ -751,7 +759,6 @@ export interface SkillDetail {
   content: string;
 }
 
-export type CommandScope = "workspace" | "user";
 export type CommandShell = "default" | "powershell" | "cmd" | "bash";
 export type CommandCwdMode = "project" | "current" | "custom";
 
@@ -759,7 +766,6 @@ export interface CommandInfo {
   id: string;
   name: string;
   description: string;
-  scope: CommandScope;
   format: "claude_native" | "extended" | string;
   allowedTools: string[];
   supportsTestRun: boolean;
@@ -779,7 +785,6 @@ export interface CommandInfo {
 export interface CommandCatalog {
   commands: CommandInfo[];
   workspaceDir?: string | null;
-  userDir: string;
 }
 
 export interface CommandDetail {

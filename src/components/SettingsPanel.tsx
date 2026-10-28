@@ -1,3 +1,4 @@
+import { SkillsSettingsPage } from "./settings/SkillsSettingsPage";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { BackgroundSettings } from "./settings/BackgroundSettings";
 import { SettingRow } from "./settings/SettingRow";
@@ -47,22 +48,17 @@ import { captureShortcutFromEvent, formatShortcutDisplay, toTauriShortcut } from
 import { stripAnsiEscapeSequences } from "@/lib/textContent";
 import { TERMINAL_SCROLLBACK_OPTIONS } from "@/lib/terminalSettings";
 import {
-  createSkill,
   createCommand,
-  ensureSkillDirectory,
   ensureCommandStore,
-  getSkillDetail,
   getCommandDetail,
   getAgentHookDetail,
   deleteCommand,
   deleteClaudeHook,
   listCommands,
-  listSkills,
   listAgentHooks,
   repairAgentHooks,
   migrateWorkspaceClaudeHooks,
   runCommandTest,
-  setSkillEnabled,
   openInFileManager,
   updateCommand,
   listMcpServers,
@@ -80,17 +76,11 @@ import { VoicePolishModePicker } from "@/components/settings/VoicePolishModePick
 import { availableVoicePolishModels, resolveVoicePolishModel } from "@/lib/voicePolish";
 import { VoiceProviderLabel } from "@/components/settings/VoiceProviderLabel";
 import type {
-  SkillCatalog,
-  SkillDetail,
-  SkillAgent,
-  SkillInfo,
-  SkillScope,
   CommandCatalog,
   CommandCwdMode,
   CommandDetail,
   CommandDraft,
   CommandInfo,
-  CommandScope,
   CommandShell,
   CommandTestResult,
   HookCatalog,
@@ -1344,62 +1334,9 @@ function ShortcutsPage() {
   );
 }
 
-/* ────────────── Skills Page ────────────── */
-type SkillStatusFilter = "all" | "enabled" | "disabled";
-type SkillAgentFilter = "all" | SkillAgent;
+/* ────────────── Shared resource lists ────────────── */
 type ResourceScope = "workspace" | "user";
 const SETTINGS_LIST_PAGE_SIZE = 5;
-const SKILL_AGENTS: readonly SkillAgent[] = getAgentIdsWithCapability("skills");
-
-function skillAgentLabel(agent: SkillAgent, t: (key: string) => string) {
-  return t(`settings.skills.agents.${agent}`);
-}
-
-function skillSourceLabel(skill: SkillInfo, t: (key: string) => string) {
-  return skill.agent === "codex"
-    || skill.agent === "pi"
-    || (skill.scope === "workspace" && skill.agent === "antigravity")
-    ? t("settings.skills.sharedAgentsSource")
-    : skillAgentLabel(skill.agent, t);
-}
-
-function formatSkillUpdatedAt(updatedAt?: number) {
-  if (!updatedAt) return null;
-  try {
-    return new Date(updatedAt).toLocaleString();
-  } catch {
-    return null;
-  }
-}
-
-function resolveSkillFolderPath(skill: SkillInfo) {
-  return skill.filePath.replace(/[\\/]SKILL\.md$/i, "");
-}
-
-function skillConflictTag(skill: SkillInfo, t: (key: string, options?: Record<string, unknown>) => string) {
-  if (skill.conflictStatus === "none") return null;
-  const affectedAgents = skill.conflictAgents.map((agent) => skillAgentLabel(agent, t)).join(", ");
-  const title = skill.conflictStatus === "runtime-conflict"
-    ? t("settings.skills.runtimeConflictDetail", { agents: affectedAgents })
-    : t(`settings.skills.${skill.conflictStatus === "identical-copy" ? "identicalCopyDetail" : "divergedCopyDetail"}`);
-  const labelKey = skill.conflictStatus === "runtime-conflict"
-    ? "runtimeConflict"
-    : skill.conflictStatus === "identical-copy"
-      ? "identicalCopy"
-      : "divergedCopy";
-  return (
-    <Tooltip title={title}>
-      <Tag className="!m-0" color={skill.conflictStatus === "runtime-conflict" ? "error" : skill.conflictStatus === "diverged-copy" ? "warning" : "processing"}>
-        {t(`settings.skills.${labelKey}`)}
-      </Tag>
-    </Tooltip>
-  );
-}
-
-function scopeLabel(scope: ResourceScope, t: (key: string, options?: Record<string, unknown>) => string) {
-  return scope === "workspace" ? t("settings.scope.workspace") : t("settings.scope.user");
-}
-
 function buildPaginationItems(current: number, totalPages: number) {
   if (totalPages <= 7) {
     return Array.from({ length: totalPages }, (_, index) => index + 1);
@@ -1563,622 +1500,6 @@ function ListPagination({
   );
 }
 
-function SkillRow({
-  skill,
-  toggling,
-  onToggle,
-  onOpen,
-}: {
-  skill: SkillInfo;
-  toggling: boolean;
-  onToggle: (checked: boolean) => void;
-  onOpen: () => void;
-}) {
-  const { t } = useTranslation();
-  return (
-    <div
-      className="flex items-start gap-4 px-4 py-3 transition-colors cursor-pointer"
-      style={{ borderBottom: "1px solid var(--cs-border-card)" }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.background = "var(--cs-bg-hover)";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = "transparent";
-      }}
-      onClick={onOpen}
-    >
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <AgentIcon agentId={skill.agent} size={16} />
-          <span className="min-w-0 break-words text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>
-            {skill.name}
-          </span>
-          <Tag className="!m-0">{t("settings.skills.nativeSource", { agent: skillSourceLabel(skill, t) })}</Tag>
-          {skillConflictTag(skill, t)}
-        </div>
-        <div className="text-[11px] mt-1 line-clamp-2" style={{ color: "var(--cs-text-tertiary)" }}>
-          {skill.description || t("settings.shared.noDescription")}
-        </div>
-        <div className="text-[10px] mt-1 flex min-w-0 items-center gap-x-3 gap-y-1 flex-wrap" style={{ color: "var(--cs-text-tertiary)" }}>
-          <span className="inline-flex min-w-0 items-center gap-1 flex-wrap">
-            {t("settings.skills.availableTo")}
-            {skill.effectiveAgents.map((agent) => (
-              <Tooltip key={agent} title={skillAgentLabel(agent, t)}>
-                <span><AgentIcon agentId={agent} size={13} /></span>
-              </Tooltip>
-            ))}
-          </span>
-          <span className="break-words">{skill.folderName}</span>
-          <span className="min-w-0 break-all">{skill.sourceDir}</span>
-          <span className="break-words">{t("settings.shared.updatedAt", { value: formatSkillUpdatedAt(skill.updatedAt) ?? t("common.unknown") })}</span>
-        </div>
-      </div>
-      <div className="mt-1 flex shrink-0 items-center gap-2">
-        <span
-          className="text-xs"
-          style={{ color: skill.enabled ? "var(--cs-success)" : "var(--cs-text-tertiary)" }}
-        >
-          {skill.enabled ? t("common.enabled") : t("common.disabled")}
-        </span>
-        <Switch
-          checked={skill.enabled}
-          loading={toggling}
-          onClick={(checked, event) => {
-            event?.stopPropagation();
-            onToggle(checked);
-          }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function SkillAgentFilterButtons({
-  value,
-  total,
-  counts,
-  onChange,
-}: {
-  value: SkillAgentFilter;
-  total: number;
-  counts: Record<SkillAgent, number>;
-  onChange: (agent: SkillAgentFilter) => void;
-}) {
-  const { t } = useTranslation();
-  const options: Array<{ value: SkillAgentFilter; label: React.ReactNode }> = [
-    { value: "all", label: `${t("settings.skills.allAgents")} (${total})` },
-    ...SKILL_AGENTS.map((agent) => ({
-      value: agent,
-      label: <><AgentIcon agentId={agent} size={14} />{skillAgentLabel(agent, t)} ({counts[agent]})</>,
-    })),
-  ];
-
-  return (
-    <div
-      className="flex flex-wrap gap-1 rounded-lg p-1"
-      role="radiogroup"
-      aria-label={t("settings.skills.filterByAgent")}
-      style={{ background: "var(--cs-bg-hover)" }}
-    >
-      {options.map((option) => {
-        const active = option.value === value;
-        return (
-          <button
-            key={option.value}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            onClick={() => onChange(option.value)}
-            className="inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-md px-3 py-1 text-left text-sm transition-colors"
-            style={{
-              background: active ? "var(--cs-bg-card)" : "transparent",
-              color: active ? "var(--cs-text-primary)" : "var(--cs-text-secondary)",
-              boxShadow: active ? "0 1px 2px rgba(0,0,0,0.08)" : "none",
-            }}
-          >
-            {option.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function SkillDetailPanel({
-  open,
-  detail,
-  loading,
-  onClose,
-  onOpenFolder,
-}: {
-  open: boolean;
-  detail: SkillDetail | null;
-  loading: boolean;
-  onClose: () => void;
-  onOpenFolder: () => void;
-}) {
-  const { t } = useTranslation();
-  return (
-    <Drawer
-      title={detail?.skill.name ?? t("settings.skills.detailTitle")}
-      placement="right"
-      width={560}
-      open={open}
-      onClose={onClose}
-      destroyOnClose={false}
-    >
-      {loading ? (
-        <div className="flex justify-center py-10">
-          <Spin />
-        </div>
-      ) : detail ? (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Tag icon={<span className="inline-flex mr-1"><AgentIcon agentId={detail.skill.agent} size={13} /></span>}>
-              {t("settings.skills.nativeSource", { agent: skillSourceLabel(detail.skill, t) })}
-            </Tag>
-            <Tag color={detail.skill.enabled ? "green" : "default"}>
-              {detail.skill.enabled ? t("common.enabled") : t("common.disabled")}
-            </Tag>
-            {skillConflictTag(detail.skill, t)}
-          </div>
-          <div className="space-y-1">
-            <div className="text-xs" style={{ color: "var(--cs-text-tertiary)" }}>{t("settings.skills.availableTo")}</div>
-            <div className="flex items-center gap-2 flex-wrap">
-              {detail.skill.effectiveAgents.map((agent) => (
-                <Tag key={agent} icon={<span className="inline-flex mr-1"><AgentIcon agentId={agent} size={13} /></span>}>
-                  {skillAgentLabel(agent, t)}
-                </Tag>
-              ))}
-            </div>
-          </div>
-          <div className="space-y-1">
-            <div className="text-xs" style={{ color: "var(--cs-text-tertiary)" }}>{t("settings.shared.directory")}</div>
-            <div className="text-xs break-all" style={{ color: "var(--cs-text-secondary)" }}>
-              {resolveSkillFolderPath(detail.skill)}
-            </div>
-          </div>
-          {detail.skill.conflictStatus !== "none" && (
-            <div className="space-y-1">
-              <div className="text-xs" style={{ color: "var(--cs-text-tertiary)" }}>{t("settings.skills.relatedCopies")}</div>
-              {detail.skill.conflictingPaths.map((path) => (
-                <div key={path} className="text-xs break-all" style={{ color: "var(--cs-text-secondary)" }}>
-                  {path.replace(/[\\/]SKILL\.md$/i, "")}
-                </div>
-              ))}
-            </div>
-          )}
-          <div className="space-y-1">
-            <div className="text-xs" style={{ color: "var(--cs-text-tertiary)" }}>{t("settings.shared.file")}</div>
-            <div className="text-xs break-all" style={{ color: "var(--cs-text-secondary)" }}>
-              {detail.skill.filePath}
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <Button icon={<FolderOpenOutlined />} onClick={onOpenFolder}>
-              {t("settings.skills.openSkillDirectory")}
-            </Button>
-          </div>
-          <div
-            className="rounded-xl p-4"
-            style={{
-              background: "var(--cs-bg-hover)",
-              border: "1px solid var(--cs-border-card)",
-            }}
-          >
-            <pre
-              className="text-xs leading-relaxed whitespace-pre-wrap font-mono"
-              style={{ color: "var(--cs-text-secondary)" }}
-            >
-              {detail.content}
-            </pre>
-          </div>
-        </div>
-      ) : (
-        <Empty description={t("settings.skills.selectSkill")} />
-      )}
-    </Drawer>
-  );
-}
-
-function SkillsPage() {
-  const { t } = useTranslation();
-  const currentProject = useAppStore((s) => s.currentProject);
-  const projectPath = currentProject?.path ?? null;
-  const [catalog, setCatalog] = useState<SkillCatalog | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [search, setSearch] = useState("");
-  const [activeAgent, setActiveAgent] = useState<SkillAgentFilter>("all");
-  const [activeScope, setActiveScope] = useState<SkillScope>(projectPath ? "workspace" : "user");
-  const [statusFilter, setStatusFilter] = useState<SkillStatusFilter>("all");
-  const [selectedSkill, setSelectedSkill] = useState<SkillInfo | null>(null);
-  const [detail, setDetail] = useState<SkillDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [togglingId, setTogglingId] = useState<string | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [createName, setCreateName] = useState("");
-  const [createDescription, setCreateDescription] = useState("");
-  const [createScope, setCreateScope] = useState<SkillScope>("workspace");
-  const [createAgent, setCreateAgent] = useState<SkillAgent>("claude");
-  const [creating, setCreating] = useState(false);
-  const [page, setPage] = useState(1);
-
-  const loadCatalog = useCallback(async (silent = false) => {
-    if (silent) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
-    }
-    try {
-      const next = await listSkills(projectPath);
-      setCatalog(next);
-      return next;
-    } catch (error) {
-      console.error("Failed to load skills:", error);
-      message.error(t("settings.skills.loadFailed"));
-      return null;
-    } finally {
-      if (silent) {
-        setRefreshing(false);
-      } else {
-        setLoading(false);
-      }
-    }
-  }, [projectPath]);
-
-  useEffect(() => {
-    if (!projectPath) {
-      setActiveScope("user");
-      setCreateScope("user");
-    }
-  }, [projectPath]);
-
-  useEffect(() => {
-    loadCatalog();
-  }, [loadCatalog]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [search, activeAgent, activeScope, statusFilter, catalog?.skills]);
-
-  const searchStatusFilteredSkills = useMemo(() => {
-    const allSkills = catalog?.skills ?? [];
-    const keyword = search.trim().toLowerCase();
-    return allSkills.filter((skill) => {
-      if (statusFilter === "enabled" && !skill.enabled) return false;
-      if (statusFilter === "disabled" && skill.enabled) return false;
-      if (!keyword) return true;
-      return [
-        skill.name,
-        skill.description,
-        skill.folderName,
-        skill.filePath,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(keyword);
-    });
-  }, [catalog?.skills, search, statusFilter]);
-
-  const agentCounts = Object.fromEntries(
-    SKILL_AGENTS.map((agent) => [agent, searchStatusFilteredSkills.filter((skill) => skill.effectiveAgents.includes(agent)).length])
-  ) as Record<SkillAgent, number>;
-  const baseFilteredSkills = activeAgent === "all"
-    ? searchStatusFilteredSkills
-    : searchStatusFilteredSkills.filter((skill) => skill.effectiveAgents.includes(activeAgent));
-  const workspaceCount = baseFilteredSkills.filter((skill) => skill.scope === "workspace").length;
-  const userCount = baseFilteredSkills.filter((skill) => skill.scope === "user").length;
-  const filteredSkills = baseFilteredSkills.filter((skill) => skill.scope === activeScope);
-
-  const pagedSkills = filteredSkills.slice(
-    (page - 1) * SETTINGS_LIST_PAGE_SIZE,
-    page * SETTINGS_LIST_PAGE_SIZE
-  );
-
-  async function handleOpenDetail(skill: SkillInfo) {
-    setSelectedSkill(skill);
-    setDetail(null);
-    setDetailLoading(true);
-    try {
-      const next = await getSkillDetail(skill.agent, skill.scope, skill.folderName, skill.enabled, projectPath);
-      setDetail({ ...next, skill: { ...next.skill, ...skill } });
-    } catch (error) {
-      console.error("Failed to load skill details:", error);
-      message.error(t("settings.skills.loadDetailFailed"));
-    } finally {
-      setDetailLoading(false);
-    }
-  }
-
-  async function handleToggle(skill: SkillInfo, checked: boolean) {
-    setTogglingId(skill.id);
-    try {
-      const updated = await setSkillEnabled(
-        skill.agent,
-        skill.scope,
-        skill.folderName,
-        skill.enabled,
-        checked,
-        projectPath
-      );
-      const mergedUpdated = {
-        ...updated,
-        conflictStatus: skill.conflictStatus,
-        conflictAgents: skill.conflictAgents,
-        conflictingPaths: skill.conflictingPaths,
-      };
-      setCatalog((prev) =>
-        prev
-          ? {
-              ...prev,
-              skills: prev.skills.map((item) => (item.id === skill.id ? mergedUpdated : item)),
-            }
-          : prev
-      );
-      if (selectedSkill?.id === skill.id) {
-        setSelectedSkill(mergedUpdated);
-        setDetail((prev) => (prev ? { ...prev, skill: mergedUpdated } : prev));
-      }
-      const refreshed = await loadCatalog(true);
-      const refreshedSkill = refreshed?.skills.find((item) => item.id === skill.id);
-      if (refreshedSkill && selectedSkill?.id === skill.id) {
-        setSelectedSkill(refreshedSkill);
-        setDetail((prev) => (prev ? { ...prev, skill: refreshedSkill } : prev));
-      }
-      message.success(
-        checked
-          ? t("settings.skills.enableSuccess", { name: updated.name })
-          : t("settings.skills.disableSuccess", { name: updated.name })
-      );
-    } catch (error) {
-      console.error("Failed to toggle skill status:", error);
-      message.error(t("settings.skills.toggleFailed"));
-    } finally {
-      setTogglingId(null);
-    }
-  }
-
-  async function handleOpenDirectory(agent: SkillAgent, scope: SkillScope, enabled: boolean) {
-    try {
-      const dir = await ensureSkillDirectory(agent, scope, enabled, projectPath);
-      await openInFileManager(dir);
-    } catch (error) {
-      console.error("Failed to open skill directory:", error);
-      message.error(t("settings.skills.openDirectoryFailed"));
-    }
-  }
-
-  async function handleCreateSkill() {
-    if (!createName.trim()) {
-      message.warning(t("settings.skills.enterSkillName"));
-      return;
-    }
-    setCreating(true);
-    try {
-      const created = await createSkill(
-        createAgent,
-        createScope,
-        createName.trim(),
-        createDescription.trim() || undefined,
-        projectPath
-      );
-      setCreateOpen(false);
-      setCreateName("");
-      setCreateDescription("");
-      message.success(t("settings.skills.createSuccess", { name: created.name }));
-      await loadCatalog(true);
-      await handleOpenDetail(created);
-    } catch (error) {
-      console.error("Failed to create skill:", error);
-      message.error(t("settings.skills.createFailed"));
-    } finally {
-      setCreating(false);
-    }
-  }
-
-  function renderSkillSection() {
-    const currentScope = activeScope;
-    const currentRoot = activeAgent === "all"
-      ? null
-      : catalog?.roots.find((root) => root.agent === activeAgent && root.scope === currentScope);
-    const directoryText = currentRoot?.enabledDir;
-    const items = pagedSkills;
-    const totalItems = filteredSkills.length;
-    const emptyDescription = currentScope === "workspace" && !projectPath
-      ? t("settings.skills.openProjectFirst")
-      : t("settings.skills.emptyFiltered");
-
-    return (
-      <SettingSection title={`${t("settings.menu.skills")} (${totalItems})`}>
-        <div className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
-          <div className="min-w-0">
-
-            <div className="text-[11px] mt-1 break-all" style={{ color: "var(--cs-text-tertiary)" }}>
-              {activeAgent === "all"
-                ? t("settings.skills.selectAgentForDirectory")
-                : directoryText || (currentScope === "workspace" ? t("settings.skills.workspaceDirUnavailable") : t("settings.skills.userDirUnavailable"))}
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button size="small" disabled={activeAgent === "all"} icon={<FolderOpenOutlined />} onClick={() => activeAgent !== "all" && handleOpenDirectory(activeAgent, currentScope, true)}>
-              {t("settings.skills.openEnabledDir")}
-            </Button>
-            <Button size="small" disabled={activeAgent === "all"} onClick={() => activeAgent !== "all" && handleOpenDirectory(activeAgent, currentScope, false)}>
-              {t("settings.skills.openDisabledDir")}
-            </Button>
-          </div>
-        </div>
-        {items.length === 0 ? (
-          <Empty
-            description={emptyDescription}
-            style={{ padding: "28px 0" }}
-          />
-        ) : (
-          <>
-            {items.map((skill) => (
-              <SkillRow
-                key={skill.id}
-                skill={skill}
-                toggling={togglingId === skill.id}
-                onOpen={() => handleOpenDetail(skill)}
-                onToggle={(checked) => handleToggle(skill, checked)}
-              />
-            ))}
-            <ListPagination
-              current={page}
-              onChange={setPage}
-              pageSize={SETTINGS_LIST_PAGE_SIZE}
-              total={totalItems}
-            />
-          </>
-        )}
-      </SettingSection>
-    );
-  }
-
-  if (loading) {
-    return (
-      <div className="flex justify-center py-20">
-        <Spin />
-      </div>
-    );
-  }
-
-  return (
-    <>
-      <SettingsPageHeader
-        title={t("settings.menu.skills")}
-        actions={
-          <>
-            <Button
-              icon={<PlusOutlined />}
-              type="primary"
-              onClick={() => {
-                setCreateScope(activeScope);
-                if (activeAgent !== "all") setCreateAgent(activeAgent);
-                setCreateOpen(true);
-              }}
-            >
-              {t("settings.skills.newSkill")}
-            </Button>
-            <Button
-              icon={<ReloadOutlined spin={refreshing} />}
-              onClick={() => loadCatalog(true)}
-            >
-              {t("common.refresh")}
-            </Button>
-          </>
-        }
-      >
-        <div className="mb-3">
-          <div className="text-xs mb-2" style={{ color: "var(--cs-text-tertiary)" }}>{t("settings.skills.filterByAgent")}</div>
-          <SkillAgentFilterButtons
-            value={activeAgent}
-            total={searchStatusFilteredSkills.length}
-            counts={agentCounts}
-            onChange={setActiveAgent}
-          />
-        </div>
-        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_auto]">
-          <Input
-            allowClear
-            prefix={<SearchOutlined style={{ color: "var(--cs-text-tertiary)" }} />}
-            placeholder={t("settings.skills.searchPlaceholder")}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <Segmented
-            value={statusFilter}
-            onChange={(value) => setStatusFilter(value as SkillStatusFilter)}
-            options={[
-              { label: t("settings.shared.allStatus"), value: "all" },
-              { label: t("common.enabled"), value: "enabled" },
-              { label: t("common.disabled"), value: "disabled" },
-            ]}
-          />
-        </div>
-        <ScopeTabs
-          value={activeScope}
-          workspaceCount={workspaceCount}
-          userCount={userCount}
-          projectAvailable={!!projectPath}
-          onChange={setActiveScope}
-        />
-      </SettingsPageHeader>
-
-      {renderSkillSection()}
-
-      <SkillDetailPanel
-        open={!!selectedSkill}
-        detail={detail}
-        loading={detailLoading}
-        onClose={() => {
-          setSelectedSkill(null);
-          setDetail(null);
-        }}
-        onOpenFolder={() => {
-          if (selectedSkill) {
-            openInFileManager(resolveSkillFolderPath(selectedSkill)).catch(() => {
-              message.error(t("settings.skills.openDirectoryFailed"));
-            });
-          }
-        }}
-      />
-
-      <Modal
-        title={t("settings.skills.newSkill")}
-        open={createOpen}
-        onCancel={() => setCreateOpen(false)}
-        onOk={handleCreateSkill}
-        confirmLoading={creating}
-        okText={t("common.create")}
-      >
-        <div className="space-y-4">
-          <div>
-            <div className="text-xs mb-1" style={{ color: "var(--cs-text-tertiary)" }}>{t("settings.skills.targetAgent")}</div>
-            <Select
-              className="w-full"
-              value={createAgent}
-              onChange={(value) => setCreateAgent(value)}
-              options={SKILL_AGENTS.map((agent) => ({ value: agent, label: skillAgentLabel(agent, t) }))}
-            />
-          </div>
-          <div>
-            <div className="text-xs mb-1" style={{ color: "var(--cs-text-tertiary)" }}>{t("settings.skills.skillScope")}</div>
-            <Segmented
-              block
-              value={createScope}
-              onChange={(value) => setCreateScope(value as SkillScope)}
-              options={[
-                { label: t("settings.scope.workspace"), value: "workspace", disabled: !projectPath },
-                { label: t("settings.scope.user"), value: "user" },
-              ]}
-            />
-          </div>
-          <div>
-            <div className="text-xs mb-1" style={{ color: "var(--cs-text-tertiary)" }}>{t("settings.skills.skillName")}</div>
-            <Input
-              placeholder={t("settings.skills.skillNamePlaceholder")}
-              value={createName}
-              onChange={(e) => setCreateName(e.target.value)}
-            />
-          </div>
-          <div>
-            <div className="text-xs mb-1" style={{ color: "var(--cs-text-tertiary)" }}>{t("settings.shared.description")}</div>
-            <Input.TextArea
-              rows={4}
-              placeholder={t("settings.skills.skillDescriptionPlaceholder")}
-              value={createDescription}
-              onChange={(e) => setCreateDescription(e.target.value)}
-            />
-          </div>
-        </div>
-      </Modal>
-    </>
-  );
-}
-
 const commandShellOptions: Array<{ label: string; value: CommandShell }> = [
   { label: "default", value: "default" },
   { label: "PowerShell", value: "powershell" },
@@ -2228,13 +1549,13 @@ function formatCommandCwdLabel(mode: CommandCwdMode, t: (key: string) => string)
   }
 }
 
-function buildCommandEmptyDraft(scope: CommandScope): CommandDraft {
+function buildCommandEmptyDraft(): CommandDraft {
   return {
     name: "",
     description: "",
     template: "",
     shell: "default",
-    cwdMode: scope === "workspace" ? "project" : "current",
+    cwdMode: "project",
     cwdPath: "",
     tags: [],
     requiresConfirm: true,
@@ -2250,13 +1571,12 @@ function splitCommandTags(input: string) {
 }
 
 function buildCommandEmptyState(params: {
-  scope: CommandScope;
   projectPath: string | null;
   search: string;
   t: (key: string) => string;
 }) {
-  const { scope, projectPath, search, t } = params;
-  if (scope === "workspace" && !projectPath) {
+  const { projectPath, search, t } = params;
+  if (!projectPath) {
     return {
       description: t("settings.commands.openProjectFirst"),
       detail: t("settings.commands.projectCommandsDetail"),
@@ -2385,9 +1705,6 @@ function CommandDetailPanel({
       ) : detail ? (
         <div className="space-y-4">
           <div className="flex items-center gap-2 flex-wrap">
-            <Tag color={detail.command.scope === "workspace" ? "blue" : "gold"}>
-              {scopeLabel(detail.command.scope, t)}
-            </Tag>
             <Tag color={detail.command.format === "claude_native" ? "cyan" : "purple"}>
               {detail.command.format === "claude_native" ? t("settings.commands.claudeNative") : t("settings.commands.extended")}
             </Tag>
@@ -2583,7 +1900,6 @@ function CommandsPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
-  const [activeScope, setActiveScope] = useState<CommandScope>(projectPath ? "workspace" : "user");
   const [selectedCommand, setSelectedCommand] = useState<CommandInfo | null>(null);
   const [detail, setDetail] = useState<CommandDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -2592,8 +1908,7 @@ function CommandsPage() {
   const [page, setPage] = useState(1);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingCommand, setEditingCommand] = useState<CommandInfo | null>(null);
-  const [draftScope, setDraftScope] = useState<CommandScope>(projectPath ? "workspace" : "user");
-  const [draft, setDraft] = useState<CommandDraft>(() => buildCommandEmptyDraft(projectPath ? "workspace" : "user"));
+  const [draft, setDraft] = useState<CommandDraft>(buildCommandEmptyDraft);
   const [tagsInput, setTagsInput] = useState("");
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<CommandInfo | null>(null);
@@ -2621,25 +1936,14 @@ function CommandsPage() {
   }, [projectPath]);
 
   useEffect(() => {
-    if (!projectPath) {
-      setActiveScope("user");
-      setDraftScope("user");
-      setDraft((prev) => ({
-        ...prev,
-        cwdMode: prev.cwdMode === "project" ? "current" : prev.cwdMode,
-      }));
-    }
-  }, [projectPath]);
-
-  useEffect(() => {
     loadCatalog();
   }, [loadCatalog]);
 
   useEffect(() => {
     setPage(1);
-  }, [search, activeScope, catalog?.commands]);
+  }, [search, catalog?.commands]);
 
-  const baseFilteredCommands = useMemo(() => {
+  const filteredCommands = useMemo(() => {
     const allCommands = catalog?.commands ?? [];
     const keyword = search.trim().toLowerCase();
     return allCommands.filter((command) => {
@@ -2659,9 +1963,6 @@ function CommandsPage() {
     });
   }, [catalog?.commands, search]);
 
-  const workspaceCount = baseFilteredCommands.filter((command) => command.scope === "workspace").length;
-  const userCount = baseFilteredCommands.filter((command) => command.scope === "user").length;
-  const filteredCommands = baseFilteredCommands.filter((command) => command.scope === activeScope);
   const pagedCommands = filteredCommands.slice(
     (page - 1) * SETTINGS_LIST_PAGE_SIZE,
     page * SETTINGS_LIST_PAGE_SIZE
@@ -2673,7 +1974,7 @@ function CommandsPage() {
     setTestResult(null);
     setDetailLoading(true);
     try {
-      const next = await getCommandDetail(command.scope, command.id, projectPath);
+      const next = await getCommandDetail(command.id, projectPath);
       setDetail(next);
     } catch (error) {
       console.error("Failed to load command details:", error);
@@ -2683,9 +1984,9 @@ function CommandsPage() {
     }
   }
 
-  async function handleOpenConfig(scope: CommandScope) {
+  async function handleOpenConfig() {
     try {
-      const configPath = await ensureCommandStore(scope, projectPath);
+      const configPath = await ensureCommandStore(projectPath);
       await openInFileManager(configPath);
     } catch (error) {
       console.error("Failed to open command config:", error);
@@ -2693,18 +1994,16 @@ function CommandsPage() {
     }
   }
 
-  function openCreateModal(scope: CommandScope) {
-    const nextScope = scope === "workspace" && !projectPath ? "user" : scope;
+  function openCreateModal() {
+    if (!projectPath) return;
     setEditingCommand(null);
-    setDraftScope(nextScope);
-    setDraft(buildCommandEmptyDraft(nextScope));
+    setDraft(buildCommandEmptyDraft());
     setTagsInput("");
     setEditorOpen(true);
   }
 
   function openEditModal(command: CommandInfo) {
     setEditingCommand(command);
-    setDraftScope(command.scope);
     setDraft({
       name: command.name,
       description: command.description,
@@ -2730,7 +2029,7 @@ function CommandsPage() {
       ...draft,
       description: draft.description?.trim() ?? "",
       template: draft.template?.trim() ?? "",
-      cwdMode: draft.cwdMode ?? (draftScope === "workspace" ? "project" : "current"),
+      cwdMode: draft.cwdMode ?? "project",
       cwdPath: draft.cwdMode === "custom" ? draft.cwdPath?.trim() ?? "" : "",
       tags: splitCommandTags(tagsInput),
     };
@@ -2751,15 +2050,14 @@ function CommandsPage() {
     setSaving(true);
     try {
       const saved = editingCommand
-        ? await updateCommand(editingCommand.scope, editingCommand.id, payload, projectPath)
-        : await createCommand(draftScope, payload, projectPath);
+        ? await updateCommand(editingCommand.id, payload, projectPath)
+        : await createCommand(payload, projectPath);
       closeEditor();
       message.success(
         editingCommand
           ? t("settings.commands.updateSuccess", { name: saved.name })
           : t("settings.commands.createSuccess", { name: saved.name })
       );
-      setActiveScope(saved.scope);
       await loadCatalog(true);
       await handleOpenDetail(saved);
     } catch (error) {
@@ -2777,7 +2075,7 @@ function CommandsPage() {
     const target = deleteTarget;
     setDeletingId(target.id);
     try {
-      await deleteCommand(target.scope, target.id, projectPath);
+      await deleteCommand(target.id, projectPath);
       setCatalog((prev) =>
         prev
           ? {
@@ -2805,7 +2103,7 @@ function CommandsPage() {
     setTestingId(command.id);
     setTestResult(null);
     try {
-      const result = await runCommandTest(command.scope, command.id, projectPath);
+      const result = await runCommandTest(command.id, projectPath);
       setTestResult({
         ...result,
         stdout: stripAnsiEscapeSequences(result.stdout),
@@ -2825,32 +2123,30 @@ function CommandsPage() {
   }
 
   function renderCommandSection() {
-    const currentScope = activeScope;
-    const directoryPath = currentScope === "workspace" ? catalog?.workspaceDir : catalog?.userDir;
+    const directoryPath = catalog?.workspaceDir;
     const totalItems = filteredCommands.length;
     const items = pagedCommands;
     const emptyState = buildCommandEmptyState({
-      scope: currentScope,
       projectPath,
       search,
       t,
     });
 
     return (
-      <SettingSection title={`${currentScope === "workspace" ? t("settings.commands.workspaceCommands") : t("settings.commands.userCommands")} (${totalItems})`}>
+      <SettingSection title={`${t("settings.commands.workspaceCommands")} (${totalItems})`}>
         <div className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
           <div className="min-w-0">
 
             <div className="text-[11px] mt-1 break-all" style={{ color: "var(--cs-text-tertiary)" }}>
-              {directoryPath || (currentScope === "workspace" ? t("settings.commands.workspaceDirUnavailable") : t("settings.commands.userDirUnavailable"))}
+              {directoryPath || t("settings.commands.workspaceDirUnavailable")}
             </div>
           </div>
           <div className="flex items-center gap-2">
             <Button
               size="small"
               icon={<FolderOpenOutlined />}
-              onClick={() => handleOpenConfig(currentScope)}
-              disabled={currentScope === "workspace" && !projectPath}
+              onClick={() => handleOpenConfig()}
+              disabled={!projectPath}
             >
               {t("settings.commands.openCommandDirectory")}
             </Button>
@@ -2858,8 +2154,8 @@ function CommandsPage() {
               size="small"
               type="primary"
               icon={<PlusOutlined />}
-              onClick={() => openCreateModal(currentScope)}
-              disabled={currentScope === "workspace" && !projectPath}
+              onClick={openCreateModal}
+              disabled={!projectPath}
             >
               {t("settings.commands.newCommand")}
             </Button>
@@ -2876,8 +2172,8 @@ function CommandsPage() {
             <Button
               type="primary"
               icon={<PlusOutlined />}
-              onClick={() => openCreateModal(currentScope)}
-              disabled={currentScope === "workspace" && !projectPath}
+              onClick={openCreateModal}
+              disabled={!projectPath}
             >
               {t("settings.commands.newCommand")}
             </Button>
@@ -2924,8 +2220,8 @@ function CommandsPage() {
             <Button
               icon={<PlusOutlined />}
               type="primary"
-              onClick={() => openCreateModal(activeScope)}
-              disabled={activeScope === "workspace" && !projectPath}
+              onClick={openCreateModal}
+              disabled={!projectPath}
             >
               {t("settings.commands.newCommand")}
             </Button>
@@ -2947,13 +2243,6 @@ function CommandsPage() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <ScopeTabs
-          value={activeScope}
-          workspaceCount={workspaceCount}
-          userCount={userCount}
-          projectAvailable={!!projectPath}
-          onChange={(scope) => setActiveScope(scope as CommandScope)}
-        />
       </SettingsPageHeader>
 
       {renderCommandSection()}
@@ -3003,26 +2292,6 @@ function CommandsPage() {
         destroyOnClose={false}
       >
         <div className="space-y-4">
-          <div>
-            <div className="text-xs mb-1" style={{ color: "var(--cs-text-tertiary)" }}>{t("settings.commands.commandSource")}</div>
-            <Segmented
-              block
-              value={draftScope}
-              onChange={(value) => {
-                const scope = value as CommandScope;
-                setDraftScope(scope);
-                setDraft((prev) => ({
-                  ...prev,
-                  cwdMode: scope === "workspace" ? (prev.cwdMode === "current" ? "project" : prev.cwdMode) : prev.cwdMode,
-                }));
-              }}
-              disabled={!!editingCommand}
-              options={[
-                { label: t("settings.scope.workspace"), value: "workspace", disabled: !projectPath },
-                { label: t("settings.scope.user"), value: "user" },
-              ]}
-            />
-          </div>
           <div>
             <div className="text-xs mb-1" style={{ color: "var(--cs-text-tertiary)" }}>{t("settings.commands.commandName")}</div>
             <Input
@@ -5019,7 +4288,7 @@ const pageComponents: Record<SettingsPage, React.FC> = {
   terminal: TerminalPage,
   voiceRecognition: VoiceRecognitionPage,
   shortcuts: ShortcutsPage,
-  skills: SkillsPage,
+  skills: SkillsSettingsPage,
   hooks: HooksPage,
   mcpServers: McpServersPage,
   commands: CommandsPage,

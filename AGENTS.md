@@ -299,6 +299,8 @@ Termflow 是基于 **Tauri 2** 的本地桌面工作台，在同一项目上下�
 - 新增/修改主题变量时，同步更新 `src/styles/themes.css` 中所有 4 套主题
 - 变量命名保持 `--cs-` 前缀
 - 不要删除已有 CSS 变量（可能有多处引用）
+- **对比度铁律（WCAG AA）**：所有 4 套主题下的正文/浮层（Tooltip、Popover）文字与背景对比度必须 ≥ 4.5:1，实心控件（`--cs-text-on-primary` × `--cs-primary`）对比度必须 ≥ 3.5:1；由 `src/lib/colorContrast.test.ts` 与 `src/lib/antdTheme.test.ts` 自动门禁校验
+- **禁止单边覆盖前景或背景**：覆盖 AntD token（如 `colorTextLightSolid`、`colorBgSpotlight`、`colorBgElevated`）或自定义组件配色时，前景文字色与背景色必须成对指定并在 `src/lib/antdTheme.ts` 中集中声明，严禁只改文字色或只改背景色导致深色/浅色主题下出现“灰底深字”或“浅底浅字”
 
 ### 4.5 国际化变更
 
@@ -384,3 +386,4 @@ pnpm format                       # Prettier
 | jsdom 测试环境 | node 环境 (Vitest) |
 | 嵌套 `describe` | 扁平测试结构 |
 | 前端直接操作数据库 | 通过 Tauri 命令 |
+| 单边覆盖文字色或背景色 token | 在 `src/lib/antdTheme.ts` 成对配置前景/背景并通过对比度测试 |

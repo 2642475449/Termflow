@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow, type CloseRequestedEvent } from "@tauri-apps/api/window";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { listen } from "@tauri-apps/api/event";
@@ -55,7 +56,6 @@ import type {
   CommandDetail,
   CommandDraft,
   CommandInfo,
-  CommandScope,
   CommandTestResult,
   HookCatalog,
   HookDetail,
@@ -443,50 +443,25 @@ export async function rebuildAgentUsageHistory(
   return status;
 }
 
-const CODEX_RATE_LIMITS_CACHE_TTL_MS = 60 * 1000;
-const QODER_USAGE_CACHE_TTL_MS = 60 * 1000;
-
-let codexRateLimitsCache:
-  | { value: CodexRateLimits; updatedAt: number }
-  | null = null;
 let codexRateLimitsRequest: Promise<CodexRateLimits> | null = null;
 
-export function getCachedCodexRateLimits(
-  maxAgeMs = CODEX_RATE_LIMITS_CACHE_TTL_MS
-): CodexRateLimits | null {
-  if (!codexRateLimitsCache) {
-    return null;
+export async function isUsageWindowVisible(): Promise<boolean> {
+  try {
+    const window = getCurrentWindow();
+    return await window.isVisible() && !await window.isMinimized();
+  } catch (error) {
+    console.error("Failed to inspect usage window visibility:", error);
+    return false;
   }
-
-  if (Date.now() - codexRateLimitsCache.updatedAt > maxAgeMs) {
-    return null;
-  }
-
-  return codexRateLimitsCache.value;
 }
 
 export async function getCodexRateLimits(options?: {
   forceRefresh?: boolean;
-  maxAgeMs?: number;
 }): Promise<CodexRateLimits> {
-  const maxAgeMs = options?.maxAgeMs ?? CODEX_RATE_LIMITS_CACHE_TTL_MS;
-  const cached = options?.forceRefresh ? null : getCachedCodexRateLimits(maxAgeMs);
-  if (cached) {
-    return cached;
-  }
+  // 后端统一检查账号、缓存与退避；强制刷新也复用在途请求。
+  if (codexRateLimitsRequest) return codexRateLimitsRequest;
 
-  if (!options?.forceRefresh && codexRateLimitsRequest) {
-    return codexRateLimitsRequest;
-  }
-
-  codexRateLimitsRequest = invoke<CodexRateLimits>("get_codex_rate_limits")
-    .then((value) => {
-      codexRateLimitsCache = {
-        value,
-        updatedAt: Date.now(),
-      };
-      return value;
-    })
+  codexRateLimitsRequest = invoke<CodexRateLimits>("get_codex_rate_limits", { forceRefresh: options?.forceRefresh ?? false })
     .finally(() => {
       codexRateLimitsRequest = null;
     });
@@ -494,49 +469,30 @@ export async function getCodexRateLimits(options?: {
   return await codexRateLimitsRequest;
 }
 
-let qoderUsageCache: { value: QoderUsage; updatedAt: number } | null = null;
 let qoderUsageRequest: Promise<QoderUsage> | null = null;
-
-export async function getQoderUsage(options?: {
-  forceRefresh?: boolean;
-  maxAgeMs?: number;
-}): Promise<QoderUsage> {
-  const maxAgeMs = options?.maxAgeMs ?? QODER_USAGE_CACHE_TTL_MS;
-  if (!options?.forceRefresh && qoderUsageCache
-    && Date.now() - qoderUsageCache.updatedAt <= maxAgeMs) {
-    return qoderUsageCache.value;
-  }
-  if (!options?.forceRefresh && qoderUsageRequest) {
-    return qoderUsageRequest;
-  }
-
-  qoderUsageRequest = invoke<QoderUsage>("get_qoder_usage")
-    .then((value) => {
-      qoderUsageCache = { value, updatedAt: Date.now() };
-      return value;
-    })
-    .finally(() => {
-      qoderUsageRequest = null;
-    });
-
-  return await qoderUsageRequest;
+export async function getQoderUsage(options?: { forceRefresh?: boolean }): Promise<QoderUsage> {
+  if (qoderUsageRequest) return qoderUsageRequest;
+  qoderUsageRequest = invoke<QoderUsage>("get_qoder_usage", { forceRefresh: options?.forceRefresh ?? false })
+    .finally(() => { qoderUsageRequest = null; });
+  return qoderUsageRequest;
 }
 
-let antigravityUsageCache: { value: AntigravityUsage; updatedAt: number } | null = null;
 let antigravityUsageRequest: Promise<AntigravityUsage> | null = null;
-
-export async function getAntigravityUsage(options?: { forceRefresh?: boolean; maxAgeMs?: number }): Promise<AntigravityUsage> {
-  const maxAgeMs = options?.maxAgeMs ?? QODER_USAGE_CACHE_TTL_MS;
-  if (!options?.forceRefresh && antigravityUsageCache && Date.now() - antigravityUsageCache.updatedAt <= maxAgeMs) return antigravityUsageCache.value;
-  if (!options?.forceRefresh && antigravityUsageRequest) return antigravityUsageRequest;
-  antigravityUsageRequest = invoke<AntigravityUsage>("get_antigravity_usage")
-    .then((value) => { if (value.status === "ok") antigravityUsageCache = { value, updatedAt: Date.now() }; return value; })
+export async function getAntigravityUsage(options?: { forceRefresh?: boolean }): Promise<AntigravityUsage> {
+  if (antigravityUsageRequest) return antigravityUsageRequest;
+  antigravityUsageRequest = invoke<AntigravityUsage>("get_antigravity_usage", { forceRefresh: options?.forceRefresh ?? false })
     .finally(() => { antigravityUsageRequest = null; });
-  return await antigravityUsageRequest;
+  return antigravityUsageRequest;
 }
 
-export async function getClaudeRateLimits(sessionId: string): Promise<ClaudeRateLimits> {
-  return await invoke<ClaudeRateLimits>("get_claude_rate_limits", { sessionId });
+const claudeUsageRequests = new Map<string, Promise<ClaudeRateLimits>>();
+export async function getClaudeRateLimits(sessionId: string, options?: { forceRefresh?: boolean }): Promise<ClaudeRateLimits> {
+  const pending = claudeUsageRequests.get(sessionId);
+  if (pending) return pending;
+  const request = invoke<ClaudeRateLimits>("get_claude_rate_limits", { sessionId, forceRefresh: options?.forceRefresh ?? false })
+    .finally(() => { claudeUsageRequests.delete(sessionId); });
+  claudeUsageRequests.set(sessionId, request);
+  return request;
 }
 
 export async function setClaudeEffortSetting(
@@ -1010,43 +966,54 @@ export async function ensureSkillDirectory(
   });
 }
 
+export interface SkillInstallRequest {
+  agents: SkillAgent[];
+  scope: SkillScope;
+  name: string;
+  description: string;
+  sourceDirectory: string | null;
+  projectPath: string | null;
+}
+
+export async function installSkill(request: SkillInstallRequest): Promise<SkillInfo[]> {
+  return await invoke("install_skill", { request });
+}
+
+export async function selectSkillImportDirectory(): Promise<string | null> {
+  return await openDialog({ directory: true, multiple: false });
+}
+
 // Commands API
 export async function listCommands(projectPath?: string | null): Promise<CommandCatalog> {
   return await invoke("list_commands", { projectPath: projectPath ?? null });
 }
 
 export async function getCommandDetail(
-  scope: CommandScope,
   id: string,
   projectPath?: string | null
 ): Promise<CommandDetail> {
   return await invoke("get_command_detail", {
-    scope,
     id,
     projectPath: projectPath ?? null,
   });
 }
 
 export async function createCommand(
-  scope: CommandScope,
   draft: CommandDraft,
   projectPath?: string | null
 ): Promise<CommandInfo> {
   return await invoke("create_command", {
-    scope,
     draft,
     projectPath: projectPath ?? null,
   });
 }
 
 export async function updateCommand(
-  scope: CommandScope,
   id: string,
   draft: CommandDraft,
   projectPath?: string | null
 ): Promise<CommandInfo> {
   return await invoke("update_command", {
-    scope,
     id,
     draft,
     projectPath: projectPath ?? null,
@@ -1054,34 +1021,28 @@ export async function updateCommand(
 }
 
 export async function deleteCommand(
-  scope: CommandScope,
   id: string,
   projectPath?: string | null
 ): Promise<void> {
   await invoke("delete_command", {
-    scope,
     id,
     projectPath: projectPath ?? null,
   });
 }
 
 export async function ensureCommandStore(
-  scope: CommandScope,
   projectPath?: string | null
 ): Promise<string> {
   return await invoke("ensure_command_store", {
-    scope,
     projectPath: projectPath ?? null,
   });
 }
 
 export async function runCommandTest(
-  scope: CommandScope,
   id: string,
   projectPath?: string | null
 ): Promise<CommandTestResult> {
   return await invoke("run_command_test", {
-    scope,
     id,
     projectPath: projectPath ?? null,
   });

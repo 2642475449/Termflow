@@ -97,6 +97,127 @@ export function normalizeGitCommitMessageProfiles(
   return [...refreshedBuiltIns, ...builtInOverrides, ...customProfiles];
 }
 
+export interface GitCommitMessagePresetTemplate {
+  id: string;
+  labelKey: string;
+  defaultName: string;
+  instructions: string;
+}
+
+export const GIT_COMMIT_MESSAGE_PRESET_TEMPLATES: readonly GitCommitMessagePresetTemplate[] = [
+  {
+    id: "concise",
+    labelKey: "settings.agents.gitProfiles.presets.concise",
+    defaultName: "精简",
+    instructions:
+      "使用中文生成 Conventional Commit。只输出一行 `type(scope): 摘要` 摘要标题，准确点明最主要的改动，不要正文；标题尽量控制在 72 个字符以内。若包含多项独立改动，选择共同主题概括，不要把文件名或要点串成清单。",
+  },
+  {
+    id: "balanced",
+    labelKey: "settings.agents.gitProfiles.presets.balanced",
+    defaultName: "适中",
+    instructions:
+      "使用中文生成 Conventional Commit。第一行为 `type(scope): 摘要` 标题，空一行后按独立改动主题输出 2-5 条以 `- ` 开头的正文；小改动可少于 2 条，不要为了凑数量拆分同一件事。每条必须点明文件、组件或模块及实际实现变化；只有 diff 能证实时才说明用户行为或影响。禁止只写“优化”“调整”“重构”等没有对象和事实的笼统表述。",
+  },
+  {
+    id: "detailed",
+    labelKey: "settings.agents.gitProfiles.presets.detailed",
+    defaultName: "详细",
+    instructions:
+      "使用中文生成 Conventional Commit。第一行为 `type(scope): 摘要` 标题，空一行后以“变更明细：”开始，按独立改动主题输出 3-8 条以 `- ` 开头的要点；覆盖主要变更但不要机械罗列每个文件。每条必须包含具体文件、组件或模块及实际实现变化；只有 diff 明确表明时才描述用户行为或兼容性影响。若 diff 中包含测试文件的新增或修改，可追加“测试：”并说明测试代码改了什么；不得声称测试已通过。不要使用空泛的“变更内容”“影响范围”标题，也不要只罗列文件名或统计数字。",
+  },
+  {
+    id: "english",
+    labelKey: "settings.agents.gitProfiles.presets.english",
+    defaultName: "English Conventional",
+    instructions:
+      "Write a Conventional Commit in English. Start with a `type(scope): summary` subject line under 72 characters using imperative mood, followed by a blank line and 2-4 `- ` bullet points describing the concrete module/file changes and observable behavior updates.",
+  },
+  {
+    id: "gitmoji",
+    labelKey: "settings.agents.gitProfiles.presets.gitmoji",
+    defaultName: "Gitmoji",
+    instructions:
+      "使用中文生成带 Gitmoji 前缀的 Conventional Commit。第一行格式为 `<emoji> type(scope): 摘要`（如 `✨ feat`、`🐛 fix`、`♻️ refactor`、`📝 docs`），空一行后输出 2-4 条以 `- ` 开头的具体改动要点，点明模块与实际行为变化。",
+  },
+];
+
+export function getBuiltInGitCommitMessageProfile(
+  id: string,
+): GitCommitMessageProfile | undefined {
+  const found = DEFAULT_GIT_COMMIT_MESSAGE_PROFILES.find((profile) => profile.id === id);
+  return found ? { ...found } : undefined;
+}
+
+export function isBuiltInGitCommitMessageProfile(id: string): boolean {
+  return DEFAULT_GIT_COMMIT_MESSAGE_PROFILES.some((profile) => profile.id === id);
+}
+
+export function isBuiltInGitCommitMessageProfileModified(
+  profile: GitCommitMessageProfile,
+): boolean {
+  const builtIn = DEFAULT_GIT_COMMIT_MESSAGE_PROFILES.find((item) => item.id === profile.id);
+  if (!builtIn) return false;
+  return (
+    builtIn.name !== profile.name.trim() ||
+    builtIn.instructions !== profile.instructions.trim()
+  );
+}
+
+export function hasBuiltInGitCommitMessageProfileChanges(
+  profiles: readonly GitCommitMessageProfile[],
+): boolean {
+  for (const builtIn of DEFAULT_GIT_COMMIT_MESSAGE_PROFILES) {
+    const current = profiles.find((profile) => profile.id === builtIn.id);
+    if (!current) return true;
+    if (isBuiltInGitCommitMessageProfileModified(current)) return true;
+  }
+  return false;
+}
+
+/** 恢复所有内置方案为出厂默认，同时完整保留用户自建的方案 */
+export function resetBuiltInGitCommitMessageProfiles(
+  profiles: readonly GitCommitMessageProfile[],
+): GitCommitMessageProfile[] {
+  const customProfiles = profiles.filter(
+    (profile) => !isBuiltInGitCommitMessageProfile(profile.id),
+  );
+  return [...createDefaultGitCommitMessageProfiles(), ...customProfiles];
+}
+
+/** 将单个已被修改的内置方案还原为出厂默认 */
+export function resetSingleBuiltInGitCommitMessageProfile(
+  profiles: readonly GitCommitMessageProfile[],
+  profileId: string,
+): GitCommitMessageProfile[] {
+  const builtIn = getBuiltInGitCommitMessageProfile(profileId);
+  if (!builtIn) return [...profiles];
+  return profiles.map((profile) => (profile.id === profileId ? builtIn : profile));
+}
+
+/** 生成不重名的克隆方案名称，例如“适中 副本”或“适中 副本 2” */
+export function createDuplicateGitCommitMessageProfileName(
+  baseName: string,
+  existingProfiles: readonly GitCommitMessageProfile[],
+  copySuffix = "副本",
+): string {
+  const normalizedBase = baseName.trim() || "风格";
+  const taken = new Set(
+    existingProfiles.map((profile) => profile.name.trim().toLocaleLowerCase()),
+  );
+  const firstCandidate = `${normalizedBase} ${copySuffix}`.slice(0, 80).trim();
+  if (!taken.has(firstCandidate.toLocaleLowerCase())) {
+    return firstCandidate;
+  }
+  for (let index = 2; index <= 99; index += 1) {
+    const candidate = `${normalizedBase} ${copySuffix} ${index}`.slice(0, 80).trim();
+    if (!taken.has(candidate.toLocaleLowerCase())) {
+      return candidate;
+    }
+  }
+  return `${normalizedBase.slice(0, 60)} ${Date.now()}`;
+}
+
 export function normalizeDefaultGitCommitMessageProfileId(
   value: unknown,
   profiles: readonly GitCommitMessageProfile[],

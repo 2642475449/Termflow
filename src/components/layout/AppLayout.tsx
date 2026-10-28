@@ -575,60 +575,6 @@ function AppLayout() {
   const restoreAttemptedLastProjectPathRef = useRef<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      for (const agentId of STATUS_AGENT_IDS) {
-        try {
-          const status = await ensureAgentStatusHook(agentId);
-          useAgentHookHealthStore.getState().setConfiguration(status);
-          useAppStore.getState().setAgentHookDiagnostic({
-            agentId,
-            configured: status.configured,
-            configPath: status.configPath,
-            detail: status.detail ?? undefined,
-            checkedAt: Date.now(),
-          });
-          if (!status.configured) {
-            const errorText = status.detail
-              ?? i18n.t("settings.hooks.integrityCheckFailed", { path: status.configPath });
-            void message.warning({
-              content: i18n.t("settings.hooks.autoInstallFailed", {
-                agent: getAgentDisplayName(agentId),
-                error: errorText,
-              }),
-              key: `agent-hook-install-${agentId}`,
-              duration: 8,
-            });
-          }
-        } catch (error) {
-          if (!cancelled) {
-            console.warn(`Failed to preinstall ${agentId} status hook:`, error);
-            const errorText = error instanceof Error ? error.message : String(error);
-            if (agentId === "codex") useAgentHookHealthStore.getState().setError(errorText);
-            useAppStore.getState().setAgentHookDiagnostic({
-              agentId,
-              configured: false,
-              checkedAt: Date.now(),
-              error: errorText,
-            });
-            void message.warning({
-              content: i18n.t("settings.hooks.autoInstallFailed", {
-                agent: getAgentDisplayName(agentId),
-                error: errorText,
-              }),
-              key: `agent-hook-install-${agentId}`,
-              duration: 8,
-            });
-          }
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
     const unlistenPromise = listen<AgentHookConfigurationFailedPayload>(
       "agent-hook-configuration-failed",
       (event) => {

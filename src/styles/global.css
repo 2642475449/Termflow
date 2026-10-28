@@ -978,6 +978,12 @@ html, body, #root {
   }
 }
 
+/* 默认 Tooltip：与页面背景拉开层次（配色由 App.tsx 中 Tooltip 组件 token 提供） */
+[data-theme] .ant-tooltip .ant-tooltip-inner {
+  border: 1px solid var(--cs-border-card, var(--cs-border));
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--cs-bg-app) 50%, transparent);
+}
+
 .app-status-pill {
   backdrop-filter: blur(6px) saturate(118%);
   -webkit-backdrop-filter: blur(6px) saturate(118%);
@@ -1064,6 +1070,90 @@ html, body, #root {
   box-shadow:
     0 6px 16px rgba(8, 8, 16, 0.4),
     0 0 0 1px rgba(245, 189, 105, 0.04);
+}
+
+.app-git-settings-panel {
+  background: var(--cs-bg-card);
+  border: 1px solid var(--cs-border-card);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.app-git-settings-panel-header {
+  border-bottom: 1px solid var(--cs-border-card);
+}
+
+.app-git-settings-icon-box {
+  background: var(--cs-primary-light);
+  color: var(--cs-primary);
+  border: 1px solid color-mix(in srgb, var(--cs-primary) 22%, transparent);
+}
+
+.app-git-settings-text-primary {
+  color: var(--cs-text-primary);
+}
+
+.app-git-settings-text-secondary {
+  color: var(--cs-text-secondary);
+}
+
+.app-git-settings-text-tertiary {
+  color: var(--cs-text-tertiary);
+}
+
+.app-git-settings-accent-text {
+  color: var(--cs-primary);
+}
+
+.app-git-profile-row {
+  border-bottom: 1px solid var(--cs-border-card);
+  transition: background-color 0.14s ease;
+}
+
+.app-git-profile-row:last-child {
+  border-bottom: none;
+}
+
+.app-git-profile-row:hover {
+  background: color-mix(in srgb, var(--cs-bg-hover) 55%, transparent);
+}
+
+.app-git-profile-row--default {
+  background: color-mix(in srgb, var(--cs-primary-light) 35%, transparent);
+}
+
+.app-git-profile-row--default:hover {
+  background: color-mix(in srgb, var(--cs-primary-light) 55%, transparent);
+}
+
+.app-git-profile-dot {
+  background: var(--cs-border);
+}
+
+.app-git-profile-dot--default {
+  background: var(--cs-primary);
+  box-shadow: 0 0 0 3px var(--cs-primary-light);
+}
+
+.app-git-profile-preset-chip {
+  background: var(--cs-bg-hover);
+  color: var(--cs-text-secondary);
+  border: 1px solid var(--cs-border);
+  transition:
+    border-color 0.14s ease,
+    background-color 0.14s ease,
+    color 0.14s ease;
+}
+
+.app-git-profile-preset-chip:hover,
+.app-git-profile-preset-chip--active {
+  background: var(--cs-primary-light);
+  color: var(--cs-text-primary);
+  border-color: color-mix(in srgb, var(--cs-primary) 44%, var(--cs-border));
+}
+
+.app-git-profile-modal-row {
+  background: var(--cs-bg-hover);
+  border: 1px solid var(--cs-border);
 }
 
 .app-home-overview-container {
@@ -3198,3 +3288,24 @@ html, body, #root {
 .app-global-search-resize-nw { top: 0; left: 0; cursor: nwse-resize; }
 .app-global-search-resize-se { bottom: 0; right: 0; cursor: nwse-resize; }
 .app-global-search-resize-sw { bottom: 0; left: 0; cursor: nesw-resize; }
+/* 技能库：来源、接入关系与操作入口分层展示。 */
+.app-skills-library { color: var(--cs-text-primary); }
+.app-skills-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; }
+.app-skills-title { font-size: 20px; font-weight: 600; line-height: 1.4; }
+.app-skills-muted, .app-skills-secondary { color: var(--cs-text-secondary); }
+.app-skills-filters { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+.app-skills-search { flex: 1; min-width: 180px; }
+.app-skills-agent-filter { min-width: 180px; }
+.app-skills-list { overflow: hidden; border: 1px solid var(--cs-border-card); border-radius: 12px; background: var(--cs-bg-card); color: var(--cs-text-primary); }
+.app-skills-row { display: flex; width: 100%; align-items: center; gap: 16px; padding: 18px 20px; text-align: left; border-bottom: 1px solid var(--cs-border-card); background: var(--cs-bg-card); color: var(--cs-text-primary); transition: background 120ms; }
+.app-skills-row:last-child { border-bottom: 0; }
+.app-skills-row:hover { background: var(--cs-bg-hover); color: var(--cs-text-primary); }
+.app-skills-row:focus-visible { outline: 2px solid var(--cs-primary); outline-offset: -2px; }
+.app-skills-row-body { flex: 1; min-width: 0; }
+.app-skills-row .ant-tag { margin-inline-end: 0; }
+.app-skills-path { font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; color: var(--cs-text-secondary); }
+.app-skills-detail { color: var(--cs-text-primary); }
+.app-skills-connection { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--cs-border-card); }
+.app-skills-entry { padding: 14px; margin-bottom: 10px; border: 1px solid var(--cs-border-card); border-radius: 8px; background: var(--cs-bg-card); color: var(--cs-text-primary); }
+.app-skills-content { padding: 16px; border: 1px solid var(--cs-border-card); border-radius: 8px; background: var(--cs-bg-card); color: var(--cs-text-primary); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }
+.app-skills-field-label { display: block; margin-bottom: 6px; font-size: 12px; color: var(--cs-text-secondary); }

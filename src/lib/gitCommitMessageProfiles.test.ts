@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  createDefaultGitCommitMessageProfiles,
+  createDuplicateGitCommitMessageProfileName,
   DEFAULT_GIT_COMMIT_MESSAGE_PROFILE_ID,
+  hasBuiltInGitCommitMessageProfileChanges,
+  isBuiltInGitCommitMessageProfile,
+  isBuiltInGitCommitMessageProfileModified,
   normalizeDefaultGitCommitMessageProfileId,
   normalizeGitCommitMessageProfiles,
+  resetBuiltInGitCommitMessageProfiles,
+  resetSingleBuiltInGitCommitMessageProfile,
 } from "./gitCommitMessageProfiles";
 
 describe("git commit message profiles", () => {
@@ -59,5 +66,41 @@ describe("git commit message profiles", () => {
       instructions: "用户调整过的规则",
     });
     expect(profiles.find((profile) => profile.id === "detailed")).toBeDefined();
+  });
+
+  it("detects modified or missing built-in profiles and restores them while keeping custom profiles", () => {
+    const defaults = createDefaultGitCommitMessageProfiles();
+    expect(hasBuiltInGitCommitMessageProfileChanges(defaults)).toBe(false);
+    expect(isBuiltInGitCommitMessageProfile("balanced")).toBe(true);
+    expect(isBuiltInGitCommitMessageProfile("custom-1")).toBe(false);
+
+    const modified = [
+      { id: "balanced", name: "适中（改）", instructions: "自定义适中规则" },
+      { id: "custom-1", name: "团队规范", instructions: "团队自定义规则" },
+    ];
+    expect(isBuiltInGitCommitMessageProfileModified(modified[0])).toBe(true);
+    expect(hasBuiltInGitCommitMessageProfileChanges(modified)).toBe(true);
+
+    const singleReset = resetSingleBuiltInGitCommitMessageProfile(modified, "balanced");
+    expect(isBuiltInGitCommitMessageProfileModified(singleReset[0])).toBe(false);
+
+    const allReset = resetBuiltInGitCommitMessageProfiles(modified);
+    expect(allReset.map((item) => item.id)).toEqual([
+      "concise",
+      "balanced",
+      "detailed",
+      "custom-1",
+    ]);
+    expect(hasBuiltInGitCommitMessageProfileChanges(allReset)).toBe(false);
+  });
+
+  it("creates unique duplicate profile names without colliding with existing profiles", () => {
+    const existing = [
+      { id: "balanced", name: "适中", instructions: "规则" },
+      { id: "copy-1", name: "适中 副本", instructions: "规则" },
+    ];
+    expect(createDuplicateGitCommitMessageProfileName("适中", existing, "副本")).toBe(
+      "适中 副本 2",
+    );
   });
 });

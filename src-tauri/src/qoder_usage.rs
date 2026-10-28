@@ -3,7 +3,7 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Child, Command, Stdio};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -39,11 +39,71 @@ pub struct QoderUsage {
     pub account_label: Option<String>,
 }
 
+use crate::usage_cache::{
+    file_revision, fingerprint, query_cached, SharedUsageCache, UsageResponse, UsageSnapshot,
+};
+use tauri::Emitter;
+
+impl UsageSnapshot for QoderUsage {
+    fn status(&self) -> &str {
+        &self.status
+    }
+    fn with_failure(&self, failure: Self) -> Self {
+        Self {
+            status: failure.status,
+            error: failure.error,
+            ..self.clone()
+        }
+    }
+    fn same_identity(&self, other: &Self) -> bool {
+        other.account_label.is_none() || self.account_label == other.account_label
+    }
+}
+
+fn auth_cache_key() -> u64 {
+    let root = crate::qoder_config::qoder_user_config_root().ok();
+    let auth_files = root.as_ref().map(|root| {
+        [
+            root.join(".auth/user"),
+            root.join(".auth/.credential-transaction"),
+        ]
+    });
+    fingerprint((
+        root,
+        auth_files.map(|paths| paths.map(|path| file_revision(&path))),
+    ))
+}
+
 #[tauri::command]
-pub async fn get_qoder_usage() -> Result<QoderUsage, String> {
-    tauri::async_runtime::spawn_blocking(fetch_qoder_usage)
-        .await
-        .map_err(|error| format!("Qoder usage task failed: {error}"))
+pub async fn get_qoder_usage(
+    app: tauri::AppHandle,
+    force_refresh: Option<bool>,
+) -> Result<UsageResponse<QoderUsage>, String> {
+    let requested_at = now_ms();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        static CACHE: OnceLock<SharedUsageCache<QoderUsage>> = OnceLock::new();
+        let key = auth_cache_key();
+        query_cached(
+            CACHE.get_or_init(Default::default),
+            key,
+            0,
+            requested_at,
+            force_refresh.unwrap_or(false),
+            || {
+                let result = fetch_qoder_usage();
+                if auth_cache_key() != key {
+                    return Err("Qoder account changed during usage query".into());
+                }
+                Ok(result)
+            },
+        )
+    })
+    .await
+    .map_err(|error| format!("Qoder usage task failed: {error}"))?;
+    if let Ok(value) = &result {
+        let _ = app.emit("qoder-usage-updated", value);
+    }
+    result
 }
 
 fn fetch_qoder_usage() -> QoderUsage {
@@ -83,16 +143,14 @@ fn error_result(error: String, account_label: Option<String>) -> QoderUsage {
 
 fn fetch_via_control_protocol(executable: &str) -> QoderUsage {
     let mut child = match spawn_qoder_sdk_process(executable) {
-        Ok(child) => child,
+        Ok(child) => crate::usage_process::UsageProcess(child),
         Err(error) => return error_result(error, None),
     };
 
     let Some(mut stdin) = child.stdin.take() else {
-        let _ = child.kill();
         return error_result("Qoder SDK stdin unavailable".to_string(), None);
     };
     let Some(stdout) = child.stdout.take() else {
-        let _ = child.kill();
         return error_result("Qoder SDK stdout unavailable".to_string(), None);
     };
 
@@ -118,7 +176,6 @@ fn fetch_via_control_protocol(executable: &str) -> QoderUsage {
         "termflow-initialize",
         initialize_control_request(),
     ) {
-        let _ = child.kill();
         return error_result(error, None);
     }
 
@@ -130,8 +187,6 @@ fn fetch_via_control_protocol(executable: &str) -> QoderUsage {
         let now = Instant::now();
         if now >= deadline {
             let stderr = diagnostic_snapshot(&stderr_buffer);
-            let _ = child.kill();
-            let _ = child.wait();
             return error_result(
                 diagnostic_message("Qoder usage timeout", &stderr),
                 account_label,
@@ -154,7 +209,6 @@ fn fetch_via_control_protocol(executable: &str) -> QoderUsage {
 
                 if request_id == "termflow-initialize" {
                     if let Some(error) = control_error_message(response) {
-                        let _ = child.kill();
                         return error_result(error, account_label);
                     }
                     account_label = response
@@ -170,7 +224,6 @@ fn fetch_via_control_protocol(executable: &str) -> QoderUsage {
                             "termflow-usage",
                             json!({ "type": "get_usage_info" }),
                         ) {
-                            let _ = child.kill();
                             return error_result(error, account_label);
                         }
                     }
@@ -183,8 +236,6 @@ fn fetch_via_control_protocol(executable: &str) -> QoderUsage {
                     } else {
                         map_usage_response(response.get("response"), account_label)
                     };
-                    let _ = child.kill();
-                    let _ = child.wait();
                     return result;
                 }
             }
@@ -199,7 +250,6 @@ fn fetch_via_control_protocol(executable: &str) -> QoderUsage {
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => {
                 let stderr = diagnostic_snapshot(&stderr_buffer);
-                let _ = child.wait();
                 return error_result(
                     diagnostic_message("Qoder usage process exited unexpectedly", &stderr),
                     account_label,
@@ -352,8 +402,8 @@ fn map_usage_response(response: Option<&Value>, account_label: Option<String>) -
             .and_then(Value::as_bool),
         session_credits,
         updated_at: now_ms(),
+        status: if usage_error.is_some() { "error" } else { "ok" }.to_string(),
         error: usage_error,
-        status: "ok".to_string(),
         account_label,
     }
 }
@@ -426,6 +476,33 @@ fn now_ms() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn partial_usage_error_is_still_a_failed_refresh() {
+        let result = map_usage_response(
+            Some(&json!({
+                "usage": { "totalUsagePercentage": 20 }, "usage_error": "temporarily unavailable"
+            })),
+            None,
+        );
+        assert_eq!(result.status, "error");
+        assert_eq!(result.error.as_deref(), Some("temporarily unavailable"));
+    }
+
+    #[test]
+    fn failed_refresh_retains_quota_only_for_the_same_account() {
+        let mut cache = crate::usage_cache::UsageCache::default();
+        let success = map_usage_response(
+            Some(&json!({ "usage": { "totalUsagePercentage": 20 } })),
+            Some("one".into()),
+        );
+        cache.update(success, 0);
+        let retained = cache.update(error_result("offline".into(), Some("one".into())), 100);
+        assert_eq!(retained.total_usage_percentage, Some(20.0));
+        assert_eq!(retained.error.as_deref(), Some("offline"));
+        let changed = cache.update(error_result("offline".into(), Some("two".into())), 200);
+        assert_eq!(changed.total_usage_percentage, None);
+    }
 
     #[test]
     fn initializes_with_sdk_permission_mode_format() {

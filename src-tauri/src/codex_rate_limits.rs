@@ -1,13 +1,17 @@
 use crate::commands::agents::find_agent_executable;
 use serde::Serialize;
 use serde_json::{json, Value};
+#[cfg(test)]
+use std::collections::HashMap;
 use std::fs;
+use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use tauri::Emitter;
 
 const RPC_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_DIAGNOSTIC_OUTPUT_LENGTH: usize = 100_000;
@@ -56,11 +60,65 @@ struct CodexIdentity {
     account_id: Option<String>,
 }
 
+use crate::usage_cache::{query_cached, SharedUsageCache, UsageResponse, UsageSnapshot};
+#[cfg(test)]
+use crate::usage_cache::{UsageCache, REFRESH_INTERVAL_MS};
+
+impl UsageSnapshot for CodexRateLimits {
+    fn status(&self) -> &str {
+        &self.status
+    }
+    fn with_failure(&self, failure: Self) -> Self {
+        Self {
+            status: failure.status,
+            error: failure.error,
+            ..self.clone()
+        }
+    }
+    fn same_identity(&self, other: &Self) -> bool {
+        self.account_id == other.account_id
+    }
+}
+
+fn auth_cache_key() -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    let path = codex_auth_path();
+    path.hash(&mut hasher);
+    // 凭据变化立即使缓存失效，避免切换账号后展示旧额度。
+    path.and_then(|path| fs::read(path).ok()).hash(&mut hasher);
+    hasher.finish()
+}
+
 #[tauri::command]
-pub async fn get_codex_rate_limits() -> Result<CodexRateLimits, String> {
-    tauri::async_runtime::spawn_blocking(fetch_codex_rate_limits)
-        .await
-        .map_err(|error| format!("Codex rate-limit task failed: {error}"))?
+pub async fn get_codex_rate_limits(
+    app: tauri::AppHandle,
+    force_refresh: Option<bool>,
+) -> Result<UsageResponse<CodexRateLimits>, String> {
+    let requested_at = now_ms();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        static CACHE: OnceLock<SharedUsageCache<CodexRateLimits>> = OnceLock::new();
+        let key = auth_cache_key();
+        query_cached(
+            CACHE.get_or_init(Default::default),
+            key,
+            0,
+            requested_at,
+            force_refresh.unwrap_or(false),
+            || {
+                let result = fetch_codex_rate_limits()?;
+                if auth_cache_key() != key {
+                    return Err("Codex account changed during usage query".into());
+                }
+                Ok(result)
+            },
+        )
+    })
+    .await
+    .map_err(|error| format!("Codex rate-limit task failed: {error}"))?;
+    if let Ok(value) = &result {
+        let _ = app.emit("codex-rate-limits-updated", value);
+    }
+    result
 }
 
 fn fetch_codex_rate_limits() -> Result<CodexRateLimits, String> {
@@ -225,16 +283,14 @@ fn decode_base64_url(input: &str) -> Option<Vec<u8>> {
 
 fn fetch_via_rpc(executable: &str, identity: CodexIdentity) -> CodexRateLimits {
     let mut child = match spawn_codex_app_server(executable) {
-        Ok(child) => child,
+        Ok(child) => crate::usage_process::UsageProcess(child),
         Err(error) => return error_result(error, identity),
     };
 
     let Some(mut stdin) = child.stdin.take() else {
-        let _ = child.kill();
         return error_result("Codex RPC stdin unavailable".to_string(), identity);
     };
     let Some(stdout) = child.stdout.take() else {
-        let _ = child.kill();
         return error_result("Codex RPC stdout unavailable".to_string(), identity);
     };
     let stderr = child.stderr.take();
@@ -263,7 +319,6 @@ fn fetch_via_rpc(executable: &str, identity: CodexIdentity) -> CodexRateLimits {
         "initialize",
         json!({ "clientInfo": { "name": "termflow", "version": "1.0.0" } }),
     ) {
-        let _ = child.kill();
         return error_result(error, identity);
     }
 
@@ -271,8 +326,6 @@ fn fetch_via_rpc(executable: &str, identity: CodexIdentity) -> CodexRateLimits {
         let now = Instant::now();
         if now >= deadline {
             let stderr = diagnostic_snapshot(&stderr_buffer);
-            let _ = child.kill();
-            let _ = child.wait();
             return error_result(diagnostic_message("RPC timeout", &stderr), identity);
         }
 
@@ -288,11 +341,9 @@ fn fetch_via_rpc(executable: &str, identity: CodexIdentity) -> CodexRateLimits {
 
                 if id == initialize_id {
                     if let Some(error) = rpc_error_message(&message) {
-                        let _ = child.kill();
                         return error_result(error, identity);
                     }
                     if let Err(error) = write_rpc_notification(&mut stdin, "initialized") {
-                        let _ = child.kill();
                         return error_result(error, identity);
                     }
                     let next_id = 2_u64;
@@ -300,7 +351,6 @@ fn fetch_via_rpc(executable: &str, identity: CodexIdentity) -> CodexRateLimits {
                     if let Err(error) =
                         write_rpc_request(&mut stdin, next_id, "account/rateLimits/read", json!({}))
                     {
-                        let _ = child.kill();
                         return error_result(error, identity);
                     }
                     continue;
@@ -312,8 +362,6 @@ fn fetch_via_rpc(executable: &str, identity: CodexIdentity) -> CodexRateLimits {
                     } else {
                         map_rate_limits_response(message.get("result"), identity)
                     };
-                    let _ = child.kill();
-                    let _ = child.wait();
                     return result;
                 }
             }
@@ -328,7 +376,6 @@ fn fetch_via_rpc(executable: &str, identity: CodexIdentity) -> CodexRateLimits {
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => {
                 let stderr = diagnostic_snapshot(&stderr_buffer);
-                let _ = child.wait();
                 return error_result(
                     diagnostic_message("RPC process exited unexpectedly", &stderr),
                     identity,
@@ -498,6 +545,13 @@ fn map_rate_limits_response(result: Option<&Value>, identity: CodexIdentity) -> 
         .and_then(|result| result.get("rateLimitResetCredits"))
         .and_then(map_reset_credits);
 
+    if session.is_none() && weekly.is_none() && rate_limit_reset_credits.is_none() {
+        return error_result(
+            "Codex quota response contains no usable data".into(),
+            identity,
+        );
+    }
+
     CodexRateLimits {
         session,
         weekly,
@@ -649,6 +703,98 @@ mod tests {
     use super::*;
 
     #[test]
+    fn empty_rpc_response_cannot_overwrite_a_successful_snapshot() {
+        let result = map_rate_limits_response(Some(&json!({})), CodexIdentity::default());
+        assert_eq!(result.status, "error");
+        assert!(result.session.is_none());
+    }
+
+    #[test]
+    fn concurrent_windows_share_query_and_accounts_are_isolated() {
+        let caches = Arc::new(Mutex::new(
+            HashMap::<u64, UsageCache<CodexRateLimits>>::new(),
+        ));
+        let barrier = Arc::new(std::sync::Barrier::new(8));
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let threads: Vec<_> = (0..8)
+            .map(|_| {
+                let (caches, barrier, calls) = (caches.clone(), barrier.clone(), calls.clone());
+                thread::spawn(move || {
+                    barrier.wait();
+                    let mut caches = caches.lock().expect("cache");
+                    let cache = caches.entry(1).or_default();
+                    if cache.cached(10_000, 10_001, true).is_none() {
+                        calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                        cache.update(
+                            error_result("offline".into(), CodexIdentity::default()),
+                            10_001,
+                        );
+                    }
+                })
+            })
+            .collect();
+        for thread in threads {
+            thread.join().expect("worker");
+        }
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+        let mut caches = caches.lock().expect("cache");
+        assert!(caches
+            .entry(2)
+            .or_default()
+            .cached(10_002, 10_002, false)
+            .is_none());
+        let cached = caches.get(&1).expect("account");
+        assert!(cached.cached(20_000, 20_000, false).is_some());
+        assert!(cached.cached(20_000, 20_000, true).is_none());
+    }
+
+    #[test]
+    fn failure_retains_success_and_backs_off() {
+        let mut cache = UsageCache::default();
+        let mut success = unavailable_result("", CodexIdentity::default());
+        success.status = "ok".into();
+        success.error = None;
+        success.updated_at = 42;
+        success.session = Some(CodexRateLimitWindow {
+            used_percent: 20.0,
+            window_minutes: 300,
+            resets_at: None,
+            reset_description: None,
+        });
+        cache.update(success, 0);
+        for (index, delay) in [180_000, 360_000, 720_000, 1_440_000, 1_800_000, 1_800_000]
+            .into_iter()
+            .enumerate()
+        {
+            let now = 100 + index as i64;
+            let result = cache.update(
+                error_result("offline".into(), CodexIdentity::default()),
+                now,
+            );
+            assert_eq!(result.session.as_ref().map(|v| v.used_percent), Some(20.0));
+            assert_eq!(result.updated_at, 42);
+            assert_eq!(cache.retry_at - now, delay);
+            assert_eq!(result.error.as_deref(), Some("offline"));
+        }
+    }
+
+    #[test]
+    fn unavailable_pauses_automatic_queries_and_success_resets_backoff() {
+        let mut cache = UsageCache::default();
+        cache.update(
+            unavailable_result("not signed in", CodexIdentity::default()),
+            100,
+        );
+        assert_eq!(cache.retry_at, i64::MAX);
+        let mut success = unavailable_result("", CodexIdentity::default());
+        success.status = "ok".into();
+        success.error = None;
+        cache.update(success, 200);
+        assert_eq!(cache.failures, 0);
+        assert_eq!(cache.retry_at, 200 + REFRESH_INTERVAL_MS);
+    }
+
+    #[test]
     fn decodes_codex_identity_from_id_token() {
         let value = json!({
             "tokens": {
@@ -730,9 +876,7 @@ mod tests {
             CodexIdentity::default(),
         );
 
-        let credits = limits
-            .rate_limit_reset_credits
-            .expect("reset credits");
+        let credits = limits.rate_limit_reset_credits.expect("reset credits");
         assert_eq!(credits.available_count, 3);
         assert_eq!(credits.credits.len(), 3);
         assert_eq!(credits.credits[0].expires_at, Some(1_791_991_860_000));

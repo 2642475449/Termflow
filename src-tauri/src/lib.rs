@@ -15,6 +15,8 @@ mod pty;
 mod qoder_config;
 mod qoder_usage;
 mod scheduled_tasks;
+mod usage_cache;
+mod usage_process;
 
 use claude_rate_limits::ClaudeRateLimitStore;
 use commands::content_search::ContentSearchState;
@@ -285,6 +287,7 @@ pub fn run() {
             commands::skills::get_skill_detail,
             commands::skills::set_skill_enabled,
             commands::skills::create_skill,
+            commands::skills::install_skill,
             commands::skills::ensure_skill_directory,
             commands::command_library::list_commands,
             commands::command_library::get_command_detail,

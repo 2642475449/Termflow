@@ -19,7 +19,6 @@ import type { NetworkProxyMode } from "./types";
 import {
   initializePersistentSettings,
   savePersistentSettings,
-  setClaudeTheme,
   setExplorerContextMenuEnabled,
   onQuickCommandsUpdated,
 } from "./lib/api";
@@ -29,13 +28,11 @@ import { startClipboardSessionSync } from "./store/slices/clipboardCache";
 import { startSessionTitleGeneration } from "./store/slices/sessionTitleSlice";
 import { loadProjectQuickCommands } from "./store/slices/projectQuickCommands";
 import { message, TOAST_NOTIFICATION_CONFIG, ToastHost } from "./lib/toast";
-
-const THEME_COLORS: Record<ThemeMode, string> = {
-  "light-glass": "#4263eb",
-  "light-warm": "#c2713a",
-  "dark-starry": "#8198ff",
-  "dark-mocha": "#f5bd69",
-};
+import {
+  ANTD_COMPONENT_OVERRIDES,
+  ANTD_PRIMARY_COLORS,
+  ANTD_TEXT_LIGHT_SOLID,
+} from "./lib/antdTheme";
 
 const STARTUP_THEME_STORAGE_KEY = "termflow-startup-theme";
 const PERSISTENT_THEME_UPDATED_EVENT = "persistent-theme-updated";
@@ -179,7 +176,7 @@ function App() {
     (themeCategory === "system" && systemPrefersDark);
 
   const currentTheme = isDark ? darkTheme : lightTheme;
-  const primaryColor = THEME_COLORS[currentTheme];
+  const primaryColor = ANTD_PRIMARY_COLORS[currentTheme];
   const persistentSettings = useMemo(
     () => ({
       lightTheme,
@@ -345,14 +342,6 @@ function App() {
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
   }, [setSystemPrefersDark]);
-
-  useEffect(() => {
-    if (themeCategory !== "system") return;
-    // 系统主题变化时自动同步 Claude Code
-    setClaudeTheme(systemPrefersDark ? "dark" : "light", projectPath).catch((error) => {
-      console.error("Failed to sync Claude theme on system change:", error);
-    });
-  }, [projectPath, systemPrefersDark, themeCategory]);
 
   useEffect(() => {
     if (isVoiceOverlayWindow) {
@@ -557,13 +546,14 @@ function App() {
         algorithm: isDark ? theme.darkAlgorithm : theme.defaultAlgorithm,
         token: {
           colorPrimary: primaryColor,
-          colorTextLightSolid: "var(--cs-text-on-primary)",
+          colorTextLightSolid: ANTD_TEXT_LIGHT_SOLID,
           borderRadius: 6,
           motionDurationFast: "0.12s",
           motionDurationMid: "0.16s",
           motionDurationSlow: "0.2s",
           motionEaseOut: "cubic-bezier(0.2, 0, 0, 1)",
         },
+        components: ANTD_COMPONENT_OVERRIDES,
       }}
     >
       <AntdApp notification={TOAST_NOTIFICATION_CONFIG}>

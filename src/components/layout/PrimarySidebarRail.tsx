@@ -7,7 +7,6 @@ import { ShortcutHint } from "@/components/ui/ShortcutHint";
 import { WorkbenchGlyph } from "@/components/ui/WorkbenchGlyph";
 import { getKeysForAction } from "@/constants/shortcuts";
 import { useAppStore, type Language, type SidebarSection, type ThemeCategory } from "@/store";
-import { setClaudeTheme } from "@/lib/api";
 import { checkForApplicationUpdate } from "@/lib/applicationUpdater";
 import { useApplicationUpdateStore } from "@/store/slices/applicationUpdate";
 import i18n, { toI18nLanguage } from "@/i18n";
@@ -85,9 +84,6 @@ function SettingsMenu({
   const language = useAppStore((s) => s.language);
   const setLanguage = useAppStore((s) => s.setLanguage);
   const openTab = useAppStore((s) => s.openTab);
-  const currentProject = useAppStore((s) => s.currentProject);
-  const projectPath = currentProject?.path ?? null;
-  const systemPrefersDark = useAppStore((s) => s.systemPrefersDark);
 
   const currentThemeLabel = t(`settings.general.appearance.${themeCategory}`);
   const languageLabels = [
@@ -113,13 +109,6 @@ function SettingsMenu({
 
   const handleSelectThemeCategory = (category: ThemeCategory) => {
     setThemeCategory(category);
-    const effectiveCategory = category === "system"
-      ? (systemPrefersDark ? "dark" : "light")
-      : category;
-    setClaudeTheme(effectiveCategory, projectPath).catch((error) => {
-      console.error("Failed to sync Claude theme:", error);
-    });
-
     onClearSubmenu();
   };
 

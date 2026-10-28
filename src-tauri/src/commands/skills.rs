@@ -80,6 +80,8 @@ pub struct SkillInfo {
     pub content_fingerprint: String,
     pub folder_name: String,
     pub file_path: String,
+    pub resolved_file_path: String,
+    pub entry_is_link: bool,
     pub source_dir: String,
     pub updated_at: Option<i64>,
 }
@@ -249,6 +251,24 @@ pub fn set_skill_enabled(
     if !source_dir.exists() {
         return Err(format!("Skill '{}' does not exist", folder_name));
     }
+    // 保护真实源目录：禁用只移动入口，不能破坏其他智能体已建立的链接。
+    let source_file = source_dir.join("SKILL.md");
+    let resolved = fs::canonicalize(&source_file).map_err(|error| error.to_string())?;
+    let source_display = display_path(&source_file);
+    if !fs::symlink_metadata(&source_dir)
+        .map_err(|error| error.to_string())?
+        .file_type()
+        .is_symlink()
+    {
+        let catalog = list_skills(project_path.clone())?;
+        if catalog.skills.iter().any(|skill| {
+            skill.file_path != source_display && skill.resolved_file_path == display_path(&resolved)
+        }) {
+            return Err(
+                "Other skill entries link to this source; manage those entries first".into(),
+            );
+        }
+    }
     let roots = resolve_skill_roots(agent, scope, project_path.as_deref())?;
     let target_root = if next_enabled {
         roots.enabled_dir
@@ -258,7 +278,7 @@ pub fn set_skill_enabled(
     .ok_or_else(|| "No skill directory is available for the current scope".to_string())?;
     fs::create_dir_all(&target_root).map_err(|error| error.to_string())?;
     let target_dir = target_root.join(&folder_name);
-    if target_dir.exists() {
+    if fs::symlink_metadata(&target_dir).is_ok() {
         return Err(format!(
             "Target directory '{}' already exists",
             target_dir.display()
@@ -326,6 +346,155 @@ pub fn ensure_skill_directory(
     .ok_or_else(|| "No skill directory is available for the current scope".to_string())?;
     fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
     Ok(display_path(&directory))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillInstallRequest {
+    pub agents: Vec<SkillAgent>,
+    pub scope: SkillScope,
+    pub name: String,
+    pub description: String,
+    pub source_directory: Option<String>,
+    pub project_path: Option<String>,
+}
+
+// 只写入选定的原生目录；共享目录只写一次，其他目录为明确标注的独立副本。
+#[tauri::command]
+pub fn install_skill(request: SkillInstallRequest) -> Result<Vec<SkillInfo>, String> {
+    if request.agents.is_empty() {
+        return Err("Select at least one agent".into());
+    }
+    let source = request
+        .source_directory
+        .as_deref()
+        .map(normalize_input_path);
+    let folder = if let Some(source) = &source {
+        if !source.join("SKILL.md").is_file() {
+            return Err("Select a skill directory containing SKILL.md".into());
+        }
+        source
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or("Invalid source directory")?
+            .to_string()
+    } else {
+        if request.name.trim().is_empty() {
+            return Err("Skill name cannot be empty".into());
+        }
+        slugify_folder_name(request.name.trim())
+    };
+    validate_folder_name(&folder)?;
+    let mut targets = Vec::new();
+    for agent in request.agents {
+        let root = resolve_skill_roots(agent, request.scope, request.project_path.as_deref())?
+            .enabled_dir
+            .ok_or("No skill directory is available for the current scope")?;
+        if !targets
+            .iter()
+            .any(|(_, existing): &(SkillAgent, PathBuf)| *existing == root)
+        {
+            targets.push((agent, root));
+        }
+    }
+    // 在任何写入前检查所有目标，避免重复安装造成半完成结果。
+    for (_, root) in &targets {
+        if let Some(source) = &source {
+            // 解析最近的真实父目录，防止目标位于导入源内部造成递归复制。
+            let mut existing = root.as_path();
+            while !existing.exists() {
+                existing = existing.parent().ok_or("Invalid target directory")?;
+            }
+            if normalize_input_path(&display_path(existing)).starts_with(source) {
+                return Err("Import destination cannot be inside the source directory".into());
+            }
+        }
+        if fs::symlink_metadata(root.join(&folder)).is_ok() {
+            return Err(format!(
+                "Target already exists: {}",
+                root.join(&folder).display()
+            ));
+        }
+    }
+    let description = if request.description.trim().is_empty() {
+        "Describe when this skill should be used and what it accomplishes."
+    } else {
+        request.description.trim()
+    };
+    let content = format!("---\nname: {}\ndescription: {}\n---\n\n# {}\n\n## Instructions\n\n- Add the workflow and constraints here.\n",
+        folder, serde_json::to_string(description).map_err(|error| error.to_string())?, request.name.trim());
+    let mut written = Vec::new();
+    let result = (|| {
+        for (agent, root) in &targets {
+            fs::create_dir_all(root).map_err(|error| error.to_string())?;
+            let target = root.join(&folder);
+            fs::create_dir(&target).map_err(|error| error.to_string())?;
+            written.push(target.clone());
+            if let Some(source) = &source {
+                copy_skill_files(source, &target, 0)?;
+            } else {
+                fs::write(target.join("SKILL.md"), &content).map_err(|error| error.to_string())?;
+            }
+            let content =
+                fs::read_to_string(target.join("SKILL.md")).map_err(|error| error.to_string())?;
+            // 在返回前验证目录可被技能扫描器完整读取。
+            build_skill_info(*agent, request.scope, true, &target, &content)?;
+        }
+        targets
+            .iter()
+            .map(|(agent, root)| {
+                let target = root.join(&folder);
+                let content = fs::read_to_string(target.join("SKILL.md"))
+                    .map_err(|error| error.to_string())?;
+                build_skill_info(*agent, request.scope, true, &target, &content)
+            })
+            .collect::<Result<Vec<_>, String>>()
+    })();
+    if result.is_err() {
+        // written 只含本次 create_dir 成功新建的目录，绝不删除预先存在的用户技能。
+        for path in written.into_iter().rev() {
+            if let Err(error) = fs::remove_dir_all(&path) {
+                return Err(format!(
+                    "{}; rollback failed for {}: {}",
+                    result.err().unwrap_or_default(),
+                    path.display(),
+                    error
+                ));
+            }
+        }
+    }
+    result
+}
+
+fn copy_skill_files(source: &Path, target: &Path, depth: usize) -> Result<(), String> {
+    if depth > 32 {
+        return Err("Skill directory is nested too deeply".into());
+    }
+    for entry in fs::read_dir(source).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let path = entry.path();
+        let kind = entry.file_type().map_err(|error| error.to_string())?;
+        if matches!(
+            entry.file_name().to_str(),
+            Some(".git" | "node_modules" | "target" | "__pycache__")
+        ) {
+            continue;
+        }
+        if kind.is_symlink() {
+            return Err(format!(
+                "Import does not follow resource symlinks: {}",
+                path.display()
+            ));
+        }
+        let destination = target.join(entry.file_name());
+        if kind.is_dir() {
+            fs::create_dir(&destination).map_err(|error| error.to_string())?;
+            copy_skill_files(&path, &destination, depth + 1)?;
+        } else if kind.is_file() {
+            fs::copy(&path, &destination).map_err(|error| error.to_string())?;
+        }
+    }
+    Ok(())
 }
 
 #[derive(Clone, Debug)]
@@ -398,6 +567,13 @@ fn build_skill_info(
         content_fingerprint: fingerprint_skill_directory(skill_dir)?,
         folder_name,
         file_path: display_path(&skill_dir.join("SKILL.md")),
+        resolved_file_path: display_path(
+            &fs::canonicalize(skill_dir.join("SKILL.md")).map_err(|error| error.to_string())?,
+        ),
+        entry_is_link: fs::symlink_metadata(skill_dir)
+            .map_err(|error| error.to_string())?
+            .file_type()
+            .is_symlink(),
         source_dir,
         updated_at,
     })
@@ -407,6 +583,15 @@ fn fingerprint_skill_directory(skill_dir: &Path) -> Result<String, String> {
     fn collect_files(directory: &Path, files: &mut Vec<PathBuf>) -> Result<(), String> {
         for entry in fs::read_dir(directory).map_err(|error| error.to_string())? {
             let path = entry.map_err(|error| error.to_string())?.path();
+            // 不递归跟随资源目录内的链接，避免循环和越界读取。
+            if fs::symlink_metadata(&path)
+                .map_err(|error| error.to_string())?
+                .file_type()
+                .is_symlink()
+            {
+                files.push(path);
+                continue;
+            }
             if path.is_dir() {
                 let ignored = path
                     .file_name()
@@ -443,7 +628,21 @@ fn fingerprint_skill_directory(skill_dir: &Path) -> Result<String, String> {
             .map_err(|error| error.to_string())?;
         digest.update(relative.to_string_lossy().replace('\\', "/").as_bytes());
         digest.update([0]);
-        digest.update(fs::read(&path).map_err(|error| error.to_string())?);
+        if fs::symlink_metadata(&path)
+            .map_err(|error| error.to_string())?
+            .file_type()
+            .is_symlink()
+        {
+            digest.update(b"symlink\0");
+            digest.update(
+                fs::read_link(&path)
+                    .map_err(|error| error.to_string())?
+                    .to_string_lossy()
+                    .as_bytes(),
+            );
+        } else {
+            digest.update(fs::read(&path).map_err(|error| error.to_string())?);
+        }
         digest.update([0]);
     }
     Ok(format!("{:x}", digest.finalize()))
@@ -459,6 +658,12 @@ fn classify_skill_conflicts(skills: &mut [SkillInfo]) {
     }
 
     for indexes in groups.into_values().filter(|indexes| indexes.len() > 1) {
+        if indexes
+            .iter()
+            .all(|index| skills[*index].resolved_file_path == skills[indexes[0]].resolved_file_path)
+        {
+            continue;
+        }
         let paths = indexes
             .iter()
             .map(|index| skills[*index].file_path.clone())
@@ -627,6 +832,130 @@ fn slugify_folder_name(input: &str) -> String {
 mod tests {
     use super::*;
 
+    fn install_request(project: &Path) -> SkillInstallRequest {
+        SkillInstallRequest {
+            agents: vec![SkillAgent::Codex, SkillAgent::Claude],
+            scope: SkillScope::Workspace,
+            name: "Review Checklist".into(),
+            description: "Review safely".into(),
+            source_directory: None,
+            project_path: Some(display_path(project)),
+        }
+    }
+
+    #[test]
+    fn multi_agent_install_deduplicates_shared_roots() {
+        let project = tempfile::tempdir().expect("project");
+        let mut request = install_request(project.path());
+        request.agents = vec![SkillAgent::Codex, SkillAgent::Pi, SkillAgent::Antigravity];
+        let installed = install_skill(request).expect("install");
+        assert_eq!(installed.len(), 1);
+        assert!(installed[0].effective_agents.contains(&SkillAgent::Pi));
+        assert!(project
+            .path()
+            .join(".agents/skills/review-checklist/SKILL.md")
+            .is_file());
+    }
+
+    #[test]
+    fn import_preserves_resources_and_source_files() {
+        let project = tempfile::tempdir().expect("project");
+        let source = tempfile::tempdir().expect("source");
+        let skill = source.path().join("review");
+        fs::create_dir_all(skill.join("references")).expect("references");
+        fs::write(
+            skill.join("SKILL.md"),
+            "---\nname: review\ndescription: Review\n---\n",
+        )
+        .expect("skill");
+        fs::write(skill.join("references/check.md"), "Check changes").expect("reference");
+        let mut request = install_request(project.path());
+        request.source_directory = Some(display_path(&skill));
+        let installed = install_skill(request).expect("import");
+        assert_eq!(installed.len(), 2);
+        for directory in [".agents", ".claude"] {
+            assert_eq!(
+                fs::read_to_string(
+                    project
+                        .path()
+                        .join(directory)
+                        .join("skills/review/references/check.md")
+                )
+                .expect("copy"),
+                "Check changes"
+            );
+        }
+        assert!(skill.join("SKILL.md").is_file());
+        assert_eq!(
+            installed[0].content_fingerprint,
+            installed[1].content_fingerprint
+        );
+        assert_ne!(
+            installed[0].resolved_file_path,
+            installed[1].resolved_file_path
+        );
+    }
+
+    #[test]
+    fn install_preflights_all_targets_without_overwriting_existing_skills() {
+        let project = tempfile::tempdir().expect("project");
+        let existing = project.path().join(".claude/skills/review-checklist");
+        fs::create_dir_all(&existing).expect("existing");
+        fs::write(existing.join("SKILL.md"), "Keep my skill").expect("content");
+        assert!(install_skill(install_request(project.path())).is_err());
+        assert!(!project
+            .path()
+            .join(".agents/skills/review-checklist")
+            .exists());
+        assert_eq!(
+            fs::read_to_string(existing.join("SKILL.md")).expect("preserved"),
+            "Keep my skill"
+        );
+    }
+
+    #[test]
+    fn failed_second_target_rolls_back_only_new_skill_directories() {
+        let project = tempfile::tempdir().expect("project");
+        fs::write(project.path().join(".claude"), "not a directory").expect("block target");
+        assert!(install_skill(install_request(project.path())).is_err());
+        assert!(!project
+            .path()
+            .join(".agents/skills/review-checklist")
+            .exists());
+        assert_eq!(
+            fs::read_to_string(project.path().join(".claude")).expect("preserved"),
+            "not a directory"
+        );
+    }
+
+    #[test]
+    fn import_rejects_recursive_destinations_and_missing_manifests() {
+        let project = tempfile::tempdir().expect("project");
+        let mut request = install_request(project.path());
+        request.source_directory = Some(display_path(project.path()));
+        assert!(install_skill(request).is_err());
+        fs::write(project.path().join("SKILL.md"), "Skill").expect("manifest");
+        let mut request = install_request(project.path());
+        request.source_directory = Some(display_path(project.path()));
+        assert!(install_skill(request)
+            .expect_err("recursive import")
+            .contains("inside the source"));
+        assert!(!project.path().join(".agents").exists());
+    }
+
+    #[test]
+    fn same_real_file_is_not_an_independent_copy_conflict() {
+        let mut skills = vec![
+            make_conflict_test_skill(SkillAgent::Claude, "same", true),
+            make_conflict_test_skill(SkillAgent::Codex, "same", true),
+        ];
+        skills[1].resolved_file_path = skills[0].resolved_file_path.clone();
+        classify_skill_conflicts(&mut skills);
+        assert!(skills
+            .iter()
+            .all(|skill| skill.conflict_status == SkillConflictStatus::None));
+    }
+
     #[test]
     fn compatibility_matches_agent_discovery_rules() {
         assert_eq!(
@@ -711,6 +1040,8 @@ mod tests {
             content_fingerprint: fingerprint.to_string(),
             folder_name: "review".to_string(),
             file_path: format!("{}/SKILL.md", agent.key()),
+            resolved_file_path: format!("{}/SKILL.md", agent.key()),
+            entry_is_link: false,
             source_dir: String::new(),
             updated_at: None,
         }

@@ -31,14 +31,59 @@ pub struct AntigravityUsage {
     pub status: String,
 }
 
+use crate::usage_cache::{
+    file_revision, fingerprint, query_cached, SharedUsageCache, UsageResponse, UsageSnapshot,
+};
+use std::sync::OnceLock;
+use tauri::Emitter;
+
+impl UsageSnapshot for AntigravityUsage {
+    fn status(&self) -> &str {
+        &self.status
+    }
+    fn with_failure(&self, failure: Self) -> Self {
+        Self {
+            status: failure.status,
+            error: failure.error,
+            ..self.clone()
+        }
+    }
+}
+
 #[tauri::command]
-pub async fn get_antigravity_usage() -> Result<AntigravityUsage, String> {
-    tauri::async_runtime::spawn_blocking(|| match snapshot_path() {
-        Ok(path) => read_snapshot(&path),
-        Err(error) => result("unavailable", Some(error), Vec::new(), now_ms()),
+pub async fn get_antigravity_usage(
+    app: tauri::AppHandle,
+    force_refresh: Option<bool>,
+) -> Result<UsageResponse<AntigravityUsage>, String> {
+    let requested_at = now_ms();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        static CACHE: OnceLock<SharedUsageCache<AntigravityUsage>> = OnceLock::new();
+        let path = snapshot_path();
+        let key = fingerprint(path.as_ref().ok());
+        let revision = path
+            .as_ref()
+            .map(|path| file_revision(path))
+            .unwrap_or_default();
+        query_cached(
+            CACHE.get_or_init(Default::default),
+            key,
+            revision,
+            requested_at,
+            force_refresh.unwrap_or(false),
+            || {
+                Ok(match path {
+                    Ok(path) => read_snapshot(&path),
+                    Err(error) => result("unavailable", Some(error), Vec::new(), now_ms()),
+                })
+            },
+        )
     })
     .await
-    .map_err(|error| format!("Antigravity usage task failed: {error}"))
+    .map_err(|error| format!("Antigravity usage task failed: {error}"))?;
+    if let Ok(value) = &result {
+        let _ = app.emit("antigravity-usage-updated", value);
+    }
+    result
 }
 
 fn snapshot_path() -> Result<PathBuf, String> {
@@ -90,20 +135,37 @@ fn read_snapshot(path: &Path) -> AntigravityUsage {
                 && (0.0..=100.0).contains(&item.remaining_percent)
                 && !item.id.is_empty()
                 && item.id.len() <= 64
-                && item.id.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+                && item
+                    .id
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
                 && !item.scope.is_empty()
                 && item.scope.len() <= 64
                 && item.scope.chars().all(|character| !character.is_control())
                 && !item.window.is_empty()
                 && item.window.len() <= 24
-                && item.window.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
-                && item.reset_description.as_ref().is_none_or(|reset| reset.len() <= 64)
+                && item
+                    .window
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+                && item
+                    .reset_description
+                    .as_ref()
+                    .is_none_or(|reset| reset.len() <= 64)
         })
         .take(32)
         .collect::<Vec<_>>();
     windows.sort_by_key(|item| {
-        let group = match item.scope.as_str() { "Gemini" => 0, "Claude and GPT" => 1, _ => 2 };
-        let period = match item.window.as_str() { "session" => 0, "weekly" => 1, _ => 2 };
+        let group = match item.scope.as_str() {
+            "Gemini" => 0,
+            "Claude and GPT" => 1,
+            _ => 2,
+        };
+        let period = match item.window.as_str() {
+            "session" => 0,
+            "weekly" => 1,
+            _ => 2,
+        };
         (group, item.scope.clone(), period, item.id.clone())
     });
     windows.dedup_by(|left, right| left.id == right.id);
@@ -142,6 +204,45 @@ fn now_ms() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn malformed_snapshot_retains_success_and_new_file_recovers_during_backoff() {
+        let directory = tempfile::tempdir().expect("directory");
+        let path = directory.path().join(SNAPSHOT_NAME);
+        let valid = r#"{"windows":[{"id":"weekly","scope":"Gemini","window":"weekly","remainingPercent":0,"resetDescription":null}],"updatedAt":1234}"#;
+        fs::write(&path, valid).expect("snapshot");
+        let cache = SharedUsageCache::default();
+        let requested = now_ms();
+        query_cached(&cache, 1, file_revision(&path), requested, false, || {
+            Ok(read_snapshot(&path))
+        })
+        .expect("initial");
+        fs::write(&path, "invalid").expect("invalid snapshot");
+        let failed = query_cached(
+            &cache,
+            1,
+            file_revision(&path),
+            requested + 1,
+            false,
+            || Ok(read_snapshot(&path)),
+        )
+        .expect("retained");
+        assert_eq!(failed.snapshot.windows[0].remaining_percent, 0.0);
+        assert_eq!(failed.snapshot.updated_at, 1234);
+        assert_eq!(failed.snapshot.status, "error");
+        fs::write(&path, valid.replace("1234", "56789")).expect("new snapshot");
+        let recovered = query_cached(
+            &cache,
+            1,
+            file_revision(&path),
+            requested + 2,
+            false,
+            || Ok(read_snapshot(&path)),
+        )
+        .expect("recovered");
+        assert_eq!(recovered.snapshot.status, "ok");
+        assert_eq!(recovered.snapshot.updated_at, 56789);
+    }
 
     #[test]
     fn reads_and_orders_sanitized_statusline_snapshot() {

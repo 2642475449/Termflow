@@ -1,4 +1,4 @@
-import type { ClaudeRateLimits, Session } from "@/types";
+import type { Session } from "@/types";
 
 type CodexUsageSession = Pick<Session, "active" | "agentId">;
 
@@ -18,11 +18,5 @@ export function shouldLoadQoderUsage(
   activeSession: CodexUsageSession | null,
 ): boolean {
   return activeSession?.active === true && activeSession.agentId === "qoder";
-}
-
-export function shouldShowClaudeRateLimits(
-  limits: ClaudeRateLimits | null,
-): boolean {
-  return limits?.status === "ok" && Boolean(limits.session || limits.weekly);
 }
 
