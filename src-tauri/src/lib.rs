@@ -91,7 +91,6 @@ pub fn run() {
             commands::window::handle_second_instance(app, args, cwd);
         }))
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_fs::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {
@@ -107,7 +106,6 @@ pub fn run() {
         )
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(pty_manager.clone())
         .manage(ingest_config.clone())

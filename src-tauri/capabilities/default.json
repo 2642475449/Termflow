@@ -19,7 +19,6 @@
     "notification:default",
     "opener:default",
     "opener:allow-open-path",
-    "store:default",
     "updater:default"
   ]
 }

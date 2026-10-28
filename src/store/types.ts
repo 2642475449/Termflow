@@ -1,8 +1,24 @@
-import type { AiAgentId, ClaudeCliInfo, GitCommitMessageProfile, NetworkProxyMode, ProjectOpenBehavior, Session, WindowMode, WindowProjectContext } from "@/types";
+import type {
+  AiAgentId, ClaudeCliInfo, AgentPermissionDefaults, SessionLaunchOptions,
+  GitCloneTask, GitCommitMessageProfile, ProjectOpenBehavior, Session,
+  TerminalQuickCommand, WindowMode, WindowProjectContext,
+} from "@/types";
+import type { AttentionItem } from "@/lib/attention";
+import type {
+  AgentHookDiagnostic, AttentionDiagnostics, AttentionEventDiagnostic,
+  NotificationDeliveryDiagnostic,
+} from "@/lib/attentionDiagnostics";
+import type { MimoAuthMode } from "@/lib/mimoAsr";
+import type { RemoteNotificationProvider } from "@/lib/remoteNotifications";
+import type { NetworkProxySlice } from "./slices/networkProxy";
 import type { TerminalCompletionNotificationSlice } from "./slices/terminalCompletionNotification";
 import type { TerminalCompletionRuntimeSlice } from "./slices/terminalCompletionRuntime";
 import type { VoicePolishSlice } from "./slices/voicePolish";
+import type { ProjectInfo, RecentProjectEntry } from "./utils/recentProjects";
 import type { ShortcutAction, ShortcutOverrides } from "@/constants/shortcuts";
+
+export type { ProjectInfo, RecentProjectEntry } from "./utils/recentProjects";
+export type { RemoteNotificationProvider } from "@/lib/remoteNotifications";
 
 export interface ShortcutSettingsState {
   overrides: ShortcutOverrides;
@@ -17,8 +33,13 @@ export interface ShortcutSettingsState {
 }
 
 export type ThemeMode = "light-glass" | "light-warm" | "dark-starry" | "dark-mocha";
+
 export type ThemeCategory = "light" | "dark" | "system";
+
 export type Language = "zh_CN" | "zh_TW" | "en" | "ja";
+
+export type SidebarSection = "project" | "sessions" | "git";
+
 export type NotificationSoundType =
   | "default"
   | "waiting"
@@ -33,19 +54,31 @@ export type NotificationSoundType =
   | "slate"
   | "aurora"
   | "hush";
+
 export type NotificationEvent = "taskComplete" | "error" | "waiting";
-export type RemoteNotificationProvider = "feishu" | "dingtalk" | "wechat" | "qq" | "telegram";
+
 export type RemoteNotificationEvent = "completed" | "error" | "waiting" | "permission";
+
 export type RemoteNotificationEventMap = Record<RemoteNotificationEvent, boolean>;
+
 export interface RemoteNotificationChannel {
   enabled: boolean;
   thresholdMs: number;
   events: RemoteNotificationEventMap;
 }
+
 export type RemoteNotificationChannels = Record<RemoteNotificationProvider, RemoteNotificationChannel>;
+
 export type SessionRuntimeStatus = "starting" | "running" | "waiting" | "completed" | "error" | "stopped";
+
+export type VoiceInputTarget = "terminal" | "system";
+
+export type DashScopeRegion = "beijing" | "singapore" | "us";
+
 export type TerminalShell = "powershell" | "cmd";
+
 export type TerminalRenderer = "webgl" | "standard";
+
 export type SessionEventType =
   | "session_started"
   | "session_resumed"
@@ -60,9 +93,14 @@ export type SessionEventType =
   | "terminal_command_complete";
 
 export type TabKind = "session" | "settings" | "scheduled-tasks" | "skill-market" | "diff" | "preview" | "file";
+
 export type TabDropPosition = "before" | "after";
+
 export type SplitDirection = "left" | "right" | "up" | "down";
+
 export type SplitMode = "copy" | "move";
+
+export type FileDocumentKind = "text" | "image" | "pdf" | "binary";
 
 export interface SessionStreamEvent {
   id: string;
@@ -101,6 +139,35 @@ export interface TabEntity {
   preview: boolean;
   createdAt: number;
   lastActivatedAt: number;
+}
+
+export interface FileDocumentState {
+  path: string;
+  name: string;
+  kind: FileDocumentKind;
+  readOnly: boolean;
+  sizeBytes?: number | null;
+  largeFile?: boolean;
+  modifiedAtMs?: number | null;
+}
+
+export interface GitDiffDocumentState {
+  tabId: string;
+  path: string;
+  oldPath?: string | null;
+  name: string;
+  staged: boolean;
+  revision?: string | null;
+  changeKind?: string | null;
+  hunkActionsAvailable?: boolean;
+  originalContent: string;
+  modifiedContent: string;
+  originalLabel: string;
+  modifiedLabel: string;
+  isBinary: boolean;
+  contentKind?: "text" | "binary" | "gitlink" | "image";
+  originalImage?: string | null;
+  modifiedImage?: string | null;
 }
 
 export interface PaneState {
@@ -151,11 +218,6 @@ export interface ResourceDragState {
   startedAt: number;
 }
 
-export interface ProjectInfo {
-  path: string;
-  name: string;
-}
-
 export interface ProjectWorkspace {
   tabsById: Record<string, TabEntity>;
   panesById: Record<string, PaneState>;
@@ -165,7 +227,8 @@ export interface ProjectWorkspace {
 }
 
 export interface AppState
-  extends TerminalCompletionNotificationSlice,
+  extends NetworkProxySlice,
+    TerminalCompletionNotificationSlice,
     TerminalCompletionRuntimeSlice,
     VoicePolishSlice {
   windowContextReady: boolean;
@@ -177,9 +240,11 @@ export interface AppState
   projectOpenBehavior: ProjectOpenBehavior;
   explorerContextMenuEnabled: boolean;
   claudeCliInfo: ClaudeCliInfo | null;
+  recentProjects: RecentProjectEntry[];
   // Project
   currentProject: ProjectInfo | null;
   projectSessions: Record<string, Session[]>;
+  projectArchivedSessions: Record<string, Session[]>;
   projectWorkspaces: Record<string, ProjectWorkspace>;
   sessions: Session[];
   // Workspace snapshots for current project
@@ -190,20 +255,27 @@ export interface AppState
   focusedTabId: string | null;
   dragState: DragState | null;
   resourceDragState: ResourceDragState | null;
+  fileDocuments: Record<string, FileDocumentState>;
+  gitDiffDocuments: Record<string, GitDiffDocumentState>;
   // Compatibility snapshots for existing UI
   activeSessionId: string | null;
   openTabs: string[];
   sidebarCollapsed: boolean;
   sidebarWidth: number;
+  activeSidebarSection: SidebarSection;
+  sidebarPinnedCollapsed: boolean;
+  sidebarSessionsCollapsed: boolean;
+  sidebarGitChangesCollapsed: boolean;
+  sidebarGitGraphCollapsed: boolean;
+  gitChangeCount: number;
+  gitAheadCount: number;
+  gitBehindCount: number;
   // Theme
   lightTheme: ThemeMode;
   darkTheme: ThemeMode;
   themeCategory: ThemeCategory;
-  language: Language;
-  networkProxyMode: NetworkProxyMode;
-  networkCustomProxyUrl: string;
-  networkNoProxy: string;
   systemPrefersDark: boolean;
+  language: Language;
   // Terminal
   editorFontSize: number;
   terminalFontSize: number;
@@ -212,11 +284,14 @@ export interface AppState
   terminalScrollback: number;
   terminalRenderer: TerminalRenderer;
   defaultTerminalShell: TerminalShell;
+  // Quick Commands
+  terminalQuickCommands: TerminalQuickCommand[];
+  // Agents
   defaultAgentId: AiAgentId | null;
   gitCommitMessageProfiles: GitCommitMessageProfile[];
   defaultGitCommitMessageProfileId: string;
   // Security
-  skipPermissions: boolean;
+  agentPermissionDefaults: AgentPermissionDefaults;
   // Notification
   notificationEnabled: boolean;
   notificationSoundEnabled: boolean;
@@ -224,21 +299,36 @@ export interface AppState
   notificationThresholdMs: number;
   remoteNotificationChannels: RemoteNotificationChannels;
   sessionEvents: SessionStreamEvent[];
+  projectAttentionItems: Record<string, AttentionItem[]>;
+  attentionDiagnostics: AttentionDiagnostics;
   unreadTotal: number;
+  gitCloneTasks: GitCloneTask[];
+  // Voice Recognition (ASR)
+  asrApiKey: string;
+  asrAuthMode: MimoAuthMode;
+  asrModel: string;
+  asrRegion: DashScopeRegion;
+  voiceShortcut: string;
+  voiceInputTarget: VoiceInputTarget;
+  voiceTriggerVisible: boolean;
   setClaudeCliInfo: (info: ClaudeCliInfo | null) => void;
-  setDefaultAgentId: (agentId: AiAgentId | null) => void;
-  setGitCommitMessageProfiles: (
-    profiles: GitCommitMessageProfile[],
-    defaultProfileId: string,
-  ) => void;
   initializeWindowContext: (context: WindowProjectContext) => void;
   // Project actions
+  setRecentProjects: (projects: RecentProjectEntry[]) => void;
   setLastProject: (project: ProjectInfo | null) => void;
   setCurrentProject: (project: ProjectInfo) => void;
-  addSession: (session: Session) => void;
+  addSession: (session: Session, options?: { openInWorkspace?: boolean }) => void;
   setActiveSession: (id: string | null, paneId?: string) => void;
   openTab: (tabId: string) => void;
+  openFileTab: (path: string, options?: { preview?: boolean }) => string | null;
+  openGitDiffTab: (
+    document: Omit<GitDiffDocumentState, "tabId">,
+    options?: { preview?: boolean },
+  ) => string | null;
+  promoteTab: (tabId: string) => void;
   closeTab: (tabId: string, paneId?: string) => void;
+  registerFileDocument: (document: FileDocumentState) => void;
+  setTabDirty: (tabId: string, dirty: boolean) => void;
   reorderTabs: (
     sourceTabId: string,
     targetTabId: string,
@@ -252,24 +342,36 @@ export interface AppState
     targetTabId?: string | null,
     position?: TabDropPosition
   ) => void;
+  setWorkspaceSplitRatio: (splitPath: number[], ratio: number) => void;
   splitTab: (tabId: string, direction: SplitDirection, paneId?: string, mode?: SplitMode) => void;
   setDragState: (dragState: DragState | null) => void;
   setResourceDragState: (dragState: ResourceDragState | null) => void;
   updateSession: (sessionId: string, updates: Partial<Session>) => void;
   removeSession: (sessionId: string) => void;
   removeAllSessions: () => void;
+  togglePinSession: (sessionId: string) => void;
+  archiveSession: (sessionId: string) => void;
+  unarchiveSession: (projectPath: string, sessionId: string) => void;
+  deleteArchivedSession: (projectPath: string, sessionId: string) => void;
+  deleteAllArchivedSessions: (projectPath: string) => void;
+  archiveAllSessionsInSection: (section: "pinned" | "normal") => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
   setSidebarWidth: (width: number) => void;
   toggleSidebar: () => void;
+  setActiveSidebarSection: (section: SidebarSection) => void;
+  togglePinnedCollapsed: () => void;
+  toggleSessionsCollapsed: () => void;
+  setPinnedCollapsed: (collapsed: boolean) => void;
+  toggleGitChangesCollapsed: () => void;
+  toggleGitGraphCollapsed: () => void;
+  setGitChangeCount: (count: number) => void;
+  setGitSyncCounts: (ahead: number, behind: number) => void;
   // Theme actions
   setLightTheme: (theme: ThemeMode) => void;
   setDarkTheme: (theme: ThemeMode) => void;
   setThemeCategory: (category: ThemeCategory) => void;
-  setLanguage: (lang: Language) => void;
-  setNetworkProxyMode: (mode: NetworkProxyMode) => void;
-  setNetworkCustomProxyUrl: (url: string) => void;
-  setNetworkNoProxy: (value: string) => void;
   setSystemPrefersDark: (value: boolean) => void;
+  setLanguage: (lang: Language) => void;
   setStartupRestoreLastProject: (enabled: boolean) => void;
   setProjectOpenBehavior: (behavior: ProjectOpenBehavior) => void;
   setExplorerContextMenuEnabled: (enabled: boolean) => void;
@@ -281,8 +383,17 @@ export interface AppState
   setTerminalScrollback: (rows: number) => void;
   setTerminalRenderer: (renderer: TerminalRenderer) => void;
   setDefaultTerminalShell: (shell: TerminalShell) => void;
+  // Quick Commands actions
+  setTerminalQuickCommands: (commands: TerminalQuickCommand[]) => void;
+  removeTerminalQuickCommand: (id: string) => void;
+  // Agent actions
+  setDefaultAgentId: (agentId: AiAgentId | null) => void;
+  setGitCommitMessageProfiles: (
+    profiles: GitCommitMessageProfile[],
+    defaultProfileId: string,
+  ) => void;
   // Security actions
-  setSkipPermissions: (skip: boolean) => void;
+  setAgentPermissionDefaults: (agentId: AiAgentId, launchOptions?: SessionLaunchOptions) => void;
   // Notification actions
   setNotificationEnabled: (enabled: boolean) => void;
   setNotificationSoundEnabled: (enabled: boolean) => void;
@@ -298,5 +409,22 @@ export interface AppState
   pushSessionEvent: (event: SessionStreamEvent) => "accepted" | "duplicate" | "stale";
   markSessionRead: (sessionId: string) => void;
   focusSessionFromEvent: (event: SessionStreamEvent) => void;
+  markAttentionSeen: (id: string) => void;
+  resolveAttention: (id: string, reason: string) => void;
+  dismissAttention: (id: string) => void;
+  resolveAttentionForSession: (sessionId: string, reason: string) => void;
+  setAgentHookDiagnostic: (diagnostic: AgentHookDiagnostic) => void;
+  recordAttentionEventDiagnostic: (diagnostic: AttentionEventDiagnostic) => void;
+  recordNotificationDelivery: (diagnostic: NotificationDeliveryDiagnostic) => void;
+  upsertGitCloneTask: (task: GitCloneTask) => void;
+  removeGitCloneTask: (taskId: string) => void;
   activeTheme: () => ThemeMode;
+  // Voice Recognition (ASR) actions
+  setAsrApiKey: (apiKey: string) => void;
+  setAsrAuthMode: (authMode: MimoAuthMode) => void;
+  setAsrModel: (model: string) => void;
+  setAsrRegion: (region: DashScopeRegion) => void;
+  setVoiceShortcut: (keys: string) => void;
+  setVoiceInputTarget: (target: VoiceInputTarget) => void;
+  setVoiceTriggerVisible: (visible: boolean) => void;
 }

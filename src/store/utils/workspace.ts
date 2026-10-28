@@ -1,3 +1,4 @@
+import { SCHEDULED_TASKS_TAB_ID } from "@/lib/scheduledTasks";
 import type { Session } from "@/types";
 import i18n from "@/i18n";
 import type {
@@ -10,8 +11,8 @@ import type {
   WorkspaceLayout,
 } from "../types";
 
-const MAIN_PANE_ID = "main";
-const SETTINGS_ID = "__settings__";
+export const MAIN_PANE_ID = "main";
+export const SETTINGS_ID = "__settings__";
 
 export const DEFAULT_LAYOUT: WorkspaceLayout = {
   root: { type: "pane", paneId: MAIN_PANE_ID },
@@ -162,15 +163,31 @@ export function normalizeWorkspace(workspace: ProjectWorkspace, sessions: Sessio
       const session = sessionById.get(tab.resourceId);
       if (!session) continue;
       tab.title = session.name;
+    } else if (tab.kind === "file") {
+      tab.title = getFileName(tab.resourceId);
+    } else if (tab.kind === "diff") {
+      const staged = tab.id.includes("git-diff:staged:");
+      tab.title = `${getFileName(tab.resourceId)} (${staged ? "索引" : "工作树"})`;
     }
   }
 
   for (const pane of Object.values(nextWorkspace.panesById)) {
     pane.tabIds = pane.tabIds.filter((tabId) => {
-      if (nextWorkspace.tabsById[tabId]?.kind === "skill-market") return true;
-      if (tabId === SETTINGS_ID) {
+      if (tabId === SETTINGS_ID || tabId === SCHEDULED_TASKS_TAB_ID) {
         if (!nextWorkspace.tabsById[tabId]) {
-          nextWorkspace.tabsById[tabId] = createSettingsTab();
+          nextWorkspace.tabsById[tabId] = tabId === SETTINGS_ID
+            ? createSettingsTab()
+            : createScheduledTasksTab();
+        }
+        return true;
+      }
+      const existingTab = nextWorkspace.tabsById[tabId];
+      if (existingTab?.kind === "skill-market") return true;
+      if (existingTab?.kind === "file" || existingTab?.kind === "diff") {
+        existingTab.title = getFileName(existingTab.resourceId);
+        if (existingTab.kind === "diff") {
+          const staged = existingTab.id.includes("git-diff:staged:");
+          existingTab.title = `${getFileName(existingTab.resourceId)} (${staged ? "索引" : "工作树"})`;
         }
         return true;
       }
@@ -233,6 +250,11 @@ export function ensureTabForId(
   if (workspace.tabsById[tabId]) return workspace.tabsById[tabId];
   if (tabId === SETTINGS_ID) {
     const tab = createSettingsTab();
+    workspace.tabsById[tab.id] = tab;
+    return tab;
+  }
+  if (tabId === SCHEDULED_TASKS_TAB_ID) {
+    const tab = createScheduledTasksTab();
     workspace.tabsById[tab.id] = tab;
     return tab;
   }
@@ -445,4 +467,25 @@ export function splitTabInWorkspace(
   nextWorkspace.activePaneId = newPaneId;
   nextWorkspace.focusedTabId = tabId;
   return nextWorkspace;
+}
+
+export function createScheduledTasksTab(now = Date.now()): TabEntity {
+  return {
+    id: SCHEDULED_TASKS_TAB_ID,
+    kind: "scheduled-tasks",
+    resourceId: SCHEDULED_TASKS_TAB_ID,
+    title: i18n.t("scheduledTasks.title"),
+    closable: true,
+    pinned: false,
+    dirty: false,
+    preview: false,
+    createdAt: now,
+    lastActivatedAt: now,
+  };
+}
+
+export function getFileName(path: string): string {
+  const normalizedPath = path.replace(/[\\/]+$/, "");
+  const segments = normalizedPath.split(/[\\/]/).filter(Boolean);
+  return segments[segments.length - 1] ?? path;
 }

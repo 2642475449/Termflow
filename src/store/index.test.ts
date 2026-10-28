@@ -3,6 +3,8 @@ import type { Session, WindowProjectContext } from "@/types";
 import { createDefaultWorkspace } from "./utils/workspace";
 import { applyPersistentSettingsToStore, createAppStore, getPersistentSettingsSnapshot } from "./index";
 import { useAppStore } from "./index";
+import { SCHEDULED_TASKS_TAB_ID } from "@/lib/scheduledTasks";
+import type { TabEntity } from "./types";
 
 function createSession(
   id: string,
@@ -37,6 +39,81 @@ function createProjectContext(
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+it("persists manual renames through the real store action and keeps every title snapshot in sync", () => {
+  const store = createAppStore();
+  const projectPath = "D:/workspace/demo";
+  store.getState().setCurrentProject({ path: projectPath, name: "demo" });
+  store.getState().addSession(createSession("s1", "Generated title", projectPath, {
+    titleSource: "auto", generatedTitle: "Generated title",
+  }));
+
+  store.getState().updateSession("s1", { name: "First manual title", titleSource: "manual" });
+  store.getState().updateSession("s1", { name: "Second manual title", titleSource: "manual" });
+  store.getState().updateSession("s1", { generatedTitle: "Late generated title", status: "completed" });
+
+  const state = store.getState();
+  expect(state.sessions[0]).toMatchObject({
+    name: "Second manual title", manualTitle: "Second manual title", titleSource: "manual",
+    generatedTitle: "Late generated title", status: "completed",
+  });
+  expect(state.projectSessions[projectPath][0]).toEqual(state.sessions[0]);
+  expect(state.tabsById.s1.title).toBe("Second manual title");
+  expect(state.projectWorkspaces[projectPath].tabsById.s1.title).toBe("Second manual title");
+});
+
+it("applies only the native title belonging to the current Codex session through updateSession", () => {
+  const store = createAppStore();
+  const projectPath = "D:/workspace/demo";
+  store.getState().setCurrentProject({ path: projectPath, name: "demo" });
+  store.getState().addSession(createSession("s1", "Generated title", projectPath, {
+    agentId: "codex", agentSessionId: "thread-current",
+    titleSource: "auto", generatedTitle: "Generated title",
+  }));
+
+  store.getState().updateSession("s1", { nativeTitle: { sessionId: "thread-old", title: "Stale title" } });
+  expect(store.getState().sessions[0].name).toBe("Generated title");
+  store.getState().updateSession("s1", { nativeTitle: { sessionId: "thread-current", title: "Native title" } });
+  expect(store.getState().sessions[0].name).toBe("Native title");
+  expect(store.getState().tabsById.s1.title).toBe("Native title");
+});
+
+it("keeps file, diff, task and marketplace tabs while a session update normalizes the workspace", () => {
+  const store = createAppStore();
+  const projectPath = "D:/workspace/demo";
+  store.getState().setCurrentProject({ path: projectPath, name: "demo" });
+  store.getState().addSession(createSession("s1", "Session", projectPath));
+  const fileId = store.getState().openFileTab(`${projectPath}/src/main.ts`, { preview: false })!;
+  const diffId = store.getState().openGitDiffTab({
+    path: "src/main.ts", name: "main.ts", staged: true,
+    originalContent: "before", modifiedContent: "after",
+    originalLabel: "HEAD", modifiedLabel: "Index", isBinary: false,
+  }, { preview: false })!;
+  store.getState().openTab("__settings__");
+  store.getState().openTab(SCHEDULED_TASKS_TAB_ID);
+  const marketplace: TabEntity = {
+    id: "marketplace", kind: "skill-market", resourceId: "marketplace", title: "Marketplace",
+    closable: true, pinned: false, dirty: false, preview: false, createdAt: 1, lastActivatedAt: 1,
+  };
+  const workspace = store.getState().projectWorkspaces[projectPath];
+  const withMarketplace = {
+    ...workspace,
+    tabsById: { ...workspace.tabsById, marketplace },
+    panesById: { ...workspace.panesById, main: {
+      ...workspace.panesById.main,
+      tabIds: [...workspace.panesById.main.tabIds, marketplace.id],
+    } },
+  };
+  store.setState({ projectWorkspaces: { [projectPath]: withMarketplace } });
+
+  store.getState().updateSession("s1", { name: "Renamed", titleSource: "manual" });
+  const state = store.getState();
+  expect(state.openTabs).toEqual(["s1", fileId, diffId, "__settings__", SCHEDULED_TASKS_TAB_ID, marketplace.id]);
+  expect(state.tabsById[fileId].title).toBe("main.ts");
+  expect(state.tabsById[diffId].title).toBe("main.ts (索引)");
+  expect(state.tabsById[marketplace.id]).toEqual(marketplace);
+  expect(state.tabsById.s1.title).toBe("Renamed");
 });
 
 describe("useAppStore actions", () => {

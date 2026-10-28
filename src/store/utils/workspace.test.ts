@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Session } from "@/types";
 import type { ProjectWorkspace } from "../types";
+import { SCHEDULED_TASKS_TAB_ID } from "@/lib/scheduledTasks";
 import {
   activateTabInWorkspace,
   closeTabInWorkspace,
@@ -42,6 +43,16 @@ function createWorkspace(
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+it("creates and preserves the scheduled tasks tab without a backing session", () => {
+  const opened = openTabInWorkspace(createDefaultWorkspace(), SCHEDULED_TASKS_TAB_ID, []);
+  const normalized = normalizeWorkspace(opened, []);
+  expect(normalized.tabsById[SCHEDULED_TASKS_TAB_ID]).toMatchObject({
+    kind: "scheduled-tasks", resourceId: SCHEDULED_TASKS_TAB_ID,
+  });
+  expect(normalized.panesById.main.tabIds).toEqual([SCHEDULED_TASKS_TAB_ID]);
+  expect(normalized.focusedTabId).toBe(SCHEDULED_TASKS_TAB_ID);
 });
 
 describe("workspace utils", () => {

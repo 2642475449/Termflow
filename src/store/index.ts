@@ -1,18 +1,46 @@
+import type {
+  ThemeMode,
+  ThemeCategory,
+  Language,
+  NotificationSoundType,
+  RemoteNotificationChannels,
+  VoiceInputTarget,
+  DashScopeRegion,
+  TerminalRenderer,
+  FileDocumentKind,
+  SessionStreamEvent,
+  TabEntity,
+  LayoutNode,
+  ProjectWorkspace,
+  AppState,
+} from "./types";
+export type * from "./types";
+import {
+  createDefaultWorkspace,
+  cloneWorkspace,
+  getActivePane,
+  touchPaneHistory,
+  normalizeWorkspace,
+  syncWorkspaceSnapshot,
+  openTabInWorkspace,
+  activateTabInWorkspace,
+  closeTabInWorkspace,
+  reorderTabsInWorkspace,
+  moveTabToPaneInWorkspace,
+  splitTabInWorkspace,
+  getFileName,
+  MAIN_PANE_ID,
+  SETTINGS_ID,
+  DEFAULT_LAYOUT,
+} from "./utils/workspace";
+import { updateSessionCollection, mapStatusFromEvent } from "./utils/session";
 import { create, type StateCreator } from "zustand";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
 import type {
   AiAgentId,
-  ClaudeCliInfo,
   AgentPermissionDefaults,
-  SessionLaunchOptions,
-  GitCloneTask,
-  GitCommitMessageProfile,
   PersistentSettings,
-  ProjectOpenBehavior,
   Session,
-  TerminalQuickCommand,
-  WindowMode,
-  WindowProjectContext,
 } from "@/types";
 import { normalizeQuickCommands } from "@/lib/quickCommands";
 import {
@@ -30,12 +58,6 @@ import {
   type AttentionItem,
   type AttentionDisposition,
 } from "@/lib/attention";
-import type {
-  AgentHookDiagnostic,
-  AttentionDiagnostics,
-  AttentionEventDiagnostic,
-  NotificationDeliveryDiagnostic,
-} from "@/lib/attentionDiagnostics";
 import {
   sanitizePersistedAttentionItems,
   sanitizePersistedSessionEvents,
@@ -58,9 +80,7 @@ import {
 import {
   DEFAULT_MIMO_AUTH_MODE,
   normalizeMimoAuthMode,
-  type MimoAuthMode,
 } from "@/lib/mimoAsr";
-import i18n from "@/i18n";
 import {
   migrateRecentProjectState,
   rehydrateRecentProjectState,
@@ -70,18 +90,15 @@ import {
 } from "./utils/recentProjects";
 import {
   createNetworkProxySlice,
-  type NetworkProxySlice,
 } from "./slices/networkProxy";
-import { createVoicePolishSlice, type VoicePolishSlice } from "./slices/voicePolish";
+import { createVoicePolishSlice } from "./slices/voicePolish";
 import { normalizeVoicePolishProvider, normalizeVoicePolishStyle, resolveVoicePolishModel } from "@/lib/voicePolish";
 import {
   createTerminalCompletionNotificationSlice,
   normalizeTerminalCompletionNotificationThreshold,
-  type TerminalCompletionNotificationSlice,
 } from "./slices/terminalCompletionNotification";
 import {
   createTerminalCompletionRuntimeSlice,
-  type TerminalCompletionRuntimeSlice,
 } from "./slices/terminalCompletionRuntime";
 import {
   normalizeNetworkProxyMode,
@@ -89,56 +106,10 @@ import {
 } from "@/lib/networkProxy";
 import { SCHEDULED_TASKS_TAB_ID } from "@/lib/scheduledTasks";
 import { SKILL_MARKETPLACE_TAB_ID } from "@/lib/skillMarketplaceTab";
-
-export type ThemeMode = "light-glass" | "light-warm" | "dark-starry" | "dark-mocha";
-export type ThemeCategory = "light" | "dark" | "system";
-export type Language = "zh_CN" | "zh_TW" | "en" | "ja";
-export type SidebarSection = "project" | "sessions" | "git";
-export type NotificationSoundType =
-  | "default"
-  | "waiting"
-  | "alert"
-  | "chime"
-  | "bell"
-  | "glass"
-  | "bloom"
-  | "pebble"
-  | "pulse"
-  | "signal"
-  | "slate"
-  | "aurora"
-  | "hush";
-export type NotificationEvent = "taskComplete" | "error" | "waiting";
-export type RemoteNotificationEvent = "completed" | "error" | "waiting" | "permission";
-export type RemoteNotificationEventMap = Record<RemoteNotificationEvent, boolean>;
-export interface RemoteNotificationChannel {
-  enabled: boolean;
-  thresholdMs: number;
-  events: RemoteNotificationEventMap;
-}
-export type RemoteNotificationChannels = Record<RemoteNotificationProvider, RemoteNotificationChannel>;
-export type { RemoteNotificationProvider } from "@/lib/remoteNotifications";
-export type SessionRuntimeStatus = "starting" | "running" | "waiting" | "completed" | "error" | "stopped";
-export type VoiceInputTarget = "terminal" | "system";
-export type DashScopeRegion = "beijing" | "singapore" | "us";
-export type TerminalShell = "powershell" | "cmd";
-export type TerminalRenderer = "webgl" | "standard";
 export const DEFAULT_ASR_MODEL = "mimo-v2.5-asr";
 export const DEFAULT_DASHSCOPE_REGION: DashScopeRegion = "beijing";
 export const DEFAULT_VOICE_SHORTCUT = "Ctrl+Shift+V";
 export const DEFAULT_VOICE_INPUT_TARGET: VoiceInputTarget = "system";
-export type SessionEventType =
-  | "session_started"
-  | "session_resumed"
-  | "assistant_complete"
-  | "waiting_input"
-  | "permission_request"
-  | "tool_blocked"
-  | "process_exit"
-  | "process_error"
-  | "hook_error"
-  | "heartbeat_timeout"
-  | "terminal_command_complete";
 
 function createMemoryStateStorage(): StateStorage {
   const data = new Map<string, string>();
@@ -491,350 +462,10 @@ function normalizeDefaultAgentId(value: unknown): AiAgentId | null {
       ? "antigravity"
     : null;
 }
-
-export type TabKind = "session" | "settings" | "scheduled-tasks" | "skill-market" | "diff" | "preview" | "file";
-export type TabDropPosition = "before" | "after";
-export type SplitDirection = "left" | "right" | "up" | "down";
-export type SplitMode = "copy" | "move";
-
-export type FileDocumentKind = "text" | "image" | "pdf" | "binary";
-
-export interface SessionStreamEvent {
-  id: string;
-  revision?: number | null;
-  sessionId: string;
-  projectPath: string;
-  sessionName: string;
-  eventType: SessionEventType;
-  title: string;
-  body: string;
-  severity: "info" | "success" | "warning" | "error";
-  source: string;
-  requiresAttention: boolean;
-  actionable: boolean;
-  dedupeKey?: string | null;
-  createdAt: number;
-  metadata?: Record<string, unknown>;
-  read?: boolean;
-  observedAtDelivery?: boolean;
-}
-
-export interface NotificationSoundMap {
-  taskComplete: NotificationSoundType;
-  error: NotificationSoundType;
-  waiting: NotificationSoundType;
-}
-
-export interface TabEntity {
-  id: string;
-  kind: TabKind;
-  resourceId: string;
-  title: string;
-  closable: boolean;
-  pinned: boolean;
-  dirty: boolean;
-  preview: boolean;
-  createdAt: number;
-  lastActivatedAt: number;
-}
-
-export interface FileDocumentState {
-  path: string;
-  name: string;
-  kind: FileDocumentKind;
-  readOnly: boolean;
-  sizeBytes?: number | null;
-  largeFile?: boolean;
-  modifiedAtMs?: number | null;
-}
-
-export interface GitDiffDocumentState {
-  tabId: string;
-  path: string;
-  oldPath?: string | null;
-  name: string;
-  staged: boolean;
-  revision?: string | null;
-  changeKind?: string | null;
-  hunkActionsAvailable?: boolean;
-  originalContent: string;
-  modifiedContent: string;
-  originalLabel: string;
-  modifiedLabel: string;
-  isBinary: boolean;
-  contentKind?: "text" | "binary" | "gitlink" | "image";
-  originalImage?: string | null;
-  modifiedImage?: string | null;
-}
-
-export interface PaneState {
-  id: string;
-  tabIds: string[];
-  activeTabId: string | null;
-  history: string[];
-}
-
-export type LayoutNode =
-  | { type: "pane"; paneId: string }
-  | {
-      type: "split";
-      direction: "horizontal" | "vertical";
-      ratio: number;
-      first: LayoutNode;
-      second: LayoutNode;
-    };
-
-export interface WorkspaceLayout {
-  root: LayoutNode;
-}
-
-export interface DragState {
-  type: "tab-reorder" | "tab-move" | "pane-split";
-  sourceTabId: string;
-  sourcePaneId: string;
-  targetPaneId: string | null;
-  targetTabId: string | null;
-  position: TabDropPosition | "into-empty-pane" | null;
-  phase: "pressing" | "dragging" | "dropping";
-  startedAt: number;
-}
-
-export interface ResourceDragEntry {
-  path: string;
-  kind: "file" | "directory";
-  name: string;
-}
-
-export interface ResourceDragState {
-  type: "agent-resource";
-  projectPath: string;
-  entries: ResourceDragEntry[];
-  x: number;
-  y: number;
-  phase: "dragging" | "dropping";
-  startedAt: number;
-}
-
-interface ProjectWorkspace {
-  tabsById: Record<string, TabEntity>;
-  panesById: Record<string, PaneState>;
-  layout: WorkspaceLayout;
-  activePaneId: string | null;
-  focusedTabId: string | null;
-}
-
-interface AppState
-  extends NetworkProxySlice,
-    TerminalCompletionNotificationSlice,
-    TerminalCompletionRuntimeSlice,
-    VoicePolishSlice {
-  windowContextReady: boolean;
-  windowMode: WindowMode;
-  windowLabel: string;
-  windowProject: ProjectInfo | null;
-  lastProject: ProjectInfo | null;
-  startupRestoreLastProject: boolean;
-  projectOpenBehavior: ProjectOpenBehavior;
-  explorerContextMenuEnabled: boolean;
-  claudeCliInfo: ClaudeCliInfo | null;
-  recentProjects: RecentProjectEntry[];
-  // Project
-  currentProject: ProjectInfo | null;
-  projectSessions: Record<string, Session[]>;
-  projectArchivedSessions: Record<string, Session[]>;
-  projectWorkspaces: Record<string, ProjectWorkspace>;
-  sessions: Session[];
-  // Workspace snapshots for current project
-  tabsById: Record<string, TabEntity>;
-  panesById: Record<string, PaneState>;
-  layout: WorkspaceLayout;
-  activePaneId: string | null;
-  focusedTabId: string | null;
-  dragState: DragState | null;
-  resourceDragState: ResourceDragState | null;
-  fileDocuments: Record<string, FileDocumentState>;
-  gitDiffDocuments: Record<string, GitDiffDocumentState>;
-  // Compatibility snapshots for existing UI
-  activeSessionId: string | null;
-  openTabs: string[];
-  sidebarCollapsed: boolean;
-  sidebarWidth: number;
-  activeSidebarSection: SidebarSection;
-  sidebarPinnedCollapsed: boolean;
-  sidebarSessionsCollapsed: boolean;
-  sidebarGitChangesCollapsed: boolean;
-  sidebarGitGraphCollapsed: boolean;
-  gitChangeCount: number;
-  gitAheadCount: number;
-  gitBehindCount: number;
-  // Theme
-  lightTheme: ThemeMode;
-  darkTheme: ThemeMode;
-  themeCategory: ThemeCategory;
-  systemPrefersDark: boolean;
-  language: Language;
-  // Terminal
-  editorFontSize: number;
-  terminalFontSize: number;
-  terminalCursorBlink: boolean;
-  terminalLineHeight: number;
-  terminalScrollback: number;
-  terminalRenderer: TerminalRenderer;
-  defaultTerminalShell: TerminalShell;
-  // Quick Commands
-  terminalQuickCommands: TerminalQuickCommand[];
-  // Agents
-  defaultAgentId: AiAgentId | null;
-  gitCommitMessageProfiles: GitCommitMessageProfile[];
-  defaultGitCommitMessageProfileId: string;
-  // Security
-  agentPermissionDefaults: AgentPermissionDefaults;
-  // Notification
-  notificationEnabled: boolean;
-  notificationSoundEnabled: boolean;
-  notificationSoundMap: NotificationSoundMap;
-  notificationThresholdMs: number;
-  remoteNotificationChannels: RemoteNotificationChannels;
-  sessionEvents: SessionStreamEvent[];
-  projectAttentionItems: Record<string, AttentionItem[]>;
-  attentionDiagnostics: AttentionDiagnostics;
-  unreadTotal: number;
-  gitCloneTasks: GitCloneTask[];
-  // Voice Recognition (ASR)
-  asrApiKey: string;
-  asrAuthMode: MimoAuthMode;
-  asrModel: string;
-  asrRegion: DashScopeRegion;
-  voiceShortcut: string;
-  voiceInputTarget: VoiceInputTarget;
-  voiceTriggerVisible: boolean;
-  setClaudeCliInfo: (info: ClaudeCliInfo | null) => void;
-  initializeWindowContext: (context: WindowProjectContext) => void;
-  // Project actions
-  setRecentProjects: (projects: RecentProjectEntry[]) => void;
-  setLastProject: (project: ProjectInfo | null) => void;
-  setCurrentProject: (project: ProjectInfo) => void;
-  addSession: (session: Session, options?: { openInWorkspace?: boolean }) => void;
-  setActiveSession: (id: string | null, paneId?: string) => void;
-  openTab: (tabId: string) => void;
-  openFileTab: (path: string, options?: { preview?: boolean }) => string | null;
-  openGitDiffTab: (
-    document: Omit<GitDiffDocumentState, "tabId">,
-    options?: { preview?: boolean },
-  ) => string | null;
-  promoteTab: (tabId: string) => void;
-  closeTab: (tabId: string, paneId?: string) => void;
-  registerFileDocument: (document: FileDocumentState) => void;
-  setTabDirty: (tabId: string, dirty: boolean) => void;
-  reorderTabs: (
-    sourceTabId: string,
-    targetTabId: string,
-    position: TabDropPosition,
-    paneId?: string
-  ) => void;
-  moveTab: (
-    tabId: string,
-    sourcePaneId: string,
-    targetPaneId: string,
-    targetTabId?: string | null,
-    position?: TabDropPosition
-  ) => void;
-  setWorkspaceSplitRatio: (splitPath: number[], ratio: number) => void;
-  splitTab: (tabId: string, direction: SplitDirection, paneId?: string, mode?: SplitMode) => void;
-  setDragState: (dragState: DragState | null) => void;
-  setResourceDragState: (dragState: ResourceDragState | null) => void;
-  updateSession: (sessionId: string, updates: Partial<Session>) => void;
-  removeSession: (sessionId: string) => void;
-  removeAllSessions: () => void;
-  togglePinSession: (sessionId: string) => void;
-  archiveSession: (sessionId: string) => void;
-  unarchiveSession: (projectPath: string, sessionId: string) => void;
-  deleteArchivedSession: (projectPath: string, sessionId: string) => void;
-  deleteAllArchivedSessions: (projectPath: string) => void;
-  archiveAllSessionsInSection: (section: "pinned" | "normal") => void;
-  setSidebarCollapsed: (collapsed: boolean) => void;
-  setSidebarWidth: (width: number) => void;
-  toggleSidebar: () => void;
-  setActiveSidebarSection: (section: SidebarSection) => void;
-  togglePinnedCollapsed: () => void;
-  toggleSessionsCollapsed: () => void;
-  setPinnedCollapsed: (collapsed: boolean) => void;
-  toggleGitChangesCollapsed: () => void;
-  toggleGitGraphCollapsed: () => void;
-  setGitChangeCount: (count: number) => void;
-  setGitSyncCounts: (ahead: number, behind: number) => void;
-  // Theme actions
-  setLightTheme: (theme: ThemeMode) => void;
-  setDarkTheme: (theme: ThemeMode) => void;
-  setThemeCategory: (category: ThemeCategory) => void;
-  setSystemPrefersDark: (value: boolean) => void;
-  setLanguage: (lang: Language) => void;
-  setStartupRestoreLastProject: (enabled: boolean) => void;
-  setProjectOpenBehavior: (behavior: ProjectOpenBehavior) => void;
-  setExplorerContextMenuEnabled: (enabled: boolean) => void;
-  // Terminal actions
-  setEditorFontSize: (size: number) => void;
-  setTerminalFontSize: (size: number) => void;
-  setTerminalCursorBlink: (blink: boolean) => void;
-  setTerminalLineHeight: (height: number) => void;
-  setTerminalScrollback: (rows: number) => void;
-  setTerminalRenderer: (renderer: TerminalRenderer) => void;
-  setDefaultTerminalShell: (shell: TerminalShell) => void;
-  // Quick Commands actions
-  setTerminalQuickCommands: (commands: TerminalQuickCommand[]) => void;
-  removeTerminalQuickCommand: (id: string) => void;
-  // Agent actions
-  setDefaultAgentId: (agentId: AiAgentId | null) => void;
-  setGitCommitMessageProfiles: (
-    profiles: GitCommitMessageProfile[],
-    defaultProfileId: string,
-  ) => void;
-  // Security actions
-  setAgentPermissionDefaults: (agentId: AiAgentId, launchOptions?: SessionLaunchOptions) => void;
-  // Notification actions
-  setNotificationEnabled: (enabled: boolean) => void;
-  setNotificationSoundEnabled: (enabled: boolean) => void;
-  setNotificationSoundMap: (event: NotificationEvent, sound: NotificationSoundType) => void;
-  setNotificationThreshold: (thresholdMs: number) => void;
-  setRemoteNotificationEnabled: (provider: RemoteNotificationProvider, enabled: boolean) => void;
-  setRemoteNotificationThreshold: (provider: RemoteNotificationProvider, thresholdMs: number) => void;
-  setRemoteNotificationEvent: (
-    provider: RemoteNotificationProvider,
-    event: RemoteNotificationEvent,
-    enabled: boolean,
-  ) => void;
-  pushSessionEvent: (event: SessionStreamEvent) => "accepted" | "duplicate" | "stale";
-  markSessionRead: (sessionId: string) => void;
-  focusSessionFromEvent: (event: SessionStreamEvent) => void;
-  markAttentionSeen: (id: string) => void;
-  resolveAttention: (id: string, reason: string) => void;
-  dismissAttention: (id: string) => void;
-  resolveAttentionForSession: (sessionId: string, reason: string) => void;
-  setAgentHookDiagnostic: (diagnostic: AgentHookDiagnostic) => void;
-  recordAttentionEventDiagnostic: (diagnostic: AttentionEventDiagnostic) => void;
-  recordNotificationDelivery: (diagnostic: NotificationDeliveryDiagnostic) => void;
-  upsertGitCloneTask: (task: GitCloneTask) => void;
-  removeGitCloneTask: (taskId: string) => void;
-  activeTheme: () => ThemeMode;
-  // Voice Recognition (ASR) actions
-  setAsrApiKey: (apiKey: string) => void;
-  setAsrAuthMode: (authMode: MimoAuthMode) => void;
-  setAsrModel: (model: string) => void;
-  setAsrRegion: (region: DashScopeRegion) => void;
-  setVoiceShortcut: (keys: string) => void;
-  setVoiceInputTarget: (target: VoiceInputTarget) => void;
-  setVoiceTriggerVisible: (visible: boolean) => void;
-}
-
-const MAIN_PANE_ID = "main";
-const SETTINGS_ID = "__settings__";
 const LAUNCHER_WORKSPACE_KEY = "__launcher__";
 const DEFAULT_SIDEBAR_WIDTH = 248;
 const MIN_SIDEBAR_WIDTH = 220;
 const MAX_SIDEBAR_WIDTH = 600;
-const DEFAULT_LAYOUT: WorkspaceLayout = {
-  root: { type: "pane", paneId: MAIN_PANE_ID },
-};
 
 function clampSidebarWidth(width: number | null | undefined) {
   return Math.min(
@@ -848,87 +479,6 @@ function sortRecentProjects(projects: RecentProjectEntry[]) {
     .filter((item) => item.path.trim().length > 0)
     .sort((a, b) => b.lastOpenedAt - a.lastOpenedAt)
     .slice(0, 10);
-}
-
-function createDefaultWorkspace(): ProjectWorkspace {
-  return {
-    tabsById: {},
-    panesById: {
-      [MAIN_PANE_ID]: {
-        id: MAIN_PANE_ID,
-        tabIds: [],
-        activeTabId: null,
-        history: [],
-      },
-    },
-    layout: DEFAULT_LAYOUT,
-    activePaneId: MAIN_PANE_ID,
-    focusedTabId: null,
-  };
-}
-
-function cloneWorkspace(workspace: ProjectWorkspace): ProjectWorkspace {
-  return {
-    tabsById: { ...workspace.tabsById },
-    panesById: Object.fromEntries(
-      Object.entries(workspace.panesById).map(([paneId, pane]) => [
-        paneId,
-        {
-          ...pane,
-          tabIds: [...pane.tabIds],
-          history: [...pane.history],
-        },
-      ])
-    ),
-    layout: workspace.layout,
-    activePaneId: workspace.activePaneId,
-    focusedTabId: workspace.focusedTabId,
-  };
-}
-
-function createSettingsTab(now = Date.now()): TabEntity {
-  return {
-    id: SETTINGS_ID,
-    kind: "settings",
-    resourceId: SETTINGS_ID,
-    title: i18n.t("common.settings"),
-    closable: true,
-    pinned: false,
-    dirty: false,
-    preview: false,
-    createdAt: now,
-    lastActivatedAt: now,
-  };
-}
-
-function createScheduledTasksTab(now = Date.now()): TabEntity {
-  return {
-    id: SCHEDULED_TASKS_TAB_ID,
-    kind: "scheduled-tasks",
-    resourceId: SCHEDULED_TASKS_TAB_ID,
-    title: i18n.t("scheduledTasks.title"),
-    closable: true,
-    pinned: false,
-    dirty: false,
-    preview: false,
-    createdAt: now,
-    lastActivatedAt: now,
-  };
-}
-
-function createSessionTab(session: Session, now = Date.now()): TabEntity {
-  return {
-    id: session.id,
-    kind: "session",
-    resourceId: session.id,
-    title: session.name,
-    closable: true,
-    pinned: false,
-    dirty: false,
-    preview: false,
-    createdAt: session.createdAt ?? now,
-    lastActivatedAt: now,
-  };
 }
 
 function normalizeFilePath(path: string): string {
@@ -962,11 +512,6 @@ function getGitDiffTitle(
       ? "\u7d22\u5f15"
       : "\u5de5\u4f5c\u6811";
   return `${getFileName(path)} (${contextLabel})`;
-}
-function getFileName(path: string): string {
-  const normalizedPath = path.replace(/[\\/]+$/, "");
-  const segments = normalizedPath.split(/[\\/]/).filter(Boolean);
-  return segments[segments.length - 1] ?? path;
 }
 
 function inferFileDocumentKind(path: string): FileDocumentKind {
@@ -1051,162 +596,6 @@ function createGitDiffTab(
     lastActivatedAt: now,
   };
 }
-function getActivePane(workspace: ProjectWorkspace, paneId?: string): PaneState {
-  const resolvedPaneId = paneId ?? workspace.activePaneId ?? MAIN_PANE_ID;
-  return workspace.panesById[resolvedPaneId] ?? workspace.panesById[MAIN_PANE_ID];
-}
-
-function touchPaneHistory(pane: PaneState, tabId: string) {
-  pane.history = [...pane.history.filter((id) => id !== tabId), tabId];
-}
-
-function findFallbackActiveTabId(pane: PaneState): string | null {
-  const historyCandidate = [...pane.history].reverse().find((tabId) => pane.tabIds.includes(tabId));
-  if (historyCandidate) return historyCandidate;
-  return pane.tabIds[pane.tabIds.length - 1] ?? null;
-}
-
-function pruneEmptyLayoutNode(
-  node: LayoutNode,
-  nonEmptyPaneIds: Set<string>
-): LayoutNode | null {
-  if (node.type === "pane") {
-    return nonEmptyPaneIds.has(node.paneId) ? node : null;
-  }
-  const first = pruneEmptyLayoutNode(node.first, nonEmptyPaneIds);
-  const second = pruneEmptyLayoutNode(node.second, nonEmptyPaneIds);
-  if (!first) return second;
-  if (!second) return first;
-  return { ...node, first, second };
-}
-
-function compactEmptyPanes(workspace: ProjectWorkspace) {
-  const nonEmptyPaneIds = new Set(
-    Object.values(workspace.panesById)
-      .filter((pane) => pane.tabIds.length > 0)
-      .map((pane) => pane.id)
-  );
-
-  if (nonEmptyPaneIds.size === 0) {
-    workspace.panesById = createDefaultWorkspace().panesById;
-    workspace.layout = DEFAULT_LAYOUT;
-    workspace.activePaneId = MAIN_PANE_ID;
-    workspace.focusedTabId = null;
-    return;
-  }
-
-  for (const paneId of Object.keys(workspace.panesById)) {
-    if (!nonEmptyPaneIds.has(paneId)) delete workspace.panesById[paneId];
-  }
-  const fallbackPaneId = nonEmptyPaneIds.values().next().value as string;
-  workspace.layout = {
-    root: pruneEmptyLayoutNode(workspace.layout.root, nonEmptyPaneIds) ?? {
-      type: "pane",
-      paneId: fallbackPaneId,
-    },
-  };
-  if (!workspace.activePaneId || !nonEmptyPaneIds.has(workspace.activePaneId)) {
-    workspace.activePaneId = fallbackPaneId;
-    workspace.focusedTabId = workspace.panesById[fallbackPaneId].activeTabId;
-  }
-}
-
-function normalizeWorkspace(workspace: ProjectWorkspace, sessions: Session[]): ProjectWorkspace {
-  const nextWorkspace = cloneWorkspace(workspace);
-  const sessionById = new Map(sessions.map((session) => [session.id, session]));
-
-  if (!nextWorkspace.panesById[MAIN_PANE_ID]) {
-    nextWorkspace.panesById[MAIN_PANE_ID] = {
-      id: MAIN_PANE_ID,
-      tabIds: [],
-      activeTabId: null,
-      history: [],
-    };
-  }
-
-  for (const tab of Object.values(nextWorkspace.tabsById)) {
-    if (tab.kind === "session") {
-      const session = sessionById.get(tab.resourceId);
-      if (!session) continue;
-      tab.title = session.name;
-    } else if (tab.kind === "file") {
-      tab.title = getFileName(tab.resourceId);
-    } else if (tab.kind === "diff") {
-      const staged = tab.id.includes("git-diff:staged:");
-      tab.title = `${getFileName(tab.resourceId)} (${staged ? "索引" : "工作树"})`;
-    }
-  }
-
-  for (const pane of Object.values(nextWorkspace.panesById)) {
-    pane.tabIds = pane.tabIds.filter((tabId) => {
-      if (tabId === SETTINGS_ID || tabId === SCHEDULED_TASKS_TAB_ID) {
-        if (!nextWorkspace.tabsById[tabId]) {
-          nextWorkspace.tabsById[tabId] = tabId === SETTINGS_ID
-            ? createSettingsTab()
-            : createScheduledTasksTab();
-        }
-        return true;
-      }
-      const existingTab = nextWorkspace.tabsById[tabId];
-      if (existingTab?.kind === "skill-market") return true;
-      if (existingTab?.kind === "file" || existingTab?.kind === "diff") {
-        existingTab.title = getFileName(existingTab.resourceId);
-        if (existingTab.kind === "diff") {
-          const staged = existingTab.id.includes("git-diff:staged:");
-          existingTab.title = `${getFileName(existingTab.resourceId)} (${staged ? "索引" : "工作树"})`;
-        }
-        return true;
-      }
-      const session = sessionById.get(tabId);
-      if (!session) return false;
-      nextWorkspace.tabsById[tabId] =
-        nextWorkspace.tabsById[tabId] ?? createSessionTab(session);
-      nextWorkspace.tabsById[tabId].title = session.name;
-      return true;
-    });
-    pane.history = pane.history.filter((tabId) => pane.tabIds.includes(tabId));
-    if (pane.activeTabId && !pane.tabIds.includes(pane.activeTabId)) {
-      pane.activeTabId = findFallbackActiveTabId(pane);
-    }
-  }
-
-  const referencedTabIds = new Set(
-    Object.values(nextWorkspace.panesById).flatMap((pane) => pane.tabIds)
-  );
-  for (const tabId of Object.keys(nextWorkspace.tabsById)) {
-    if (!referencedTabIds.has(tabId)) {
-      delete nextWorkspace.tabsById[tabId];
-    }
-  }
-
-  compactEmptyPanes(nextWorkspace);
-
-  if (!nextWorkspace.activePaneId || !nextWorkspace.panesById[nextWorkspace.activePaneId]) {
-    nextWorkspace.activePaneId = MAIN_PANE_ID;
-  }
-
-  if (
-    nextWorkspace.focusedTabId &&
-    !nextWorkspace.tabsById[nextWorkspace.focusedTabId]
-  ) {
-    nextWorkspace.focusedTabId = getActivePane(nextWorkspace).activeTabId;
-  }
-
-  return nextWorkspace;
-}
-
-function syncWorkspaceSnapshot(workspace: ProjectWorkspace) {
-  const activePane = getActivePane(workspace);
-  return {
-    tabsById: workspace.tabsById,
-    panesById: workspace.panesById,
-    layout: workspace.layout,
-    activePaneId: workspace.activePaneId,
-    focusedTabId: workspace.focusedTabId,
-    openTabs: [...activePane.tabIds],
-    activeSessionId: activePane.activeTabId,
-  };
-}
 
 function syncProjectState(
   state: AppState,
@@ -1224,236 +613,6 @@ function syncProjectState(
     sessions,
     ...syncWorkspaceSnapshot(normalizedWorkspace),
   };
-}
-
-function ensureTabForId(
-  workspace: ProjectWorkspace,
-  tabId: string,
-  sessions: Session[]
-): TabEntity | null {
-  if (workspace.tabsById[tabId]) return workspace.tabsById[tabId];
-  if (tabId === SETTINGS_ID) {
-    const tab = createSettingsTab();
-    workspace.tabsById[tab.id] = tab;
-    return tab;
-  }
-  if (tabId === SCHEDULED_TASKS_TAB_ID) {
-    const tab = createScheduledTasksTab();
-    workspace.tabsById[tab.id] = tab;
-    return tab;
-  }
-  const session = sessions.find((item) => item.id === tabId);
-  if (!session) return null;
-  const tab = createSessionTab(session);
-  workspace.tabsById[tab.id] = tab;
-  return tab;
-}
-
-function openTabInWorkspace(
-  workspace: ProjectWorkspace,
-  tabId: string,
-  sessions: Session[],
-  paneId?: string
-) {
-  const nextWorkspace = cloneWorkspace(workspace);
-  const pane = getActivePane(nextWorkspace, paneId);
-  const tab = ensureTabForId(nextWorkspace, tabId, sessions);
-  if (!tab) return nextWorkspace;
-  if (!pane.tabIds.includes(tabId)) {
-    pane.tabIds.push(tabId);
-  }
-  const now = Date.now();
-  nextWorkspace.tabsById[tabId] = {
-    ...tab,
-    lastActivatedAt: now,
-  };
-  pane.activeTabId = tabId;
-  touchPaneHistory(pane, tabId);
-  nextWorkspace.activePaneId = pane.id;
-  nextWorkspace.focusedTabId = tabId;
-  return nextWorkspace;
-}
-
-function activateTabInWorkspace(
-  workspace: ProjectWorkspace,
-  tabId: string | null,
-  paneId?: string
-) {
-  const nextWorkspace = cloneWorkspace(workspace);
-  const pane = getActivePane(nextWorkspace, paneId);
-  if (!tabId) {
-    pane.activeTabId = null;
-    nextWorkspace.focusedTabId = null;
-    nextWorkspace.activePaneId = pane.id;
-    return nextWorkspace;
-  }
-  if (!pane.tabIds.includes(tabId)) return nextWorkspace;
-  pane.activeTabId = tabId;
-  touchPaneHistory(pane, tabId);
-  if (nextWorkspace.tabsById[tabId]) {
-    nextWorkspace.tabsById[tabId] = {
-      ...nextWorkspace.tabsById[tabId],
-      lastActivatedAt: Date.now(),
-    };
-  }
-  nextWorkspace.activePaneId = pane.id;
-  nextWorkspace.focusedTabId = tabId;
-  return nextWorkspace;
-}
-
-function closeTabInWorkspace(workspace: ProjectWorkspace, tabId: string, paneId?: string) {
-  const nextWorkspace = cloneWorkspace(workspace);
-  for (const pane of Object.values(nextWorkspace.panesById)) {
-    if (paneId && pane.id !== paneId) continue;
-    if (!pane.tabIds.includes(tabId)) continue;
-    pane.tabIds = pane.tabIds.filter((id) => id !== tabId);
-    pane.history = pane.history.filter((id) => id !== tabId);
-    if (pane.activeTabId === tabId) {
-      pane.activeTabId = findFallbackActiveTabId(pane);
-    }
-  }
-  const stillReferenced = Object.values(nextWorkspace.panesById)
-    .some((pane) => pane.tabIds.includes(tabId));
-  if (!stillReferenced) delete nextWorkspace.tabsById[tabId];
-  if (nextWorkspace.focusedTabId === tabId) {
-    nextWorkspace.focusedTabId = getActivePane(nextWorkspace).activeTabId;
-  }
-  compactEmptyPanes(nextWorkspace);
-  return nextWorkspace;
-}
-
-function reorderTabsInWorkspace(
-  workspace: ProjectWorkspace,
-  sourceTabId: string,
-  targetTabId: string,
-  position: TabDropPosition,
-  paneId?: string
-) {
-  if (sourceTabId === targetTabId) return workspace;
-  const nextWorkspace = cloneWorkspace(workspace);
-  const pane = getActivePane(nextWorkspace, paneId);
-  const sourceIndex = pane.tabIds.indexOf(sourceTabId);
-  const targetIndex = pane.tabIds.indexOf(targetTabId);
-  if (sourceIndex < 0 || targetIndex < 0) return workspace;
-
-  const nextTabIds = [...pane.tabIds];
-  nextTabIds.splice(sourceIndex, 1);
-  let insertIndex = targetIndex;
-  if (sourceIndex < targetIndex) {
-    insertIndex -= 1;
-  }
-  if (position === "after") {
-    insertIndex += 1;
-  }
-  nextTabIds.splice(Math.max(0, insertIndex), 0, sourceTabId);
-  pane.tabIds = nextTabIds;
-  return nextWorkspace;
-}
-
-function moveTabToPaneInWorkspace(
-  workspace: ProjectWorkspace,
-  tabId: string,
-  sourcePaneId: string,
-  targetPaneId: string,
-  targetTabId?: string | null,
-  position: TabDropPosition = "after"
-) {
-  if (sourcePaneId === targetPaneId) return workspace;
-  const sourcePane = workspace.panesById[sourcePaneId];
-  const targetPane = workspace.panesById[targetPaneId];
-  if (!sourcePane?.tabIds.includes(tabId) || !targetPane) return workspace;
-
-  const nextWorkspace = cloneWorkspace(workspace);
-  const nextSourcePane = nextWorkspace.panesById[sourcePaneId];
-  const nextTargetPane = nextWorkspace.panesById[targetPaneId];
-  nextSourcePane.tabIds = nextSourcePane.tabIds.filter((id) => id !== tabId);
-  nextSourcePane.history = nextSourcePane.history.filter((id) => id !== tabId);
-  if (nextSourcePane.activeTabId === tabId) {
-    nextSourcePane.activeTabId = findFallbackActiveTabId(nextSourcePane);
-  }
-  if (!nextTargetPane.tabIds.includes(tabId)) {
-    const nextTabIds = [...nextTargetPane.tabIds];
-    const targetIndex = targetTabId ? nextTabIds.indexOf(targetTabId) : -1;
-    const insertIndex = targetIndex < 0
-      ? nextTabIds.length
-      : targetIndex + (position === "after" ? 1 : 0);
-    nextTabIds.splice(insertIndex, 0, tabId);
-    nextTargetPane.tabIds = nextTabIds;
-  }
-  nextTargetPane.activeTabId = tabId;
-  touchPaneHistory(nextTargetPane, tabId);
-  nextWorkspace.activePaneId = targetPaneId;
-  nextWorkspace.focusedTabId = tabId;
-  compactEmptyPanes(nextWorkspace);
-  return nextWorkspace;
-}
-
-function replacePaneWithSplit(
-  node: LayoutNode,
-  targetPaneId: string,
-  newPaneId: string,
-  direction: SplitDirection
-): LayoutNode {
-  if (node.type === "pane") {
-    if (node.paneId !== targetPaneId) return node;
-    const currentPane: LayoutNode = { type: "pane", paneId: targetPaneId };
-    const newPane: LayoutNode = { type: "pane", paneId: newPaneId };
-    const newPaneFirst = direction === "left" || direction === "up";
-    return {
-      type: "split",
-      direction: direction === "left" || direction === "right" ? "horizontal" : "vertical",
-      ratio: 0.5,
-      first: newPaneFirst ? newPane : currentPane,
-      second: newPaneFirst ? currentPane : newPane,
-    };
-  }
-
-  return {
-    ...node,
-    first: replacePaneWithSplit(node.first, targetPaneId, newPaneId, direction),
-    second: replacePaneWithSplit(node.second, targetPaneId, newPaneId, direction),
-  };
-}
-
-function splitTabInWorkspace(
-  workspace: ProjectWorkspace,
-  tabId: string,
-  direction: SplitDirection,
-  paneId?: string,
-  mode: SplitMode = "move"
-) {
-  const nextWorkspace = cloneWorkspace(workspace);
-  const sourcePane = getActivePane(nextWorkspace, paneId);
-  if (!sourcePane.tabIds.includes(tabId) || (mode === "move" && sourcePane.tabIds.length <= 1)) {
-    return workspace;
-  }
-
-  const newPaneId = `pane-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  if (mode === "move") {
-    sourcePane.tabIds = sourcePane.tabIds.filter((id) => id !== tabId);
-    sourcePane.history = sourcePane.history.filter((id) => id !== tabId);
-    if (sourcePane.activeTabId === tabId) {
-      sourcePane.activeTabId = findFallbackActiveTabId(sourcePane);
-    }
-  }
-
-  nextWorkspace.panesById[newPaneId] = {
-    id: newPaneId,
-    tabIds: [tabId],
-    activeTabId: tabId,
-    history: [tabId],
-  };
-  nextWorkspace.layout = {
-    root: replacePaneWithSplit(
-      nextWorkspace.layout.root,
-      sourcePane.id,
-      newPaneId,
-      direction
-    ),
-  };
-  nextWorkspace.activePaneId = newPaneId;
-  nextWorkspace.focusedTabId = tabId;
-  return nextWorkspace;
 }
 
 function clampWorkspaceSplitRatio(ratio: number) {
@@ -1489,16 +648,6 @@ function setLayoutSplitRatioAtPath(
   }
 
   return node;
-}
-
-function updateSessionCollection(
-  sessions: Session[],
-  sessionId: string,
-  updates: Partial<Session>
-) {
-  return sessions.map((session) =>
-    session.id === sessionId ? { ...session, ...updates } : session
-  );
 }
 
 function sameProjectPath(left: string, right: string) {
@@ -2886,13 +2035,4 @@ function rehydrateMigrationState(persistedState: Partial<AppState> | undefined) 
       migratedState.explorerContextMenuEnabled ?? true;
   }
   return migratedState;
-}
-
-function mapStatusFromEvent(eventType: SessionEventType): SessionRuntimeStatus {
-  if (eventType === "session_started" || eventType === "session_resumed") return "waiting";
-  if (eventType === "assistant_complete") return "completed";
-  if (eventType === "waiting_input" || eventType === "permission_request") return "waiting";
-  if (eventType === "process_error" || eventType === "hook_error") return "error";
-  if (eventType === "process_exit") return "stopped";
-  return "running";
 }

@@ -129,7 +129,7 @@ Termflow 是基于 **Tauri 2** 的本地桌面工作台，在同一项目上下�
 | 文件 / 子目录 | 职责 |
 |---|---|
 | `index.ts` | 主 store 定义（大型单文件，正在重构中） |
-| `types.ts` | Store 状态与 Action 类型定义 |
+| `types.ts` | Store 状态与 Action 类型的唯一声明；`index.ts` 兼容再导出 |
 | `slices/` | Store 分片（重构目标目录） |
 | `slices/sessionTitleSlice.ts` | 会话标题生成与同步 |
 | `slices/terminalCompletionRuntime.ts` | 终端完成通知运行时 |
@@ -138,8 +138,8 @@ Termflow 是基于 **Tauri 2** 的本地桌面工作台，在同一项目上下�
 | `slices/voicePolish.ts` | 语音润色设置 |
 | `utils/` | Store 工具函数 |
 | `utils/recentProjects.ts` | 最近项目管理 |
-| `utils/session.ts` | 会话工具函数 |
-| `utils/workspace.ts` | 工作区工具函数 |
+| `utils/session.ts` | 主 store 与测试共用的会话更新、标题规范化和事件状态映射 |
+| `utils/workspace.ts` | 主 store 与测试共用的工作区、标签和分屏操作 |
 | `auxiliaryDock.ts` | 辅助停靠状态 |
 
 **约定**：
@@ -311,7 +311,8 @@ Termflow 是基于 **Tauri 2** 的本地桌面工作台，在同一项目上下�
 
 - `src/store/index.ts` 是大型单文件，正在向 `slices/` 迁移
 - 新状态**只放入** `slices/` 目录下的分片文件
-- 修改 store 类型定义时，同步更新 `src/store/types.ts`
+- Store 类型统一在 `src/store/types.ts` 定义；`index.ts` 只导入和再导出，禁止维护平行声明
+- 工作区和会话通用逻辑复用 `utils/workspace.ts`、`utils/session.ts`，回归测试须覆盖实际 store action
 - 持久化字段变更需检查双轨同步逻辑（`App.tsx` 中的 250ms 防抖同步）
 
 ### 4.7 多窗口架构注意

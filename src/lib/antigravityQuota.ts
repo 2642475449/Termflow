@@ -2,6 +2,11 @@ import type { AntigravityQuotaWindow } from "@/types";
 
 type Translate = (key: string) => string;
 
+/** 列表默认展示 Gemini；其他模型组的额度只在详情中展开。 */
+export function getAntigravityGeminiQuotaWindows(windows: AntigravityQuotaWindow[]): AntigravityQuotaWindow[] {
+  return windows.filter((window) => window.scope === "Gemini");
+}
+
 export function antigravityQuotaScopeLabel(scope: string, t: Translate): string {
   if (scope === "Gemini") return t("settings.agents.quota.gemini");
   if (scope === "Claude and GPT") return t("settings.agents.quota.claudeGpt");

@@ -19,7 +19,7 @@ import { useAppStore } from "@/store";
 import { useAgentUsage } from "@/hooks/useAgentUsage";
 import { hasUsageData } from "@/lib/agentUsage";
 import type { AiAgentId, AntigravityQuotaWindow, AntigravityUsage, ClaudeRateLimits, CodexRateLimitResetCredit, CodexRateLimits, CodexRateLimitWindow, GitCloneEventPayload, GitCloneTask, ProjectSearchIndexStatus, QoderQuotaBucket, QoderUsage } from "@/types";
-import { antigravityQuotaLabel, antigravityQuotaPeriodLabel, antigravityQuotaScopeLabel } from "@/lib/antigravityQuota";
+import { antigravityQuotaLabel, antigravityQuotaPeriodLabel, antigravityQuotaScopeLabel, getAntigravityGeminiQuotaWindows } from "@/lib/antigravityQuota";
 const GIT_CLONE_EVENT = "git-clone-task-event";
 const SEARCH_INDEX_EVENT = "search-index-status";
 
@@ -822,12 +822,12 @@ function AntigravityUsageStatus({
 }) {
   const { t } = useTranslation();
   const hasData = Boolean(usage && hasUsageData(usage));
-  const compactScope = hasData && usage && usage.windows.some((window) => window.scope === "Gemini")
-    ? "Gemini" : usage?.windows[0]?.scope;
+  const compactWindows = getAntigravityGeminiQuotaWindows(usage?.windows ?? []);
+  const compactScope = compactWindows.length ? "Gemini" : undefined;
   const compactGroups = hasData && usage && compactScope ? [compactScope].map((scope) => ({
     scope,
     label: antigravityQuotaScopeLabel(scope, t),
-    periods: usage.windows.filter((window) => window.scope === scope).slice(0, 2).map((window) => ({
+    periods: compactWindows.slice(0, 2).map((window) => ({
       period: window.window,
       label: antigravityQuotaPeriodLabel(window.window, t),
       remaining: Math.max(0, Math.min(100, Math.round(window.remainingPercent))),
@@ -912,7 +912,7 @@ function AntigravityUsageStatus({
         style={{ background: "transparent", border: 0, color: hasData ? "var(--cs-text-secondary)" : "var(--cs-text-tertiary)" }}
       >
         <AgentIcon agentId="antigravity" size={15} />
-        {hasData ? compactGroups.map((group) => (
+        {compactGroups.length > 0 ? compactGroups.map((group) => (
           <span key={group.scope} className="flex shrink-0 items-center gap-2 whitespace-nowrap">
             {group.periods.map((period) => (
               <span key={period.period} className="flex items-center gap-1 text-[12px]">

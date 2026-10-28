@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { getAntigravityUsage, getClaudeRateLimits, getCodexRateLimits, getQoderUsage, inspectAgentClis } from "@/lib/api";
 import { AGENT_DEFINITIONS, AI_AGENT_ORDER, formatAgentVersion } from "@/lib/agents";
 import type { AgentCliInfo, AiAgentId, AntigravityQuotaWindow, AntigravityUsage, ClaudeRateLimits, CodexRateLimitWindow, CodexRateLimits, QoderUsage } from "@/types";
-import { antigravityQuotaLabel } from "@/lib/antigravityQuota";
+import { antigravityQuotaLabel, antigravityQuotaPeriodLabel, getAntigravityGeminiQuotaWindows } from "@/lib/antigravityQuota";
 import { AgentIcon } from "@/components/AgentIcon";
 import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
 import { useAppStore } from "@/store";
@@ -247,9 +247,11 @@ function AgentQuota({ agent, quota, loading, expanded = false }: { agent: AgentC
   if (agent.id === "antigravity") {
     const usage = quota as AntigravityUsage | null;
     if (usage?.status !== "ok" || usage.windows.length === 0) return <QuotaUnavailable agentId={agent.id} />;
-    const percentages = usage.windows.map((window) => clampPercent(window.remainingPercent));
-    const detail = usage.windows.map((window) =>
-      `${antigravityQuotaLabel(window, t)} ${clampPercent(window.remainingPercent)}%`).join(" · ");
+    const windows = getAntigravityGeminiQuotaWindows(usage.windows);
+    if (windows.length === 0) return <Muted>{t("settings.agents.quota.unavailable")}</Muted>;
+    const percentages = windows.map((window) => clampPercent(window.remainingPercent));
+    const detail = windows.map((window) =>
+      `${antigravityQuotaPeriodLabel(window.window, t)} ${clampPercent(window.remainingPercent)}%`).join(" · ");
     const minimum = Math.min(...percentages);
     return <QuotaSummary headline={quotaHeadline(minimum, t)} detail={detail} percentages={[minimum]} />;
   }
@@ -392,10 +394,13 @@ function AntigravityQuotaDetails({ usage, loading }: { usage: AntigravityUsage |
   if (loading && (!usage || usage.status !== "ok")) return <Muted>{t("settings.agents.quota.loading")}</Muted>;
   if (usage?.status !== "ok" || usage.windows.length === 0) return <QuotaUnavailable agentId="antigravity" />;
 
-  const remaining = usage.windows.map((window) => clampPercent(window.remainingPercent));
+  const remaining = getAntigravityGeminiQuotaWindows(usage.windows).map((window) => clampPercent(window.remainingPercent));
+  const headline = remaining.length
+    ? `${t("settings.agents.quota.gemini")} · ${quotaHeadline(Math.min(...remaining), t)}`
+    : t("settings.agents.details.quota");
   return (
     <div className="space-y-4">
-      <QuotaDetailsHeader headline={quotaHeadline(Math.min(...remaining), t)} updatedAt={usage.updatedAt} />
+      <QuotaDetailsHeader headline={headline} updatedAt={usage.updatedAt} />
       <div className="space-y-4">
         {usage.windows.map((window) => <AntigravityQuotaWindowDetail key={window.id} window={window} />)}
       </div>
