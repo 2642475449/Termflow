@@ -5,7 +5,8 @@ import { getQuickSettingsSubmenuOnPopoverChange, toggleQuickSettingsSubmenu, typ
 import { useTranslation } from "react-i18next";
 import { ShortcutHint } from "@/components/ui/ShortcutHint";
 import { WorkbenchGlyph } from "@/components/ui/WorkbenchGlyph";
-import { getKeysForAction } from "@/constants/shortcuts";
+import { useShortcutStore } from "@/store/slices/shortcutSlice";
+import { getAppShortcut } from "@/lib/appShortcuts";
 import { useAppStore, type Language, type SidebarSection, type ThemeCategory } from "@/store";
 import { checkForApplicationUpdate } from "@/lib/applicationUpdater";
 import { useApplicationUpdateStore } from "@/store/slices/applicationUpdate";
@@ -94,7 +95,7 @@ function SettingsMenu({
   ] as const;
   const currentLangLabel =
     languageLabels.find((item) => item.value === language)?.label ?? language;
-  const settingsShortcut = getKeysForAction("openSettings");
+  const settingsShortcut = useShortcutStore((s) => getAppShortcut(s.overrides, "openSettings"));
 
   const handleOpenSettings = () => {
     openTab(SETTINGS_ID);

@@ -1,10 +1,10 @@
 import { expect, it } from "vitest";
 import type { SkillCatalog } from "@/types";
-import { marketplaceConflicts, marketplaceSkillKey } from "./skillMarketplace";
+import { marketplaceConflicts, marketplaceDetailErrorKind, marketplaceRepositoryUrl, marketplaceSkillKey, marketplaceSkillUrl } from "./skillMarketplace";
 
-it("keeps skills from different providers and repositories distinct", () => {
-  const skill = { provider: "openai" as const, repository: "openai/skills", slug: "review", name: "Review", description: "", installs: null };
-  expect(marketplaceSkillKey(skill)).not.toBe(marketplaceSkillKey({ ...skill, provider: "community" }));
+it("keeps skills from different repositories and folders distinct", () => {
+  const skill = { repository: "owner/skills", slug: "review", name: "Review", description: "", installs: null };
+  expect(marketplaceSkillKey(skill)).not.toBe(marketplaceSkillKey({ ...skill, slug: "other" }));
   expect(marketplaceSkillKey(skill)).not.toBe(marketplaceSkillKey({ ...skill, repository: "other/skills" }));
 });
 
@@ -24,4 +24,16 @@ it("checks physical target paths rather than assuming a matching name is install
   expect(marketplaceConflicts(catalog, "review", ["claude"], "workspace")).toEqual([]);
   expect(marketplaceConflicts(catalog, "review", ["codex"], "user")).toEqual([]);
   expect(marketplaceConflicts(null, "review", ["codex"], "user")).toEqual([]);
+});
+
+it("distinguishes unavailable skills from ambiguous directories and network failures", () => {
+  expect(marketplaceDetailErrorKind("marketplace_skill_not_found")).toBe("unavailable");
+  expect(marketplaceDetailErrorKind("marketplace_skill_ambiguous")).toBe("ambiguous");
+  expect(marketplaceDetailErrorKind("Network request failed")).toBe("request");
+});
+
+it("links unavailable skills to their listing and source repository", () => {
+  const skill = { repository: "mattpocock/skills", slug: "resolving-merge-conflicts", name: "resolving-merge-conflicts", description: "", installs: null };
+  expect(marketplaceSkillUrl(skill)).toBe("https://skills.sh/mattpocock/skills/resolving-merge-conflicts");
+  expect(marketplaceRepositoryUrl(skill)).toBe("https://github.com/mattpocock/skills");
 });

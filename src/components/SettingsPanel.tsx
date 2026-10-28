@@ -94,7 +94,9 @@ import type {
   McpServerConfig,
   McpServerInfo,
 } from "@/types";
-import { SHORTCUTS } from "@/constants/shortcuts";
+import { ShortcutsPage } from "./settings/ShortcutsPage";
+import { findShortcutConflict } from "@/lib/appShortcuts";
+import { useShortcutStore } from "@/store/slices/shortcutSlice";
 import ClaudeMdPage from "@/components/settings/ClaudeMdPage";
 import { QuickCommandsPage } from "@/components/settings/QuickCommandsPage";
 import { AgentIcon } from "@/components/AgentIcon";
@@ -893,6 +895,11 @@ function VoiceRecognitionPage() {
   }, [restoreGlobalVoiceShortcut]);
 
   const applyRecordedShortcut = useCallback((shortcut: string) => {
+    const conflict = findShortcutConflict(useShortcutStore.getState().overrides, "voiceInput", shortcut, voiceShortcut);
+    if (conflict) {
+      message.warning(t("settings.shortcuts.conflict", { action: t(`settings.shortcuts.${conflict}`) }));
+      return;
+    }
     const previousShortcut = previousShortcutRef.current;
     previousShortcutRef.current = null;
     setVoiceShortcut(shortcut);
@@ -902,7 +909,7 @@ function VoiceRecognitionPage() {
     if (previousShortcut === shortcut) {
       void restoreGlobalVoiceShortcut(shortcut);
     }
-  }, [restoreGlobalVoiceShortcut, setVoiceShortcut]);
+  }, [restoreGlobalVoiceShortcut, setVoiceShortcut, t, voiceShortcut]);
 
   const handleTest = async () => {
     if (!asrApiKey.trim()) {
@@ -1283,56 +1290,6 @@ function VoiceRecognitionPage() {
   );
 }
 
-/* ────────────── Shortcuts Page ────────────── */
-function ShortcutsPage() {
-  const { t } = useTranslation();
-  return (
-    <>
-      <SettingsPageHeader
-        title={t("settings.menu.shortcuts")}
-      />
-      <SettingSection title={t("settings.menu.shortcuts")}>
-        {SHORTCUTS.map((s, i) => (
-          <div
-            key={s.id}
-            className="flex items-center justify-between px-4 py-2.5"
-            style={{
-              borderBottom: i < SHORTCUTS.length - 1
-                ? "1px solid var(--cs-border-card)"
-                : "none",
-            }}
-          >
-            <span className="text-sm" style={{ color: "var(--cs-text-primary)" }}>
-              {t(s.i18nKey)}
-            </span>
-            <div className="flex gap-1">
-              {s.keys.split(" + ").map((k, j) => (
-                <span key={j}>
-                  <kbd
-                    className="inline-block px-1.5 py-0.5 rounded text-[11px] font-mono"
-                    style={{
-                      background: "var(--cs-bg-hover)",
-                      color: "var(--cs-text-secondary)",
-                      boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
-                      minWidth: 22,
-                      textAlign: "center",
-                    }}
-                  >
-                    {k}
-                  </kbd>
-                  {j < s.keys.split(" + ").length - 1 && (
-                    <span className="text-[10px] mx-0.5" style={{ color: "var(--cs-text-tertiary)" }}>+</span>
-                  )}
-                </span>
-              ))}
-            </div>
-          </div>
-        ))}
-
-      </SettingSection>
-    </>
-  );
-}
 
 /* ────────────── Shared resource lists ────────────── */
 type ResourceScope = "workspace" | "user";

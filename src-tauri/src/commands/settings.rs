@@ -27,6 +27,13 @@ struct PersistentNetworkProxyUpdate {
 
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
+struct PersistentShortcutsUpdate {
+    keyboard_shortcuts: std::collections::BTreeMap<String, String>,
+    voice_shortcut: String,
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PersistentExplorerContextMenuUpdate {
     pub explorer_context_menu_enabled: bool,
 }
@@ -76,6 +83,13 @@ pub fn save_persistent_settings(
             network_proxy_mode: settings.network_proxy_mode,
             network_custom_proxy_url: settings.network_custom_proxy_url,
             network_no_proxy: settings.network_no_proxy,
+        },
+    );
+    let _ = app.emit(
+        "persistent-shortcuts-updated",
+        PersistentShortcutsUpdate {
+            keyboard_shortcuts: settings.keyboard_shortcuts,
+            voice_shortcut: settings.voice_shortcut,
         },
     );
     Ok(())

@@ -263,6 +263,8 @@ pub struct PersistentSettingsRecord {
     #[serde(default)]
     pub voice_polish_instructions: String,
     pub voice_shortcut: String,
+    #[serde(default)]
+    pub keyboard_shortcuts: BTreeMap<String, String>,
     pub voice_input_target: String,
     pub voice_trigger_visible: bool,
     pub terminal_quick_commands: serde_json::Value,
@@ -320,6 +322,7 @@ impl Default for PersistentSettingsRecord {
             voice_polish_style: default_voice_polish_style(),
             voice_polish_instructions: String::new(),
             voice_shortcut: "Ctrl+Shift+V".into(),
+            keyboard_shortcuts: BTreeMap::new(),
             voice_input_target: "system".into(),
             voice_trigger_visible: true,
             terminal_quick_commands: serde_json::Value::Array(vec![]),
@@ -992,6 +995,8 @@ impl Database {
             read_setting(&conn, "voice.polishInstructions")?.unwrap_or(settings.voice_polish_instructions);
         settings.voice_shortcut =
             read_setting(&conn, "voice.shortcut")?.unwrap_or(settings.voice_shortcut);
+        settings.keyboard_shortcuts =
+            read_setting(&conn, "keyboard.shortcuts")?.unwrap_or(settings.keyboard_shortcuts);
         settings.voice_input_target =
             read_setting(&conn, "voice.inputTarget")?.unwrap_or(settings.voice_input_target);
         settings.voice_trigger_visible =
@@ -1217,6 +1222,7 @@ impl Database {
         write_setting(&conn, "voice.polishStyle", &settings.voice_polish_style)?;
         write_setting(&conn, "voice.polishInstructions", &settings.voice_polish_instructions)?;
         write_setting(&conn, "voice.shortcut", &settings.voice_shortcut)?;
+        write_setting(&conn, "keyboard.shortcuts", &settings.keyboard_shortcuts)?;
         write_setting(&conn, "voice.inputTarget", &settings.voice_input_target)?;
         write_setting(
             &conn,
@@ -1659,6 +1665,24 @@ mod tests {
     #[test]
     fn persistent_settings_default_to_beijing_asr_region() {
         assert_eq!(PersistentSettingsRecord::default().asr_region, "beijing");
+    }
+
+    #[test]
+    fn keyboard_shortcuts_round_trip_and_support_older_settings() -> Result<(), String> {
+        let database = Database::open_in_memory();
+        let mut settings = PersistentSettingsRecord::default();
+        settings.keyboard_shortcuts.insert("newSession".into(), "Ctrl+Alt+N".into());
+        settings.keyboard_shortcuts.insert("closeTab".into(), String::new());
+        database.save_general_persistent_settings(&settings)?;
+        assert_eq!(database.load_persistent_settings()?.keyboard_shortcuts, settings.keyboard_shortcuts);
+
+        let mut legacy = serde_json::to_value(&settings).map_err(|error| error.to_string())?;
+        if let Some(object) = legacy.as_object_mut() {
+            object.remove("keyboardShortcuts");
+        }
+        let restored: PersistentSettingsRecord = serde_json::from_value(legacy).map_err(|error| error.to_string())?;
+        assert!(restored.keyboard_shortcuts.is_empty());
+        Ok(())
     }
 
     #[test]

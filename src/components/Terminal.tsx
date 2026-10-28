@@ -1,3 +1,6 @@
+import { useShortcutStore } from "@/store/slices/shortcutSlice";
+import { getAppShortcut } from "@/lib/appShortcuts";
+import { matchesShortcut } from "@/lib/shortcut";
 import { useEffect, useRef, useCallback, useState, useId } from "react";
 import type { DragEvent as ReactDragEvent } from "react";
 import { Dropdown, Modal, message } from "antd";
@@ -1279,7 +1282,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       }
 
       // Ctrl+L: clear current input line (rebinds the browser-default address-bar shortcut)
-      if (isPlainCtrlCombo && lowerKey === "l") {
+      if (matchesShortcut(event, getAppShortcut(useShortcutStore.getState().overrides, "clearInput"))) {
         if (event.type !== "keydown") {
           return false;
         }

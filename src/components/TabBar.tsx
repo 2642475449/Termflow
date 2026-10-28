@@ -20,7 +20,8 @@ import { inspectAgentClis } from "@/lib/api";
 import { getFileIconByName } from "@/lib/fileIcon";
 import { useTranslation } from "react-i18next";
 import { ShortcutHint } from "@/components/ui/ShortcutHint";
-import { getKeysForAction } from "@/constants/shortcuts";
+import { useShortcutStore } from "@/store/slices/shortcutSlice";
+import { getAppShortcut } from "@/lib/appShortcuts";
 import { closeTabRuntime, confirmCloseTab } from "@/lib/tabClose";
 import { AgentIcon } from "@/components/AgentIcon";
 import { AgentActivityIcon } from "@/components/AgentActivityIcon";
@@ -114,6 +115,7 @@ interface TabBarProps {
 }
 
 function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
+  const closeKeys = useShortcutStore((s) => getAppShortcut(s.overrides, "closeTab"));
   const { t } = useTranslation();
   const openTabs = tabIds;
   const activeSessionId = activeTabId;
@@ -354,7 +356,6 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
     const isDiff = tab?.kind === "diff";
     const session = isSettings || isScheduledTasks || isFile || isDiff ? null : sessionById.get(tabId);
 
-    const closeKeys = getKeysForAction("closeTab");
 
     const items: MenuProps["items"] = [
       {

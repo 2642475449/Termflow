@@ -1,15 +1,15 @@
 import { useEffect } from "react";
 import { ArrowLeftOutlined, DownloadOutlined, LinkOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
-import { Alert, Button, Empty, Input, Modal, Segmented, Select, Spin, Tag, message } from "antd";
+import { Alert, Button, Empty, Input, Modal, Segmented, Select, Spin, message } from "antd";
 import { useTranslation } from "react-i18next";
 import { AgentIcon } from "@/components/AgentIcon";
 import { getAgentIdsWithCapability } from "@/lib/agents";
 import { installMarketplaceSkill, openExternalUrl } from "@/lib/api";
-import { marketplaceConflicts, marketplaceSkillKey } from "@/lib/skillMarketplace";
+import { marketplaceConflicts, marketplaceDetailErrorKind, marketplaceRepositoryUrl, marketplaceSkillKey, marketplaceSkillUrl } from "@/lib/skillMarketplace";
 import { skillInstallTargets } from "@/lib/skills";
 import { useSkillMarketplaceStore } from "@/store/slices/skillMarketplaceSlice";
 import { useSkillsStore } from "@/store/slices/skillsSlice";
-import type { SkillMarketProvider, SkillScope } from "@/types";
+import type { SkillScope } from "@/types";
 
 const SKILL_AGENTS = getAgentIdsWithCapability("skills");
 
@@ -22,8 +22,9 @@ export function SkillMarketplaceModal({ projectPath, onInstalled }: Props) {
   const { t } = useTranslation();
   const market = useSkillMarketplaceStore();
   const catalog = useSkillsStore((state) => state.catalog);
-  const providerLabel = (provider: SkillMarketProvider) => t(`settings.skillMarket.providers.${provider}`);
+  const canSearch = [...market.query.trim()].length >= 2;
   const detail = market.detail;
+  const detailErrorKind = marketplaceDetailErrorKind(market.detailError);
   const targets = skillInstallTargets(catalog, market.agents, market.scope);
   const conflicts = detail ? marketplaceConflicts(catalog, detail.folderName, market.agents, market.scope) : [];
   const consumers = [...new Set(targets.flatMap((target) => target.consumers))];
@@ -32,7 +33,7 @@ export function SkillMarketplaceModal({ projectPath, onInstalled }: Props) {
     if (!market.open) return;
     const timer = window.setTimeout(() => { void useSkillMarketplaceStore.getState().search(); }, 400);
     return () => window.clearTimeout(timer);
-  }, [market.open, market.query, market.provider]);
+  }, [market.open, market.query]);
 
   useEffect(() => {
     const state = useSkillMarketplaceStore.getState();
@@ -65,13 +66,19 @@ export function SkillMarketplaceModal({ projectPath, onInstalled }: Props) {
     {market.selected ? <div>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <Button type="text" icon={<ArrowLeftOutlined />} disabled={market.installing} onClick={() => void market.selectSkill(null)}>{t("settings.skillMarket.back")}</Button>
-        <Tag>{providerLabel(market.selected.provider)}</Tag>
       </div>
       <h3 className="font-semibold text-lg">{detail?.skill.name ?? market.selected.name}</h3>
       <p className="app-skills-secondary text-xs mt-1 mb-4">{market.selected.repository}</p>
-      {market.detailLoading ? <div className="flex justify-center py-20"><Spin /></div> : market.detailError ?
-        <Alert type="error" showIcon message={t("settings.skillMarket.detailFailed")} description={market.detailError}
-          action={<Button onClick={() => market.selected && void market.selectSkill(market.selected)}>{t("common.refresh")}</Button>} /> : detail &&
+      {market.detailLoading ? <div className="flex justify-center py-20"><Spin /></div> : market.detailError ? <div>
+        <Alert type={detailErrorKind === "unavailable" ? "warning" : "error"} showIcon
+          message={t(`settings.skillMarket.${detailErrorKind === "request" ? "detailFailed" : detailErrorKind}`)}
+          description={detailErrorKind === "request" ? market.detailError : t(`settings.skillMarket.${detailErrorKind}Hint`)}
+          action={<Button onClick={() => market.selected && void market.selectSkill(market.selected, true)}>{t("common.refresh")}</Button>} />
+        <div className="flex flex-wrap gap-2 mt-3">
+          <Button icon={<LinkOutlined />} onClick={() => market.selected && void openSource(marketplaceSkillUrl(market.selected))}>{t("settings.skillMarket.viewListing")}</Button>
+          <Button icon={<LinkOutlined />} onClick={() => market.selected && void openSource(marketplaceRepositoryUrl(market.selected))}>{t("settings.skillMarket.viewRepository")}</Button>
+        </div>
+      </div> : detail &&
         <div className="app-skill-market-detail">
           <section className="min-w-0">
             <p className="app-skills-secondary text-sm mb-3">{detail.skill.description}</p>
@@ -117,27 +124,19 @@ export function SkillMarketplaceModal({ projectPath, onInstalled }: Props) {
       <div className="flex flex-wrap items-center gap-3 mb-3">
         <Input className="app-skills-search" allowClear prefix={<SearchOutlined />} placeholder={t("settings.skillMarket.searchPlaceholder")}
           maxLength={200} value={market.query} onChange={(event) => market.setQuery(event.target.value)} />
-        <Select<SkillMarketProvider | "all"> value={market.provider ?? "all"} className="app-skills-agent-filter" aria-label={t("settings.skillMarket.source")}
-          onChange={(value) => market.setProvider(value === "all" ? null : value)} options={[
-            { value: "all", label: t("settings.skillMarket.allSources") },
-            ...(["openai", "anthropic", "community"] as const).map((value) => ({ value, label: providerLabel(value) })),
-          ]} />
-        <Button icon={<ReloadOutlined spin={market.loading} />} disabled={market.loading} onClick={() => void market.search(true)}>{t("common.refresh")}</Button>
+        <Button icon={<ReloadOutlined spin={market.loading} />} disabled={market.loading || !canSearch} onClick={() => void market.search()}>{t("common.refresh")}</Button>
       </div>
-      {market.query.trim().length < 2 && market.provider !== "openai" && market.provider !== "anthropic" &&
-        <Alert type="info" showIcon className="mb-3" message={t("settings.skillMarket.communityHint")} />}
       {market.error && <Alert type="error" showIcon className="mb-3" message={t("settings.skillMarket.loadFailed")} description={market.error}
-        action={<Button onClick={() => void market.search(true)}>{t("common.refresh")}</Button>} />}
-      {market.results?.warnings.map((warning) => <Alert key={warning.provider} type="warning" showIcon className="mb-3"
-        message={t("settings.skillMarket.sourceFailed", { source: providerLabel(warning.provider) })} description={warning.reason} />)}
+        action={<Button onClick={() => void market.search()}>{t("common.refresh")}</Button>} />}
       <div className="app-skill-market-results" aria-busy={market.loading}>
-        {market.loading ? <div className="flex justify-center py-20"><Spin /></div> : market.results && !market.results.skills.length ?
+        {!canSearch ? <div className="py-12"><Empty description={t("settings.skillMarket.searchHint")} /></div> :
+          market.loading ? <div className="flex justify-center py-20"><Spin /></div> : market.results && !market.results.skills.length ?
           <div className="py-12"><Empty description={t("settings.skillMarket.empty")} /></div> :
           <div className="app-skills-list">
             {(market.results?.skills ?? []).map((skill) => <button key={marketplaceSkillKey(skill)} type="button" className="app-skills-row"
               onClick={() => void market.selectSkill(skill)}>
               <div className="app-skills-row-body">
-                <div className="flex flex-wrap items-center gap-2"><span className="font-medium text-sm">{skill.name}</span><Tag>{providerLabel(skill.provider)}</Tag></div>
+                <div className="font-medium text-sm">{skill.name}</div>
                 <p className="app-skills-secondary text-xs mt-2 line-clamp-2">{skill.description || t("settings.skillMarket.previewHint")}</p>
                 <p className="app-skills-muted text-xs mt-2">{skill.repository}</p>
               </div>
@@ -145,7 +144,7 @@ export function SkillMarketplaceModal({ projectPath, onInstalled }: Props) {
             </button>)}
           </div>}
       </div>
-      {market.results?.communityLimited && <p className="app-skills-muted text-xs mt-3">{t("settings.skillMarket.limited")}</p>}
+      {market.results?.limited && <p className="app-skills-muted text-xs mt-3">{t("settings.skillMarket.limited")}</p>}
     </div>}
   </Modal>;
 }

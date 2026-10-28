@@ -1,3 +1,4 @@
+import { useShortcutStore } from "@/store/slices/shortcutSlice";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Layout, message, Spin } from "antd";
 import dayjs from "dayjs";
@@ -928,6 +929,7 @@ function AppLayout() {
   const voicePolishStyle = useAppStore((s) => s.voicePolishStyle);
   const voicePolishInstructions = useAppStore((s) => s.voicePolishInstructions);
   const voiceShortcut = useAppStore((s) => s.voiceShortcut);
+  const shortcutRecordingAction = useShortcutStore((s) => s.recordingAction);
   const voiceInputTarget = useAppStore((s) => s.voiceInputTarget);
   const [hasGlobalVoiceShortcut, setHasGlobalVoiceShortcut] = useState(false);
   const [workerVoiceState, setWorkerVoiceState] = useState<WorkerVoiceStatePayload>(
@@ -1066,6 +1068,7 @@ function AppLayout() {
 
   useEffect(() => {
     let disposed = false;
+    if (shortcutRecordingAction) return;
     const accelerator = toTauriShortcut(voiceShortcut);
 
     void configureVoiceGlobalShortcut(accelerator, Boolean(voiceShortcut.trim()))
@@ -1091,7 +1094,7 @@ function AppLayout() {
     return () => {
       disposed = true;
     };
-  }, [voiceShortcut]);
+  }, [voiceShortcut, shortcutRecordingAction]);
 
   useKeyboardShortcuts({
     onNewSession: handleNewSession,

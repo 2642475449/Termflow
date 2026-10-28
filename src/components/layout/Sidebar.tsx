@@ -1,3 +1,6 @@
+import { useShortcutStore } from "@/store/slices/shortcutSlice";
+import { getAppShortcut } from "@/lib/appShortcuts";
+import { formatShortcutDisplay } from "@/lib/shortcut";
 import { retrySessionTitle } from "@/store/slices/sessionTitleSlice";
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Layout, message, Modal, Input, Tooltip } from "antd";
@@ -52,6 +55,7 @@ interface SidebarProps {
 
 function Sidebar({ collapsed, section }: SidebarProps) {
   const { t, i18n } = useTranslation();
+  const newSessionShortcut = useShortcutStore((s) => getAppShortcut(s.overrides, "newSession"));
   const currentProject = useAppStore((s) => s.currentProject);
   const sidebarWidth = useAppStore((s) => s.sidebarWidth);
   const sessions = useAppStore((s) => s.sessions);
@@ -441,7 +445,7 @@ function Sidebar({ collapsed, section }: SidebarProps) {
               className="px-3 pt-2.5 pb-2"
               style={{ borderBottom: "1px solid color-mix(in srgb, var(--cs-border-sidebar) 88%, transparent)" }}
             >
-              <Tooltip title={t("sidebar.newSessionTooltip")} mouseEnterDelay={0.4}>
+              <Tooltip title={`${t("settings.shortcuts.newSession")}${newSessionShortcut ? ` (${formatShortcutDisplay(newSessionShortcut)})` : ""}`} mouseEnterDelay={0.4}>
                 <button
                   type="button"
                   className="app-sidebar-new-session-button flex h-7 w-full items-center justify-start gap-2 rounded-[7px] px-3 text-sm font-medium text-[var(--cs-text-secondary)] hover:bg-[var(--cs-bg-hover)]"

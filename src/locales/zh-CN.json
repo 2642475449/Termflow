@@ -1437,7 +1437,22 @@
       "openSettings": "打开设置",
       "clearInput": "清空输入",
       "voiceInput": "语音输入",
-      "hint1": "上述全局快捷键在终端获得焦点时同样可用"
+      "hint1": "上述全局快捷键在终端获得焦点时同样可用",
+      "description": "点击快捷键后按下新的组合键，即时生效并自动保存。语音快捷键与语音识别设置同步。",
+      "edit": "修改{{action}}快捷键",
+      "resetAll": "全部恢复默认",
+      "reset": "恢复默认",
+      "clear": "清除",
+      "clearAction": "清除{{action}}快捷键",
+      "resetAction": "恢复{{action}}默认快捷键",
+      "unassigned": "未设置",
+      "preparing": "正在准备…",
+      "recording": "请按下快捷键…",
+      "doubleShift": "双击 Shift",
+      "conflict": "此快捷键已用于“{{action}}”，请先修改或清除该绑定。",
+      "invalid": "请使用 Ctrl、Alt、Cmd 加按键，或 F1–F24。Ctrl+A/C/V 保留给选择、复制和粘贴。",
+      "recordHint": "按 Esc 或再次点击可取消录制；全局搜索也支持双击 Shift。清空输入仅在终端中生效。",
+      "resetSuccess": "已恢复默认快捷键"
     },
     "notifications": {
       "channels": "通知渠道",
@@ -1657,18 +1672,15 @@
     },
     "skillMarket": {
       "title": "在线技能市场",
-      "description": "浏览官方技能，或通过 skills.sh 搜索社区技能，预览内容后安装到本地。",
-      "providers": {
-        "openai": "OpenAI 官方",
-        "anthropic": "Anthropic 官方",
-        "community": "skills.sh 社区"
-      },
-      "source": "技能来源",
-      "allSources": "全部来源",
+      "description": "通过 skills.sh 搜索技能，预览内容后安装到本地。",
       "searchPlaceholder": "搜索技能名称、用途或仓库…",
-      "communityHint": "输入至少 2 个字符以搜索 skills.sh 社区目录；默认展示官方技能。",
       "loadFailed": "加载技能市场失败",
-      "sourceFailed": "{{source}} 暂时无法加载，其他来源仍可使用",
+      "unavailable": "源仓库中未找到该技能",
+      "unavailableHint": "skills.sh 的收录记录可能已过期，对应技能可能已被移除、改名或移动。可刷新重试，或查看技能页面与源仓库。",
+      "ambiguous": "无法确定技能的安装目录",
+      "ambiguousHint": "源仓库中存在多个匹配的 SKILL.md，暂时无法确定要安装哪一个。请查看源仓库或选择其他技能。",
+      "viewListing": "查看 skills.sh 页面",
+      "viewRepository": "查看源仓库",
       "detailFailed": "加载技能详情失败",
       "installFailed": "安装失败",
       "install": "安装技能",
@@ -1680,7 +1692,8 @@
       "resourceFiles": "安装文件清单",
       "previewHint": "点击预览技能说明与完整安装内容",
       "installs": "{{count}} 次安装",
-      "limited": "社区搜索最多显示 50 条结果，可输入更具体的关键词缩小范围。"
+      "limited": "搜索最多显示 50 条结果，可输入更具体的关键词缩小范围。",
+      "searchHint": "输入至少 2 个字符，搜索 skills.sh 技能目录。"
     },
     "skills": {
       "editor": {

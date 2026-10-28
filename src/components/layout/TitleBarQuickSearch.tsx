@@ -1,3 +1,6 @@
+import { useShortcutStore } from "@/store/slices/shortcutSlice";
+import { createDoubleShiftMatcher, getAppShortcut } from "@/lib/appShortcuts";
+import { matchesShortcut, formatShortcutDisplay } from "@/lib/shortcut";
 import { FolderOutlined, SearchOutlined } from "@ant-design/icons";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Empty, Input, Modal, Spin } from "antd";
@@ -86,7 +89,7 @@ function highlightMatch(value: string, query: string) {
 }
 
 function TitleBarQuickSearch() {
-  const DOUBLE_SHIFT_WINDOW_MS = 320;
+  const searchShortcut = useShortcutStore((s) => getAppShortcut(s.overrides, "searchEverywhere"));
   const { t } = useTranslation();
   const currentProject = useAppStore((s) => s.currentProject);
   const tabsById = useAppStore((s) => s.tabsById);
@@ -99,7 +102,6 @@ function TitleBarQuickSearch() {
   const deferredQuery = useDeferredValue(query);
   const inputRef = useRef<InputRef | null>(null);
   const resultListRef = useRef<HTMLDivElement | null>(null);
-  const lastShiftKeyDownAtRef = useRef(0);
 
   const recentItems = useMemo<QuickSearchItem[]>(() => {
     if (!currentProject) return [];
@@ -226,53 +228,34 @@ function TitleBarQuickSearch() {
   }, [activeIndex]);
 
   useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (
-        event.key === "Shift" &&
-        !event.repeat &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey
-      ) {
-        const target = event.target;
-        const isMonacoEditor = target instanceof HTMLElement && !!target.closest(".monaco-editor");
-        const isTerminal = target instanceof HTMLElement && !!target.closest(".xterm");
-        const isEditableTarget =
-          !isMonacoEditor &&
-          !isTerminal &&
-          target instanceof HTMLElement &&
-          (target.isContentEditable ||
-            !!target.closest("[contenteditable='true']") ||
-            ["input", "textarea", "select"].includes(target.tagName.toLowerCase()));
-        if (!isEditableTarget) {
-          const now = Date.now();
-          if (!open && now - lastShiftKeyDownAtRef.current <= DOUBLE_SHIFT_WINDOW_MS) {
-            event.preventDefault();
-            event.stopPropagation();
-            lastShiftKeyDownAtRef.current = 0;
-            openSearch();
-            return;
-          }
-          lastShiftKeyDownAtRef.current = now;
-        }
-      }
-
-      if (!open || shouldIgnoreShortcut(event)) {
+    const doubleShift = createDoubleShiftMatcher();
+    function handleKey(event: KeyboardEvent) {
+      if (event.isComposing || useShortcutStore.getState().recordingAction) return;
+      const target = event.target;
+      const isEditorOrTerminal = target instanceof HTMLElement && !!target.closest(".monaco-editor, .xterm");
+      const isEditableTarget = !isEditorOrTerminal && shouldIgnoreShortcut(event);
+      const matches = searchShortcut === "Double Shift"
+        ? doubleShift(event, Date.now())
+        : event.type === "keydown" && !event.repeat && matchesShortcut(event, searchShortcut);
+      if (!open && !isEditableTarget && matches) {
+        event.preventDefault();
+        event.stopPropagation();
+        openSearch();
         return;
       }
-
-      if (event.key === "Escape") {
+      if (event.type === "keydown" && open && !shouldIgnoreShortcut(event) && event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
         closeSearch();
       }
     }
-
-    document.addEventListener("keydown", handleKeyDown, true);
+    document.addEventListener("keydown", handleKey, true);
+    document.addEventListener("keyup", handleKey, true);
     return () => {
-      document.removeEventListener("keydown", handleKeyDown, true);
+      document.removeEventListener("keydown", handleKey, true);
+      document.removeEventListener("keyup", handleKey, true);
     };
-  }, [closeSearch, open, openSearch]);
+  }, [closeSearch, open, openSearch, searchShortcut]);
 
   const handleInputKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -321,7 +304,7 @@ function TitleBarQuickSearch() {
         className="app-titlebar-search"
         data-active={open ? "true" : "false"}
         onClick={openSearch}
-        title={t("titleBar.quickSearchTooltip")}
+        title={`${t("titleBar.quickSearch")}${searchShortcut ? ` (${searchShortcut === "Double Shift" ? t("settings.shortcuts.doubleShift") : formatShortcutDisplay(searchShortcut)})` : ""}`}
       >
         <SearchOutlined className="text-[11px]" />
         <span className="text-[12px]">{t("titleBar.quickSearch")}</span>

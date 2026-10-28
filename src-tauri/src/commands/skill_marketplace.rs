@@ -19,29 +19,12 @@ const MAX_FILE: usize = 5 * 1024 * 1024;
 const MAX_SKILL: usize = 50 * 1024 * 1024;
 const MAX_FILES: usize = 1024;
 const COMMUNITY_LIMIT: usize = 50;
-
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum MarketProvider {
-    Openai,
-    Anthropic,
-    Community,
-}
-
-impl MarketProvider {
-    fn official(self) -> Option<(&'static str, &'static str)> {
-        match self {
-            Self::Openai => Some(("openai/skills", "skills/.curated/")),
-            Self::Anthropic => Some(("anthropics/skills", "skills/")),
-            Self::Community => None,
-        }
-    }
-}
+const SKILL_NOT_FOUND: &str = "marketplace_skill_not_found";
+const SKILL_AMBIGUOUS: &str = "marketplace_skill_ambiguous";
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MarketSkill {
-    pub provider: MarketProvider,
     pub repository: String,
     pub slug: String,
     pub name: String,
@@ -53,14 +36,7 @@ pub struct MarketSkill {
 #[serde(rename_all = "camelCase")]
 pub struct MarketSearch {
     skills: Vec<MarketSkill>,
-    warnings: Vec<MarketWarning>,
-    community_limited: bool,
-}
-
-#[derive(Serialize)]
-pub struct MarketWarning {
-    provider: MarketProvider,
-    reason: String,
+    limited: bool,
 }
 
 #[derive(Clone, Serialize)]
@@ -117,7 +93,6 @@ struct RepositorySnapshot {
 type Cache<T> = Mutex<HashMap<String, (Instant, T)>>;
 static REPOSITORIES: LazyLock<Cache<RepositorySnapshot>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
-static OFFICIAL: LazyLock<Cache<Vec<MarketSkill>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
 
 fn cached<T: Clone>(cache: &Cache<T>, key: &str) -> Option<T> {
     cache
@@ -135,6 +110,12 @@ fn remember<T>(cache: &Cache<T>, key: String, value: T) {
             entries.clear();
         }
         entries.insert(key, (Instant::now(), value));
+    }
+}
+
+fn invalidate_latest_snapshot(repository: &str) {
+    if let Ok(mut entries) = REPOSITORIES.lock() {
+        entries.remove(&format!("{repository}@HEAD"));
     }
 }
 
@@ -247,11 +228,6 @@ fn validate_skill(skill: &MarketSkill) -> Result<(), String> {
     if skill.slug.contains('/') {
         return Err("Invalid skill identifier".into());
     }
-    if let Some((repository, _)) = skill.provider.official() {
-        if skill.repository != repository {
-            return Err("Skill repository does not match its provider".into());
-        }
-    }
     Ok(())
 }
 
@@ -259,14 +235,11 @@ async fn snapshot(
     client: &Client,
     repository: &str,
     revision: Option<&str>,
-    refresh: bool,
 ) -> Result<RepositorySnapshot, String> {
     validate_repository(repository)?;
     let key = format!("{repository}@{}", revision.unwrap_or("HEAD"));
-    if !refresh {
-        if let Some(item) = cached(&REPOSITORIES, &key) {
-            return Ok(item);
-        }
+    if let Some(item) = cached(&REPOSITORIES, &key) {
+        return Ok(item);
     }
     let revision = if let Some(revision) = revision {
         if revision.len() != 40 || !revision.bytes().all(|b| b.is_ascii_hexdigit()) {
@@ -344,59 +317,6 @@ async fn manifest(
         .map_err(|_| "SKILL.md must be UTF-8 text".into())
 }
 
-fn official_manifest(path: &str, prefix: &str) -> bool {
-    path.strip_prefix(prefix)
-        .and_then(|rest| rest.strip_suffix("/SKILL.md"))
-        .is_some_and(|folder| !folder.is_empty() && !folder.contains('/'))
-}
-
-async fn official_skills(
-    client: &Client,
-    provider: MarketProvider,
-    refresh: bool,
-) -> Result<Vec<MarketSkill>, String> {
-    let (repository, prefix) = provider.official().ok_or("Unknown official source")?;
-    if !refresh {
-        if let Some(skills) = cached(&OFFICIAL, repository) {
-            return Ok(skills);
-        }
-    }
-    let repo = snapshot(client, repository, None, refresh).await?;
-    let entries = repo
-        .entries
-        .iter()
-        .filter(|entry| official_manifest(&entry.path, prefix))
-        .cloned()
-        .collect::<Vec<_>>();
-    let results = stream::iter(entries.into_iter().map(|entry| {
-        let repo = &repo;
-        async move {
-            let content = manifest(client, repository, repo, &entry).await?;
-            let (name, description) = parse_skill_frontmatter(&content);
-            let slug = entry
-                .path
-                .trim_end_matches("/SKILL.md")
-                .rsplit('/')
-                .next()
-                .unwrap_or_default()
-                .to_string();
-            Ok::<_, String>(MarketSkill {
-                provider,
-                repository: repository.into(),
-                name: if name.is_empty() { slug.clone() } else { name },
-                slug,
-                description,
-                installs: None,
-            })
-        }
-    }))
-    .buffer_unordered(6)
-    .try_collect::<Vec<_>>()
-    .await?;
-    remember(&OFFICIAL, repository.into(), results.clone());
-    Ok(results)
-}
-
 #[derive(Deserialize)]
 struct CommunityResults {
     skills: Vec<CommunitySkill>,
@@ -421,7 +341,6 @@ fn community_skills(results: CommunityResults) -> Vec<MarketSkill> {
                 .strip_prefix(&format!("{}/", entry.source))?
                 .to_string();
             let skill = MarketSkill {
-                provider: MarketProvider::Community,
                 repository: entry.source,
                 slug,
                 name: entry.name,
@@ -450,72 +369,25 @@ async fn search_community(client: &Client, query: &str) -> Result<Vec<MarketSkil
 #[tauri::command]
 pub async fn search_skill_marketplace(
     query: String,
-    provider: Option<MarketProvider>,
-    refresh: bool,
     database: State<'_, Arc<Database>>,
 ) -> Result<MarketSearch, String> {
     let client = client(&database)?;
-    search_with_client(&client, &query, provider, refresh).await
+    search_with_client(&client, &query).await
 }
 
-async fn search_with_client(
-    client: &Client,
-    query: &str,
-    provider: Option<MarketProvider>,
-    refresh: bool,
-) -> Result<MarketSearch, String> {
+async fn search_with_client(client: &Client, query: &str) -> Result<MarketSearch, String> {
     let query = query.trim();
-    if query.len() > 200 {
+    let query_length = query.chars().count();
+    if query_length > 200 {
         return Err("Search query is too long".into());
     }
-    let sources = [
-        MarketProvider::Openai,
-        MarketProvider::Anthropic,
-        MarketProvider::Community,
-    ];
-    let results = stream::iter(
-        sources
-            .into_iter()
-            .filter(|source| provider.is_none_or(|p| p == *source))
-            .map(|source| async move {
-                let result = if source == MarketProvider::Community {
-                    if query.chars().count() < 2 {
-                        Ok(Vec::new())
-                    } else {
-                        search_community(client, query).await
-                    }
-                } else {
-                    official_skills(client, source, refresh).await
-                };
-                (source, result)
-            }),
-    )
-    .buffer_unordered(3)
-    .collect::<Vec<_>>()
-    .await;
-    let mut skills = Vec::new();
-    let mut warnings = Vec::new();
-    let mut community_limited = false;
-    let keyword = query.to_lowercase();
-    for (source, result) in results {
-        match result {
-            Ok(items) => {
-                if source == MarketProvider::Community {
-                    community_limited = items.len() >= COMMUNITY_LIMIT;
-                }
-                skills.extend(items.into_iter().filter(|skill| {
-                    source == MarketProvider::Community
-                        || format!("{} {} {}", skill.name, skill.description, skill.repository)
-                            .to_lowercase()
-                            .contains(&keyword)
-                }));
-            }
-            Err(reason) => warnings.push(MarketWarning {
-                provider: source,
-                reason,
-            }),
-        }
+    if query_length < 2 {
+        return Ok(MarketSearch {
+            skills: Vec::new(),
+            limited: false,
+        });
     }
+    let mut skills = search_community(client, query).await?;
     skills.sort_by(|a, b| {
         b.installs
             .unwrap_or(0)
@@ -523,9 +395,8 @@ async fn search_with_client(
             .then_with(|| a.name.cmp(&b.name))
     });
     Ok(MarketSearch {
+        limited: skills.len() >= COMMUNITY_LIMIT,
         skills,
-        warnings,
-        community_limited,
     })
 }
 
@@ -570,54 +441,83 @@ fn skill_resources<'a>(
     Ok(files)
 }
 
-async fn detail_with_client(
+fn matching_manifest(
+    slug: &str,
+    candidates: Vec<(TreeEntry, String)>,
+) -> Result<(TreeEntry, String), String> {
+    let mut matches = candidates
+        .into_iter()
+        .filter(|(_, content)| parse_skill_frontmatter(content).0 == slug);
+    let selected = matches.next().ok_or_else(|| SKILL_NOT_FOUND.to_string())?;
+    if matches.next().is_some() {
+        return Err(SKILL_AMBIGUOUS.into());
+    }
+    Ok(selected)
+}
+
+async fn resolve_manifest(
     client: &Client,
-    mut skill: MarketSkill,
-) -> Result<MarketDetail, String> {
-    validate_skill(&skill)?;
-    let repo = snapshot(client, &skill.repository, None, false).await?;
+    skill: &MarketSkill,
+    repo: &RepositorySnapshot,
+) -> Result<(TreeEntry, String), String> {
     let candidates = repo
         .entries
         .iter()
         .filter(|entry| entry.path == "SKILL.md" || entry.path.ends_with("/SKILL.md"))
-        .filter(|entry| {
-            skill
-                .provider
-                .official()
-                .is_none_or(|(_, prefix)| official_manifest(&entry.path, prefix))
-        })
         .cloned()
         .collect::<Vec<_>>();
     if candidates.len() > 256 {
         return Err("Repository contains too many skills to resolve this selection".into());
     }
-    let direct = candidates.iter().find(|entry| {
-        entry.path.trim_end_matches("/SKILL.md").rsplit('/').next() == Some(skill.slug.as_str())
-    });
-    let (entry, content) = if let Some(entry) = direct {
-        (
-            entry.clone(),
-            manifest(client, &skill.repository, &repo, entry).await?,
-        )
-    } else {
-        // 社区 slug 可能来自 frontmatter，而非文件夹名（如 vercel-react-best-practices）。
-        let repository = &skill.repository;
-        let snapshot = &repo;
-        let mut matches = stream::iter(candidates.into_iter().map(|entry| async move {
-            let content = manifest(client, repository, snapshot, &entry).await?;
-            Ok::<_, String>((entry, content))
-        }))
-        .buffer_unordered(6)
-        .try_filter(|(_, content)| {
-            std::future::ready(parse_skill_frontmatter(content).0 == skill.slug)
+    let direct = candidates
+        .iter()
+        .filter(|entry| {
+            entry
+                .path
+                .strip_suffix("/SKILL.md")
+                .and_then(|directory| directory.rsplit('/').next())
+                == Some(skill.slug.as_str())
         })
-        .try_collect::<Vec<_>>()
-        .await?;
-        if matches.len() != 1 {
-            return Err("Could not resolve a unique SKILL.md for this skill".into());
-        }
-        matches.remove(0)
+        .cloned()
+        .collect::<Vec<_>>();
+    if direct.len() == 1 {
+        let entry = direct
+            .into_iter()
+            .next()
+            .ok_or_else(|| SKILL_NOT_FOUND.to_string())?;
+        let content = manifest(client, &skill.repository, repo, &entry).await?;
+        return Ok((entry, content));
+    }
+    // 多个同名目录不能任取第一个；先通过 frontmatter 消歧。
+    let ambiguous_directory = direct.len() > 1;
+    let candidates = if ambiguous_directory {
+        direct
+    } else {
+        candidates
     };
+    let contents = stream::iter(candidates.into_iter().map(|entry| async move {
+        let content = manifest(client, &skill.repository, repo, &entry).await?;
+        Ok::<_, String>((entry, content))
+    }))
+    .buffer_unordered(6)
+    .try_collect::<Vec<_>>()
+    .await?;
+    matching_manifest(&skill.slug, contents).map_err(|reason| {
+        if ambiguous_directory && reason == SKILL_NOT_FOUND {
+            SKILL_AMBIGUOUS.into()
+        } else {
+            reason
+        }
+    })
+}
+
+async fn detail_with_client(
+    client: &Client,
+    mut skill: MarketSkill,
+) -> Result<MarketDetail, String> {
+    validate_skill(&skill)?;
+    let repo = snapshot(client, &skill.repository, None).await?;
+    let (entry, content) = resolve_manifest(client, &skill, &repo).await?;
     let directory = entry
         .path
         .strip_suffix("/SKILL.md")
@@ -655,8 +555,12 @@ async fn detail_with_client(
 #[tauri::command]
 pub async fn get_marketplace_skill_detail(
     skill: MarketSkill,
+    refresh: Option<bool>,
     database: State<'_, Arc<Database>>,
 ) -> Result<MarketDetail, String> {
+    if refresh.unwrap_or(false) {
+        invalidate_latest_snapshot(&skill.repository);
+    }
     detail_with_client(&client(&database)?, skill).await
 }
 
@@ -676,18 +580,7 @@ async fn install_with_client(
     if request.agents.is_empty() {
         return Err("Select at least one agent".into());
     }
-    if let Some((_, prefix)) = request.skill.provider.official() {
-        if !official_manifest(&format!("{}/SKILL.md", request.directory), prefix) {
-            return Err("Skill directory does not match its provider".into());
-        }
-    }
-    let repo = snapshot(
-        client,
-        &request.skill.repository,
-        Some(&request.revision),
-        false,
-    )
-    .await?;
+    let repo = snapshot(client, &request.skill.repository, Some(&request.revision)).await?;
     let entries = skill_resources(&repo.entries, &request.directory)?
         .into_iter()
         .map(|(entry, path)| (entry.clone(), path))
@@ -776,6 +669,84 @@ mod tests {
         }
     }
 
+    fn named_manifest(path: &str, name: &str) -> (TreeEntry, String) {
+        (
+            entry(path),
+            format!("---\nname: {name}\ndescription: Example skill\n---\n"),
+        )
+    }
+
+    #[test]
+    fn missing_and_ambiguous_manifests_have_distinct_errors() {
+        assert_eq!(
+            matching_manifest("review", Vec::new()).err().as_deref(),
+            Some(SKILL_NOT_FOUND)
+        );
+        assert_eq!(
+            matching_manifest(
+                "review",
+                vec![named_manifest("skills/other/SKILL.md", "other")]
+            )
+            .err()
+            .as_deref(),
+            Some(SKILL_NOT_FOUND)
+        );
+        assert_eq!(
+            matching_manifest(
+                "review",
+                vec![
+                    named_manifest("skills/review/SKILL.md", "review"),
+                    named_manifest("examples/review/SKILL.md", "review"),
+                ]
+            )
+            .err()
+            .as_deref(),
+            Some(SKILL_AMBIGUOUS)
+        );
+        let (manifest, _) = matching_manifest(
+            "review",
+            vec![named_manifest("skills/alias/SKILL.md", "review")],
+        )
+        .expect("frontmatter match");
+        assert_eq!(manifest.path, "skills/alias/SKILL.md");
+    }
+
+    #[test]
+    fn archived_documentation_does_not_become_an_installable_skill() {
+        tauri::async_runtime::block_on(async {
+            let skill = MarketSkill {
+                repository: "mattpocock/skills".into(),
+                slug: "resolving-merge-conflicts".into(),
+                name: "resolving-merge-conflicts".into(),
+                description: String::new(),
+                installs: None,
+            };
+            let repo = RepositorySnapshot {
+                revision: "a".repeat(40),
+                entries: vec![entry("docs/engineering/resolving-merge-conflicts.md")],
+            };
+            let result = resolve_manifest(&Client::new(), &skill, &repo).await;
+            assert_eq!(result.err().as_deref(), Some(SKILL_NOT_FOUND));
+        });
+    }
+
+    #[test]
+    fn refresh_invalidates_latest_tree_but_preserves_pinned_install_revisions() {
+        let revision = "a".repeat(40);
+        let repo = RepositorySnapshot {
+            revision: revision.clone(),
+            entries: Vec::new(),
+        };
+        let latest_key = "test-refresh/skills@HEAD";
+        let pinned_key = format!("test-refresh/skills@{revision}");
+        remember(&REPOSITORIES, latest_key.into(), repo.clone());
+        remember(&REPOSITORIES, pinned_key.clone(), repo);
+        invalidate_latest_snapshot("test-refresh/skills");
+        assert!(cached(&REPOSITORIES, latest_key).is_none());
+        assert!(cached(&REPOSITORIES, &pinned_key).is_some());
+        REPOSITORIES.lock().expect("cache").remove(&pinned_key);
+    }
+
     #[test]
     fn rejects_traversal_and_windows_unsafe_paths() {
         for path in [
@@ -799,19 +770,18 @@ mod tests {
     }
 
     #[test]
-    fn only_lists_direct_official_skill_folders() {
-        assert!(official_manifest(
-            "skills/.curated/review/SKILL.md",
-            "skills/.curated/"
-        ));
-        assert!(!official_manifest(
-            "skills/.system/review/SKILL.md",
-            "skills/.curated/"
-        ));
-        assert!(!official_manifest(
-            "skills/review/examples/SKILL.md",
-            "skills/"
-        ));
+    fn empty_and_short_queries_do_not_request_a_catalog() {
+        tauri::async_runtime::block_on(async {
+            let client = Client::new();
+            for query in ["", " ", "a", " 🦀 "] {
+                let result = search_with_client(&client, query)
+                    .await
+                    .expect("empty search");
+                assert!(result.skills.is_empty());
+                assert!(!result.limited);
+            }
+            assert!(search_with_client(&client, &"a".repeat(201)).await.is_err());
+        });
     }
 
     #[test]
@@ -896,23 +866,7 @@ mod tests {
             .expect("builder")
             .build()
             .expect("client");
-            let results = search_with_client(&client, "react", None, false)
-                .await
-                .expect("search");
-            for warning in &results.warnings {
-                eprintln!("{:?}: {}", warning.provider, warning.reason);
-            }
-            assert!(results.warnings.is_empty(), "all providers are reachable");
-            for provider in [MarketProvider::Openai, MarketProvider::Anthropic] {
-                let skills = official_skills(&client, provider, false)
-                    .await
-                    .expect("official catalog");
-                assert!(!skills.is_empty());
-                let detail = detail_with_client(&client, skills[0].clone())
-                    .await
-                    .expect("official preview");
-                assert!(detail.content.contains("description:"));
-            }
+            let results = search_with_client(&client, "react").await.expect("search");
             let community = results
                 .skills
                 .into_iter()
@@ -925,14 +879,9 @@ mod tests {
                 .await
                 .expect("resolve frontmatter name to folder");
             assert!(detail.file_count > 1, "supporting resources are included");
-            let repo = snapshot(
-                &client,
-                &detail.skill.repository,
-                Some(&detail.revision),
-                false,
-            )
-            .await
-            .expect("pinned snapshot");
+            let repo = snapshot(&client, &detail.skill.repository, Some(&detail.revision))
+                .await
+                .expect("pinned snapshot");
             let resources =
                 skill_resources(&repo.entries, &detail.directory).expect("resource manifest");
             let project = tempfile::tempdir().expect("temporary project");
@@ -972,6 +921,41 @@ mod tests {
                     );
                 }
             }
+        });
+    }
+
+    #[test]
+    #[ignore = "访问真实 skills.sh / GitHub，复现已归档技能的详情提示"]
+    fn live_removed_skill_is_reported_as_unavailable() {
+        tauri::async_runtime::block_on(async {
+            let proxy = crate::network_proxy::resolve_network_proxy(
+                &crate::network_proxy::NetworkProxySettings::default(),
+            )
+            .expect("proxy");
+            let client = crate::network_proxy::apply_proxy_to_client_builder(
+                Client::builder()
+                    .no_proxy()
+                    .user_agent("Termflow archived skill regression check")
+                    .timeout(Duration::from_secs(30)),
+                &proxy,
+            )
+            .expect("builder")
+            .build()
+            .expect("client");
+            let results = search_with_client(&client, "resolving-merge-conflicts")
+                .await
+                .expect("listing");
+            let skill = results
+                .skills
+                .into_iter()
+                .find(|skill| {
+                    skill.repository == "mattpocock/skills"
+                        && skill.slug == "resolving-merge-conflicts"
+                })
+                .expect("stale listing");
+            invalidate_latest_snapshot(&skill.repository);
+            let result = detail_with_client(&client, skill).await;
+            assert_eq!(result.err().as_deref(), Some(SKILL_NOT_FOUND));
         });
     }
 }

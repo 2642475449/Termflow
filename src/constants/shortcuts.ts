@@ -1,8 +1,12 @@
 export interface ShortcutEntry {
-  id: string;
+  id: ShortcutAction;
   keys: string;
   i18nKey: string;
 }
+
+export type ShortcutAction = "searchEverywhere" | "globalTextSearch" | "newSession" |
+  "toggleSidebar" | "closeTab" | "nextTab" | "openSettings" | "clearInput" | "voiceInput";
+export type ShortcutOverrides = Partial<Record<Exclude<ShortcutAction, "voiceInput">, string>>;
 
 export const SHORTCUTS: readonly ShortcutEntry[] = [
   { id: "searchEverywhere", keys: "Double Shift", i18nKey: "settings.shortcuts.searchEverywhere" },
@@ -16,7 +20,7 @@ export const SHORTCUTS: readonly ShortcutEntry[] = [
   { id: "voiceInput", keys: "Ctrl + Shift + V", i18nKey: "settings.shortcuts.voiceInput" },
 ];
 
-const keysById = new Map(SHORTCUTS.map((s) => [s.id, s.keys]));
+const keysById = new Map<string, string>(SHORTCUTS.map((s) => [s.id, s.keys]));
 
 export function getKeysForAction(id: string): string | undefined {
   return keysById.get(id);

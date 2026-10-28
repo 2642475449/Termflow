@@ -2,6 +2,19 @@ import type { AiAgentId, ClaudeCliInfo, GitCommitMessageProfile, NetworkProxyMod
 import type { TerminalCompletionNotificationSlice } from "./slices/terminalCompletionNotification";
 import type { TerminalCompletionRuntimeSlice } from "./slices/terminalCompletionRuntime";
 import type { VoicePolishSlice } from "./slices/voicePolish";
+import type { ShortcutAction, ShortcutOverrides } from "@/constants/shortcuts";
+
+export interface ShortcutSettingsState {
+  overrides: ShortcutOverrides;
+  pendingOverrides: boolean;
+  recordingAction: ShortcutAction | null;
+  preparing: boolean;
+  setShortcut: (action: Exclude<ShortcutAction, "voiceInput">, keys: string) => void;
+  setDefaultShortcut: (action?: Exclude<ShortcutAction, "voiceInput">) => void;
+  setOverrides: (value: unknown) => void;
+  setPersistedOverrides: (value: unknown) => void;
+  setRecordingAction: (action: ShortcutAction | null) => Promise<void>;
+}
 
 export type ThemeMode = "light-glass" | "light-warm" | "dark-starry" | "dark-mocha";
 export type ThemeCategory = "light" | "dark" | "system";

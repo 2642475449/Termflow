@@ -1437,7 +1437,22 @@
       "openSettings": "Open Settings",
       "clearInput": "Clear input",
       "voiceInput": "Voice Input",
-      "hint1": "These global shortcuts also work when the terminal has focus."
+      "hint1": "These global shortcuts also work when the terminal has focus.",
+      "description": "Click a shortcut and press a new combination. Changes apply immediately and save automatically. The voice shortcut is shared with Voice Recognition settings.",
+      "edit": "Edit {{action}} shortcut",
+      "resetAll": "Reset all",
+      "reset": "Reset",
+      "clear": "Clear",
+      "clearAction": "Clear {{action}} shortcut",
+      "resetAction": "Reset {{action}} shortcut",
+      "unassigned": "Not set",
+      "preparing": "Preparing…",
+      "recording": "Press a shortcut…",
+      "doubleShift": "Double Shift",
+      "conflict": "This shortcut is assigned to “{{action}}”. Change or clear that binding first.",
+      "invalid": "Use Ctrl, Alt, or Cmd with a key, or F1–F24. Ctrl+A/C/V are reserved for selection, copy, and paste.",
+      "recordHint": "Press Esc or click again to cancel. Global search also supports Double Shift. Clear input only applies in terminals.",
+      "resetSuccess": "Default shortcuts restored"
     },
     "notifications": {
       "channels": "Notification channels",
@@ -1657,18 +1672,15 @@
     },
     "skillMarket": {
       "title": "Online skill marketplace",
-      "description": "Browse official skills or search the skills.sh community, then preview and install them locally.",
-      "providers": {
-        "openai": "OpenAI official",
-        "anthropic": "Anthropic official",
-        "community": "skills.sh community"
-      },
-      "source": "Skill source",
-      "allSources": "All sources",
+      "description": "Search skills.sh, preview skill contents, and install skills locally.",
       "searchPlaceholder": "Search skills, tasks, or repositories…",
-      "communityHint": "Enter at least 2 characters to search skills.sh. Official skills are shown by default.",
       "loadFailed": "Could not load the skill marketplace",
-      "sourceFailed": "{{source}} is temporarily unavailable; other sources are still accessible",
+      "unavailable": "Skill not found in the source repository",
+      "unavailableHint": "The skills.sh listing may be outdated. The skill may have been removed, renamed, or moved. Refresh to retry, or view the listing and repository.",
+      "ambiguous": "Could not determine the skill directory",
+      "ambiguousHint": "The source repository contains multiple matching SKILL.md files. View the repository or choose another skill.",
+      "viewListing": "View on skills.sh",
+      "viewRepository": "View repository",
       "detailFailed": "Could not load skill details",
       "installFailed": "Installation failed",
       "install": "Install skill",
@@ -1680,7 +1692,8 @@
       "resourceFiles": "Installation files",
       "previewHint": "Preview skill instructions and installation contents",
       "installs": "{{count}} installs",
-      "limited": "Community search shows up to 50 results. Use a more specific query to narrow the results."
+      "limited": "Search shows up to 50 results. Use a more specific query to narrow the results.",
+      "searchHint": "Enter at least 2 characters to search the skills.sh catalog."
     },
     "skills": {
       "editor": {

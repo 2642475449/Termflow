@@ -1437,7 +1437,22 @@
       "openSettings": "設定を開く",
       "clearInput": "入力をクリア",
       "voiceInput": "音声入力",
-      "hint1": "これらのグローバルショートカットは、ターミナルにフォーカスがある場合も動作します。"
+      "hint1": "これらのグローバルショートカットは、ターミナルにフォーカスがある場合も動作します。",
+      "description": "ショートカットをクリックし、新しいキーの組み合わせを押すと、すぐに適用され自動保存されます。音声入力の設定と同期します。",
+      "edit": "{{action}}のショートカットを変更",
+      "resetAll": "すべて初期化",
+      "reset": "初期化",
+      "clear": "解除",
+      "clearAction": "{{action}}のショートカットを解除",
+      "resetAction": "{{action}}のショートカットを初期化",
+      "unassigned": "未設定",
+      "preparing": "準備中…",
+      "recording": "キーを押してください…",
+      "doubleShift": "Shift を2回",
+      "conflict": "このキーは「{{action}}」に割り当てられています。先に変更または解除してください。",
+      "invalid": "Ctrl、Alt、Cmd とキーの組み合わせ、または F1–F24 を使用してください。Ctrl+A/C/V は選択・コピー・貼り付け用です。",
+      "recordHint": "Esc または再クリックで記録を中止します。全体検索は Shift を2回押す操作にも対応します。入力の消去はターミナル内でのみ有効です。",
+      "resetSuccess": "既定のショートカットに戻しました"
     },
     "notifications": {
       "channels": "通知チャネル", "triggerPolicy": "通知条件", "systemThreshold": "システム通知のしきい値", "feishuThreshold": "Feishu 長時間タスクのしきい値",
@@ -1652,18 +1667,15 @@
     },
     "skillMarket": {
       "title": "オンラインスキルマーケット",
-      "description": "公式スキルの閲覧や skills.sh の検索を行い、内容を確認してローカルにインストールできます。",
-      "providers": {
-        "openai": "OpenAI 公式",
-        "anthropic": "Anthropic 公式",
-        "community": "skills.sh コミュニティ"
-      },
-      "source": "スキルの提供元",
-      "allSources": "すべての提供元",
+      "description": "skills.sh でスキルを検索し、内容を確認してローカルにインストールできます。",
       "searchPlaceholder": "スキル名、用途、リポジトリを検索…",
-      "communityHint": "skills.sh の検索には 2 文字以上入力してください。初期状態では公式スキルを表示します。",
       "loadFailed": "スキルマーケットを読み込めませんでした",
-      "sourceFailed": "{{source}} は現在利用できません。他の提供元は利用できます",
+      "unavailable": "ソースリポジトリにスキルが見つかりません",
+      "unavailableHint": "skills.sh の登録情報が古い可能性があります。スキルが削除、改名、移動された可能性があります。更新して再試行するか、スキルのページやリポジトリを確認してください。",
+      "ambiguous": "スキルのディレクトリを特定できません",
+      "ambiguousHint": "ソースリポジトリに一致する SKILL.md が複数あります。リポジトリを確認するか、別のスキルを選択してください。",
+      "viewListing": "skills.sh で表示",
+      "viewRepository": "リポジトリを表示",
       "detailFailed": "スキルの詳細を読み込めませんでした",
       "installFailed": "インストールに失敗しました",
       "install": "スキルをインストール",
@@ -1675,7 +1687,8 @@
       "resourceFiles": "インストールするファイル",
       "previewHint": "スキルの説明とインストール内容をプレビュー",
       "installs": "{{count}} 回インストール",
-      "limited": "コミュニティ検索は最大 50 件表示します。具体的なキーワードで絞り込んでください。"
+      "limited": "検索結果は最大 50 件表示します。具体的なキーワードで絞り込んでください。",
+      "searchHint": "skills.sh のスキルを検索するには 2 文字以上入力してください。"
     },
     "skills": {
       "editor": {

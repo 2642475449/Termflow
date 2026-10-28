@@ -11,11 +11,13 @@ import { BackgroundCloseController } from "./components/BackgroundCloseControlle
 import VoiceWorkerWindow from "./components/VoiceWorkerWindow";
 import {
   applyPersistentSettingsToStore,
-  getPersistentSettingsSnapshot,
+  getPersistentSettingsSnapshot as getAppSettingsSnapshot,
   useAppStore,
   type ThemeMode,
 } from "./store";
 import type { NetworkProxyMode } from "./types";
+import { useShortcutStore } from "./store/slices/shortcutSlice";
+import { normalizeShortcutOverrides } from "./lib/appShortcuts";
 import {
   initializePersistentSettings,
   savePersistentSettings,
@@ -103,7 +105,12 @@ function isPersistentExplorerContextMenuUpdate(
   );
 }
 
+function getPersistentSettingsSnapshot() {
+  return { ...getAppSettingsSnapshot(), keyboardShortcuts: useShortcutStore.getState().overrides };
+}
+
 function App() {
+  const keyboardShortcuts = useShortcutStore((s) => s.overrides);
   const lightTheme = useAppStore((s) => s.lightTheme);
   const darkTheme = useAppStore((s) => s.darkTheme);
   const themeCategory = useAppStore((s) => s.themeCategory);
@@ -160,6 +167,7 @@ function App() {
   const projectPath = currentProject?.path ?? null;
   const [persistentSettingsReady, setPersistentSettingsReady] = useState(false);
   const lastPersistedSnapshotRef = useRef<string | null>(null);
+  const lastPersistedShortcutsRef = useRef<string | null>(null);
 
   useEffect(() => {
     const preventNativeContextMenu = (event: MouseEvent) => {
@@ -223,8 +231,10 @@ function App() {
       voiceShortcut,
       voiceInputTarget,
       voiceTriggerVisible,
+      keyboardShortcuts,
     }),
     [
+      keyboardShortcuts,
       asrApiKey,
       asrAuthMode,
       asrModel,
@@ -354,6 +364,8 @@ function App() {
         if (!disposed) {
           message.destroy(PERSISTENT_SETTINGS_LOAD_ERROR_KEY);
           applyPersistentSettingsToStore(settings);
+          useShortcutStore.getState().setPersistedOverrides(settings.keyboardShortcuts);
+          lastPersistedShortcutsRef.current = JSON.stringify(normalizeShortcutOverrides(settings.keyboardShortcuts));
           lastPersistedSnapshotRef.current = JSON.stringify(settings);
           if (settings.explorerContextMenuEnabled === false) {
             void setExplorerContextMenuEnabled(false).catch((error) => {
@@ -388,7 +400,8 @@ function App() {
     }
 
     const serialized = JSON.stringify(persistentSettings);
-    if (serialized === lastPersistedSnapshotRef.current) {
+    const serializedShortcuts = JSON.stringify(keyboardShortcuts);
+    if (serialized === lastPersistedSnapshotRef.current && serializedShortcuts === lastPersistedShortcutsRef.current) {
       return;
     }
 
@@ -396,6 +409,11 @@ function App() {
       savePersistentSettings(persistentSettings)
         .then(() => {
           lastPersistedSnapshotRef.current = serialized;
+          lastPersistedShortcutsRef.current = serializedShortcuts;
+          const shortcuts = useShortcutStore.getState();
+          if (JSON.stringify(shortcuts.overrides) === serializedShortcuts) {
+            shortcuts.setPersistedOverrides(keyboardShortcuts);
+          }
           message.destroy(PERSISTENT_SETTINGS_SAVE_ERROR_KEY);
         })
         .catch((error) => {
@@ -414,7 +432,7 @@ function App() {
     return () => {
       window.clearTimeout(timer);
     };
-  }, [isVoiceOverlayWindow, persistentSettings, persistentSettingsReady]);
+  }, [isVoiceOverlayWindow, persistentSettings, persistentSettingsReady, keyboardShortcuts]);
 
   useEffect(() => {
     if (!persistentSettingsReady) {
@@ -519,6 +537,21 @@ function App() {
       disposed = true;
       unlisten?.();
     };
+  }, [persistentSettingsReady]);
+
+  useEffect(() => {
+    if (!persistentSettingsReady) return;
+    const unlisten = listen<{ keyboardShortcuts: unknown; voiceShortcut: string }>("persistent-shortcuts-updated", ({ payload }) => {
+      if (!payload || typeof payload.voiceShortcut !== "string") return;
+      const store = useShortcutStore.getState();
+      const serializedShortcuts = JSON.stringify(normalizeShortcutOverrides(payload.keyboardShortcuts));
+      if (store.pendingOverrides && JSON.stringify(store.overrides) !== serializedShortcuts) return;
+      store.setPersistedOverrides(payload.keyboardShortcuts);
+      useAppStore.getState().setVoiceShortcut(payload.voiceShortcut);
+      lastPersistedShortcutsRef.current = serializedShortcuts;
+      lastPersistedSnapshotRef.current = JSON.stringify(getPersistentSettingsSnapshot());
+    });
+    return () => { void unlisten.then((stop) => stop()).catch(console.error); };
   }, [persistentSettingsReady]);
 
   useEffect(() => {

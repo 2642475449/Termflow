@@ -1,6 +1,9 @@
 import { useEffect, useRef } from "react";
 import { useAppStore } from "@/store";
 import { matchesShortcut, parseShortcut } from "@/lib/shortcut";
+import { useShortcutStore } from "@/store/slices/shortcutSlice";
+import { getAppShortcut } from "@/lib/appShortcuts";
+import type { ShortcutAction } from "@/constants/shortcuts";
 
 const SETTINGS_ID = "__settings__";
 
@@ -21,6 +24,7 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
   const activeSessionId = useAppStore((s) => s.activeSessionId);
   const openTab = useAppStore((s) => s.openTab);
   const voiceShortcutPressedRef = useRef(false);
+  const overrides = useShortcutStore((s) => s.overrides);
 
   useEffect(() => {
     const parsedVoiceShortcut = handlers.voiceShortcut
@@ -35,22 +39,17 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       handlers.onVoiceShortcutRelease?.();
     }
 
-    /** 判断是否为全局应用快捷键（Ctrl+N/W/B/Tab/,），这些快捷键在 Monaco 编辑器中也应生效 */
-    function isGlobalAppShortcut(e: KeyboardEvent): boolean {
-      if (!e.ctrlKey && !e.metaKey) return false;
-      if (e.altKey) return false;
-      const key = e.key.toLowerCase();
-      if (e.shiftKey) return key === "f";
-      return key === "n" || key === "w" || key === "b" || key === "tab" || key === ",";
-    }
+    const globalActions: ShortcutAction[] = ["newSession", "globalTextSearch", "closeTab", "nextTab", "openSettings", "toggleSidebar"];
+    const matches = (event: KeyboardEvent, action: ShortcutAction) => matchesShortcut(event, getAppShortcut(overrides, action));
 
     function handleKeyDown(e: KeyboardEvent) {
+      if (e.isComposing || useShortcutStore.getState().recordingAction) return;
       const hasPrimaryModifier = e.ctrlKey || e.metaKey;
       const lowerKey = e.key.toLowerCase();
       const isTerminalTarget = isTerminalShortcutTarget(e.target);
 
       // 全局快捷键在 Monaco 编辑器中也生效
-      if (!isGlobalAppShortcut(e) && shouldIgnoreShortcut(e)) {
+      if (!globalActions.some((action) => matches(e, action)) && shouldIgnoreShortcut(e)) {
         return;
       }
 
@@ -71,22 +70,25 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       }
 
       // Ctrl+N: New session
-      if (hasPrimaryModifier && lowerKey === "n" && !e.shiftKey && !e.altKey) {
+      if (matches(e, "newSession")) {
         consumeShortcut(e);
+        if (e.repeat) return;
         handlers.onNewSession?.();
         return;
       }
 
       // Ctrl+Shift+F: Search text across the project.
-      if (hasPrimaryModifier && e.shiftKey && lowerKey === "f" && !e.altKey) {
+      if (matches(e, "globalTextSearch")) {
         consumeShortcut(e);
+        if (e.repeat) return;
         handlers.onGlobalTextSearch?.();
         return;
       }
 
       // Ctrl+W: Close current tab
-      if (hasPrimaryModifier && lowerKey === "w" && !e.shiftKey && !e.altKey) {
+      if (matches(e, "closeTab")) {
         consumeShortcut(e);
+        if (e.repeat) return;
         if (activeSessionId) {
           handlers.onRequestCloseTab?.(activeSessionId);
         }
@@ -94,8 +96,9 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       }
 
       // Ctrl+Tab: Switch to next tab
-      if (hasPrimaryModifier && e.key === "Tab" && !e.shiftKey && !e.altKey) {
+      if (matches(e, "nextTab")) {
         consumeShortcut(e);
+        if (e.repeat) return;
         if (openTabs.length > 1) {
           const currentIndex = openTabs.indexOf(activeSessionId ?? "");
           const nextIndex = (currentIndex + 1) % openTabs.length;
@@ -105,16 +108,19 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       }
 
       // Ctrl+,: Open settings
-      if (hasPrimaryModifier && e.key === "," && !e.shiftKey && !e.altKey) {
+      if (matches(e, "openSettings")) {
         consumeShortcut(e);
+        if (e.repeat) return;
         openTab(SETTINGS_ID);
         return;
       }
 
       // Ctrl+B: Toggle sidebar
-      if (hasPrimaryModifier && lowerKey === "b" && !e.shiftKey && !e.altKey) {
+      if (matches(e, "toggleSidebar")) {
         consumeShortcut(e);
+        if (e.repeat) return;
         handlers.onToggleSidebar?.();
+        return;
       }
 
       if (
@@ -175,7 +181,7 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       voiceShortcutPressedRef.current = false;
     };
-  }, [openTabs, activeSessionId, openTab, handlers]);
+  }, [openTabs, activeSessionId, openTab, handlers, overrides]);
 }
 
 export function shouldIgnoreShortcut(event: KeyboardEvent): boolean {

@@ -117,6 +117,7 @@ export interface PersistentSettings {
   voicePolishStyle: VoicePolishConfig["style"];
   voicePolishInstructions: string;
   voiceShortcut: string;
+  keyboardShortcuts?: import("@/constants/shortcuts").ShortcutOverrides;
   voiceInputTarget: string;
   voiceTriggerVisible: boolean;
   terminalQuickCommands: TerminalQuickCommand[];
@@ -719,10 +720,8 @@ export interface SearchIndexStorageStatus {
 }
 
 export type SkillScope = "workspace" | "user";
-export type SkillMarketProvider = "openai" | "anthropic" | "community";
 
 export interface MarketplaceSkill {
-  provider: SkillMarketProvider;
   repository: string;
   slug: string;
   name: string;
@@ -732,8 +731,7 @@ export interface MarketplaceSkill {
 
 export interface SkillMarketSearch {
   skills: MarketplaceSkill[];
-  warnings: { provider: SkillMarketProvider; reason: string }[];
-  communityLimited: boolean;
+  limited: boolean;
 }
 
 export interface MarketplaceSkillDetail {

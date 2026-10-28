@@ -1437,7 +1437,22 @@
       "openSettings": "開啟設定",
       "clearInput": "清空輸入",
       "voiceInput": "語音輸入",
-      "hint1": "上述全域快速鍵在終端機獲得焦點時同樣可用"
+      "hint1": "上述全域快速鍵在終端機獲得焦點時同樣可用",
+      "description": "點擊快捷鍵後按下新的組合鍵，即時生效並自動儲存。語音快捷鍵與語音辨識設定同步。",
+      "edit": "修改{{action}}快捷鍵",
+      "resetAll": "全部恢復預設",
+      "reset": "恢復預設",
+      "clear": "清除",
+      "clearAction": "清除{{action}}快捷鍵",
+      "resetAction": "恢復{{action}}預設快捷鍵",
+      "unassigned": "未設定",
+      "preparing": "正在準備…",
+      "recording": "請按下快捷鍵…",
+      "doubleShift": "雙擊 Shift",
+      "conflict": "此快捷鍵已用於「{{action}}」，請先修改或清除該綁定。",
+      "invalid": "請使用 Ctrl、Alt、Cmd 加按鍵，或 F1–F24。Ctrl+A/C/V 保留給選取、複製和貼上。",
+      "recordHint": "按 Esc 或再次點擊可取消錄製；全域搜尋也支援雙擊 Shift。清空輸入僅在終端機中生效。",
+      "resetSuccess": "已恢復預設快捷鍵"
     },
     "notifications": {
       "channels": "通知管道", "triggerPolicy": "觸發策略", "systemThreshold": "系統通知門檻", "feishuThreshold": "飛書長任務門檻",
@@ -1652,18 +1667,15 @@
     },
     "skillMarket": {
       "title": "線上技能市場",
-      "description": "瀏覽官方技能，或透過 skills.sh 搜尋社群技能，預覽內容後安裝到本機。",
-      "providers": {
-        "openai": "OpenAI 官方",
-        "anthropic": "Anthropic 官方",
-        "community": "skills.sh 社群"
-      },
-      "source": "技能來源",
-      "allSources": "全部來源",
+      "description": "透過 skills.sh 搜尋技能，預覽內容後安裝到本機。",
       "searchPlaceholder": "搜尋技能名稱、用途或儲存庫…",
-      "communityHint": "輸入至少 2 個字元以搜尋 skills.sh 社群目錄；預設顯示官方技能。",
       "loadFailed": "載入技能市場失敗",
-      "sourceFailed": "{{source}} 暫時無法載入，其他來源仍可使用",
+      "unavailable": "在來源儲存庫中找不到該技能",
+      "unavailableHint": "skills.sh 的收錄記錄可能已過期，對應技能可能已被移除、改名或移動。可重新整理再試，或檢視技能頁面與來源儲存庫。",
+      "ambiguous": "無法確定技能的安裝目錄",
+      "ambiguousHint": "來源儲存庫中存在多個符合的 SKILL.md，暫時無法確定要安裝哪一個。請檢視來源儲存庫或選擇其他技能。",
+      "viewListing": "檢視 skills.sh 頁面",
+      "viewRepository": "檢視來源儲存庫",
       "detailFailed": "載入技能詳情失敗",
       "installFailed": "安裝失敗",
       "install": "安裝技能",
@@ -1675,7 +1687,8 @@
       "resourceFiles": "安裝檔案清單",
       "previewHint": "點擊預覽技能說明與完整安裝內容",
       "installs": "{{count}} 次安裝",
-      "limited": "社群搜尋最多顯示 50 筆結果，可輸入更具體的關鍵字縮小範圍。"
+      "limited": "搜尋最多顯示 50 筆結果，可輸入更具體的關鍵字縮小範圍。",
+      "searchHint": "輸入至少 2 個字元，搜尋 skills.sh 技能目錄。"
     },
     "skills": {
       "editor": {

@@ -211,9 +211,9 @@ export function matchesShortcut(event: KeyboardEvent, shortcutText: string): boo
   const eventKey = normalizeEventKey(event.key);
   return (
     shortcut.altKey === event.altKey &&
-    shortcut.metaKey === event.metaKey &&
+    (shortcut.metaKey ? event.metaKey : (!event.metaKey || (shortcut.primaryKey && !event.ctrlKey))) &&
     shortcut.shiftKey === event.shiftKey &&
-    shortcut.primaryKey === (event.ctrlKey || event.metaKey) &&
+    shortcut.primaryKey === (event.ctrlKey || (event.metaKey && !shortcut.metaKey)) &&
     shortcut.key === eventKey
   );
 }

@@ -16,8 +16,8 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-const skill = (slug: string): MarketplaceSkill => ({ provider: "community", repository: "owner/skills", slug, name: slug, description: "", installs: 12 });
-const results = (slug: string): SkillMarketSearch => ({ skills: [skill(slug)], warnings: [], communityLimited: false });
+const skill = (slug: string): MarketplaceSkill => ({ repository: "owner/skills", slug, name: slug, description: "", installs: 12 });
+const results = (slug: string): SkillMarketSearch => ({ skills: [skill(slug)], limited: false });
 const detail = (slug: string): MarketplaceSkillDetail => ({ skill: skill(slug), revision: "a".repeat(40), directory: `skills/${slug}`,
   folderName: slug, content: "instructions", fileCount: 1, files: ["SKILL.md"], totalBytes: 12, sourceUrl: "https://github.com/owner/skills" });
 
@@ -62,13 +62,34 @@ it("invalidates pending details when closing and blocks selection changes during
   expect(useSkillMarketplaceStore.getState()).toMatchObject({ open: true, selected: null, installing: true });
 });
 
-it("surfaces request failures and allows retrying with the same filters", async () => {
+it("surfaces request failures and allows retrying with the same query", async () => {
   vi.mocked(searchSkillMarketplace).mockRejectedValueOnce("offline").mockResolvedValueOnce(results("react"));
   const store = useSkillMarketplaceStore.getState();
-  store.setQuery("react"); store.setProvider("community");
+  store.setQuery("react");
   await store.search();
   expect(useSkillMarketplaceStore.getState()).toMatchObject({ error: "offline", loading: false });
-  await store.search(true);
-  expect(searchSkillMarketplace).toHaveBeenLastCalledWith("react", "community", true);
+  await store.search();
+  expect(searchSkillMarketplace).toHaveBeenLastCalledWith("react");
   expect(useSkillMarketplaceStore.getState()).toMatchObject({ error: null, loading: false });
+});
+
+it("does not contact the marketplace for empty or one-character queries", async () => {
+  const store = useSkillMarketplaceStore.getState();
+  for (const query of ["", " ", "a", " 🦀 "]) {
+    store.setQuery(query);
+    await store.search();
+  }
+  expect(searchSkillMarketplace).not.toHaveBeenCalled();
+  expect(useSkillMarketplaceStore.getState()).toMatchObject({ results: null, loading: false, error: null });
+});
+
+it("forces a repository refresh when retrying an unavailable skill", async () => {
+  vi.mocked(getMarketplaceSkillDetail).mockRejectedValueOnce("marketplace_skill_not_found").mockResolvedValueOnce(detail("review"));
+  const store = useSkillMarketplaceStore.getState();
+  const selected = skill("review");
+  await store.selectSkill(selected);
+  expect(useSkillMarketplaceStore.getState()).toMatchObject({ detailError: "marketplace_skill_not_found", detailLoading: false });
+  await store.selectSkill(selected, true);
+  expect(getMarketplaceSkillDetail).toHaveBeenLastCalledWith(selected, true);
+  expect(useSkillMarketplaceStore.getState()).toMatchObject({ detailError: null, detailLoading: false });
 });
