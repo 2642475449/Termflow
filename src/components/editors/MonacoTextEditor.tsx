@@ -1,6 +1,6 @@
 import { registerRichCodeTokens } from "@/lib/monaco";
 import Editor, { loader, type OnMount } from "@monaco-editor/react";
-import * as monaco from "monaco-editor";
+import * as monaco from "@/lib/monacoRuntime";
 import { useEffect, useMemo, useRef } from "react";
 import MonacoContextMenu from "@/components/editors/MonacoContextMenu";
 import {

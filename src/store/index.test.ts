@@ -1187,6 +1187,26 @@ describe("Remote notification settings", () => {
     });
   });
 });
+it("falls back to the default language for unsupported persisted settings", () => {
+  const originalSettings = getPersistentSettingsSnapshot();
+  try {
+    applyPersistentSettingsToStore({ ...originalSettings, language: "retired-locale" });
+    expect(useAppStore.getState().language).toBe("zh_CN");
+  } finally {
+    applyPersistentSettingsToStore(originalSettings);
+  }
+});
+
+it("normalizes unsupported languages when rehydrating local storage", async () => {
+  const store = createAppStore({
+    getItem: () => JSON.stringify({ state: { language: "retired-locale" }, version: 5 }),
+    setItem: () => {},
+    removeItem: () => {},
+  });
+  await store.persist.rehydrate();
+  expect(store.getState().language).toBe("zh_CN");
+});
+
 describe("language persistence", () => {
   const originalLanguage = useAppStore.getState().language;
 

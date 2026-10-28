@@ -26,9 +26,9 @@ import {
   type MarkdownSourceBlock,
 } from "@/components/markdown/markdownSourceBlocks";
 import {
-  canHighlightWithStarryNight,
-  getStarryNightLanguageFlag,
-} from "@/components/markdown/starryNightEligibility";
+  canHighlightWithMarkdownCode,
+  getMarkdownCodeLanguageFlag,
+} from "@/components/markdown/markdownHighlightEligibility";
 
 type TableAlignment = "left" | "center" | "right";
 type ListItem = {
@@ -825,14 +825,14 @@ export function renderInlineMarkdown(
   return nodes.length > 0 ? nodes : <span>{text}</span>;
 }
 
-function getStarryNightClassName(className: unknown): string | undefined {
+function getMarkdownCodeClassName(className: unknown): string | undefined {
   if (typeof className === "string") return className;
   if (!Array.isArray(className)) return undefined;
   const values = className.filter((value): value is string => typeof value === "string");
   return values.length > 0 ? values.join(" ") : undefined;
 }
 
-function renderStarryNightNode(
+function renderMarkdownCodeNode(
   node: RootContent | ElementContent,
   key: string,
 ): ReactNode {
@@ -840,14 +840,14 @@ function renderStarryNightNode(
   if (node.type !== "element" || node.tagName !== "span") return null;
 
   return (
-    <span key={key} className={getStarryNightClassName(node.properties.className)}>
-      {node.children.map((child, index) => renderStarryNightNode(child, `${key}-${index}`))}
+    <span key={key} className={getMarkdownCodeClassName(node.properties.className)}>
+      {node.children.map((child, index) => renderMarkdownCodeNode(child, `${key}-${index}`))}
     </span>
   );
 }
 
-export function renderStarryNightTree(tree: Root): ReactNode {
-  return tree.children.map((node, index) => renderStarryNightNode(node, `starry-${index}`));
+export function renderMarkdownCodeTree(tree: Root): ReactNode {
+  return tree.children.map((node, index) => renderMarkdownCodeNode(node, `highlight-${index}`));
 }
 
 function HighlightedCode({ code, language }: { code: string; language?: string }) {
@@ -856,10 +856,10 @@ function HighlightedCode({ code, language }: { code: string; language?: string }
   useEffect(() => {
     let cancelled = false;
     setTree(null);
-    if (!getStarryNightLanguageFlag(language) || !canHighlightWithStarryNight(code)) return;
+    if (!getMarkdownCodeLanguageFlag(language) || !canHighlightWithMarkdownCode(code)) return;
 
-    void import("./starryNight")
-      .then(({ highlightWithStarryNight }) => highlightWithStarryNight(code, language))
+    void import("./markdownHighlight")
+      .then(({ highlightWithMarkdownCode }) => highlightWithMarkdownCode(code, language))
       .then((nextTree) => {
         if (!cancelled) setTree(nextTree);
       })
@@ -872,7 +872,7 @@ function HighlightedCode({ code, language }: { code: string; language?: string }
     };
   }, [code, language]);
 
-  return <>{tree ? renderStarryNightTree(tree) : code}</>;
+  return <>{tree ? renderMarkdownCodeTree(tree) : code}</>;
 }
 
 function CodeBlock({ code, language }: { code: string; language?: string }) {

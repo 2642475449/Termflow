@@ -1,8 +1,8 @@
 import { beforeAll, expect, it, vi } from "vitest";
-import { createTextmateHighlighter, createTextmateProvider, installTextmate, textmateTokenScope } from "./textmate";
+import { getTextmateHighlighter, createTextmateProvider, installTextmate, textmateTokenScope } from "./textmate";
 
-let highlighter: Awaited<ReturnType<typeof createTextmateHighlighter>>;
-beforeAll(async () => { highlighter = await createTextmateHighlighter(); }, 30000);
+let highlighter: Awaited<ReturnType<typeof getTextmateHighlighter>>;
+beforeAll(async () => { highlighter = await getTextmateHighlighter(); }, 30000);
 
 it("bundles Java and component grammars without remote loaders", () => {
   expect(highlighter.getLoadedLanguages()).toEqual(expect.arrayContaining(["java", "tsx", "vue", "rust", "python"]));

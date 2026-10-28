@@ -95,7 +95,6 @@ struct TrayMenuState {
 fn tray_labels(language: &str) -> (String, String) {
     let catalog = match language {
         "en" => include_str!("../../../src/locales/en-US.json"),
-        "zh_TW" => include_str!("../../../src/locales/zh-TW.json"),
         "ja" => include_str!("../../../src/locales/ja-JP.json"),
         _ => include_str!("../../../src/locales/zh-CN.json"),
     };

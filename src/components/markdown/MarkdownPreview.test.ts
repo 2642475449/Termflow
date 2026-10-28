@@ -6,7 +6,7 @@ import { parseScheduledTaskLog } from "@/lib/scheduledTasks";
 import MarkdownPreview, {
   isLikelyMarkdownPath,
   renderInlineMarkdown,
-  renderStarryNightTree,
+  renderMarkdownCodeTree,
 } from "./MarkdownPreview";
 
 it("renders a saved scheduled-task report as a table, list and code block", () => {
@@ -79,15 +79,15 @@ describe("Markdown rendering", () => {
     expect(markup).toContain('aria-label="复制代码"');
   });
 
-  it("only renders safe Starry Night text and span nodes", () => {
+  it("only renders safe Markdown highlighter text and span nodes", () => {
     const markup = renderToStaticMarkup(
-      createElement("code", null, renderStarryNightTree({
+      createElement("code", null, renderMarkdownCodeTree({
         type: "root",
         children: [
           {
             type: "element",
             tagName: "span",
-            properties: { className: ["pl-k"] },
+            properties: { className: ["app-code-keyword"] },
             children: [{ type: "text", value: "const" }],
           },
           {
@@ -100,7 +100,7 @@ describe("Markdown rendering", () => {
       } as Root)),
     );
 
-    expect(markup).toContain('<span class="pl-k">const</span>');
+    expect(markup).toContain('<span class="app-code-keyword">const</span>');
     expect(markup).not.toContain("script");
     expect(markup).not.toContain("alert(1)");
   });

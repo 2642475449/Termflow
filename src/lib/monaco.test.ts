@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import * as monaco from "monaco-editor";
+import * as monaco from "./monacoRuntime";
 import themeCss from "../styles/themes.css?raw";
-vi.mock("monaco-editor", () => ({
+vi.mock("./monacoRuntime", () => ({
   editor: { defineTheme: vi.fn(), setTheme: vi.fn() },
   languages: { onLanguage: vi.fn(), setMonarchTokensProvider: vi.fn() },
 }));

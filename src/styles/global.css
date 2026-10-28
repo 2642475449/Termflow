@@ -1495,6 +1495,20 @@ html, body, #root {
   --color-prettylights-syntax-sublimelinter-gutter-mark: var(--cs-text-tertiary);
 }
 
+
+.app-markdown-preview .app-code-comment { color: var(--cs-code-comment); }
+.app-markdown-preview .app-code-keyword { color: var(--cs-code-keyword); }
+.app-markdown-preview .app-code-string { color: var(--cs-code-string); }
+.app-markdown-preview .app-code-number { color: var(--cs-code-number); }
+.app-markdown-preview .app-code-type { color: var(--cs-code-type); }
+.app-markdown-preview .app-code-function { color: var(--cs-code-function); }
+.app-markdown-preview .app-code-annotation { color: var(--cs-code-annotation); }
+.app-markdown-preview .app-code-property { color: var(--cs-code-annotation); }
+.app-markdown-preview .app-code-constant { color: var(--cs-code-number); }
+.app-markdown-preview .app-code-inserted { color: var(--cs-success); }
+.app-markdown-preview .app-code-deleted { color: var(--cs-error); }
+.app-markdown-preview .app-code-changed { color: var(--cs-warning); }
+
 .app-markdown-preview *,
 .app-markdown-preview code,
 .app-markdown-preview pre {

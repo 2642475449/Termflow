@@ -196,6 +196,7 @@
     "loadFailed": "スケジュールタスクを読み込めません"
   },
   "common": {
+    "edit": "編集",
     "file": "エクスプローラー",
     "openFolder": "フォルダーを開く",
     "settings": "設定",
@@ -1253,6 +1254,7 @@
     "installedSuccessfully": "Termflow を v{{version}} に更新しました。"
   },
   "settings": {
+    "loading": "設定を読み込み中…",
     "menu": {
       "general": "一般",
       "network": "ネットワーク",
@@ -1333,6 +1335,15 @@
       "defaultUnavailable": "デフォルトエージェントは未インストールまたは現在利用できません。別のエージェントを選択してください。",
       "defaultRequired": "先に「設定」→「エージェント」でデフォルトエージェントを選択してください。",
       "gitProfiles": {
+        "layout": {
+          "title": "AI コミットメッセージのスタイル",
+          "description": "既定のスタイルを選択します。Git パネルの AI メニューから一時的に切り替えることもできます。",
+          "summaries": {
+            "concise": "小さな変更に適した、タイトルのみの形式。",
+            "balanced": "日常のコミット向けに、タイトルと 2～5 件の変更点を記載。",
+            "detailed": "詳しい説明が必要な変更向けに、タイトルと変更内容を記載。"
+          }
+        },
         "title": "Git AI コミットメッセージスタイル",
         "description": "AI がコミットメッセージを生成するときの名前付きスタイルを管理します。AI をクリックするとデフォルトを使用し、メニューから一時的に別のスタイルを選べます。",
         "add": "新規スタイル",
@@ -1409,7 +1420,6 @@
     },
     "languageName": {
       "zh_CN": "简体中文",
-      "zh_TW": "繁體中文",
       "en": "English",
       "ja": "日本語"
     },
@@ -2168,6 +2178,14 @@
       "theme": "テーマ"
     },
     "voiceRecognition": {
+      "layout": {
+        "tokenPlanKeyPlaceholder": "Token Plan キーを入力",
+        "autoSave": "変更は自動保存されます",
+        "recognition": "音声認識サービス",
+        "input": "音声入力",
+        "instructionsHint": "空欄の場合は既定のルールを使用します。指示は選択した整形方法と併用されます。整形に失敗した場合は元の文字起こしを保持します。",
+        "polishOff": "口癖の除去、表現の修正、書式整理を自動で行います。整形に失敗した場合は元の文字起こしを保持します。"
+      },
       "polishingTestSample": "えっと、明日の午後三時、いや四時に林さんとイベントページを確認します。",
       "polishingRegionUs": "米国（バージニア）",
       "polishingRegionSingapore": "シンガポール",

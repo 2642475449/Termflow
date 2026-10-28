@@ -4,7 +4,7 @@
 </h1>
 
 <p align="center">
-  <a href="README.md">简体中文</a> | <a href="README.zh-TW.md">繁體中文</a> | English | <a href="README.ja-JP.md">日本語</a>
+  <a href="README.md">简体中文</a> | English | <a href="README.ja-JP.md">日本語</a>
 </p>
 
 <p align="center">
@@ -53,7 +53,7 @@ Key capabilities:
 - **Quick commands** — define and run common actions with one click.
 - **Persistent sessions** — reopen historical conversations after restarting the app.
 
-The baseline experience also includes dark, light, and system-following themes, plus Simplified Chinese, Traditional Chinese, English, and Japanese interfaces.
+The baseline experience also includes dark, light, and system-following themes, plus Simplified Chinese, English, and Japanese interfaces.
 
 ## Why open source?
 
@@ -71,7 +71,7 @@ Termflow started as an application built around the workflow I wanted to use eve
 | **Quick commands and voice input** | Run common actions through searchable, parameterized quick commands; use MiMo or DashScope ASR with a global shortcut and recording-status overlay. |
 | **Work status overview** | Summarize session activity, token usage, and work patterns, while the attention center and smart notifications highlight tasks that need action.<br><br><img src=".github/assets/demos/work-status-overview.gif" alt="Termflow work status overview demo" width="240"> |
 
-Additional capabilities include persistent sessions, a custom title bar and borderless window controls, dark/light/system themes, and Simplified Chinese, Traditional Chinese, English, and Japanese interfaces.
+Additional capabilities include persistent sessions, a custom title bar and borderless window controls, dark/light/system themes, and Simplified Chinese, English, and Japanese interfaces.
 
 ## Technology stack
 

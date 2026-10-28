@@ -3,7 +3,6 @@ import i18n, { toI18nLanguage } from "./i18n";
 import enUS from "./locales/en-US.json";
 import jaJP from "./locales/ja-JP.json";
 import zhCN from "./locales/zh-CN.json";
-import zhTW from "./locales/zh-TW.json";
 
 function flattenTranslationKeys(
   value: unknown,
@@ -21,7 +20,7 @@ function flattenTranslationKeys(
 describe("translation catalog parity", () => {
   it("keeps every locale on the same key set", () => {
     const expectedKeys = flattenTranslationKeys(zhCN).sort();
-    for (const catalog of [zhTW, enUS, jaJP]) {
+    for (const catalog of [enUS, jaJP]) {
       expect(flattenTranslationKeys(catalog).sort()).toEqual(expectedKeys);
     }
   });

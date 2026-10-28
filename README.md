@@ -4,7 +4,7 @@
 </h1>
 
 <p align="center">
-  简体中文 | <a href="README.zh-TW.md">繁體中文</a> | <a href="README.en-US.md">English</a> | <a href="README.ja-JP.md">日本語</a>
+  简体中文 | <a href="README.en-US.md">English</a> | <a href="README.ja-JP.md">日本語</a>
 </p>
 
 <p align="center">
@@ -54,7 +54,7 @@ Termflow 原生支持以下 CLI 智能体：
 - ⚡ **快速命令**：自定义快捷命令，一键执行常用操作
 - 💾 **会话持久化**：关闭应用后无缝恢复历史对话
 
-基础体验包括深色、浅色与跟随系统的主题切换，以及简体中文、繁體中文、英文和日语界面。
+基础体验包括深色、浅色与跟随系统的主题切换，以及简体中文、英文和日语界面。
 
 
 ## 项目快捷命令
@@ -103,7 +103,7 @@ Termflow 最初是为了做一款符合自己使用习惯的应用。在功能�
 | **快捷命令与语音输入**：通过可搜索、可参数化的快捷命令执行常用操作；支持 MiMo 与 DashScope ASR、全局快捷键和录音状态悬浮窗。 | <img src=".github/assets/termflow-overview.png" alt="Termflow 快捷命令与语音输入" width="240"> |
 | **工作状态概览**：汇总会话活动、Token 使用和工作节奏，通过注意力中心与智能通知提示需要处理的任务。 | <img src=".github/assets/demos/work-status-overview.gif" alt="Termflow 工作状态概览演示" width="240"> |
 
-其他基础能力包括会话持久化、自定义标题栏与无边框窗口控制、深色/浅色/跟随系统主题，以及简体中文、繁體中文、英文和日语界面。
+其他基础能力包括会话持久化、自定义标题栏与无边框窗口控制、深色/浅色/跟随系统主题，以及简体中文、英文和日语界面。
 
 ## 技术栈
 
@@ -117,7 +117,7 @@ Termflow 最初是为了做一款符合自己使用习惯的应用。在功能�
 | UI 组件 | Ant Design 5 | 按钮、弹窗、标签等 |
 | 样式 | TailwindCSS 3 + CSS 变量 | 原子化样式 + 主题系统 |
 | 构建 | Vite 6 | 前端构建工具 |
-| 国际化 | i18next | 多语言支持（简体中文/繁體中文/英文/日语） |
+| 国际化 | i18next | 多语言支持（简体中文/英文/日语） |
 | 代码编辑器 | Monaco Editor | 代码查看与编辑（Geist Mono 字体） |
 | 图表渲染 | Mermaid | Git 提交历史图表 |
 | 数据库 | sql.js / rusqlite | 前后端数据存储 |

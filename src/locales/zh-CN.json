@@ -196,6 +196,7 @@
     "loadFailed": "无法加载定时任务"
   },
   "common": {
+    "edit": "编辑",
     "file": "资源管理器",
     "openFolder": "打开文件夹",
     "settings": "设置",
@@ -1253,6 +1254,7 @@
     "installedSuccessfully": "Termflow 已成功更新至 v{{version}}。"
   },
   "settings": {
+    "loading": "正在加载设置…",
     "menu": {
       "general": "通用",
       "network": "网络",
@@ -1333,6 +1335,15 @@
       "defaultUnavailable": "默认智能体未安装或当前不可用，请重新选择。",
       "defaultRequired": "请先在设置 → 智能体中选择默认智能体。",
       "gitProfiles": {
+        "layout": {
+          "title": "AI 提交信息风格",
+          "description": "选择默认风格，也可在 Git 面板的 AI 菜单中临时切换。",
+          "summaries": {
+            "concise": "只生成一行标题，适合小改动。",
+            "balanced": "标题加 2–5 条改动要点，适合日常提交。",
+            "detailed": "标题与变更明细，适合需要更多说明的改动。"
+          }
+        },
         "title": "Git AI 提交信息风格",
         "description": "管理 AI 生成提交信息时使用的命名方案。直接点击 AI 使用默认方案，下拉菜单可临时选择其他方案。",
         "add": "新建风格",
@@ -1409,7 +1420,6 @@
     },
     "languageName": {
       "zh_CN": "中文",
-      "zh_TW": "繁體中文",
       "en": "English",
       "ja": "日本語"
     },
@@ -2173,6 +2183,14 @@
       "theme": "主题"
     },
     "voiceRecognition": {
+      "layout": {
+        "tokenPlanKeyPlaceholder": "请输入 Token Plan Key",
+        "autoSave": "更改自动保存",
+        "recognition": "识别服务",
+        "input": "输入方式",
+        "instructionsHint": "留空使用默认规则。自定义要求与所选整理方式一起应用；整理失败时保留原始转写。",
+        "polishOff": "开启后自动去除口癖、修正表达并整理格式，失败时保留原始转写。"
+      },
       "polishingTestSample": "嗯，明天下午三点，不对，四点和小林确认活动页面。",
       "polishingRegionUs": "美国（弗吉尼亚）",
       "polishingRegionSingapore": "新加坡",

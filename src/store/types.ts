@@ -36,7 +36,7 @@ export type ThemeMode = "light-glass" | "light-warm" | "dark-starry" | "dark-moc
 
 export type ThemeCategory = "light" | "dark" | "system";
 
-export type Language = "zh_CN" | "zh_TW" | "en" | "ja";
+export type Language = "zh_CN" | "en" | "ja";
 
 export type SidebarSection = "project" | "sessions" | "git";
 

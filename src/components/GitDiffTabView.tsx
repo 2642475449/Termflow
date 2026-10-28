@@ -1,6 +1,6 @@
 import { registerRichCodeTokens } from "@/lib/monaco";
 import { DiffEditor, loader } from "@monaco-editor/react";
-import * as monaco from "monaco-editor";
+import * as monaco from "@/lib/monacoRuntime";
 import { Alert, Button, Empty, Image } from "antd";
 import {
   DownOutlined,

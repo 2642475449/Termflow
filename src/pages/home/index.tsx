@@ -202,18 +202,17 @@ function formatTokenCount(value: number): string {
 }
 function getCompactTokenUnit(value: number, language: string): { divisor: number; suffix: string } | null {
   const safeValue = Math.max(0, value);
-  const isCjkLocale = language === "zh-CN" || language === "zh-TW" || language === "ja-JP" || language === "ja";
-  const isTraditionalChinese = language === "zh-TW";
+  const isCjkLocale = language === "zh-CN" || language === "ja-JP" || language === "ja";
 
   if (isCjkLocale) {
     if (safeValue >= 100_000_000) {
       return {
         divisor: 100_000_000,
-        suffix: isTraditionalChinese || language === "ja-JP" || language === "ja" ? "億" : "亿",
+        suffix: language === "ja-JP" || language === "ja" ? "億" : "亿",
       };
     }
     if (safeValue >= 10_000) {
-      return { divisor: 10_000, suffix: isTraditionalChinese ? "萬" : "万" };
+      return { divisor: 10_000, suffix: "万" };
     }
     return null;
   }
@@ -260,7 +259,7 @@ function formatHourRange(hour: number | null, language: string): string {
   }
   const start = Math.min(23, Math.max(0, Math.trunc(hour)));
   const end = (start + 1) % 24;
-  if (language === "zh-CN" || language === "zh-TW") {
+  if (language === "zh-CN") {
     return `${start}–${end} 点`;
   }
   if (language === "ja-JP" || language === "ja") {

@@ -3,7 +3,6 @@ import { availableVoicePolishModels, defaultVoicePolishModel, normalizeVoicePoli
 import { createVoicePolishSlice, type VoicePolishSlice } from "@/store/slices/voicePolish";
 import zh from "@/locales/zh-CN.json";
 import en from "@/locales/en-US.json";
-import tw from "@/locales/zh-TW.json";
 import ja from "@/locales/ja-JP.json";
 
 it("defaults to DeepSeek independently of ASR", () => {
@@ -63,7 +62,7 @@ it("keeps user instructions independent of provider and organization mode", () =
 });
 
 it("provides the custom prompt label, example and behavior in every UI language", () => {
-  for (const locale of [zh, en, tw, ja]) {
+  for (const locale of [zh, en, ja]) {
     const voice = locale.settings.voiceRecognition;
     expect(voice.polishingInstructionsLabel.trim()).not.toBe("");
     expect(voice.polishingInstructionsPlaceholder.trim()).not.toBe("");

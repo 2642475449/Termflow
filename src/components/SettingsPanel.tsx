@@ -73,6 +73,8 @@ import {
   polishVoiceText,
 } from "@/lib/api";
 import { VoicePolishModePicker } from "@/components/settings/VoicePolishModePicker";
+import { VoiceSettingsDisclosure, VoiceSettingsField, VoiceSettingsSection } from "@/components/settings/VoiceSettingsLayout";
+import "@/styles/voiceSettings.css";
 import { availableVoicePolishModels, resolveVoicePolishModel } from "@/lib/voicePolish";
 import { VoiceProviderLabel } from "@/components/settings/VoiceProviderLabel";
 import type {
@@ -398,7 +400,6 @@ function GeneralPage() {
 
   const langOptions = [
     { label: t("settings.languageName.zh_CN"), value: "zh_CN" },
-    { label: t("settings.languageName.zh_TW"), value: "zh_TW" },
     { label: t("settings.languageName.en"), value: "en" },
     { label: t("settings.languageName.ja"), value: "ja" },
   ];
@@ -722,7 +723,7 @@ const DASHSCOPE_ASR_MODELS: AsrModelOption[] = [
   },
 ];
 
-function VoiceRecognitionPage() {
+export function VoiceRecognitionPage() {
   const { t } = useTranslation();
   const asrApiKey = useAppStore((s) => s.asrApiKey);
   const asrAuthMode = useAppStore((s) => s.asrAuthMode);
@@ -793,15 +794,11 @@ function VoiceRecognitionPage() {
     );
   };
   const apiKeyPlaceholder = isDashScopeProvider
-    ? "请输入 DashScope API Key"
+    ? t("settings.voiceRecognition.polishingKeyPlaceholder", { provider: "DashScope" })
     : asrAuthMode === "token-plan"
-      ? "请输入 Token Plan Key"
-      : "请输入 MiMo API Key";
-  const apiKeyDesc = isDashScopeProvider
-    ? "使用阿里云百炼 DashScope API Key。"
-    : asrAuthMode === "token-plan"
-      ? "使用 MiniMax Token Plan 获取的 Key。"
-      : "使用 MiMo API Key。";
+      ? t("settings.voiceRecognition.layout.tokenPlanKeyPlaceholder")
+      : t("settings.voiceRecognition.polishingKeyPlaceholder", { provider: "MiMo" });
+  const apiKeyDesc = t("settings.voiceRecognition.apiKeyDesc");
   const shortcutPlaceholder = t("settings.voiceRecognition.shortcutPlaceholder", {
     defaultValue: "未设置快捷键",
   });
@@ -1034,259 +1031,153 @@ function VoiceRecognitionPage() {
   }, [restoreGlobalVoiceShortcut]);
 
   return (
-    <>
-      <SettingsPageHeader
-        title={t("settings.menu.voiceRecognition")}
-      />
-      <SettingSection title={t("settings.voiceRecognition.apiConfig", { defaultValue: "API 配置" })}>
-        <SettingRow
-          label={t("settings.voiceRecognition.provider", { defaultValue: "服务商" })}
-        >
-          <Select
-            className="w-64"
-            value={asrProvider}
-            options={providerOptions}
-            onChange={handleProviderChange}
-            showSearch={false}
-            aria-label={t("settings.voiceRecognition.serviceProvider")}
-          />
-        </SettingRow>
-        {!isDashScopeProvider && (
-          <SettingRow
-            label={t("settings.voiceRecognition.authMode", { defaultValue: "认证方式" })}
-          >
-            <Segmented
-              size="small"
-              value={asrAuthMode}
-              options={mimoAuthOptions}
-              onChange={(value) => {
-                setAsrAuthMode(value as MimoAuthMode);
-              }}
-            />
-          </SettingRow>
-        )}
-        <SettingRow
-          label={t("settings.voiceRecognition.apiKey", { defaultValue: "API Key" })}
-        >
-          <div className="flex items-center gap-2">
-            <Input.Password
-              value={asrApiKey}
-              onChange={(e) => {
-                setAsrApiKey(e.target.value);
-              }}
-              placeholder={t("settings.voiceRecognition.apiKeyPlaceholder", { defaultValue: "请输入 API Key" })}
-              aria-label={apiKeyPlaceholder}
-              title={apiKeyDesc}
-              style={{ width: 260 }}
-              visibilityToggle={{ visible: showApiKey, onVisibleChange: setShowApiKey }}
-            />
-          </div>
-        </SettingRow>
-        <SettingRow
-          label={t("settings.voiceRecognition.model", { defaultValue: "模型" })}
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <Select
-              value={asrModel}
-              onChange={(value) => {
-                setAsrModel(value);
-              }}
-              options={currentModelOptions}
-              optionRender={renderAsrModelOption}
-              popupClassName="app-asr-model-select-dropdown"
-              style={{ width: 280 }}
-              placeholder={t("settings.voiceRecognition.modelPlaceholder", {
-                defaultValue: "请选择模型",
-              })}
-            />
-          </div>
-        </SettingRow>
-        {isDashScopeProvider && (
-        <SettingRow
-          label={t("settings.voiceRecognition.region", { defaultValue: "区域" })}
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <Select
-              value={asrRegion}
-              onChange={(value) => setAsrRegion(value)}
-              options={[
-                { value: "beijing", label: "华北2（北京）" },
-                { value: "singapore", label: "新加坡" },
-                { value: "us", label: "美国（弗吉尼亚）" },
-              ]}
-              style={{ width: 280 }}
-              placeholder={t("settings.voiceRecognition.regionPlaceholder", {
-                defaultValue: "请选择区域",
-              })}
-            />
-          </div>
-        </SettingRow>
-        )}
-      </SettingSection>
+    <div className="app-voice-settings mx-auto max-w-[920px] space-y-5 pb-6">
+      <header className="flex flex-wrap items-center justify-between gap-3 pb-1">
+        <h1 className="m-0 text-xl font-semibold text-[var(--cs-text-primary)]">{t("settings.menu.voiceRecognition")}</h1>
+        <span className="text-xs text-[var(--cs-text-secondary)]">{t("settings.voiceRecognition.layout.autoSave")}</span>
+      </header>
 
-      <SettingSection title={t("settings.voiceRecognition.polishingSectionTitle")}>
-        <SettingRow
-          label={t("settings.voiceRecognition.polishingLabel")}
-        >
-          <Tooltip title={t("settings.voiceRecognition.polishingDesc")}>
-            <Switch checked={voicePolishEnabled} onChange={setVoicePolishEnabled} />
-          </Tooltip>
-        </SettingRow>
-        <VoicePolishModePicker value={voicePolishStyle} onChange={setVoicePolishStyle} />
-        <div className="app-voice-polish-instructions px-4 py-3">
-          <label htmlFor="voice-polish-instructions" className="mb-2 block text-sm text-[var(--cs-text-primary)]">
-            {t("settings.voiceRecognition.polishingInstructionsLabel")}
-          </label>
-          <Input.TextArea
-            id="voice-polish-instructions"
-            value={voicePolishInstructions}
-            onChange={(event) => setVoicePolishInstructions(event.target.value)}
-            placeholder={t("settings.voiceRecognition.polishingInstructionsPlaceholder")}
-            autoSize={{ minRows: 3, maxRows: 8 }}
-            maxLength={2000}
-            showCount
-            aria-describedby="voice-polish-instructions-hint"
-          />
-          <p id="voice-polish-instructions-hint" className="mt-6 text-xs text-[var(--cs-text-secondary)]">
-            {t("settings.voiceRecognition.polishingInstructionsHint")}
-          </p>
-        </div>
-        <SettingRow label={t("settings.voiceRecognition.serviceProvider")}>
-          <Select
-            className="w-64"
-            value={voicePolishProvider}
-            onChange={setVoicePolishProvider}
-            options={[
-              { value: "deepseek", label: <VoiceProviderLabel provider="deepseek" label="DeepSeek" /> },
-              { value: "dashscope", label: <VoiceProviderLabel provider="dashscope" label="DashScope" /> },
-              { value: "mimo", label: <VoiceProviderLabel provider="mimo" label="MiMo" /> },
-            ]}
-          />
-        </SettingRow>
-        <SettingRow label={t("settings.voiceRecognition.apiKey")}>
-          <Input.Password
-            className="w-80"
-            value={voicePolishApiKey}
-            onChange={(event) => setVoicePolishApiKey(event.target.value)}
-            autoComplete="off"
-            placeholder={t("settings.voiceRecognition.polishingKeyPlaceholder", { provider: voicePolishProvider === "deepseek" ? "DeepSeek" : voicePolishProvider === "dashscope" ? "DashScope" : "MiMo" })}
-          />
-        </SettingRow>
-        {voicePolishProvider === "mimo" && (
-          <SettingRow label={t("settings.voiceRecognition.polishingAuthLabel")}>
-            <Select className="w-64" value={voicePolishAuthMode} onChange={setVoicePolishAuthMode} options={mimoAuthOptions} />
-          </SettingRow>
-        )}
-        {voicePolishProvider === "dashscope" && (
-          <SettingRow label={t("settings.voiceRecognition.region")}>
-            <Select className="w-64" value={voicePolishRegion} onChange={setVoicePolishRegion} options={[
-              { value: "beijing", label: t("settings.voiceRecognition.polishingRegionBeijing") },
-              { value: "singapore", label: t("settings.voiceRecognition.polishingRegionSingapore") },
-              { value: "us", label: t("settings.voiceRecognition.polishingRegionUs") },
-            ]} />
-          </SettingRow>
-        )}
-        <SettingRow
-          label={t("settings.voiceRecognition.polishingModelLabel")}
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <Select
-              value={resolveVoicePolishModel(voicePolishProvider, voicePolishModel)}
-              onChange={setVoicePolishModel}
-              options={availableVoicePolishModels(voicePolishProvider).map((model) => ({ value: model, label: model }))}
-              showSearch={false}
-              aria-label={t("settings.voiceRecognition.polishingModelLabel")}
-              className="w-64"
-            />
-            <Tooltip title={t("settings.voiceRecognition.polishingModelDesc")}>
-              <Button loading={polishTesting} onClick={() => void handlePolishTest()}>
-                {t("settings.voiceRecognition.polishingTest")}
-              </Button>
-            </Tooltip>
-          </div>
-        </SettingRow>
-        {voicePolishEnabled && !voicePolishApiKey.trim() && (
-          <p className="px-5 pb-4 text-sm text-[var(--cs-text-secondary)]">{t("settings.voiceRecognition.polishingKeyMissing")}</p>
-        )}
-      </SettingSection>
-
-      <SettingSection title={t("settings.voiceRecognition.shortcutLabel", { defaultValue: "语音输入" })}>
-        <SettingRow
-          label={t("settings.voiceRecognition.shortcutLabel", { defaultValue: "语音输入快捷键" })}
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <Input
-              readOnly
-              value={currentShortcutLabel}
-              size="middle"
-              placeholder={shortcutPlaceholder}
-              onClick={() => void startShortcutRecording()}
-              disabled={isPreparingShortcutRecording}
-              className="w-[220px] cursor-pointer"
-            />
-            <Button
-              type={isRecordingShortcut ? "primary" : "default"}
-              size="middle"
-              loading={isPreparingShortcutRecording}
-              onClick={() => {
-                if (isRecordingShortcut) {
-                  cancelShortcutRecording();
-                  return;
-                }
-                void startShortcutRecording();
-              }}
-            >
-              {isRecordingShortcut
-                ? t("settings.voiceRecognition.shortcutRecording", {
-                    defaultValue: "请按下快捷键...",
-                  })
-                : t("settings.voiceRecognition.shortcutRecord", {
-                    defaultValue: "录制快捷键",
-                  })}
-            </Button>
-            <Button
-              size="middle"
-              disabled={isPreparingShortcutRecording}
-              onClick={() => {
-                applyRecordedShortcut(DEFAULT_VOICE_SHORTCUT);
-              }}
-            >
-              {t("settings.voiceRecognition.shortcutReset", { defaultValue: "恢复默认" })}
-            </Button>
-            <Button
-              size="middle"
-              icon={<DeleteOutlined />}
-              disabled={!voiceShortcut.trim() || isPreparingShortcutRecording}
-              onClick={() => {
-                applyRecordedShortcut("");
-              }}
-            >
-              {t("settings.voiceRecognition.shortcutClear", { defaultValue: "清除" })}
-            </Button>
-          </div>
-        </SettingRow>
-        <SettingRow
-          label={t("settings.voiceRecognition.triggerButton", { defaultValue: "麦克风图标" })}
-        >
-          <Switch checked={voiceTriggerVisible} onChange={setVoiceTriggerVisible} />
-        </SettingRow>
-      </SettingSection>
-
-      <SettingSection title={t("settings.voiceRecognition.test", { defaultValue: "测试" })}>
-        <SettingRow
-          label={t("settings.voiceRecognition.testConnection", { defaultValue: "测试连接" })}
-        >
-          <Button
-            type="primary"
-            loading={testing}
-            onClick={handleTest}
-            disabled={!asrApiKey.trim()}
-          >
-            {t("settings.voiceRecognition.testButton", { defaultValue: "测试" })}
+      <VoiceSettingsSection title={t("settings.voiceRecognition.layout.recognition")} actions={
+        <Tooltip title={t("settings.voiceRecognition.testConnectionDesc")}>
+          <Button size="small" loading={testing} onClick={handleTest} disabled={!asrApiKey.trim()}>
+            {t("settings.voiceRecognition.testConnection")}
           </Button>
-        </SettingRow>
-      </SettingSection>
-    </>
+        </Tooltip>
+      }>
+        <div className="app-voice-settings-grid">
+          <VoiceSettingsField htmlFor="voice-asr-provider" label={t("settings.voiceRecognition.serviceProvider")}>
+            <Select id="voice-asr-provider" className="w-full" value={asrProvider}
+              options={providerOptions} onChange={handleProviderChange} showSearch={false} />
+          </VoiceSettingsField>
+          <VoiceSettingsField htmlFor="voice-asr-model" label={t("settings.voiceRecognition.model")}>
+            <Select id="voice-asr-model" className="w-full" value={asrModel} onChange={setAsrModel}
+              options={currentModelOptions} optionRender={renderAsrModelOption}
+              popupClassName="app-asr-model-select-dropdown"
+              placeholder={t("settings.voiceRecognition.modelPlaceholder")} />
+          </VoiceSettingsField>
+          <VoiceSettingsField htmlFor="voice-asr-api-key" label={t("settings.voiceRecognition.apiKey")}>
+            <Input.Password id="voice-asr-api-key" name="voice-asr-api-key" className="w-full" value={asrApiKey}
+              onChange={(event) => setAsrApiKey(event.target.value)} placeholder={apiKeyPlaceholder}
+              autoComplete="off" spellCheck={false} title={apiKeyDesc}
+              visibilityToggle={{ visible: showApiKey, onVisibleChange: setShowApiKey }} />
+          </VoiceSettingsField>
+          {isDashScopeProvider ? (
+            <VoiceSettingsField htmlFor="voice-asr-region" label={t("settings.voiceRecognition.region")}>
+              <Select id="voice-asr-region" className="w-full" value={asrRegion} onChange={setAsrRegion} options={[
+                { value: "beijing", label: t("settings.voiceRecognition.polishingRegionBeijing") },
+                { value: "singapore", label: t("settings.voiceRecognition.polishingRegionSingapore") },
+                { value: "us", label: t("settings.voiceRecognition.polishingRegionUs") },
+              ]} />
+            </VoiceSettingsField>
+          ) : (
+            <VoiceSettingsField htmlFor="voice-asr-auth" label={t("settings.voiceRecognition.polishingAuthLabel")}>
+              <Select id="voice-asr-auth" className="w-full" value={asrAuthMode} options={mimoAuthOptions}
+                onChange={(value) => setAsrAuthMode(value as MimoAuthMode)} />
+            </VoiceSettingsField>
+          )}
+        </div>
+      </VoiceSettingsSection>
+
+      <VoiceSettingsSection title={t("settings.voiceRecognition.polishingLabel")} actions={
+        <Tooltip title={t("settings.voiceRecognition.polishingDesc")}>
+          <Switch aria-label={t("settings.voiceRecognition.polishingLabel")}
+            checked={voicePolishEnabled} onChange={setVoicePolishEnabled} />
+        </Tooltip>
+      }>
+        {voicePolishEnabled ? (
+          <div className="space-y-4">
+            <div className="app-voice-settings-grid items-start">
+              <VoicePolishModePicker value={voicePolishStyle} onChange={setVoicePolishStyle} />
+              <VoiceSettingsField htmlFor="voice-polish-provider" label={t("settings.voiceRecognition.serviceProvider")}>
+                <Select id="voice-polish-provider" className="w-full" value={voicePolishProvider} onChange={setVoicePolishProvider} options={[
+                  { value: "deepseek", label: <VoiceProviderLabel provider="deepseek" label="DeepSeek" /> },
+                  { value: "dashscope", label: <VoiceProviderLabel provider="dashscope" label="DashScope" /> },
+                  { value: "mimo", label: <VoiceProviderLabel provider="mimo" label="MiMo" /> },
+                ]} />
+              </VoiceSettingsField>
+              <VoiceSettingsField htmlFor="voice-polish-api-key" label={t("settings.voiceRecognition.apiKey")}>
+                <div className="flex min-w-0 gap-2">
+                <Input.Password id="voice-polish-api-key" name="voice-polish-api-key" className="min-w-0 flex-1" value={voicePolishApiKey}
+                  onChange={(event) => setVoicePolishApiKey(event.target.value)} autoComplete="off" spellCheck={false}
+                  placeholder={t("settings.voiceRecognition.polishingKeyPlaceholder", { provider: voicePolishProvider === "deepseek" ? "DeepSeek" : voicePolishProvider === "dashscope" ? "DashScope" : "MiMo" })} />
+                {voicePolishProvider === "mimo" && (
+                  <Select id="voice-polish-auth" aria-label={t("settings.voiceRecognition.polishingAuthLabel")}
+                    className="w-32 shrink-0" value={voicePolishAuthMode} onChange={setVoicePolishAuthMode} options={mimoAuthOptions} />
+                )}
+                {voicePolishProvider === "dashscope" && (
+                  <Select id="voice-polish-region" aria-label={t("settings.voiceRecognition.region")}
+                    className="w-40 shrink-0" value={voicePolishRegion} onChange={setVoicePolishRegion} options={[
+                      { value: "beijing", label: t("settings.voiceRecognition.polishingRegionBeijing") },
+                      { value: "singapore", label: t("settings.voiceRecognition.polishingRegionSingapore") },
+                      { value: "us", label: t("settings.voiceRecognition.polishingRegionUs") },
+                    ]} />
+                )}
+                </div>
+              </VoiceSettingsField>
+              <VoiceSettingsField htmlFor="voice-polish-model" label={t("settings.voiceRecognition.polishingModelLabel")}>
+                <div className="flex min-w-0 items-center gap-2">
+                  <Select id="voice-polish-model" className="min-w-0 flex-1"
+                    value={resolveVoicePolishModel(voicePolishProvider, voicePolishModel)} onChange={setVoicePolishModel}
+                    options={availableVoicePolishModels(voicePolishProvider).map((model) => ({ value: model, label: model }))} showSearch={false} />
+                  <Tooltip title={t("settings.voiceRecognition.polishingModelDesc")}>
+                    <Button className="shrink-0" loading={polishTesting} onClick={() => void handlePolishTest()}
+                      aria-label={t("settings.voiceRecognition.polishingTest")}>{t("settings.voiceRecognition.testButton")}</Button>
+                  </Tooltip>
+                </div>
+              </VoiceSettingsField>
+            </div>
+            {!voicePolishApiKey.trim() && <p role="status" className="m-0 text-xs text-[var(--cs-text-secondary)]">{t("settings.voiceRecognition.polishingKeyMissing")}</p>}
+            <div className="space-y-2 border-t border-[var(--cs-border-card)] pt-3">
+              <VoiceSettingsDisclosure title={t("settings.voiceRecognition.polishingInstructionsLabel")}>
+                <Input.TextArea id="voice-polish-instructions" name="voice-polish-instructions" value={voicePolishInstructions}
+                  aria-label={t("settings.voiceRecognition.polishingInstructionsLabel")}
+                  onChange={(event) => setVoicePolishInstructions(event.target.value)}
+                  placeholder={t("settings.voiceRecognition.polishingInstructionsPlaceholder")}
+                  autoSize={{ minRows: 2, maxRows: 6 }} maxLength={2000} showCount
+                  aria-describedby="voice-polish-instructions-hint" />
+                <p id="voice-polish-instructions-hint" className="mb-0 mt-6 text-xs leading-5 text-[var(--cs-text-secondary)]">
+                  {t("settings.voiceRecognition.layout.instructionsHint")}
+                </p>
+              </VoiceSettingsDisclosure>
+            </div>
+          </div>
+        ) : <p className="m-0 text-xs leading-5 text-[var(--cs-text-secondary)]">{t("settings.voiceRecognition.layout.polishOff")}</p>}
+      </VoiceSettingsSection>
+
+      <VoiceSettingsSection title={t("settings.voiceRecognition.layout.input")} actions={
+        <div className="flex items-center gap-3">
+          <label htmlFor="voice-trigger-visible" className="text-xs text-[var(--cs-text-secondary)]">{t("settings.voiceRecognition.triggerButton")}</label>
+          <Switch id="voice-trigger-visible" checked={voiceTriggerVisible} onChange={setVoiceTriggerVisible} />
+        </div>
+      }>
+        <div className="space-y-4">
+          <VoiceSettingsField htmlFor="voice-shortcut" label={t("settings.voiceRecognition.shortcutLabel")}>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <Input id="voice-shortcut" name="voice-shortcut" readOnly value={currentShortcutLabel} placeholder={shortcutPlaceholder}
+                onClick={() => void startShortcutRecording()} disabled={isPreparingShortcutRecording}
+                onKeyDown={(event) => {
+                  if (!isRecordingShortcut && (event.key === "Enter" || event.key === " ")) {
+                    event.preventDefault();
+                    void startShortcutRecording();
+                  }
+                }}
+                className="w-full cursor-pointer min-[700px]:w-[200px]" />
+              <Button type={isRecordingShortcut ? "primary" : "default"} loading={isPreparingShortcutRecording}
+                onClick={() => { if (isRecordingShortcut) { cancelShortcutRecording(); return; } void startShortcutRecording(); }}>
+                {t(isRecordingShortcut ? "settings.voiceRecognition.shortcutRecording" : "settings.voiceRecognition.shortcutRecord")}
+              </Button>
+              <Button disabled={isPreparingShortcutRecording} onClick={() => applyRecordedShortcut(DEFAULT_VOICE_SHORTCUT)}>
+                {t("settings.voiceRecognition.shortcutReset")}
+              </Button>
+              <Tooltip title={t("settings.voiceRecognition.shortcutClear")}>
+                <Button icon={<DeleteOutlined />} aria-label={t("settings.voiceRecognition.shortcutClear")}
+                  disabled={!voiceShortcut.trim() || isPreparingShortcutRecording} onClick={() => applyRecordedShortcut("")} />
+              </Tooltip>
+            </div>
+          </VoiceSettingsField>
+        </div>
+      </VoiceSettingsSection>
+    </div>
   );
 }
 

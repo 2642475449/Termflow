@@ -2,7 +2,7 @@ import { registerRichCodeTokens } from "@/lib/monaco";
 import { CheckOutlined, CopyOutlined, ReloadOutlined, WarningOutlined } from "@ant-design/icons";
 import { Editor, loader } from "@monaco-editor/react";
 import { Alert, Button, Empty, Spin, Tag, message } from "antd";
-import * as monaco from "monaco-editor";
+import * as monaco from "@/lib/monacoRuntime";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { gitConflictDetail, gitResolveConflict } from "@/lib/api";

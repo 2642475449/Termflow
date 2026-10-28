@@ -1,4 +1,4 @@
-import * as monaco from "monaco-editor";
+import * as monaco from "@/lib/monacoRuntime";
 
 export function getMonacoLanguage(filePath: string): string {
   const normalizedPath = filePath.replace(/[\\/]+$/, "");

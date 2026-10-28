@@ -1,6 +1,8 @@
 import { createHighlighterCore } from "@shikijs/core";
 import { createOnigurumaEngine } from "@shikijs/engine-oniguruma";
 import type * as Monaco from "monaco-editor";
+import csharp from "@shikijs/langs/csharp";
+import diff from "@shikijs/langs/diff";
 import java from "@shikijs/langs/java";
 import typescript from "@shikijs/langs/typescript";
 import tsx from "@shikijs/langs/tsx";
@@ -30,6 +32,8 @@ import vue from "@shikijs/langs/vue";
 
 // 语法和 WASM 均内置，仅延迟读取应用自身的资源。
 export const TEXTMATE_LANGUAGES = {
+  csharp,
+  diff,
   java: java,
   typescript: typescript,
   tsx: tsx,
@@ -57,14 +61,16 @@ export const TEXTMATE_LANGUAGES = {
   makefile: makefile,
   vue: vue,
 };
-export function createTextmateHighlighter() {
-  return createHighlighterCore({
+// 编辑器与 Markdown 共用一次初始化，避免重复创建 WASM 和语法注册表。
+let highlighterPromise: ReturnType<typeof createHighlighterCore> | undefined;
+export function getTextmateHighlighter() {
+  return highlighterPromise ??= createHighlighterCore({
     themes: [],
     langs: Object.values(TEXTMATE_LANGUAGES),
     engine: createOnigurumaEngine(import("@shikijs/engine-oniguruma/wasm-inlined")),
   });
 }
-type Highlighter = Awaited<ReturnType<typeof createTextmateHighlighter>>;
+type Highlighter = Awaited<ReturnType<typeof getTextmateHighlighter>>;
 type Grammar = ReturnType<Highlighter["getLanguage"]>;
 type Stack = ReturnType<Grammar["tokenizeLine"]>["ruleStack"];
 
@@ -109,8 +115,8 @@ export function createTextmateProvider(grammar: Grammar): Monaco.languages.Token
     },
   };
 }
-export async function installTextmate(monaco: typeof Monaco) {
-  const highlighter = await createTextmateHighlighter();
+export async function installTextmate(monaco: Pick<typeof Monaco, "editor" | "languages">) {
+  const highlighter = await getTextmateHighlighter();
   const installers = new Map<string, () => void>();
   const pending = new Map<string, Promise<void>>();
   for (const [id, grammar] of Object.entries(TEXTMATE_LANGUAGES)) {

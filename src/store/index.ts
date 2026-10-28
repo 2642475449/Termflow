@@ -181,9 +181,6 @@ function normalizeLanguageValue(language: string | null | undefined): Language {
   if (normalizedLanguage === "en") {
     return "en";
   }
-  if (normalizedLanguage === "zh_TW" || normalizedLanguage === "zh-TW") {
-    return "zh_TW";
-  }
   if (normalizedLanguage === "ja" || normalizedLanguage === "ja-JP") {
     return "ja";
   }
@@ -1958,6 +1955,7 @@ function createPersistOptions(storage?: StateStorage) {
     },
     onRehydrateStorage: () => (state?: AppState) => {
       if (state) {
+        state.language = normalizeLanguageValue(state.language);
         state.windowContextReady = false;
         state.windowMode = "launcher";
         state.windowLabel = "main";

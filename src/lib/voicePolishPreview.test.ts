@@ -2,12 +2,11 @@ import { expect, it } from "vitest";
 import { diffVoicePolishPreview } from "./voicePolishPreview";
 import zh from "@/locales/zh-CN.json";
 import en from "@/locales/en-US.json";
-import tw from "@/locales/zh-TW.json";
 import ja from "@/locales/ja-JP.json";
 import { VOICE_POLISH_STYLES } from "./voicePolish";
 
 it("reconstructs both original and organized examples in every language", () => {
-  for (const locale of [zh, en, tw, ja]) {
+  for (const locale of [zh, en, ja]) {
     const preview = locale.settings.voiceRecognition.polishingPreview;
     for (const mode of VOICE_POLISH_STYLES) {
       const changes = diffVoicePolishPreview(preview.source, preview.results[mode]);

@@ -89,7 +89,6 @@ function SettingsMenu({
   const currentThemeLabel = t(`settings.general.appearance.${themeCategory}`);
   const languageLabels = [
     { value: "zh_CN" as Language, label: t("settings.languageName.zh_CN") },
-    { value: "zh_TW" as Language, label: t("settings.languageName.zh_TW") },
     { value: "en" as Language, label: t("settings.languageName.en") },
     { value: "ja" as Language, label: t("settings.languageName.ja") },
   ] as const;

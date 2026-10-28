@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import {
   CheckOutlined,
-  CopyOutlined,
   DeleteOutlined,
   EditOutlined,
   PlusOutlined,
@@ -22,10 +21,6 @@ import {
   type GitCommitMessagePresetTemplate,
 } from "@/lib/gitCommitMessageProfiles";
 import { useAppStore } from "@/store";
-import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
-
-/** 超过该字数的规则才提供“展开/收起”切换，内置与常见规则直接完整显示 */
-const EXPANDABLE_INSTRUCTION_LENGTH = 280;
 
 /** Manages the reusable AI commit-message profiles used by the Git workspace. */
 export function GitSettingsPage() {
@@ -38,7 +33,6 @@ export function GitSettingsPage() {
     (state) => state.setGitCommitMessageProfiles,
   );
 
-  const [expandedProfileIds, setExpandedProfileIds] = useState<Record<string, boolean>>({});
   const [profileEditorOpen, setProfileEditorOpen] = useState(false);
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
   const [profileName, setProfileName] = useState("");
@@ -51,13 +45,6 @@ export function GitSettingsPage() {
     [gitCommitMessageProfiles],
   );
 
-  const toggleExpandProfile = useCallback((profileId: string) => {
-    setExpandedProfileIds((prev) => ({
-      ...prev,
-      [profileId]: !prev[profileId],
-    }));
-  }, []);
-
   const openProfileEditor = useCallback(
     (profile?: GitCommitMessageProfile) => {
       setEditingProfileId(profile?.id ?? null);
@@ -69,22 +56,6 @@ export function GitSettingsPage() {
       setProfileEditorOpen(true);
     },
     [defaultGitCommitMessageProfileId],
-  );
-
-  const duplicateProfile = useCallback(
-    (profile: GitCommitMessageProfile) => {
-      const nextName = createDuplicateGitCommitMessageProfileName(
-        profile.name,
-        gitCommitMessageProfiles,
-        t("settings.agents.gitProfiles.copySuffix"),
-      );
-      setEditingProfileId(null);
-      setProfileName(nextName);
-      setProfileInstructions(profile.instructions);
-      setMakeProfileDefault(false);
-      setProfileEditorOpen(true);
-    },
-    [gitCommitMessageProfiles, t],
   );
 
   const applyPresetTemplate = useCallback(
@@ -209,180 +180,78 @@ export function GitSettingsPage() {
   ]);
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <SettingsPageHeader title={t("settings.menu.git")} />
-
-      <div className="app-glass-card app-git-settings-panel overflow-hidden rounded-xl">
-        <div className="app-git-settings-panel-header flex flex-wrap items-center justify-between gap-4 px-5 py-4">
-          <div className="min-w-0">
-            <div className="app-git-settings-text-primary text-sm font-semibold">
-              {t("settings.agents.gitProfiles.title")}
-            </div>
-            <div className="app-git-settings-text-tertiary mt-0.5 text-xs">
-              {t("settings.agents.gitProfiles.description")}
-            </div>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-2">
-            {hasBuiltInChanges ? (
-              <Button
-                size="small"
-                icon={<ReloadOutlined />}
-                onClick={handleResetBuiltInProfiles}
-              >
-                {t("settings.agents.gitProfiles.resetBuiltIn")}
-              </Button>
-            ) : null}
-            <Button
-              type="primary"
-              size="small"
-              icon={<PlusOutlined />}
-              onClick={() => openProfileEditor()}
-            >
-              {t("settings.agents.gitProfiles.add")}
+    <div className="app-git-settings mx-auto max-w-[920px] space-y-5 pb-6">
+      <header className="flex flex-wrap items-center justify-between gap-3 pb-1">
+        <h1 className="m-0 text-xl font-semibold text-[var(--cs-text-primary)]">{t("settings.menu.git")}</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          {hasBuiltInChanges && (
+            <Button size="small" icon={<ReloadOutlined aria-hidden="true" />} onClick={handleResetBuiltInProfiles}>
+              {t("settings.agents.gitProfiles.resetBuiltIn")}
             </Button>
-          </div>
+          )}
+          <Button type="primary" icon={<PlusOutlined aria-hidden="true" />} onClick={() => openProfileEditor()}>
+            {t("settings.agents.gitProfiles.add")}
+          </Button>
         </div>
+      </header>
 
-        <div role="radiogroup" aria-label={t("settings.agents.gitProfiles.title")}>
+      <section className="overflow-hidden rounded-xl border border-[var(--cs-border-card)] bg-[var(--cs-bg-card)]">
+        <header className="space-y-1 border-b border-[var(--cs-border-card)] px-4 py-3">
+          <h2 className="m-0 text-sm font-semibold text-[var(--cs-text-primary)]">{t("settings.agents.gitProfiles.layout.title")}</h2>
+          <p className="m-0 text-xs leading-5 text-[var(--cs-text-secondary)]">{t("settings.agents.gitProfiles.layout.description")}</p>
+        </header>
+
+        <fieldset className="m-0 min-w-0 border-0 p-0">
+          <legend className="sr-only">{t("settings.agents.gitProfiles.title")}</legend>
           {gitCommitMessageProfiles.map((profile) => {
             const isDefault = profile.id === defaultGitCommitMessageProfileId;
             const builtIn = isBuiltInGitCommitMessageProfile(profile.id);
             const modified = builtIn && isBuiltInGitCommitMessageProfileModified(profile);
-            const isLong = profile.instructions.length > EXPANDABLE_INSTRUCTION_LENGTH;
-            const expanded = !!expandedProfileIds[profile.id];
-
+            const summary = builtIn && !modified
+              ? t(`settings.agents.gitProfiles.layout.summaries.${profile.id}`)
+              : profile.instructions;
             return (
-              <div
-                key={profile.id}
-                role="radio"
-                aria-checked={isDefault}
-                tabIndex={0}
-                onClick={() => {
-                  if (!isDefault) {
-                    setDefaultProfile(profile.id);
-                  }
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    if (!isDefault) {
-                      setDefaultProfile(profile.id);
-                    }
-                  }
-                }}
-                className={`app-git-profile-row flex cursor-pointer items-start justify-between gap-4 px-5 py-3.5 ${
-                  isDefault ? "app-git-profile-row--default" : ""
-                }`}
-              >
-                <div className="flex min-w-0 flex-1 items-start gap-3">
-                  <span
-                    aria-hidden="true"
-                    className={`app-git-profile-dot mt-2 h-2 w-2 shrink-0 rounded-full ${
-                      isDefault ? "app-git-profile-dot--default" : ""
-                    }`}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="app-git-settings-text-primary text-sm font-medium">
-                        {profile.name}
+              <article key={profile.id} aria-label={profile.name}
+                className={`app-git-profile-row ${isDefault ? "app-git-profile-row--default" : ""}`}>
+                <div className="flex items-start gap-3 p-4">
+                  <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
+                    <input type="radio" name="git-commit-message-default" value={profile.id}
+                      checked={isDefault} onChange={() => setDefaultProfile(profile.id)} aria-label={profile.name}
+                      className="mt-1 h-4 w-4 shrink-0 cursor-pointer accent-[var(--cs-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--cs-primary)]" />
+                    <span className="block min-w-0 flex-1">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span title={profile.name} className="min-w-0 truncate text-sm font-medium text-[var(--cs-text-primary)]">{profile.name}</span>
+                        {isDefault && <Tag icon={<CheckOutlined aria-hidden="true" />} color="processing" className="!m-0 shrink-0">{t("settings.agents.gitProfiles.default")}</Tag>}
+                        {!builtIn && <Tag className="!m-0 shrink-0">{t("settings.agents.gitProfiles.custom")}</Tag>}
+                        {modified && <Tag color="warning" className="!m-0 shrink-0">{t("settings.agents.gitProfiles.modified")}</Tag>}
                       </span>
-                      {isDefault ? (
-                        <Tag icon={<CheckOutlined />} color="processing" className="!m-0">
-                          {t("settings.agents.gitProfiles.default")}
-                        </Tag>
-                      ) : null}
-                      {!builtIn ? (
-                        <Tag className="!m-0">
-                          {t("settings.agents.gitProfiles.custom")}
-                        </Tag>
-                      ) : null}
-                      {modified ? (
-                        <Tag color="warning" className="!m-0">
-                          {t("settings.agents.gitProfiles.modified")}
-                        </Tag>
-                      ) : null}
-                    </div>
-
-                    <div
-                      className={`app-git-settings-text-secondary mt-1 text-xs leading-relaxed ${
-                        expanded ? "whitespace-pre-wrap break-words" : "line-clamp-3"
-                      }`}
-                    >
-                      {profile.instructions}
-                    </div>
-
-                    {isLong ? (
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          toggleExpandProfile(profile.id);
-                        }}
-                        onKeyDown={(event) => event.stopPropagation()}
-                        className="app-git-settings-accent-text mt-1 border-0 bg-transparent p-0 text-xs hover:underline"
-                      >
-                        {expanded
-                          ? t("settings.agents.gitProfiles.collapse")
-                          : t("settings.agents.gitProfiles.expand")}
-                      </button>
-                    ) : null}
+                      <span className="mt-1 line-clamp-1 break-words text-xs leading-5 text-[var(--cs-text-secondary)]">{summary}</span>
+                    </span>
+                  </label>
+                  <div className="flex shrink-0 flex-wrap items-center gap-0.5">
+                    {modified && (
+                      <Tooltip title={t("settings.agents.gitProfiles.resetSingle")}>
+                        <Button type="text" size="small" icon={<UndoOutlined />}
+                          aria-label={`${t("settings.agents.gitProfiles.resetSingle")} ${profile.name}`}
+                          onClick={() => handleResetSingleBuiltIn(profile.id)} />
+                      </Tooltip>
+                    )}
+                    <Tooltip title={t("common.edit")}>
+                      <Button type="text" size="small" icon={<EditOutlined />}
+                        aria-label={`${t("common.edit")} ${profile.name}`} onClick={() => openProfileEditor(profile)} />
+                    </Tooltip>
+                    <Tooltip title={gitCommitMessageProfiles.length <= 1 ? t("settings.agents.gitProfiles.keepOne") : t("common.delete")}>
+                      <Button type="text" danger size="small" icon={<DeleteOutlined />}
+                        aria-label={`${t("common.delete")} ${profile.name}`} disabled={gitCommitMessageProfiles.length <= 1}
+                        onClick={() => setDeleteProfileId(profile.id)} />
+                    </Tooltip>
                   </div>
                 </div>
-
-                <div
-                  className="flex shrink-0 items-center gap-1 pt-0.5"
-                  onClick={(event) => event.stopPropagation()}
-                  onKeyDown={(event) => event.stopPropagation()}
-                >
-                  {modified ? (
-                    <Tooltip title={t("settings.agents.gitProfiles.resetSingle")}>
-                      <Button
-                        type="text"
-                        size="small"
-                        icon={<UndoOutlined />}
-                        onClick={() => handleResetSingleBuiltIn(profile.id)}
-                      />
-                    </Tooltip>
-                  ) : null}
-                  <Tooltip title={t("settings.agents.gitProfiles.duplicate")}>
-                    <Button
-                      type="text"
-                      size="small"
-                      icon={<CopyOutlined />}
-                      onClick={() => duplicateProfile(profile)}
-                    />
-                  </Tooltip>
-                  <Tooltip title={t("common.edit", { defaultValue: "编辑" })}>
-                    <Button
-                      type="text"
-                      size="small"
-                      icon={<EditOutlined />}
-                      onClick={() => openProfileEditor(profile)}
-                    />
-                  </Tooltip>
-                  <Tooltip
-                    title={
-                      gitCommitMessageProfiles.length <= 1
-                        ? t("settings.agents.gitProfiles.keepOne")
-                        : t("common.delete", { defaultValue: "删除" })
-                    }
-                  >
-                    <Button
-                      type="text"
-                      danger
-                      size="small"
-                      icon={<DeleteOutlined />}
-                      disabled={gitCommitMessageProfiles.length <= 1}
-                      onClick={() => setDeleteProfileId(profile.id)}
-                    />
-                  </Tooltip>
-                </div>
-              </div>
+              </article>
             );
           })}
-        </div>
-      </div>
+        </fieldset>
+      </section>
 
       <Modal
         open={profileEditorOpen}
@@ -411,6 +280,7 @@ export function GitSettingsPage() {
                     key={preset.id}
                     type="button"
                     onClick={() => applyPresetTemplate(preset)}
+                    aria-pressed={isActive}
                     className={`app-git-profile-preset-chip rounded-md px-2.5 py-1 text-xs font-medium ${
                       isActive ? "app-git-profile-preset-chip--active" : ""
                     }`}
@@ -423,10 +293,13 @@ export function GitSettingsPage() {
           </div>
 
           <div>
-            <div className="app-git-settings-text-secondary mb-1 text-xs font-medium">
+            <label htmlFor="git-profile-name" className="app-git-settings-text-secondary mb-1 block text-xs font-medium">
               {t("settings.agents.gitProfiles.name")}
-            </div>
+            </label>
             <Input
+              id="git-profile-name"
+              name="git-profile-name"
+              autoComplete="off"
               value={profileName}
               maxLength={80}
               placeholder={t("settings.agents.gitProfiles.namePlaceholder")}
@@ -435,10 +308,13 @@ export function GitSettingsPage() {
           </div>
 
           <div>
-            <div className="app-git-settings-text-secondary mb-1 text-xs font-medium">
+            <label htmlFor="git-profile-instructions" className="app-git-settings-text-secondary mb-1 block text-xs font-medium">
               {t("settings.agents.gitProfiles.instructions")}
-            </div>
+            </label>
             <Input.TextArea
+              id="git-profile-instructions"
+              name="git-profile-instructions"
+              aria-describedby="git-profile-instructions-hint"
               value={profileInstructions}
               maxLength={6000}
               autoSize={{ minRows: 6, maxRows: 12 }}
@@ -446,16 +322,17 @@ export function GitSettingsPage() {
               placeholder={t("settings.agents.gitProfiles.instructionsPlaceholder")}
               onChange={(event) => setProfileInstructions(event.target.value)}
             />
-            <div className="app-git-settings-text-tertiary mt-1.5 text-xs">
+            <div id="git-profile-instructions-hint" className="app-git-settings-text-secondary mt-6 text-xs">
               {t("settings.agents.gitProfiles.instructionsHint")}
             </div>
           </div>
 
           <div className="app-git-profile-modal-row flex items-center justify-between gap-3 rounded-lg px-3.5 py-2.5">
-            <span className="app-git-settings-text-secondary text-sm">
+            <label htmlFor="git-profile-make-default" className="app-git-settings-text-secondary text-sm">
               {t("settings.agents.gitProfiles.makeDefault")}
-            </span>
+            </label>
             <Switch
+              id="git-profile-make-default"
               checked={makeProfileDefault}
               disabled={editingProfileId === defaultGitCommitMessageProfileId}
               onChange={setMakeProfileDefault}

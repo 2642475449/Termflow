@@ -196,6 +196,7 @@
     "loadFailed": "Unable to load scheduled tasks"
   },
   "common": {
+    "edit": "Edit",
     "file": "Explorer",
     "openFolder": "Open Folder",
     "settings": "Settings",
@@ -1253,6 +1254,7 @@
     "installedSuccessfully": "Termflow was updated successfully to v{{version}}."
   },
   "settings": {
+    "loading": "Loading settings…",
     "menu": {
       "general": "General",
       "network": "Network",
@@ -1333,6 +1335,15 @@
       "defaultUnavailable": "The default agent is not installed or currently unavailable. Choose another agent.",
       "defaultRequired": "Choose a default agent in Settings → Agents first.",
       "gitProfiles": {
+        "layout": {
+          "title": "AI commit message styles",
+          "description": "Choose a default style, or switch temporarily from the Git panel’s AI menu.",
+          "summaries": {
+            "concise": "A single subject line for small changes.",
+            "balanced": "A subject and 2–5 change highlights for everyday commits.",
+            "detailed": "A subject and a detailed breakdown for changes that need more context."
+          }
+        },
         "title": "Git AI commit message styles",
         "description": "Manage named styles for AI-generated commit messages. Click AI to use the default, or use the menu for a one-time choice.",
         "add": "New style",
@@ -1409,7 +1420,6 @@
     },
     "languageName": {
       "zh_CN": "中文",
-      "zh_TW": "繁體中文",
       "en": "English",
       "ja": "日本語"
     },
@@ -2173,6 +2183,14 @@
       "theme": "Theme"
     },
     "voiceRecognition": {
+      "layout": {
+        "tokenPlanKeyPlaceholder": "Enter your Token Plan key",
+        "autoSave": "Changes saved automatically",
+        "recognition": "Recognition service",
+        "input": "Voice input",
+        "instructionsHint": "Leave blank for default rules. Your instructions apply alongside the selected style. If formatting fails, the original transcript is kept.",
+        "polishOff": "Remove filler words, improve wording, and format transcripts automatically. The original transcript is kept if formatting fails."
+      },
       "polishingTestSample": "Um, meet Lin tomorrow at three, no, four in the afternoon to confirm the event page.",
       "polishingRegionUs": "US (Virginia)",
       "polishingRegionSingapore": "Singapore",

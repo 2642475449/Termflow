@@ -9,6 +9,7 @@ import Sidebar from "./Sidebar";
 import AuxiliaryDock from "./AuxiliaryDock";
 import TabBar from "@/components/TabBar";
 import HomePage from "@/pages/home";
+import { SettingsPanelSkeleton } from "@/components/settings/SettingsPanelSkeleton";
 import SessionCheckpointSummaryBar from "@/components/SessionCheckpointSummaryBar";
 import { SessionResumeView } from "@/components/SessionResumeView";
 import { NewSessionDialog } from "@/components/NewSessionDialog";
@@ -241,7 +242,7 @@ function WorkspacePane({ paneId }: { paneId: string }) {
                   className="app-workspace-tab-content"
                   data-active={tabId === pane.activeTabId ? "true" : "false"}
                 >
-                  <Suspense fallback={<WorkspaceContentFallback />}>
+                  <Suspense fallback={isSettings ? <SettingsPanelSkeleton /> : <WorkspaceContentFallback />}>
                     {isSettings ? (
                       <SettingsPanel />
                     ) : isScheduledTasks ? (

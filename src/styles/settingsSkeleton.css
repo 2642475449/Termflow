@@ -1,0 +1,22 @@
+.app-settings-skeleton {
+  background: var(--cs-bg-card-solid, var(--cs-bg-card));
+  color: var(--cs-text-primary);
+  pointer-events: none;
+}
+
+.app-settings-skeleton-block {
+  border-radius: 4px;
+  background: var(--cs-border-card);
+  animation: app-settings-skeleton-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes app-settings-skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-settings-skeleton-block {
+    animation: none;
+  }
+}

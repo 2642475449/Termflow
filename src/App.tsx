@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { App as AntdApp, ConfigProvider, theme } from "antd";
 import { listen } from "@tauri-apps/api/event";
 import zhCN from "antd/locale/zh_CN";
-import zhTW from "antd/locale/zh_TW";
 import enUS from "antd/locale/en_US";
 import jaJP from "antd/locale/ja_JP";
 import AppLayout from "./components/layout/AppLayout";
@@ -567,7 +566,7 @@ function App() {
     document.documentElement.setAttribute("lang", nextLanguage);
   }, [language]);
 
-  const antdLocale = language === "en" ? enUS : language === "zh_TW" ? zhTW : language === "ja" ? jaJP : zhCN;
+  const antdLocale = language === "en" ? enUS : language === "ja" ? jaJP : zhCN;
 
   return (
     <ConfigProvider
