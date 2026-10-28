@@ -64,7 +64,11 @@ export const useSkillMarketplaceStore = create<SkillMarketplaceState>((set, get)
     const pending = skills.filter((skill) => !skill.description);
     if (!pending.length) return;
     try {
-      const summaries = await getMarketplaceSkillSummaries(pending);
+      const summaries = [];
+      // 分类概览最多展示 30 项，按后端每次最多 24 项分批补齐简介。
+      for (let offset = 0; offset < pending.length; offset += 24) {
+        summaries.push(...await getMarketplaceSkillSummaries(pending.slice(offset, offset + 24)));
+      }
       const descriptions = new Map(summaries.map((summary) => [marketplaceSkillKey(summary), summary.description]));
       const merge = (results: SkillMarketSearch | null) => results ? { ...results, skills: results.skills.map((skill) => {
         const description = descriptions.get(marketplaceSkillKey(skill));

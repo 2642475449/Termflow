@@ -1671,9 +1671,10 @@
       "no": "No"
     },
     "skillMarket": {
-      "title": "Online skill marketplace",
+      "title": "Skill marketplace",
       "description": "Search skills.sh, preview skill contents, and install skills locally.",
       "popular": "Popular skills",
+      "viewCategory": "View all",
       "searchResults": "Search results",
       "categoryFilter": "Filter skills by purpose",
       "categories": {"all": "All", "development": "Development", "design": "Interface design", "content": "Content creation", "productivity": "Productivity", "data": "Data analysis"},

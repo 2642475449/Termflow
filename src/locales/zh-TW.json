@@ -1669,6 +1669,7 @@
       "title": "線上技能市場",
       "description": "透過 skills.sh 搜尋技能，預覽內容後安裝到本機。",
       "popular": "熱門技能",
+      "viewCategory": "檢視全部",
       "searchResults": "搜尋結果",
       "categoryFilter": "依用途篩選技能",
       "categories": {"all": "全部", "development": "開發工具", "design": "介面設計", "content": "內容創作", "productivity": "效率提升", "data": "資料分析"},

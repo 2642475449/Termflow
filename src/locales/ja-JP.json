@@ -1669,6 +1669,7 @@
       "title": "オンラインスキルマーケット",
       "description": "skills.sh でスキルを検索し、内容を確認してローカルにインストールできます。",
       "popular": "人気のスキル",
+      "viewCategory": "すべて表示",
       "searchResults": "検索結果",
       "categoryFilter": "用途でスキルを絞り込む",
       "categories": {"all": "すべて", "development": "開発ツール", "design": "UI デザイン", "content": "コンテンツ制作", "productivity": "生産性", "data": "データ分析"},

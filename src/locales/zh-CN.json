@@ -1671,9 +1671,10 @@
       "no": "否"
     },
     "skillMarket": {
-      "title": "在线技能市场",
+      "title": "技能市场",
       "description": "通过 skills.sh 搜索技能，预览内容后安装到本地。",
       "popular": "热门技能",
+      "viewCategory": "查看全部",
       "searchResults": "搜索结果",
       "categoryFilter": "按用途筛选技能",
       "categories": {"all": "全部", "development": "开发工具", "design": "界面设计", "content": "内容创作", "productivity": "效率提升", "data": "数据分析"},

@@ -9,12 +9,31 @@ export function marketplaceCategory(skill: MarketplaceSkill): Exclude<Marketplac
   if (/\b(data|sql|postgres|mysql|database|analytics|csv|xlsx|excel|pandas|spreadsheet|redis|supabase|snowflake|bigquery)\b/.test(text)) return "data";
   if (/\b(design|figma|ui|ux|css|tailwind|shadcn|accessibility|interface|typography|layout)\b/.test(text)) return "design";
   if (/\b(writ\w*|content|copywrit\w*|article|blog|pdf|docx|pptx|video|image|drawing|marketing|seo|slides|presentation|animation)\b/.test(text)) return "content";
-  if (/\b(code|coding|react|next\w*|typescript|javascript|python|rust|test\w*|debug\w*|git|github|api|mcp|deploy\w*|docker|security|review|browser|web|frontend|backend|swift|flutter|native|vue|angular)\b/.test(text)) return "development";
+  if (/\b(code|codebase|coding|programming|software|react|next\w*|typescript|javascript|python|rust|test\w*|tdd|debug\w*|bug\w*|git|github|merge|conflicts|api|mcp|deploy\w*|docker|security|review|browser|web|frontend|backend|swift|flutter|native|vue|angular)\b/.test(text)) return "development";
   return "productivity";
 }
 
 export function filterMarketplaceCategory(skills: MarketplaceSkill[], category: MarketplaceCategory): MarketplaceSkill[] {
   return category === "all" ? skills : skills.filter((skill) => marketplaceCategory(skill) === category);
+}
+
+// 全部展示分类概览；进入单个分类后，才对该分类的完整列表分页。
+export function marketplaceBrowseView(skills: MarketplaceSkill[], category: MarketplaceCategory, requestedPage: number) {
+  const counts = { all: skills.length, development: 0, design: 0, content: 0, productivity: 0, data: 0 };
+  const sections = MARKETPLACE_CATEGORIES.filter((value) => value !== "all").map((value) => {
+    const entries = filterMarketplaceCategory(skills, value);
+    counts[value] = entries.length;
+    return { category: value, total: entries.length, skills: entries };
+  });
+  const total = counts[category];
+  const pageSize = 24;
+  const page = Math.max(1, Math.min(Math.floor(requestedPage) || 1, Math.ceil(total / pageSize)));
+  const overview = category === "all";
+  return {
+    counts, total, page, pageSize, overview,
+    sections: sections.filter((section) => section.total && (overview || section.category === category))
+      .map((section) => ({ ...section, skills: overview ? section.skills.slice(0, 6) : section.skills.slice((page - 1) * pageSize, page * pageSize) })),
+  };
 }
 
 export function marketplaceSkillKey(skill: Pick<MarketplaceSkill, "repository" | "slug">): string {
