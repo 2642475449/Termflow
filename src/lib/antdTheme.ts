@@ -21,6 +21,18 @@ export const ANTD_PRIMARY_COLORS: Record<ThemeMode, string> = {
 /** 全局 colorTextLightSolid：主色背景上的文字 */
 export const ANTD_TEXT_LIGHT_SOLID = "var(--cs-text-on-primary)";
 
+/** 自定义窗口关闭按钮：红底与白色图标必须成对配置，与 shell.css 保持一致。 */
+export const WINDOW_CLOSE_BUTTON_COLORS = {
+  hover: {
+    background: "var(--cs-window-close-hover-bg)",
+    foreground: "var(--cs-window-close-text)",
+  },
+  pressed: {
+    background: "var(--cs-window-close-pressed-bg)",
+    foreground: "var(--cs-window-close-text)",
+  },
+} as const;
+
 /** 组件级 token 覆盖：文字色与背景色必须成对出现 */
 export const ANTD_COMPONENT_OVERRIDES = {
   Tooltip: {

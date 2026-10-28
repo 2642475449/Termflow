@@ -6,10 +6,9 @@ import { AgentIcon } from "@/components/AgentIcon";
 import { SkillContentEditor } from "./SkillContentEditor";
 import { useAppStore } from "@/store";
 import { useSkillsStore } from "@/store/slices/skillsSlice";
-import { useSkillMarketplaceStore } from "@/store/slices/skillMarketplaceSlice";
-import { SkillMarketplaceModal } from "./SkillMarketplaceModal";
+import { openSkillMarketplaceTab } from "@/store/slices/skillMarketplaceTabsSlice";
 import { getAgentIdsWithCapability } from "@/lib/agents";
-import { ensureSkillDirectory, getSkillDetail, installSkill, listSkills, openInFileManager, saveSkillContent, selectSkillImportDirectory, setSkillEnabled } from "@/lib/api";
+import { ensureSkillDirectory, getSkillDetail, installSkill, openInFileManager, saveSkillContent, selectSkillImportDirectory, setSkillEnabled } from "@/lib/api";
 import { filterSkillGroups, groupSkills, isSkillLinked, skillEditorKey, skillFolderName, skillInstallTargets, skillToggleBlocked } from "@/lib/skills";
 import type { SkillAgent, SkillInfo, SkillScope } from "@/types";
 
@@ -40,7 +39,6 @@ export function SkillsSettingsPage() {
   const [description, setDescription] = useState("");
   const [source, setSource] = useState<string | null>(null);
   const [installing, setInstalling] = useState(false);
-  const requestId = useRef(0);
   const detailId = useRef(0);
   const label = (id: SkillAgent) => t(`settings.skills.agents.${id}`);
   const scopeLabel = (value: SkillScope) => t(`settings.scope.${value === "workspace" ? "workspaceShort" : "userShort"}`);
@@ -48,21 +46,11 @@ export function SkillsSettingsPage() {
 
   const refresh = useCallback(async () => {
     if (useSkillsStore.getState().projectPath !== projectPath) return;
-    const request = ++requestId.current;
-    useSkillsStore.getState().setLoading(projectPath, true);
     try {
-      const next = await listSkills(projectPath);
-      if (request === requestId.current) useSkillsStore.getState().setCatalog(projectPath, next);
+      await useSkillsStore.getState().refreshCatalog(projectPath);
     } catch (reason) {
-      if (request === requestId.current) {
-        useSkillsStore.getState().setLoading(projectPath, false, true);
-        message.error(t("settings.skills.loadFailed"));
-        console.error("Failed to load skills", reason);
-      }
-    } finally {
-      if (request === requestId.current && !useSkillsStore.getState().error) {
-        useSkillsStore.getState().setLoading(projectPath, false);
-      }
+      message.error(t("settings.skills.loadFailed"));
+      console.error("Failed to load skills", reason);
     }
   }, [projectPath, t]);
 
@@ -73,7 +61,7 @@ export function SkillsSettingsPage() {
     setScope("all");
     setPage(1);
     void refresh();
-    return () => { requestId.current++; detailId.current++; };
+    return () => { detailId.current++; };
   }, [projectPath, refresh]);
 
   const groups = useMemo(() => groupSkills(catalog?.skills ?? []), [catalog]);
@@ -208,14 +196,13 @@ export function SkillsSettingsPage() {
 
   const changeFilter = () => setPage(1);
   return <div className="app-skills-library">
-    <SkillMarketplaceModal projectPath={projectPath} onInstalled={refresh} />
     <div className="app-skills-toolbar">
       <div>
         <h2 className="app-skills-title">{t("settings.menu.skills")} <span className="app-skills-muted">{groups.length}</span></h2>
         <p className="app-skills-muted text-xs mt-1">{t("settings.skills.libraryDescription")}</p>
       </div>
       <div className="flex gap-2">
-        <Button icon={<ShopOutlined />} onClick={() => useSkillMarketplaceStore.getState().setOpen(true)}>{t("settings.skillMarket.title")}</Button>
+        <Button icon={<ShopOutlined />} onClick={openSkillMarketplaceTab}>{t("settings.skillMarket.title")}</Button>
         <Button icon={<ReloadOutlined spin={loading} />} onClick={() => void refresh()}>{t("common.refresh")}</Button>
         <Button type="primary" icon={<PlusOutlined />} disabled={!catalog} onClick={openAdd}>{t("settings.skills.addSkill")}</Button>
       </div>

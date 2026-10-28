@@ -1682,6 +1682,7 @@
       "viewListing": "查看 skills.sh 页面",
       "viewRepository": "查看源仓库",
       "detailFailed": "加载技能详情失败",
+      "installing": "正在安装技能，请等待安装完成后再关闭市场标签页。",
       "installFailed": "安装失败",
       "install": "安装技能",
       "back": "返回技能列表",

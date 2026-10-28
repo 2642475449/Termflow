@@ -45,21 +45,18 @@ it("ignores details for a selection replaced by another skill", async () => {
   expect(useSkillMarketplaceStore.getState().detail?.skill.slug).toBe("new");
 });
 
-it("invalidates pending details when closing and blocks selection changes during installation", async () => {
+it("invalidates pending details when returning to the list and blocks selection changes during installation", async () => {
   const pendingDetail = deferred<MarketplaceSkillDetail>();
   vi.mocked(getMarketplaceSkillDetail).mockReturnValueOnce(pendingDetail.promise);
   const store = useSkillMarketplaceStore.getState();
-  store.setOpen(true);
   const pending = store.selectSkill(skill("review"));
-  store.setOpen(false);
+  await store.selectSkill(null);
   pendingDetail.resolve(detail("review"));
   await pending;
-  expect(useSkillMarketplaceStore.getState()).toMatchObject({ open: false, detail: null, detailLoading: false });
-  store.setOpen(true);
+  expect(useSkillMarketplaceStore.getState()).toMatchObject({ selected: null, detail: null, detailLoading: false });
   store.setInstalling(true);
-  store.setOpen(false);
   await store.selectSkill(skill("other"));
-  expect(useSkillMarketplaceStore.getState()).toMatchObject({ open: true, selected: null, installing: true });
+  expect(useSkillMarketplaceStore.getState()).toMatchObject({ selected: null, installing: true });
 });
 
 it("surfaces request failures and allows retrying with the same query", async () => {

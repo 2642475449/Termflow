@@ -11,6 +11,7 @@ import {
   ANTD_COMPONENT_OVERRIDES,
   ANTD_PRIMARY_COLORS,
   ANTD_TEXT_LIGHT_SOLID,
+  WINDOW_CLOSE_BUTTON_COLORS,
 } from "./antdTheme";
 
 const THEMES = Object.keys(ANTD_PRIMARY_COLORS) as Array<keyof typeof ANTD_PRIMARY_COLORS>;
@@ -52,5 +53,16 @@ it("overrides tooltip text and background as a pair", () => {
       resolveToken(theme, tooltip.colorBgSpotlight),
     );
     expect(ratio, `${theme} tooltip`).toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST_RATIO);
+  }
+});
+
+it("keeps window close glyphs readable on hover and pressed backgrounds in every theme", () => {
+  for (const theme of THEMES) {
+    for (const colors of Object.values(WINDOW_CLOSE_BUTTON_COLORS)) {
+      expect(getContrastRatio(
+        resolveToken(theme, colors.foreground),
+        resolveToken(theme, colors.background),
+      )).toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST_RATIO);
+    }
   }
 });

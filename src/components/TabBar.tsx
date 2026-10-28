@@ -13,6 +13,7 @@ import {
   StopOutlined,
   CloseCircleOutlined,
   ClockCircleOutlined,
+  ShopOutlined,
 } from "@ant-design/icons";
 import { useAppStore, type SplitDirection, type TabDropPosition } from "@/store";
 import { openInAssociatedApplication, openInFileManager } from "@/lib/api";
@@ -21,6 +22,7 @@ import { getFileIconByName } from "@/lib/fileIcon";
 import { useTranslation } from "react-i18next";
 import { ShortcutHint } from "@/components/ui/ShortcutHint";
 import { useShortcutStore } from "@/store/slices/shortcutSlice";
+import { useSkillMarketplaceStore } from "@/store/slices/skillMarketplaceSlice";
 import { getAppShortcut } from "@/lib/appShortcuts";
 import { closeTabRuntime, confirmCloseTab } from "@/lib/tabClose";
 import { AgentIcon } from "@/components/AgentIcon";
@@ -116,6 +118,7 @@ interface TabBarProps {
 
 function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
   const closeKeys = useShortcutStore((s) => getAppShortcut(s.overrides, "closeTab"));
+  const marketInstalling = useSkillMarketplaceStore((state) => state.installing);
   const { t } = useTranslation();
   const openTabs = tabIds;
   const activeSessionId = activeTabId;
@@ -352,9 +355,10 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
     const isSettings = tabId === SETTINGS_ID;
     const tab = tabsById[tabId];
     const isScheduledTasks = tabId === SCHEDULED_TASKS_TAB_ID || tab?.kind === "scheduled-tasks";
+    const isSkillMarket = tab?.kind === "skill-market";
     const isFile = tab?.kind === "file";
     const isDiff = tab?.kind === "diff";
-    const session = isSettings || isScheduledTasks || isFile || isDiff ? null : sessionById.get(tabId);
+    const session = isSettings || isScheduledTasks || isSkillMarket || isFile || isDiff ? null : sessionById.get(tabId);
 
 
     const items: MenuProps["items"] = [
@@ -572,14 +576,15 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
         const isSettings = tabId === SETTINGS_ID;
         const tab = tabsById[tabId];
         const isScheduledTasks = tabId === SCHEDULED_TASKS_TAB_ID || tab?.kind === "scheduled-tasks";
+        const isSkillMarket = tab?.kind === "skill-market";
         const isFile = tab?.kind === "file";
         const isDiff = tab?.kind === "diff";
         const filePath = isFile ? tab?.resourceId ?? null : null;
         const diffPath = isDiff ? tab?.resourceId ?? null : null;
-        const session = isSettings || isScheduledTasks || isFile || isDiff ? null : sessionById.get(tabId);
+        const session = isSettings || isScheduledTasks || isSkillMarket || isFile || isDiff ? null : sessionById.get(tabId);
         const isDragging = draggingTabId === tabId;
         const fileVisual = (isFile || isDiff) && tab?.title ? getFileIconByName(tab.title) : null;
-        if (!isSettings && !isScheduledTasks && !isFile && !isDiff && !session) return null;
+        if (!isSettings && !isScheduledTasks && !isSkillMarket && !isFile && !isDiff && !session) return null;
 
         return (
           <Dropdown
@@ -668,6 +673,8 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
                   <SettingOutlined className="text-xs" />
                 ) : isScheduledTasks ? (
                   <ClockCircleOutlined className="text-xs" />
+                ) : isSkillMarket ? (
+                  <ShopOutlined className="text-xs" />
                 ) : isFile || isDiff ? (
                   <span className="text-xs inline-flex" style={{ color: fileVisual?.color }}>{fileVisual?.icon}</span>
                 ) : (
@@ -682,6 +689,8 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
                   <span className="app-tabbar-title text-xs" title={t("common.settings")}>{t("common.settings")}</span>
                 ) : isScheduledTasks ? (
                   <span className="app-tabbar-title text-xs" title={t("scheduledTasks.title")}>{t("scheduledTasks.title")}</span>
+                ) : isSkillMarket ? (
+                  <span className="app-tabbar-title text-xs" title={t("settings.skillMarket.title")}>{t("settings.skillMarket.title")}</span>
                 ) : isFile || isDiff ? (
                   <Tooltip title={<><div>{tab?.title}</div><div>{filePath ?? diffPath}</div></>} mouseEnterDelay={0.5}>
                     <span className={`app-tabbar-title text-xs ${tab?.preview ? 'italic opacity-70' : ''}`}>
@@ -701,6 +710,7 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
                   size="small"
                   icon={<CloseOutlined style={{ fontSize: 10 }} />}
                   className="tab-close-btn ml-auto shrink-0 !p-0 !w-4 !h-4 !min-w-0 flex items-center justify-center"
+                  disabled={isSkillMarket && marketInstalling}
                   style={{ color: "var(--cs-text-tertiary)" }}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -777,6 +787,7 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
               if (dragPreview.tabId === SCHEDULED_TASKS_TAB_ID || previewTab?.kind === "scheduled-tasks") {
                 return <ClockCircleOutlined className="text-xs" />;
               }
+              if (previewTab?.kind === "skill-market") return <ShopOutlined className="text-xs" />;
               if (previewFileVisual) {
                 return <span className="text-xs inline-flex" style={{ color: previewFileVisual.color }}>{previewFileVisual.icon}</span>;
               }
@@ -791,6 +802,8 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
               <span className="text-xs">{t("common.settings")}</span>
             ) : dragPreview.tabId === SCHEDULED_TASKS_TAB_ID || tabsById[dragPreview.tabId]?.kind === "scheduled-tasks" ? (
               <span className="text-xs">{t("scheduledTasks.title")}</span>
+            ) : tabsById[dragPreview.tabId]?.kind === "skill-market" ? (
+              <span className="text-xs">{t("settings.skillMarket.title")}</span>
             ) : (
               <span className="text-xs truncate">
                 {tabsById[dragPreview.tabId]?.title ?? sessionById.get(dragPreview.tabId)?.name}

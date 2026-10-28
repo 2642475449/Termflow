@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { TabEntity } from "@/store";
-import { archiveSessionRuntime, closeTabRuntime } from "./tabClose";
+import { archiveSessionRuntime, closeTabRuntime, confirmCloseTab } from "./tabClose";
+import { useSkillMarketplaceStore } from "@/store/slices/skillMarketplaceSlice";
+import { message } from "@/lib/toast";
+import i18n from "@/i18n";
 
 function tab(overrides: Partial<TabEntity> = {}): TabEntity {
   return {
@@ -17,6 +20,21 @@ function tab(overrides: Partial<TabEntity> = {}): TabEntity {
     ...overrides,
   };
 }
+
+it("keeps a marketplace tab open while installation is running", async () => {
+  const info = vi.spyOn(message, "info").mockImplementation(() => undefined);
+  try {
+    const marketTab = tab({ kind: "skill-market" });
+    useSkillMarketplaceStore.getState().setInstalling(true);
+    expect(await confirmCloseTab(marketTab, i18n.t.bind(i18n))).toBe(false);
+    expect(info).toHaveBeenCalledOnce();
+    useSkillMarketplaceStore.getState().setInstalling(false);
+    expect(await confirmCloseTab(marketTab, i18n.t.bind(i18n))).toBe(true);
+  } finally {
+    useSkillMarketplaceStore.getState().setInstalling(false);
+    info.mockRestore();
+  }
+});
 
 describe("closeTabRuntime", () => {
   it("closes the PTY for PowerShell and cmd session tabs", async () => {

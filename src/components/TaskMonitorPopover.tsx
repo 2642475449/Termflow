@@ -123,6 +123,7 @@ export function TaskMonitorPanel({
               )}
               {projectTabs?.map((tab) => (
                 <div key={tab.id} className="app-task-monitor-row"
+                  data-closable={targetWindowLabel ? "true" : "false"}
                   data-active={isCurrent && focusedTabId === tab.id ? "true" : "false"}>
                   <button type="button" className="app-task-monitor-row-main"
                     onClick={() => void navigate(project.path, tab)} title={tab.name}>

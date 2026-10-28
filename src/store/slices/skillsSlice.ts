@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { SkillCatalog, SkillValidation } from "@/types";
+import { listSkills } from "@/lib/api";
 
 export interface SkillEditorDraft {
   original: string;
@@ -13,6 +14,8 @@ interface SkillsState {
   catalog: SkillCatalog | null;
   loading: boolean;
   error: boolean;
+  catalogRequestId: number;
+  refreshCatalog: (path: string | null) => Promise<void>;
   editors: Record<string, SkillEditorDraft>;
   setEditorLoaded: (key: string, content: string, force?: boolean) => void;
   setEditorDraft: (key: string, draft: string) => void;
@@ -24,8 +27,23 @@ interface SkillsState {
 }
 
 // 技能目录是文件系统快照，不持久化到 localStorage 或 SQLite。
-export const useSkillsStore = create<SkillsState>((set) => ({
+export const useSkillsStore = create<SkillsState>((set, get) => ({
   projectPath: null, catalog: null, loading: true, error: false,
+  catalogRequestId: 0,
+  refreshCatalog: async (path) => {
+    if (get().projectPath !== path) return;
+    const requestId = get().catalogRequestId + 1;
+    set({ catalogRequestId: requestId, loading: true, error: false });
+    try {
+      const catalog = await listSkills(path);
+      if (get().projectPath === path && get().catalogRequestId === requestId) set({ catalog, loading: false, error: false });
+    } catch (reason) {
+      if (get().projectPath === path && get().catalogRequestId === requestId) {
+        set({ loading: false, error: true });
+        throw reason;
+      }
+    }
+  },
   editors: {},
   setEditorLoaded: (key, content, force = false) => set((state) => {
     const previous = state.editors[key];
@@ -44,7 +62,7 @@ export const useSkillsStore = create<SkillsState>((set) => ({
     const previous = state.editors[key];
     return previous ? { editors: { ...state.editors, [key]: { ...previous, original: content, draft: previous.draft === submitted ? content : previous.draft } } } : state;
   }),
-  setProject: (projectPath) => set({ projectPath, catalog: null, loading: true, error: false }),
+  setProject: (projectPath) => set((state) => ({ projectPath, catalog: null, loading: true, error: false, catalogRequestId: state.catalogRequestId + 1 })),
   setCatalog: (path, catalog) => set((state) => state.projectPath === path ? { catalog, error: false } : state),
   setLoading: (path, loading, error = false) => set((state) => state.projectPath === path ? { loading, error } : state),
 }));

@@ -97,6 +97,7 @@ const MIN_SPLIT_PANE_SIZE = 320;
 
 const SettingsPanel = lazy(() => import("@/components/SettingsPanel"));
 const ScheduledTasksPanel = lazy(() => import("@/components/ScheduledTasksPanel"));
+const SkillMarketplacePage = lazy(() => import("@/components/settings/SkillMarketplacePage"));
 const FileTabView = lazy(() => import("@/components/FileTabView"));
 const GitDiffTabView = lazy(() => import("@/components/GitDiffTabView"));
 const Terminal = lazy(() => import("@/components/Terminal"));
@@ -226,12 +227,13 @@ function WorkspacePane({ paneId }: { paneId: string }) {
               const tab = tabsById[tabId];
               const isSettings = tabId === SETTINGS_ID || tab?.kind === "settings";
               const isScheduledTasks = tabId === SCHEDULED_TASKS_TAB_ID || tab?.kind === "scheduled-tasks";
+              const isSkillMarket = tab?.kind === "skill-market";
               const isFile = tab?.kind === "file";
               const isDiff = tab?.kind === "diff";
-              const session = isSettings || isScheduledTasks || isFile || isDiff
+              const session = isSettings || isScheduledTasks || isSkillMarket || isFile || isDiff
                 ? null
                 : sessions.find((item) => item.id === tabId);
-              if (!isSettings && !isScheduledTasks && !isFile && !isDiff && !session) return null;
+              if (!isSettings && !isScheduledTasks && !isSkillMarket && !isFile && !isDiff && !session) return null;
 
               return (
                 <div
@@ -244,6 +246,8 @@ function WorkspacePane({ paneId }: { paneId: string }) {
                       <SettingsPanel />
                     ) : isScheduledTasks ? (
                       <ScheduledTasksPanel />
+                    ) : isSkillMarket ? (
+                      <SkillMarketplacePage isActive={tabId === pane.activeTabId} />
                     ) : isFile && currentProject ? (
                       <FileTabView
                         tabId={tabId}

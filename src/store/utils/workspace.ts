@@ -167,6 +167,7 @@ export function normalizeWorkspace(workspace: ProjectWorkspace, sessions: Sessio
 
   for (const pane of Object.values(nextWorkspace.panesById)) {
     pane.tabIds = pane.tabIds.filter((tabId) => {
+      if (nextWorkspace.tabsById[tabId]?.kind === "skill-market") return true;
       if (tabId === SETTINGS_ID) {
         if (!nextWorkspace.tabsById[tabId]) {
           nextWorkspace.tabsById[tabId] = createSettingsTab();

@@ -39,6 +39,10 @@ pub struct MarketSearch {
     limited: bool,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MarketSummary { repository: String, slug: String, description: String }
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MarketDetail {
@@ -93,6 +97,7 @@ struct RepositorySnapshot {
 type Cache<T> = Mutex<HashMap<String, (Instant, T)>>;
 static REPOSITORIES: LazyLock<Cache<RepositorySnapshot>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
+static SUMMARIES: LazyLock<Cache<String>> = LazyLock::new(|| Mutex::new(HashMap::new()));
 
 fn cached<T: Clone>(cache: &Cache<T>, key: &str) -> Option<T> {
     cache
@@ -320,13 +325,20 @@ async fn manifest(
 #[derive(Deserialize)]
 struct CommunityResults {
     skills: Vec<CommunitySkill>,
+    #[serde(default, rename = "hasMore")]
+    has_more: bool,
 }
 #[derive(Deserialize)]
 struct CommunitySkill {
+    #[serde(default)]
     id: String,
+    #[serde(default, rename = "skillId")]
+    skill_id: String,
     source: String,
     name: String,
     installs: u64,
+    #[serde(default)]
+    description: String,
 }
 
 fn community_skills(results: CommunityResults) -> Vec<MarketSkill> {
@@ -336,15 +348,13 @@ fn community_skills(results: CommunityResults) -> Vec<MarketSkill> {
         .filter_map(|entry| {
             // 公开 CLI 搜索接口也会返回 well-known 来源；本版只安装可验证的 GitHub 目录。
             validate_repository(&entry.source).ok()?;
-            let slug = entry
-                .id
-                .strip_prefix(&format!("{}/", entry.source))?
-                .to_string();
+            let slug = if entry.id.is_empty() { entry.skill_id }
+                else { entry.id.strip_prefix(&format!("{}/", entry.source))?.to_string() };
             let skill = MarketSkill {
                 repository: entry.source,
                 slug,
                 name: entry.name,
-                description: String::new(),
+                description: entry.description,
                 installs: Some(entry.installs),
             };
             validate_skill(&skill).ok()?;
@@ -353,17 +363,21 @@ fn community_skills(results: CommunityResults) -> Vec<MarketSkill> {
         .collect()
 }
 
-async fn search_community(client: &Client, query: &str) -> Result<Vec<MarketSkill>, String> {
-    let mut url =
-        reqwest::Url::parse("https://skills.sh/api/search").map_err(|error| error.to_string())?;
-    url.query_pairs_mut()
-        .append_pair("q", query)
-        .append_pair("limit", &COMMUNITY_LIMIT.to_string());
+fn community_url(query: &str) -> Result<reqwest::Url, String> {
+    let mut url = reqwest::Url::parse(if query.is_empty() { "https://skills.sh/api/skills/all-time/0" }
+        else { "https://skills.sh/api/search" }).map_err(|error| error.to_string())?;
+    if !query.is_empty() { url.query_pairs_mut().append_pair("q", query).append_pair("limit", &COMMUNITY_LIMIT.to_string()); }
+    Ok(url)
+}
+
+async fn search_community(client: &Client, query: &str) -> Result<MarketSearch, String> {
+    let url = community_url(query)?;
     let results = serde_json::from_slice::<CommunityResults>(
         &read_bytes(client, url, 2 * 1024 * 1024).await?,
     )
     .map_err(|error| format!("Invalid skills.sh search response: {error}"))?;
-    Ok(community_skills(results))
+    let limited = if query.is_empty() { results.has_more } else { results.skills.len() >= COMMUNITY_LIMIT };
+    Ok(MarketSearch { skills: community_skills(results), limited })
 }
 
 #[tauri::command]
@@ -381,23 +395,67 @@ async fn search_with_client(client: &Client, query: &str) -> Result<MarketSearch
     if query_length > 200 {
         return Err("Search query is too long".into());
     }
-    if query_length < 2 {
+    if query_length == 1 {
         return Ok(MarketSearch {
             skills: Vec::new(),
             limited: false,
         });
     }
-    let mut skills = search_community(client, query).await?;
-    skills.sort_by(|a, b| {
+    let mut results = search_community(client, query).await?;
+    results.skills.sort_by(|a, b| {
         b.installs
             .unwrap_or(0)
             .cmp(&a.installs.unwrap_or(0))
             .then_with(|| a.name.cmp(&b.name))
     });
-    Ok(MarketSearch {
-        limited: skills.len() >= COMMUNITY_LIMIT,
-        skills,
-    })
+    Ok(results)
+}
+
+fn listing_description(html: &str) -> Option<String> {
+    let tags = regex::Regex::new(r"(?is)<meta\s+[^>]*>").ok()?;
+    let attributes = regex::Regex::new(r#"(?is)([\w:-]+)\s*=\s*["']([^"']*)["']"#).ok()?;
+    let entities = regex::Regex::new(r"&(?:#x[0-9a-fA-F]+|#[0-9]+|amp|quot|apos|lt|gt);" ).ok()?;
+    for tag in tags.find_iter(html) {
+        let attrs = attributes.captures_iter(tag.as_str()).map(|capture| (capture[1].to_lowercase(), capture[2].to_string())).collect::<HashMap<_, _>>();
+        if attrs.get("name").or_else(|| attrs.get("property")).is_some_and(|value| value == "description" || value == "og:description") {
+            let content = attrs.get("content")?;
+            let decoded = entities.replace_all(content, |capture: &regex::Captures<'_>| {
+                match &capture[0] {
+                    "&amp;" => "&".into(), "&quot;" => "\"".into(), "&apos;" => "'".into(), "&lt;" => "<".into(), "&gt;" => ">".into(),
+                    entity => {
+                        let value = entity.trim_start_matches("&#").trim_end_matches(';');
+                        let number = if let Some(hex) = value.strip_prefix('x') { u32::from_str_radix(hex, 16).ok() } else { value.parse::<u32>().ok() };
+                        number.and_then(char::from_u32).map(|c| c.to_string()).unwrap_or_else(|| entity.to_string())
+                    }
+                }
+            });
+            let description = decoded.trim().chars().filter(|c| *c != '\u{fffd}').take(500).collect::<String>();
+            if !description.is_empty() { return Some(description); }
+        }
+    }
+    None
+}
+
+#[tauri::command]
+pub async fn get_marketplace_skill_summaries(skills: Vec<MarketSkill>, database: State<'_, Arc<Database>>) -> Result<Vec<MarketSummary>, String> {
+    if skills.len() > 24 { return Err("Too many skill summaries requested".into()); }
+    for skill in &skills { validate_skill(skill)?; }
+    let client = client(&database)?;
+    let summaries = stream::iter(skills.into_iter().map(|skill| {
+        let client = &client;
+        async move {
+            let key = format!("{}/{}", skill.repository, skill.slug);
+            let description = if let Some(description) = cached(&SUMMARIES, &key) { Some(description) } else {
+                let url = reqwest::Url::parse(&format!("https://skills.sh/{key}")).ok()?;
+                let html = String::from_utf8(read_bytes(client, url, 2 * 1024 * 1024).await.ok()?).ok()?;
+                let description = listing_description(&html)?;
+                remember(&SUMMARIES, key, description.clone());
+                Some(description)
+            }?;
+            Some(MarketSummary { repository: skill.repository, slug: skill.slug, description })
+        }
+    })).buffer_unordered(6).collect::<Vec<_>>().await;
+    Ok(summaries.into_iter().flatten().collect())
 }
 
 fn skill_resources<'a>(

@@ -88,6 +88,7 @@ import {
   normalizeNoProxy,
 } from "@/lib/networkProxy";
 import { SCHEDULED_TASKS_TAB_ID } from "@/lib/scheduledTasks";
+import { SKILL_MARKETPLACE_TAB_ID } from "@/lib/skillMarketplaceTab";
 
 export type ThemeMode = "light-glass" | "light-warm" | "dark-starry" | "dark-mocha";
 export type ThemeCategory = "light" | "dark" | "system";
@@ -491,7 +492,7 @@ function normalizeDefaultAgentId(value: unknown): AiAgentId | null {
     : null;
 }
 
-export type TabKind = "session" | "settings" | "scheduled-tasks" | "diff" | "preview" | "file";
+export type TabKind = "session" | "settings" | "scheduled-tasks" | "skill-market" | "diff" | "preview" | "file";
 export type TabDropPosition = "before" | "after";
 export type SplitDirection = "left" | "right" | "up" | "down";
 export type SplitMode = "copy" | "move";
@@ -1147,6 +1148,7 @@ function normalizeWorkspace(workspace: ProjectWorkspace, sessions: Session[]): P
         return true;
       }
       const existingTab = nextWorkspace.tabsById[tabId];
+      if (existingTab?.kind === "skill-market") return true;
       if (existingTab?.kind === "file" || existingTab?.kind === "diff") {
         existingTab.title = getFileName(existingTab.resourceId);
         if (existingTab.kind === "diff") {
@@ -1762,7 +1764,12 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
       setActiveSession: (id, paneId) =>
         set((state) => {
           if (!state.currentProject) {
-            return { activeSessionId: id };
+            const workspace = state.projectWorkspaces[LAUNCHER_WORKSPACE_KEY] || createDefaultWorkspace();
+            const nextWorkspace = activateTabInWorkspace(workspace, id, paneId);
+            return {
+              projectWorkspaces: { ...state.projectWorkspaces, [LAUNCHER_WORKSPACE_KEY]: nextWorkspace },
+              ...syncWorkspaceSnapshot(nextWorkspace),
+            };
           }
           const path = state.currentProject.path;
           const sessions = id
@@ -1795,9 +1802,9 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
 
       openTab: (tabId) =>
         set((state) => {
-          // 启动器模式允许打开设置和全局定时任务标签。
+          // 启动器模式允许打开设置、全局定时任务和技能市场标签。
           if (!state.currentProject) {
-            if (tabId !== SETTINGS_ID && tabId !== SCHEDULED_TASKS_TAB_ID) return state;
+            if (tabId !== SETTINGS_ID && tabId !== SCHEDULED_TASKS_TAB_ID && tabId !== SKILL_MARKETPLACE_TAB_ID) return state;
             const currentWorkspace = state.projectWorkspaces[LAUNCHER_WORKSPACE_KEY] || createDefaultWorkspace();
             const nextWorkspace = openTabInWorkspace(currentWorkspace, tabId, []);
             const normalizedWorkspace = normalizeWorkspace(nextWorkspace, []);

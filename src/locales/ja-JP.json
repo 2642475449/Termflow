@@ -1677,6 +1677,7 @@
       "viewListing": "skills.sh で表示",
       "viewRepository": "リポジトリを表示",
       "detailFailed": "スキルの詳細を読み込めませんでした",
+      "installing": "スキルをインストール中です。完了してからマーケットのタブを閉じてください。",
       "installFailed": "インストールに失敗しました",
       "install": "スキルをインストール",
       "back": "スキル一覧に戻る",

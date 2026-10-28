@@ -55,6 +55,7 @@ import type {
   SkillSaveRequest,
   SkillScope,
   MarketplaceSkill,
+  MarketplaceSkillSummary,
   MarketplaceSkillDetail,
   MarketplaceSkillInstallRequest,
   SkillMarketSearch,
@@ -906,6 +907,10 @@ export async function moveProjectEntries(
 // Skills API
 export async function searchSkillMarketplace(query: string): Promise<SkillMarketSearch> {
   return await invoke("search_skill_marketplace", { query });
+}
+
+export async function getMarketplaceSkillSummaries(skills: MarketplaceSkill[]): Promise<MarketplaceSkillSummary[]> {
+  return await invoke("get_marketplace_skill_summaries", { skills });
 }
 
 export async function getMarketplaceSkillDetail(skill: MarketplaceSkill, refresh = false): Promise<MarketplaceSkillDetail> {

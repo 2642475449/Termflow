@@ -1682,6 +1682,7 @@
       "viewListing": "View on skills.sh",
       "viewRepository": "View repository",
       "detailFailed": "Could not load skill details",
+      "installing": "A skill is being installed. Wait for it to finish before closing the marketplace tab.",
       "installFailed": "Installation failed",
       "install": "Install skill",
       "back": "Back to skills",

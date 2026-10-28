@@ -1,6 +1,6 @@
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { ArrowLeftOutlined, DownloadOutlined, LinkOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
-import { Alert, Button, Empty, Input, Modal, Segmented, Select, Spin, message } from "antd";
+import { Alert, Button, Empty, Input, Segmented, Select, Spin, message } from "antd";
 import { useTranslation } from "react-i18next";
 import { AgentIcon } from "@/components/AgentIcon";
 import { getAgentIdsWithCapability } from "@/lib/agents";
@@ -9,19 +9,21 @@ import { marketplaceConflicts, marketplaceDetailErrorKind, marketplaceRepository
 import { skillInstallTargets } from "@/lib/skills";
 import { useSkillMarketplaceStore } from "@/store/slices/skillMarketplaceSlice";
 import { useSkillsStore } from "@/store/slices/skillsSlice";
+import { useAppStore } from "@/store";
 import type { SkillScope } from "@/types";
 
 const SKILL_AGENTS = getAgentIdsWithCapability("skills");
 
 interface Props {
-  projectPath: string | null;
-  onInstalled: () => Promise<void>;
+  isActive: boolean;
 }
 
-export function SkillMarketplaceModal({ projectPath, onInstalled }: Props) {
+export default function SkillMarketplacePage({ isActive }: Props) {
   const { t } = useTranslation();
+  const projectPath = useAppStore((state) => state.currentProject?.path ?? null);
   const market = useSkillMarketplaceStore();
   const catalog = useSkillsStore((state) => state.catalog);
+  const catalogError = useSkillsStore((state) => state.error);
   const canSearch = [...market.query.trim()].length >= 2;
   const detail = market.detail;
   const detailErrorKind = marketplaceDetailErrorKind(market.detailError);
@@ -30,16 +32,22 @@ export function SkillMarketplaceModal({ projectPath, onInstalled }: Props) {
   const consumers = [...new Set(targets.flatMap((target) => target.consumers))];
 
   useEffect(() => {
-    if (!market.open) return;
+    if (!isActive) return;
     const timer = window.setTimeout(() => { void useSkillMarketplaceStore.getState().search(); }, 400);
     return () => window.clearTimeout(timer);
-  }, [market.open, market.query]);
+  }, [isActive, market.query]);
+
+  const refreshCatalog = useCallback(async () => {
+    await useSkillsStore.getState().refreshCatalog(projectPath);
+  }, [projectPath]);
 
   useEffect(() => {
     const state = useSkillMarketplaceStore.getState();
-    state.setOpen(false);
+    void state.selectSkill(null);
     if (!projectPath) state.setScope("user");
-  }, [projectPath]);
+    if (useSkillsStore.getState().projectPath !== projectPath) useSkillsStore.getState().setProject(projectPath);
+    void refreshCatalog().catch((reason) => console.error("Failed to load installation targets", reason));
+  }, [projectPath, refreshCatalog]);
 
   async function openSource(url: string) {
     try { await openExternalUrl(url); }
@@ -54,15 +62,16 @@ export function SkillMarketplaceModal({ projectPath, onInstalled }: Props) {
         agents: market.agents, scope: market.scope, projectPath });
     } catch (reason) { market.setInstalling(false, String(reason)); return; }
     market.setInstalling(false);
-    market.setOpen(false);
     message.success(t("settings.skills.installSuccess"));
-    try { await onInstalled(); }
+    try { await refreshCatalog(); }
     catch { message.error(t("settings.skills.loadFailed")); }
   }
 
-  return <Modal title={t("settings.skillMarket.title")} open={market.open} width={1180} centered
-    className="app-skill-market-modal" footer={null} destroyOnClose={false}
-    onCancel={() => market.setOpen(false)} closable={!market.installing} maskClosable={!market.installing} keyboard={!market.installing}>
+  return <div className="app-skill-market-page app-skills-library h-full overflow-auto">
+    <div className="app-skill-market-page-inner">
+      <div className="app-skills-toolbar"><h2 className="app-skills-title">{t("settings.skillMarket.title")}</h2></div>
+      {catalogError && <Alert type="error" showIcon className="mb-3" message={t("settings.skills.loadFailed")}
+        action={<Button onClick={() => void refreshCatalog().catch(() => message.error(t("settings.skills.loadFailed")))}>{t("common.refresh")}</Button>} />}
     {market.selected ? <div>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <Button type="text" icon={<ArrowLeftOutlined />} disabled={market.installing} onClick={() => void market.selectSkill(null)}>{t("settings.skillMarket.back")}</Button>
@@ -146,5 +155,6 @@ export function SkillMarketplaceModal({ projectPath, onInstalled }: Props) {
       </div>
       {market.results?.limited && <p className="app-skills-muted text-xs mt-3">{t("settings.skillMarket.limited")}</p>}
     </div>}
-  </Modal>;
+    </div>
+  </div>;
 }

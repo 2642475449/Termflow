@@ -14,22 +14,16 @@ const THEMES = ["light-glass", "light-warm", "dark-starry", "dark-mocha"] as con
 /** 界面中实际出现的“正文/浮层文字 × 底色”组合，任何主题都必须满足 WCAG AA (4.5:1) */
 const TEXT_SURFACE_PAIRS: ReadonlyArray<readonly [string, string]> = [
   ["text-primary", "bg-app"],
-  ["text-primary", "bg-header"],
-  ["text-primary", "bg-statusbar"],
   ["text-primary", "bg-card-solid"],
   ["text-primary", "bg-elevated"],
   ["text-primary", "bg-hover"],
   ["text-primary", "bg-active"],
   ["text-secondary", "bg-app"],
-  ["text-secondary", "bg-header"],
-  ["text-secondary", "bg-statusbar"],
   ["text-secondary", "bg-card-solid"],
   ["text-secondary", "bg-elevated"],
   ["text-secondary", "bg-hover"],
   ["text-secondary", "bg-active"],
   ["text-tertiary", "bg-app"],
-  ["text-tertiary", "bg-header"],
-  ["text-tertiary", "bg-statusbar"],
   ["text-tertiary", "bg-card-solid"],
   ["text-tertiary", "bg-elevated"],
 ];

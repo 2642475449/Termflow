@@ -734,6 +734,12 @@ export interface SkillMarketSearch {
   limited: boolean;
 }
 
+export interface MarketplaceSkillSummary {
+  repository: string;
+  slug: string;
+  description: string;
+}
+
 export interface MarketplaceSkillDetail {
   skill: MarketplaceSkill;
   revision: string;

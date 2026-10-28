@@ -291,6 +291,7 @@ pub fn run() {
             commands::skills::create_skill,
             commands::skills::install_skill,
             commands::skill_marketplace::search_skill_marketplace,
+            commands::skill_marketplace::get_marketplace_skill_summaries,
             commands::skill_marketplace::get_marketplace_skill_detail,
             commands::skill_marketplace::install_marketplace_skill,
             commands::skills::ensure_skill_directory,

@@ -34,8 +34,13 @@
   }
 
   .app-window-control-close:hover {
-    background: var(--cs-danger-hover);
-    color: var(--cs-danger);
+    background: var(--cs-window-close-hover-bg);
+    color: var(--cs-window-close-text);
+  }
+
+  .app-window-control-close:active {
+    background: var(--cs-window-close-pressed-bg);
+    color: var(--cs-window-close-text);
   }
 
   .app-titlebar-search {

@@ -1677,6 +1677,7 @@
       "viewListing": "檢視 skills.sh 頁面",
       "viewRepository": "檢視來源儲存庫",
       "detailFailed": "載入技能詳情失敗",
+      "installing": "正在安裝技能，請等待安裝完成後再關閉市場分頁。",
       "installFailed": "安裝失敗",
       "install": "安裝技能",
       "back": "返回技能清單",
