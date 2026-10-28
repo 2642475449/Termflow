@@ -1,4 +1,3 @@
-import MonacoTextEditor from "@/components/editors/MonacoTextEditor";
 import {
   FileSearchOutlined,
   LoadingOutlined,
@@ -7,6 +6,8 @@ import {
 import { Button, Input, Modal, Select, Spin, Tooltip } from "antd";
 import type { TextAreaRef } from "antd/es/input/TextArea";
 import {
+  lazy,
+  Suspense,
   startTransition,
   useCallback,
   useDeferredValue,
@@ -47,6 +48,8 @@ interface SearchResultGroup {
 }
 
 const RESULT_FLUSH_INTERVAL_MS = 100;
+// 弹窗常驻以保留搜索状态；仅显示结果预览时加载编辑器。
+const MonacoTextEditor = lazy(() => import("@/components/editors/MonacoTextEditor"));
 
 function parsePatterns(value: string): string[] {
   return value
@@ -618,15 +621,17 @@ function GlobalTextSearchDialog({
                   ) : preview.error ? (
                     <div className="app-global-search-empty" role="alert">{preview.error}</div>
                   ) : (
-                    <MonacoTextEditor
-                      key={selectedMatch.path}
-                      filePath={`search-preview:///${selectedMatch.path.replace(/\\/g, "/")}`}
-                      value={preview.content}
-                      readOnly
-                      onChange={() => {}}
-                      revealTarget={previewTarget}
-                      focusOnReveal={false}
-                    />
+                    <Suspense fallback={<div className="app-global-search-empty"><Spin /></div>}>
+                      <MonacoTextEditor
+                        key={selectedMatch.path}
+                        filePath={`search-preview:///${selectedMatch.path.replace(/\\/g, "/")}`}
+                        value={preview.content}
+                        readOnly
+                        onChange={() => {}}
+                        revealTarget={previewTarget}
+                        focusOnReveal={false}
+                      />
+                    </Suspense>
                   )}
                 </div>
 

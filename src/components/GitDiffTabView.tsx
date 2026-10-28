@@ -30,7 +30,6 @@ import MonacoContextMenu from "@/components/editors/MonacoContextMenu";
 import { GitConflictTabView } from "@/components/GitConflictTabView";
 
 loader.config({ monaco });
-registerRichCodeTokens();
 
 interface GitDiffTabViewProps {
   tabId: string;
@@ -105,6 +104,7 @@ function GitDiffTabView({ tabId }: GitDiffTabViewProps) {
 
   const handleDiffEditorMount = useCallback(
     (editor: monaco.editor.IStandaloneDiffEditor) => {
+      registerRichCodeTokens();
       diffUpdateSubscriptionRef.current?.dispose();
       diffEditorRef.current = editor;
       disableMonacoCommandPalette(editor.getOriginalEditor(), monaco);

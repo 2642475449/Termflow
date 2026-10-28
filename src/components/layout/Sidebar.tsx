@@ -2,6 +2,7 @@ import { useShortcutStore } from "@/store/slices/shortcutSlice";
 import { getAppShortcut } from "@/lib/appShortcuts";
 import { formatShortcutDisplay } from "@/lib/shortcut";
 import { retrySessionTitle } from "@/store/slices/sessionTitleSlice";
+import { getNativeSessionTitle } from "@/lib/sessionTitles";
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Layout, message, Modal, Input, Tooltip } from "antd";
 import type { MenuProps } from "antd";
@@ -270,7 +271,7 @@ function Sidebar({ collapsed, section }: SidebarProps) {
         icon: <EditOutlined />,
         onClick: () => handleOpenRename(session.id, session.name),
       },
-      ...(session.titleSource !== "manual" && !session.manualTitle &&
+      ...(session.titleSource !== "manual" && !session.manualTitle && !getNativeSessionTitle(session) &&
         (session.titleGeneration || session.firstPromptTitle || session.temporaryTitle)
         ? [{
             key: "retry-title",

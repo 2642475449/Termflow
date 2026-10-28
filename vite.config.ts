@@ -7,6 +7,14 @@ import { fileViewerRenderers } from "@file-viewer/vite-plugin";
 
 const host = process.env.TAURI_DEV_HOST;
 
+// 与 Office 插件复制的离线资源共用路径，避免 Vite 再生成一份带哈希的副本。
+// 保留 copyAssets：PPT Worker 仍通过相对路径读取这些文件。
+const OFFICE_ASSET_PATHS = new Map([
+  ["ppt-font-cjk.otf", "vendor/ppt/ppt-font-cjk.otf"],
+  ["ppt-native.wasm", "vendor/ppt/ppt-native.wasm"],
+  ["pptx.worker.js", "vendor/pptx/pptx.worker.js"],
+]);
+
 export default defineConfig(async () => ({
   plugins: [
     {
@@ -54,7 +62,13 @@ export default defineConfig(async () => ({
         // Rollup's default `.[ext]` suffix leaves a trailing dot for extensionless
         // assets such as third-party LICENSE files. Windows cannot embed such a
         // path during the Tauri build, so use extname (including its own dot).
-        assetFileNames: "assets/[name]-[hash][extname]",
+        assetFileNames: (asset) => {
+          for (const name of asset.names) {
+            const officePath = OFFICE_ASSET_PATHS.get(name);
+            if (officePath) return officePath;
+          }
+          return "assets/[name]-[hash][extname]";
+        },
       },
     },
   },

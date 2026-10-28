@@ -15,7 +15,6 @@ import { useFileEditorStatusStore } from "@/store/slices/fileEditorStatus";
 import type { FileRevealTarget } from "@/lib/fileNavigation";
 
 loader.config({ monaco });
-registerRichCodeTokens();
 
 interface MonacoTextEditorProps {
   statusTabId?: string;
@@ -111,6 +110,7 @@ function MonacoTextEditor({
   const typography = getMonacoTypography(Math.max(13, editorFontSize));
 
   const handleMount: OnMount = (editor, monaco) => {
+    registerRichCodeTokens();
     editorRef.current = editor;
     if (statusTabId) {
       const updateStatus = () => {

@@ -11,9 +11,12 @@ function setSessionTitleState(id: string, change: (session: Session) => Session)
     const projectWorkspaces = { ...state.projectWorkspaces };
     let changed = false;
     for (const [path, sessions] of Object.entries(projectSessions)) {
-      if (!sessions.some((session) => session.id === id)) continue;
-      projectSessions[path] = sessions.map((session) => session.id === id ? change(session) : session);
-      const name = projectSessions[path].find((session) => session.id === id)!.name;
+      const current = sessions.find((session) => session.id === id);
+      if (!current) continue;
+      const next = change(current);
+      if (next === current) continue;
+      projectSessions[path] = sessions.map((session) => session.id === id ? next : session);
+      const name = next.name;
       const workspace = projectWorkspaces[path];
       if (workspace) projectWorkspaces[path] = {
         ...workspace,

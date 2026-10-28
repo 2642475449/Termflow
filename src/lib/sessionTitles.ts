@@ -113,13 +113,18 @@ export function startTitleGeneration(deps: TitleGenerationDependencies): () => v
   // 上次进程退出时未完成的请求重新排队，不把它视为已生成。
   for (const session of deps.sessions()) {
     const job = session.titleGeneration;
-    if (job && (job.status === "generating" ||
-      (session.agentId === "codex" && job.status === "pending" && job.notBefore === undefined))) {
+    const waitForNative = session.agentId === "codex" && !getNativeSessionTitle(session) && job &&
+      (job.status === "pending" || job.status === "generating" ||
+        (job.status === "failed" && job.nextRetryAt !== undefined));
+    if (job && (job.status === "generating" || waitForNative)) {
+      // 重启后也先给原生索引一次读取机会，不能因旧期限已过而立即重复生成。
+      const notBefore = waitForNative ? Math.max(job.notBefore ?? 0, Date.now() + CODEX_NATIVE_TITLE_WAIT_MS) : job.notBefore;
       deps.update(session.id, (current) => ({
         ...current, titleGeneration: {
-          ...job, status: "pending", requestId: undefined,
-          ...(session.agentId === "codex" && job.notBefore === undefined
-            ? { notBefore: Date.now() + CODEX_NATIVE_TITLE_WAIT_MS } : {}),
+          ...job, status: job.status === "generating" ? "pending" : job.status, requestId: undefined,
+          notBefore,
+          ...(waitForNative && job.nextRetryAt !== undefined
+            ? { nextRetryAt: Math.max(job.nextRetryAt, notBefore!) } : {}),
         },
       }));
     }

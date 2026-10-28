@@ -130,3 +130,20 @@ it("does not queue AI for an existing native title or apply AI after native arri
   expect(completeSessionTitle(current, "r", { title: "AI 名称" }, 0)).toBe(current);
   expect(queueSessionTitle(current, "修复 bug").name).toBe("原生名称");
 });
+
+it("gives native lookup time after restart even when a persisted fallback retry is overdue", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(100_000);
+  let current = session({ agentId: "codex", titleGeneration: {
+    prompt: "修复 bug", status: "failed", attempts: 1, notBefore: 10, nextRetryAt: 20,
+  } });
+  const generate = vi.fn().mockResolvedValue("AI 名称");
+  const stop = startTitleGeneration({ sessions: () => [current],
+    update: (_, change) => { current = change(current); }, generate, subscribe: () => () => {},
+  });
+  await vi.advanceTimersByTimeAsync(CODEX_NATIVE_TITLE_WAIT_MS - 1);
+  expect(generate).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(2);
+  expect(generate).toHaveBeenCalledOnce();
+  stop();
+});

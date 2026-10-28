@@ -131,13 +131,11 @@ Termflow 是基于 **Tauri 2** 的本地桌面工作台，在同一项目上下�
 | `index.ts` | 主 store 定义（大型单文件，正在重构中） |
 | `types.ts` | Store 状态与 Action 类型定义 |
 | `slices/` | Store 分片（重构目标目录） |
-| `slices/sessionSlice.ts` | 会话相关状态 |
-| `slices/terminal.ts` | 终端相关状态 |
-| `slices/theme.ts` | 主题相关状态 |
-| `slices/windowSlice.ts` | 窗口相关状态 |
-| `slices/workspaceSlice.ts` | 工作区相关状态 |
-| `slices/notification.ts` | 通知相关状态 |
-| `slices/security.ts` | 安全/权限相关状态 |
+| `slices/sessionTitleSlice.ts` | 会话标题生成与同步 |
+| `slices/terminalCompletionRuntime.ts` | 终端完成通知运行时 |
+| `slices/terminalCompletionNotification.ts` | 终端完成通知设置 |
+| `slices/networkProxy.ts` | 网络代理设置 |
+| `slices/voicePolish.ts` | 语音润色设置 |
 | `utils/` | Store 工具函数 |
 | `utils/recentProjects.ts` | 最近项目管理 |
 | `utils/session.ts` | 会话工具函数 |
@@ -148,6 +146,7 @@ Termflow 是基于 **Tauri 2** 的本地桌面工作台，在同一项目上下�
 - Action 函数使用 `set` 前缀（`setLightTheme`）或 `toggle` 前缀（`toggleSidebar`）
 - Normalize 函数使用 `normalize` 前缀（`normalizeAsrModel`）
 - **新状态必须放入 `slices/` 目录**，不要修改 `index.ts` 中的大型 store
+- 未接入的旧主题、终端、会话、窗口、工作区、通知和权限分片已移除；相关有效实现仍在主 store。后续迁移须保持当前行为并替换旧实现，避免留下平行副本。
 - 持久化走双轨：Zustand persist（localStorage）+ SQLite（通过 Tauri 命令）
 - 禁止在组件中绕过 store 直接操作状态
 
