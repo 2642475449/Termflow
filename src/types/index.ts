@@ -719,6 +719,43 @@ export interface SearchIndexStorageStatus {
 }
 
 export type SkillScope = "workspace" | "user";
+export type SkillMarketProvider = "openai" | "anthropic" | "community";
+
+export interface MarketplaceSkill {
+  provider: SkillMarketProvider;
+  repository: string;
+  slug: string;
+  name: string;
+  description: string;
+  installs: number | null;
+}
+
+export interface SkillMarketSearch {
+  skills: MarketplaceSkill[];
+  warnings: { provider: SkillMarketProvider; reason: string }[];
+  communityLimited: boolean;
+}
+
+export interface MarketplaceSkillDetail {
+  skill: MarketplaceSkill;
+  revision: string;
+  directory: string;
+  folderName: string;
+  content: string;
+  fileCount: number;
+  files: string[];
+  totalBytes: number;
+  sourceUrl: string;
+}
+
+export interface MarketplaceSkillInstallRequest {
+  skill: MarketplaceSkill;
+  revision: string;
+  directory: string;
+  agents: SkillAgent[];
+  scope: SkillScope;
+  projectPath: string | null;
+}
 export type SkillAgent = AiAgentId;
 export type SkillConflictStatus = "none" | "identical-copy" | "diverged-copy" | "runtime-conflict";
 
@@ -757,6 +794,25 @@ export interface SkillCatalog {
 export interface SkillDetail {
   skill: SkillInfo;
   content: string;
+}
+
+export type SkillValidationIssue = "missingFrontmatter" | "malformedYaml" | "invalidName" | "nameMismatch" | "invalidDescription" | "validationUnavailable";
+
+export interface SkillValidation {
+  issues: SkillValidationIssue[];
+  name: string;
+  description: string;
+}
+
+export interface SkillSaveRequest {
+  agent: SkillAgent;
+  scope: SkillScope;
+  folderName: string;
+  enabled: boolean;
+  projectPath: string | null;
+  content: string;
+  expectedContent: string;
+  expectedResolvedPath: string;
 }
 
 export type CommandShell = "default" | "powershell" | "cmd" | "bash";

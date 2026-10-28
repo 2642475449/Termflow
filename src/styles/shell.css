@@ -88,14 +88,34 @@
     line-height: 18px;
   }
 
+  .app-session-time,
+  .app-session-actions {
+    grid-area: 1 / 1;
+  }
+
+  .app-session-time {
+    color: var(--cs-text-tertiary);
+  }
+
+  .app-session-list-item[data-active="true"] .app-session-time {
+    color: color-mix(in srgb, var(--cs-primary) 58%, var(--cs-text-secondary) 42%);
+  }
+
   .app-session-actions {
     opacity: 0;
+    pointer-events: none;
     transition: opacity 140ms ease;
+  }
+
+  .app-session-list-item:hover .app-session-time,
+  .app-session-list-item:focus-within .app-session-time {
+    visibility: hidden;
   }
 
   .app-session-list-item:hover .app-session-actions,
   .app-session-list-item:focus-within .app-session-actions {
     opacity: 1;
+    pointer-events: auto;
   }
 
   .app-tab-chrome[data-active="true"] .app-tabbar-title {

@@ -112,9 +112,6 @@ function SidebarSessionsPanel({
   function renderSessionItem(session: Session) {
     const isActive = activeSessionId === session.id;
     const titleColor = isActive ? "var(--cs-text-primary)" : "var(--cs-text-secondary)";
-    const metaColor = isActive
-      ? "color-mix(in srgb, var(--cs-primary) 58%, var(--cs-text-secondary) 42%)"
-      : "var(--cs-text-tertiary)";
     const currentAttentionItem = attentionBySession.get(session.id);
     // Failures remain available to the notification/diagnostics flows, but a
     // historical execution error should not occupy the persistent session-row
@@ -122,6 +119,11 @@ function SidebarSessionsPanel({
     const attentionItem =
       currentAttentionItem?.kind === "failure" ? undefined : currentAttentionItem;
     const tone = attentionItem ? attentionTone(attentionItem.kind) : null;
+    const hasPendingCheckpoint = (session.checkpointPendingTurns ?? 0) > 0;
+    const timestamp = session.lastEventAt ?? session.createdAt;
+    const relative = dayjs(timestamp)
+      .locale(locale.startsWith("zh") ? "zh-cn" : "en")
+      .fromNow();
 
     return (
       <Dropdown
@@ -151,111 +153,104 @@ function SidebarSessionsPanel({
                 <span className="min-w-0 flex-1 truncate">{session.name}</span>
               </Tooltip>
             </div>
-            {(() => {
-              const ts = session.lastEventAt ?? session.createdAt;
-              const relative = dayjs(ts)
-                .locale(locale.startsWith("zh") ? "zh-cn" : "en")
-                .fromNow();
-              return (
-                <div className="app-session-meta mt-0.5 flex min-w-0 items-center gap-1.5">
-                  {(session.checkpointPendingTurns ?? 0) > 0 && (
-                    <>
-                      <Tooltip
-                        title={t("checkpointReview.pendingHint", {
-                          files: session.checkpointFileCount ?? 0,
-                          additions: session.checkpointInsertions ?? 0,
-                          deletions: session.checkpointDeletions ?? 0,
+            {(hasPendingCheckpoint || attentionItem) && (
+              <div className="app-session-meta mt-0.5 flex min-w-0 items-center gap-1.5">
+                {hasPendingCheckpoint && (
+                  <Tooltip
+                    title={t("checkpointReview.pendingHint", {
+                      files: session.checkpointFileCount ?? 0,
+                      additions: session.checkpointInsertions ?? 0,
+                      deletions: session.checkpointDeletions ?? 0,
+                    })}
+                    mouseEnterDelay={0.35}
+                  >
+                    <button
+                      type="button"
+                      className="inline-flex min-w-0 items-center gap-1 truncate font-medium"
+                      style={{ color: "var(--cs-primary)" }}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onOpenCheckpointReview(session.id);
+                      }}
+                    >
+                      <SafetyCertificateOutlined className="shrink-0 text-[10px]" />
+                      <span className="truncate">
+                        {t("checkpointReview.pendingBadge", {
+                          count: session.checkpointPendingTurns,
                         })}
-                        mouseEnterDelay={0.35}
-                      >
-                        <button
-                          type="button"
-                          className="inline-flex min-w-0 items-center gap-1 truncate font-medium"
-                          style={{ color: "var(--cs-primary)" }}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            onOpenCheckpointReview(session.id);
-                          }}
-                        >
-                          <SafetyCertificateOutlined className="shrink-0 text-[10px]" />
-                          <span className="truncate">
-                            {t("checkpointReview.pendingBadge", {
-                              count: session.checkpointPendingTurns,
-                            })}
-                          </span>
-                        </button>
-                      </Tooltip>
-                      <span aria-hidden="true" style={{ color: "var(--cs-text-tertiary)" }}>·</span>
-                    </>
-                  )}
-                  {attentionItem && tone && (
-                    <>
-                      <Tooltip
-                        title={t(`sidebar.attentionKind.${attentionItem.kind}`)}
-                        mouseEnterDelay={0.4}
-                      >
-                        <span
-                          className="inline-flex min-w-0 items-center gap-1.5 truncate font-medium"
-                          style={{ color: tone.color }}
-                        >
-                          <span
-                            className="h-1.5 w-1.5 shrink-0 rounded-full"
-                            style={{
-                              background: tone.color,
-                              boxShadow: `0 0 0 2px ${tone.halo}`,
-                            }}
-                          />
-                          <span className="truncate">
-                            {t(`sidebar.sessionAttention.${attentionItem.kind}`)}
-                          </span>
-                        </span>
-                      </Tooltip>
-                      <span aria-hidden="true" style={{ color: "var(--cs-text-tertiary)" }}>
-                        ·
                       </span>
-                    </>
-                  )}
-                  <Tooltip title={dayjs(ts).format("YYYY-MM-DD HH:mm:ss")} mouseEnterDelay={0.5}>
-                    <span className="shrink-0" style={{ color: metaColor }}>
-                      {relative}
+                    </button>
+                  </Tooltip>
+                )}
+                {hasPendingCheckpoint && attentionItem && (
+                  <span aria-hidden="true" className="text-[var(--cs-text-tertiary)]">·</span>
+                )}
+                {attentionItem && tone && (
+                  <Tooltip
+                    title={t(`sidebar.attentionKind.${attentionItem.kind}`)}
+                    mouseEnterDelay={0.4}
+                  >
+                    <span
+                      className="inline-flex min-w-0 items-center gap-1.5 truncate font-medium"
+                      style={{ color: tone.color }}
+                    >
+                      <span
+                        className="h-1.5 w-1.5 shrink-0 rounded-full"
+                        style={{
+                          background: tone.color,
+                          boxShadow: `0 0 0 2px ${tone.halo}`,
+                        }}
+                      />
+                      <span className="truncate">
+                        {t(`sidebar.sessionAttention.${attentionItem.kind}`)}
+                      </span>
                     </span>
                   </Tooltip>
-                </div>
-              );
-            })()}
+                )}
+              </div>
+            )}
           </div>
 
-          <div className="app-session-actions ml-auto flex items-center">
-            <Tooltip title={session.pinned ? unpinSessionText : pinSessionText} mouseEnterDelay={0.5}>
-              <button
-                type="button"
-                className="flex h-6 w-6 items-center justify-center rounded"
-                style={{ color: "var(--cs-text-tertiary)" }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onTogglePinSession(session.id);
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = "var(--cs-primary)")}
-                onMouseLeave={(e) => (e.currentTarget.style.color = "var(--cs-text-tertiary)")}
-              >
-                {session.pinned ? <PushpinFilled className="text-sm" /> : <PushpinOutlined className="text-sm" />}
-              </button>
+          <div className="app-session-trailing ml-auto grid shrink-0 items-center">
+            <Tooltip title={dayjs(timestamp).format("YYYY-MM-DD HH:mm:ss")} mouseEnterDelay={0.5}>
+              <span className="app-session-time justify-self-end whitespace-nowrap text-xs">
+                {relative}
+              </span>
             </Tooltip>
-            <Tooltip title={archiveSessionText} mouseEnterDelay={0.5}>
-              <button
-                type="button"
-                className="flex h-6 w-6 items-center justify-center rounded"
-                style={{ color: "var(--cs-text-tertiary)" }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onArchiveSession(session.id);
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = "var(--cs-primary)")}
-                onMouseLeave={(e) => (e.currentTarget.style.color = "var(--cs-text-tertiary)")}
-              >
-                <InboxOutlined className="text-sm" />
-              </button>
-            </Tooltip>
+            <div className="app-session-actions flex items-center justify-end">
+              <Tooltip title={session.pinned ? unpinSessionText : pinSessionText} mouseEnterDelay={0.5}>
+                <button
+                  type="button"
+                  aria-label={session.pinned ? unpinSessionText : pinSessionText}
+                  className="flex h-6 w-6 items-center justify-center rounded"
+                  style={{ color: "var(--cs-text-tertiary)" }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTogglePinSession(session.id);
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "var(--cs-primary)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "var(--cs-text-tertiary)")}
+                >
+                  {session.pinned ? <PushpinFilled className="text-sm" /> : <PushpinOutlined className="text-sm" />}
+                </button>
+              </Tooltip>
+              <Tooltip title={archiveSessionText} mouseEnterDelay={0.5}>
+                <button
+                  type="button"
+                  aria-label={archiveSessionText}
+                  className="flex h-6 w-6 items-center justify-center rounded"
+                  style={{ color: "var(--cs-text-tertiary)" }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onArchiveSession(session.id);
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "var(--cs-primary)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "var(--cs-text-tertiary)")}
+                >
+                  <InboxOutlined className="text-sm" />
+                </button>
+              </Tooltip>
+            </div>
           </div>
         </div>
       </Dropdown>

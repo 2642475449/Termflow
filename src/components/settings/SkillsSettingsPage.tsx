@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FolderOpenOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
-import { Alert, Button, Drawer, Empty, Input, Modal, Pagination, Segmented, Select, Spin, Switch, Tag, Tooltip, message } from "antd";
+import { FolderOpenOutlined, PlusOutlined, ReloadOutlined, SearchOutlined, ShopOutlined } from "@ant-design/icons";
+import { Alert, Button, Empty, Input, Modal, Pagination, Segmented, Select, Spin, Switch, Tabs, Tag, Tooltip, message } from "antd";
 import { useTranslation } from "react-i18next";
 import { AgentIcon } from "@/components/AgentIcon";
+import { SkillContentEditor } from "./SkillContentEditor";
 import { useAppStore } from "@/store";
 import { useSkillsStore } from "@/store/slices/skillsSlice";
+import { useSkillMarketplaceStore } from "@/store/slices/skillMarketplaceSlice";
+import { SkillMarketplaceModal } from "./SkillMarketplaceModal";
 import { getAgentIdsWithCapability } from "@/lib/agents";
-import { ensureSkillDirectory, getSkillDetail, installSkill, listSkills, openInFileManager, selectSkillImportDirectory, setSkillEnabled } from "@/lib/api";
-import { filterSkillGroups, groupSkills, isSkillLinked, skillFolderName, skillInstallTargets, skillToggleBlocked } from "@/lib/skills";
+import { ensureSkillDirectory, getSkillDetail, installSkill, listSkills, openInFileManager, saveSkillContent, selectSkillImportDirectory, setSkillEnabled } from "@/lib/api";
+import { filterSkillGroups, groupSkills, isSkillLinked, skillEditorKey, skillFolderName, skillInstallTargets, skillToggleBlocked } from "@/lib/skills";
 import type { SkillAgent, SkillInfo, SkillScope } from "@/types";
 
 const SKILL_AGENTS = getAgentIdsWithCapability("skills");
@@ -16,14 +19,17 @@ const PAGE_SIZE = 10;
 export function SkillsSettingsPage() {
   const { t } = useTranslation();
   const projectPath = useAppStore((state) => state.currentProject?.path ?? null);
-  const { catalog, loading, error } = useSkillsStore();
+  const { catalog, loading, error, editors } = useSkillsStore();
   const [scope, setScope] = useState<"all" | SkillScope>("all");
   const [agent, setAgent] = useState<"all" | SkillAgent>("all");
   const [status, setStatus] = useState<"all" | "enabled" | "disabled">("all");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<string | null>(null);
-  const [content, setContent] = useState<string | null>(null);
+  const [detailTab, setDetailTab] = useState("content");
+  const [saving, setSaving] = useState(false);
+  const [saveConflict, setSaveConflict] = useState(false);
+  const [discardIntent, setDiscardIntent] = useState<"close" | "reload" | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -74,17 +80,23 @@ export function SkillsSettingsPage() {
   const filtered = filterSkillGroups(groups, search, agent, scope, status);
   const selectedGroup = groups.find((group) => group.id === selected);
   const selectedLocation = selectedGroup?.locations[0];
+  const editorKey = selected ? skillEditorKey(projectPath, selected) : "";
+  const editor = editors[editorKey];
+  const editorDirty = !!editor && editor.draft !== editor.original;
   const currentPage = Math.min(page, Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)));
   const preview = skillInstallTargets(catalog, targets, addScope);
   const consumers = [...new Set(preview.flatMap((target) => target.consumers))];
 
   useEffect(() => {
     const request = ++detailId.current;
-    setContent(null);
+    setSaveConflict(false);
+    setDiscardIntent(null);
     if (!selectedLocation) { setDetailLoading(false); return; }
     setDetailLoading(true);
     void getSkillDetail(selectedLocation.agent, selectedLocation.scope, selectedLocation.folderName, selectedLocation.enabled, projectPath)
-      .then((detail) => { if (request === detailId.current) setContent(detail.content); })
+      .then((detail) => {
+        if (request === detailId.current) useSkillsStore.getState().setEditorLoaded(editorKey, detail.content);
+      })
       .catch((reason: unknown) => {
         if (request === detailId.current) {
           message.error(t("settings.skills.loadDetailFailed"));
@@ -92,14 +104,72 @@ export function SkillsSettingsPage() {
         }
       }).finally(() => { if (request === detailId.current) setDetailLoading(false); });
     return () => { detailId.current++; };
-  }, [selectedLocation, projectPath, t]);
+  }, [selectedLocation, projectPath, editorKey, t]);
+
+  useEffect(() => {
+    if (!editorDirty) return;
+    const beforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [editorDirty]);
+
+  async function saveContent() {
+    if (!selectedLocation || !editor || saving || saveConflict) return;
+    const submitted = editor.draft;
+    const key = editorKey;
+    setSaving(true);
+    try {
+      const detail = await saveSkillContent({ agent: selectedLocation.agent, scope: selectedLocation.scope,
+        folderName: selectedLocation.folderName, enabled: selectedLocation.enabled, projectPath,
+        content: submitted, expectedContent: editor.original, expectedResolvedPath: selectedLocation.resolvedFilePath });
+      useSkillsStore.getState().setEditorSaved(key, submitted, detail.content);
+      await refresh();
+      message.success(t("settings.skills.editor.saved"));
+    } catch (reason) {
+      if (String(reason) === "skill_content_changed" || String(reason) === "skill_path_changed") setSaveConflict(true);
+      else failure(reason);
+    } finally { setSaving(false); }
+  }
+
+  async function reloadContent() {
+    if (!selectedLocation || saving) return;
+    const request = ++detailId.current;
+    setDetailLoading(true);
+    try {
+      const detail = await getSkillDetail(selectedLocation.agent, selectedLocation.scope, selectedLocation.folderName, selectedLocation.enabled, projectPath);
+      if (request === detailId.current) {
+        const nextKey = skillEditorKey(projectPath, detail.skill.resolvedFilePath);
+        useSkillsStore.getState().setEditorLoaded(nextKey, detail.content, true);
+        setSaveConflict(false);
+        if (detail.skill.resolvedFilePath !== selected) {
+          await refresh();
+          setSelected((current) => current === selected ? detail.skill.resolvedFilePath : current);
+        }
+      }
+    } catch (reason) { failure(reason); }
+    finally { if (request === detailId.current) setDetailLoading(false); }
+  }
+
+  function closeDetail() {
+    if (saving) return;
+    if (editorDirty) setDiscardIntent("close");
+    else setSelected(null);
+  }
+
+  function discardChanges() {
+    const intent = discardIntent;
+    setDiscardIntent(null);
+    if (intent === "reload") { void reloadContent(); return; }
+    if (editor) useSkillsStore.getState().setEditorDraft(editorKey, editor.original);
+    setSelected(null);
+  }
 
   async function openFolder(path: string) {
     try { await openInFileManager(path); } catch (reason) { failure(reason); }
   }
 
   async function toggle(skill: SkillInfo, enabled: boolean) {
-    if (!catalog || skillToggleBlocked(skill, catalog)) return;
+    if (!catalog || editorDirty || saving || skillToggleBlocked(skill, catalog)) return;
     setBusy(skill.id);
     try {
       const updated = await setSkillEnabled(skill.agent, skill.scope, skill.folderName, skill.enabled, enabled, projectPath);
@@ -129,6 +199,7 @@ export function SkillsSettingsPage() {
       setAddOpen(false);
       setScope("all"); setAgent("all"); setStatus("all"); setSearch(""); setPage(1);
       await refresh();
+      setDetailTab("content");
       setSelected(installed[0]?.resolvedFilePath ?? null);
       message.success(t("settings.skills.installSuccess"));
     } catch (reason) { failure(reason); }
@@ -137,12 +208,14 @@ export function SkillsSettingsPage() {
 
   const changeFilter = () => setPage(1);
   return <div className="app-skills-library">
+    <SkillMarketplaceModal projectPath={projectPath} onInstalled={refresh} />
     <div className="app-skills-toolbar">
       <div>
         <h2 className="app-skills-title">{t("settings.menu.skills")} <span className="app-skills-muted">{groups.length}</span></h2>
         <p className="app-skills-muted text-xs mt-1">{t("settings.skills.libraryDescription")}</p>
       </div>
       <div className="flex gap-2">
+        <Button icon={<ShopOutlined />} onClick={() => useSkillMarketplaceStore.getState().setOpen(true)}>{t("settings.skillMarket.title")}</Button>
         <Button icon={<ReloadOutlined spin={loading} />} onClick={() => void refresh()}>{t("common.refresh")}</Button>
         <Button type="primary" icon={<PlusOutlined />} disabled={!catalog} onClick={openAdd}>{t("settings.skills.addSkill")}</Button>
       </div>
@@ -182,7 +255,7 @@ export function SkillsSettingsPage() {
           const skill = group.locations[0];
           const available = [...new Set(group.locations.filter((item) => item.enabled).flatMap((item) => item.effectiveAgents))];
           const conflict = group.locations.find((item) => item.conflictStatus !== "none")?.conflictStatus;
-          return <button key={group.id} type="button" className="app-skills-row" onClick={() => setSelected(group.id)}>
+          return <button key={group.id} type="button" className="app-skills-row" onClick={() => { setDetailTab("content"); setSelected(group.id); }}>
             <div className="app-skills-row-body">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-medium text-sm">{skill.name}</span>
@@ -204,47 +277,69 @@ export function SkillsSettingsPage() {
       {filtered.length > PAGE_SIZE && <div className="flex justify-end p-4"><Pagination current={currentPage} total={filtered.length} pageSize={PAGE_SIZE} showSizeChanger={false} onChange={setPage} /></div>}
     </div>}
 
-    <Drawer title={selectedGroup?.skill.name ?? t("settings.skills.detailTitle")} open={!!selectedGroup} width={640}
-      onClose={() => setSelected(null)} destroyOnClose={false}>
-      {selectedGroup && catalog && <div className="space-y-5 app-skills-detail">
-        <div><div className="app-skills-muted text-xs mb-2">{t("settings.skills.realFile")}</div><p className="app-skills-path">{selectedGroup.id}</p></div>
-        <div>
-          <h3 className="text-sm font-medium mb-2">{t("settings.skills.connections")}</h3>
-          <p className="app-skills-muted text-xs mb-3">{t("settings.skills.discoveryHint")}</p>
-          {SKILL_AGENTS.map((id) => {
-            const location = selectedGroup.locations.find((item) => item.enabled && item.effectiveAgents.includes(id))
-              ?? selectedGroup.locations.find((item) => item.effectiveAgents.includes(id));
-            const copy = catalog.skills.find((item) => item.name === selectedGroup.skill.name && item.resolvedFilePath !== selectedGroup.id
-              && item.contentFingerprint === selectedGroup.skill.contentFingerprint && item.effectiveAgents.includes(id) && item.enabled);
-            const connection = location ? (isSkillLinked(location) ? "connectionLinked" : "connectionDirect") : copy ? "connectionCopy" : "connectionNone";
-            return <div key={id} className="app-skills-connection">
-              <span className="inline-flex items-center gap-2 text-sm"><AgentIcon agentId={id} size={16} />{label(id)}</span>
-              <span><Tag>{t(`settings.skills.${connection}`)}</Tag>{location && !location.enabled && <Tag>{t("common.disabled")}</Tag>}</span>
-            </div>;
-          })}
-        </div>
-        <div>
-          <h3 className="text-sm font-medium mb-3">{t("settings.skills.entryManagement")}</h3>
-          {selectedGroup.locations.map((skill) => <div key={`${skill.id}:${skill.enabled}`} className="app-skills-entry">
-            <div className="flex items-center justify-between gap-3 mb-2">
-              <span className="text-xs">{scopeLabel(skill.scope)} · {isSkillLinked(skill) ? t("settings.skills.connectionLinked") : t("settings.skills.connectionDirect")}</span>
-              <Tooltip title={skillToggleBlocked(skill, catalog) ? t("settings.skills.linkedSourceProtected") : undefined}>
-                <span><Switch checked={skill.enabled} loading={busy === skill.id} disabled={!!busy || skillToggleBlocked(skill, catalog)}
-                  checkedChildren={t("common.enabled")} unCheckedChildren={t("common.disabled")} onChange={(value) => void toggle(skill, value)} /></span>
-              </Tooltip>
-            </div>
-            <p className="app-skills-path">{skill.filePath}</p>
-            <p className="app-skills-muted text-xs my-2">{t("settings.skills.toggleAffects", { agents: skill.effectiveAgents.map(label).join(", ") })}</p>
-            <Button size="small" icon={<FolderOpenOutlined />} onClick={() => void openFolder(skill.filePath.replace(/[\\/]SKILL\.md$/i, ""))}>{t("settings.skills.openSkillDirectory")}</Button>
-          </div>)}
-        </div>
-        {selectedGroup.locations.some((item) => item.conflictingPaths.length > 1) && <div>
-          <h3 className="text-sm font-medium mb-2">{t("settings.skills.relatedCopies")}</h3>
-          {[...new Set(selectedGroup.locations.flatMap((item) => item.conflictingPaths))].map((path) => <p className="app-skills-path mb-2" key={path}>{path}</p>)}
-        </div>}
-        {detailLoading ? <Spin /> : content !== null && <pre className="app-skills-content">{content}</pre>}
+    <Modal title={selectedGroup?.skill.name ?? t("settings.skills.detailTitle")} open={!!selectedGroup} width={1040}
+      centered className="app-skills-detail-modal" footer={discardIntent ? <Alert type="warning" showIcon
+        message={t("settings.skills.editor.discardPrompt")} action={<div className="flex gap-2">
+          <Button onClick={() => setDiscardIntent(null)}>{t("settings.skills.editor.keepEditing")}</Button>
+          <Button danger onClick={discardChanges}>{t(`settings.skills.editor.${discardIntent === "reload" ? "discardReload" : "discardClose"}`)}</Button>
+        </div>} /> : null}
+      onCancel={closeDetail} closable={!saving} maskClosable={!saving} keyboard={!saving} destroyOnClose={false}>
+      {selectedGroup && catalog && <div className="app-skills-detail">
+        {selectedGroup.skill.description && <p className="app-skills-secondary text-sm mb-3 line-clamp-2">{selectedGroup.skill.description}</p>}
+        <Tabs activeKey={detailTab} onChange={setDetailTab} items={[
+          {
+            key: "content",
+            label: t("settings.skills.contentTab"),
+            children: editor && selectedLocation ? <SkillContentEditor editorKey={editorKey} editor={editor} skill={selectedLocation}
+                  saving={saving || detailLoading} conflict={saveConflict} onSave={() => void saveContent()}
+                  onReload={() => editorDirty ? setDiscardIntent("reload") : void reloadContent()} />
+                : detailLoading ? <div className="flex justify-center py-10"><Spin /></div>
+                  : <Empty description={t("settings.skills.loadDetailFailed")} />,
+          },
+          {
+            key: "management",
+            label: t("settings.skills.managementTab"),
+            children: <div className="space-y-5">
+              <div><div className="app-skills-muted text-xs mb-2">{t("settings.skills.realFile")}</div><p className="app-skills-path">{selectedGroup.id}</p></div>
+              <div>
+                <h3 className="text-sm font-medium mb-2">{t("settings.skills.connections")}</h3>
+                <p className="app-skills-muted text-xs mb-3">{t("settings.skills.discoveryHint")}</p>
+                {SKILL_AGENTS.map((id) => {
+                  const location = selectedGroup.locations.find((item) => item.enabled && item.effectiveAgents.includes(id))
+                    ?? selectedGroup.locations.find((item) => item.effectiveAgents.includes(id));
+                  const copy = catalog.skills.find((item) => item.name === selectedGroup.skill.name && item.resolvedFilePath !== selectedGroup.id
+                    && item.contentFingerprint === selectedGroup.skill.contentFingerprint && item.effectiveAgents.includes(id) && item.enabled);
+                  const connection = location ? (isSkillLinked(location) ? "connectionLinked" : "connectionDirect") : copy ? "connectionCopy" : "connectionNone";
+                  return <div key={id} className="app-skills-connection">
+                    <span className="inline-flex items-center gap-2 text-sm"><AgentIcon agentId={id} size={16} />{label(id)}</span>
+                    <span><Tag>{t(`settings.skills.${connection}`)}</Tag>{location && !location.enabled && <Tag>{t("common.disabled")}</Tag>}</span>
+                  </div>;
+                })}
+              </div>
+              <div>
+                <h3 className="text-sm font-medium mb-3">{t("settings.skills.entryManagement")}</h3>
+                {selectedGroup.locations.map((skill) => <div key={`${skill.id}:${skill.enabled}`} className="app-skills-entry">
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <span className="text-xs">{scopeLabel(skill.scope)} · {isSkillLinked(skill) ? t("settings.skills.connectionLinked") : t("settings.skills.connectionDirect")}</span>
+                    <Tooltip title={editorDirty ? t("settings.skills.editor.saveBeforeToggle") : skillToggleBlocked(skill, catalog) ? t("settings.skills.linkedSourceProtected") : undefined}>
+                      <span><Switch checked={skill.enabled} loading={busy === skill.id} disabled={!!busy || saving || editorDirty || skillToggleBlocked(skill, catalog)}
+                        checkedChildren={t("common.enabled")} unCheckedChildren={t("common.disabled")} onChange={(value) => void toggle(skill, value)} /></span>
+                    </Tooltip>
+                  </div>
+                  <p className="app-skills-path">{skill.filePath}</p>
+                  <p className="app-skills-muted text-xs my-2">{t("settings.skills.toggleAffects", { agents: skill.effectiveAgents.map(label).join(", ") })}</p>
+                  <Button size="small" icon={<FolderOpenOutlined />} onClick={() => void openFolder(skill.filePath.replace(/[\\/]SKILL\.md$/i, ""))}>{t("settings.skills.openSkillDirectory")}</Button>
+                </div>)}
+              </div>
+              {selectedGroup.locations.some((item) => item.conflictingPaths.length > 1) && <div>
+                <h3 className="text-sm font-medium mb-2">{t("settings.skills.relatedCopies")}</h3>
+                {[...new Set(selectedGroup.locations.flatMap((item) => item.conflictingPaths))].map((path) => <p className="app-skills-path mb-2" key={path}>{path}</p>)}
+              </div>}
+            </div>,
+          },
+        ]} />
       </div>}
-    </Drawer>
+    </Modal>
 
     <Modal title={t("settings.skills.addSkill")} open={addOpen} onCancel={() => !installing && setAddOpen(false)} onOk={() => void submit()}
       confirmLoading={installing} closable={!installing} maskClosable={!installing} keyboard={!installing}

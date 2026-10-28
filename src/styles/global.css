@@ -1962,8 +1962,8 @@ html, body, #root {
 
 .app-tabbar-tab {
   /* 固定等宽，空间不足时由标签区域横向滚动。 */
-  flex: 0 0 180px;
-  width: 180px;
+  flex: 0 0 var(--cs-workspace-tab-width);
+  width: var(--cs-workspace-tab-width);
   min-width: 0;
 }
 
@@ -3305,7 +3305,25 @@ html, body, #root {
 .app-skills-row .ant-tag { margin-inline-end: 0; }
 .app-skills-path { font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; color: var(--cs-text-secondary); }
 .app-skills-detail { color: var(--cs-text-primary); }
+.app-skills-detail-modal { max-width: calc(100vw - 48px); padding-bottom: 0; }
+.app-skills-detail-modal .ant-tabs-content-holder { min-height: min(32vh, 260px); max-height: min(65vh, 720px, calc(100dvh - 240px)); overflow-y: auto; scrollbar-gutter: stable; }
+.app-skills-detail-modal .ant-tabs-tabpane { padding-right: 8px; }
+.app-skill-editor { display: flex; flex-direction: column; gap: 12px; }
+.app-skill-editor-toolbar { position: sticky; top: 0; z-index: 1; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 4px 0 12px; background: var(--cs-bg-card); color: var(--cs-text-primary); }
+.app-skill-source-editor.ant-input { height: min(48vh, 520px); min-height: 220px; resize: vertical; font-family: var(--font-mono); font-size: 12px; line-height: 1.7; tab-size: 2; }
+.app-skill-markdown-preview { padding: 12px 4px; min-height: 220px; }
 .app-skills-connection { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--cs-border-card); }
 .app-skills-entry { padding: 14px; margin-bottom: 10px; border: 1px solid var(--cs-border-card); border-radius: 8px; background: var(--cs-bg-card); color: var(--cs-text-primary); }
 .app-skills-content { padding: 16px; border: 1px solid var(--cs-border-card); border-radius: 8px; background: var(--cs-bg-card); color: var(--cs-text-primary); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }
 .app-skills-field-label { display: block; margin-bottom: 6px; font-size: 12px; color: var(--cs-text-secondary); }
+
+.app-skill-market-modal { max-width: calc(100vw - 48px); padding-bottom: 0; }
+.app-skill-market-modal .ant-modal-body { max-height: calc(100dvh - 180px); overflow-y: auto; scrollbar-gutter: stable; }
+.app-skill-market-results { max-height: 58vh; overflow-y: auto; min-height: 220px; }
+.app-skill-market-detail { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; }
+.app-skill-market-content { max-height: 54vh; overflow-y: auto; }
+.app-skill-market-install { min-width: 0; }
+@media (max-width: 850px) {
+  .app-skill-market-detail { grid-template-columns: minmax(0, 1fr); }
+  .app-skill-market-content { max-height: 35vh; }
+}

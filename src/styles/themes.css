@@ -4,6 +4,7 @@
 
 /* ─── 亮色 A：清朗蓝白 ──────────────────────────────────── */
 [data-theme="light-glass"] {
+  --cs-workspace-tab-width: 192px;
   --cs-code-keyword: #3156B8;
   --cs-code-string: #287D3C;
   --cs-code-number: #9650A0;
@@ -68,6 +69,7 @@
 
 /* ─── 亮色 B：暖木书房 ──────────────────────────────────── */
 [data-theme="light-warm"] {
+  --cs-workspace-tab-width: 192px;
   --cs-code-keyword: #3156B8;
   --cs-code-string: #287D3C;
   --cs-code-number: #9650A0;
@@ -132,6 +134,7 @@
 
 /* ─── 暗色 A：星空沉浸 ──────────────────────────────────── */
 [data-theme="dark-starry"] {
+  --cs-workspace-tab-width: 192px;
   --cs-code-keyword: #A5B4FC;
   --cs-code-string: #A6D189;
   --cs-code-number: #D5A4E6;
@@ -196,6 +199,7 @@
 
 /* ─── 暗色 B：摩卡棕夜 ──────────────────────────────────── */
 [data-theme="dark-mocha"] {
+  --cs-workspace-tab-width: 192px;
   --cs-code-keyword: #A5B4FC;
   --cs-code-string: #A6D189;
   --cs-code-number: #D5A4E6;

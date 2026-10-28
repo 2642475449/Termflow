@@ -119,52 +119,8 @@ pub struct SkillDetail {
     pub content: String,
 }
 
-fn parse_skill_frontmatter(content: &str) -> (String, String) {
-    let mut name = String::new();
-    let mut description = String::new();
-    if !content.starts_with("---") {
-        return (name, description);
-    }
-
-    let Some(end_offset) = content[3..].find("\n---") else {
-        return (name, description);
-    };
-    let frontmatter = &content[4..end_offset + 3];
-    let lines = frontmatter.lines().collect::<Vec<_>>();
-    let mut index = 0;
-    while index < lines.len() {
-        let trimmed = lines[index].trim();
-        if let Some(value) = trimmed.strip_prefix("name:") {
-            name = value
-                .trim()
-                .trim_matches('"')
-                .trim_matches('\'')
-                .to_string();
-        } else if let Some(value) = trimmed.strip_prefix("description:") {
-            let value = value.trim();
-            if matches!(value, "|" | ">" | "|-" | ">-") || value.is_empty() {
-                let mut block = Vec::new();
-                index += 1;
-                while index < lines.len() {
-                    let next = lines[index];
-                    if next.starts_with(' ') || next.starts_with('\t') || next.trim().is_empty() {
-                        if !next.trim().is_empty() {
-                            block.push(next.trim().to_string());
-                        }
-                        index += 1;
-                        continue;
-                    }
-                    index -= 1;
-                    break;
-                }
-                description = block.join("\n");
-            } else {
-                description = value.trim_matches('"').trim_matches('\'').to_string();
-            }
-        }
-        index += 1;
-    }
-    (name, description)
+pub(super) fn parse_skill_frontmatter(content: &str) -> (String, String) {
+    super::skill_editor::skill_metadata(content).unwrap_or_default()
 }
 
 #[tauri::command]
@@ -528,7 +484,7 @@ fn scan_scope_skills(
     Ok(skills)
 }
 
-fn build_skill_info(
+pub(super) fn build_skill_info(
     agent: SkillAgent,
     scope: SkillScope,
     enabled: bool,
@@ -764,7 +720,7 @@ fn agent_user_directory(agent: SkillAgent) -> Result<PathBuf, String> {
     })
 }
 
-fn resolve_skill_dir(
+pub(super) fn resolve_skill_dir(
     agent: SkillAgent,
     scope: SkillScope,
     project_path: Option<&str>,
@@ -824,7 +780,11 @@ fn slugify_folder_name(input: &str) -> String {
     if slug.is_empty() {
         "new-skill".to_string()
     } else {
-        slug.chars().take(64).collect()
+        slug.chars()
+            .take(64)
+            .collect::<String>()
+            .trim_end_matches('-')
+            .to_string()
     }
 }
 

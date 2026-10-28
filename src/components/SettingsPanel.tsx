@@ -4333,7 +4333,7 @@ function SettingsPanel() {
     >
       {/* Left nav */}
       <div
-        className="app-settings-nav w-16 min-[960px]:w-48 shrink-0 py-5 px-2 min-[960px]:px-3 overflow-y-auto"
+        className="app-settings-nav w-16 min-[960px]:w-[var(--cs-workspace-tab-width)] shrink-0 py-5 px-2 min-[960px]:px-3 overflow-y-auto"
         style={{
           borderRight: "1px solid var(--cs-border-sidebar)",
           background: "var(--cs-bg-card-solid, var(--cs-bg-card))",

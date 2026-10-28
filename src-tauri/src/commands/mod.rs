@@ -23,6 +23,8 @@ pub mod search_index;
 pub mod session;
 pub mod settings;
 pub mod skills;
+pub mod skill_marketplace;
+pub mod skill_editor;
 pub mod system_input;
 pub mod voice;
 pub mod voice_polish;

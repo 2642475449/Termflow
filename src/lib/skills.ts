@@ -43,7 +43,15 @@ export function skillInstallTargets(catalog: SkillCatalog | null, agents: SkillA
 
 export function skillFolderName(name: string, source: string | null): string {
   if (source) return source.replace(/[\\/]+$/, "").split(/[\\/]/).at(-1) ?? "";
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 64) || "new-skill";
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 64).replace(/-$/, "") || "new-skill";
+}
+
+export function skillEditorKey(projectPath: string | null, resolvedPath: string): string {
+  return JSON.stringify([projectPath, resolvedPath]);
+}
+
+export function skillMarkdownBody(content: string): string {
+  return content.replace(/^\uFEFF?---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/, "");
 }
 
 export function skillToggleBlocked(skill: SkillInfo, catalog: SkillCatalog): boolean {

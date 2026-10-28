@@ -51,7 +51,14 @@ import type {
   SkillDetail,
   SkillAgent,
   SkillInfo,
+  SkillValidation,
+  SkillSaveRequest,
   SkillScope,
+  SkillMarketProvider,
+  MarketplaceSkill,
+  MarketplaceSkillDetail,
+  MarketplaceSkillInstallRequest,
+  SkillMarketSearch,
   CommandCatalog,
   CommandDetail,
   CommandDraft,
@@ -898,6 +905,18 @@ export async function moveProjectEntries(
 }
 
 // Skills API
+export async function searchSkillMarketplace(query: string, provider: SkillMarketProvider | null, refresh = false): Promise<SkillMarketSearch> {
+  return await invoke("search_skill_marketplace", { query, provider, refresh });
+}
+
+export async function getMarketplaceSkillDetail(skill: MarketplaceSkill): Promise<MarketplaceSkillDetail> {
+  return await invoke("get_marketplace_skill_detail", { skill });
+}
+
+export async function installMarketplaceSkill(request: MarketplaceSkillInstallRequest): Promise<SkillInfo[]> {
+  return await invoke("install_marketplace_skill", { request });
+}
+
 export async function listSkills(projectPath?: string | null): Promise<SkillCatalog> {
   return await invoke("list_skills", { projectPath: projectPath ?? null });
 }
@@ -981,6 +1000,14 @@ export async function installSkill(request: SkillInstallRequest): Promise<SkillI
 
 export async function selectSkillImportDirectory(): Promise<string | null> {
   return await openDialog({ directory: true, multiple: false });
+}
+
+export async function validateSkillContent(content: string, folderName: string): Promise<SkillValidation> {
+  return await invoke("validate_skill_content", { content, folderName });
+}
+
+export async function saveSkillContent(request: SkillSaveRequest): Promise<SkillDetail> {
+  return await invoke("save_skill_content", { request });
 }
 
 // Commands API

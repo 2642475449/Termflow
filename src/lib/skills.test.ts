@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SkillCatalog, SkillInfo } from "@/types";
-import { filterSkillGroups, groupSkills, isSkillLinked, skillFolderName, skillInstallTargets, skillToggleBlocked } from "./skills";
+import { filterSkillGroups, groupSkills, isSkillLinked, skillEditorKey, skillMarkdownBody, skillFolderName, skillInstallTargets, skillToggleBlocked } from "./skills";
 
 const skill = (overrides: Partial<SkillInfo> = {}): SkillInfo => ({
   id: "codex:workspace:review", name: "review", description: "Review changes", enabled: true,
@@ -54,6 +54,13 @@ describe("skill library", () => {
   it("previews generated folder names and preserves imported folder names", () => {
     expect(skillFolderName("Review Checklist", null)).toBe("review-checklist");
     expect(skillFolderName("审查", null)).toBe("new-skill");
+    expect(skillFolderName(`${"a".repeat(63)} separator`, null)).toBe("a".repeat(63));
     expect(skillFolderName("", "C:\\skills\\Existing_Name")).toBe("Existing_Name");
+  });
+  it("previews only the Markdown body while preserving incomplete source", () => {
+    expect(skillMarkdownBody("\uFEFF---\r\nname: review\r\ndescription: Review\r\n---\r\n# Instructions")).toBe("# Instructions");
+    expect(skillMarkdownBody("---\nname: unfinished")).toBe("---\nname: unfinished");
+    expect(skillMarkdownBody("# Instructions\n---\nKeep this rule")).toBe("# Instructions\n---\nKeep this rule");
+    expect(skillEditorKey("a", "file")).not.toBe(skillEditorKey("b", "file"));
   });
 });
