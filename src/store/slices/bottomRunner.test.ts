@@ -98,11 +98,20 @@ it("persists only validated UI preferences, never tabs, open state or maximizati
   state().setHeight(400, 1000);
   state().setWordWrap(true);
   state().addRunTab("A", tab("a"));
-  expect(JSON.parse([...entries.values()][0]).state).toEqual({ height: 400, autoScroll: true, wordWrap: true });
+  expect(JSON.parse([...entries.values()][0]).state).toEqual({ height: 400, wordWrap: true });
   state().reset();
   await useBottomRunnerStore.persist.rehydrate();
   expect(state()).toMatchObject({ height: 400, wordWrap: true, open: false, tabsByProject: {} });
   const merge = useBottomRunnerStore.persist.getOptions().merge!;
   expect(merge({ height: "oops", autoScroll: "yes", wordWrap: 1, tabsByProject: { A: [tab("x")] }, open: true }, state()))
     .toMatchObject({ height: 260, autoScroll: true, wordWrap: false, open: false, tabsByProject: {} });
+});
+it("enables auto scroll for a new run and ignores a previously saved pause", () => {
+  state().setAutoScroll(false);
+  state().addRunTab("A", tab("new"));
+  expect(state().autoScroll).toBe(true);
+  state().toggleAutoScroll();
+  expect(state().autoScroll).toBe(false);
+  const merge = useBottomRunnerStore.persist.getOptions().merge!;
+  expect(merge({ autoScroll: false }, state()).autoScroll).toBe(true);
 });

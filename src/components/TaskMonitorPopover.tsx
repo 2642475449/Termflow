@@ -4,8 +4,8 @@ import { CloseOutlined, FileSearchOutlined, FolderOpenOutlined } from "@ant-desi
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "@/store";
 import { focusProjectWindow } from "@/lib/api";
-import { collectOpenProjects, projectPathKey } from "@/lib/openProjects";
-import { collectTaskMonitorTabs, type TaskMonitorTab } from "@/lib/taskMonitor";
+import { projectPathKey } from "@/lib/openProjects";
+import { collectTaskMonitorProjects, collectTaskMonitorTabs, type TaskMonitorTab } from "@/lib/taskMonitor";
 import { useOpenProjectsStore } from "@/store/slices/openProjects";
 import {
   requestTaskMonitorSnapshots,
@@ -36,7 +36,7 @@ export function TaskMonitorPanel({
   const windows = useOpenProjectsStore((s) => s.windows);
   const refreshWindows = useOpenProjectsStore((s) => s.setOpenProjectWindows);
   const snapshots = useTaskMonitorStore((s) => s.snapshots);
-  const projects = collectOpenProjects(windows, currentProject);
+  const projects = collectTaskMonitorProjects(windows, currentProject);
 
   useEffect(() => {
     if (!active) return;
@@ -108,6 +108,7 @@ export function TaskMonitorPanel({
               <div className="app-task-monitor-project-name" title={project.path}>
                 <FolderOpenOutlined />
                 <span className="min-w-0 flex-1 truncate">{project.name}</span>
+                {isCurrent && <span className="app-task-monitor-current">{t("taskMonitor.current")}</span>}
                 {targetWindowLabel && (
                   <Tooltip title={t("taskMonitor.closeProject")}>
                     <button type="button" className="app-task-monitor-project-close flex h-6 w-6 shrink-0 items-center justify-center rounded"

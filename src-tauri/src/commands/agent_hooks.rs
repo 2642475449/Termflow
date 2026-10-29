@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
 const MANAGED_SCRIPT_NAME: &str = "termflow-agent-hook.cjs";
-const PI_EXTENSION_SCRIPT_NAME: &str = "termflow-agent-status.js";
+pub(crate) const PI_EXTENSION_SCRIPT_NAME: &str = "termflow-agent-status.js";
 const ANTIGRAVITY_STATUSLINE_SCRIPT_NAME: &str = "termflow-antigravity-statusline.cjs";
 const ANTIGRAVITY_STATUSLINE_MARKER: &str = "termflow-antigravity-statusline.cjs";
 const ANTIGRAVITY_ORIGINAL_STATUSLINE_NAME: &str = "antigravity-statusline-original.json";
@@ -393,7 +393,11 @@ fn install_pi_extension() -> Result<AgentHookStatus, String> {
     let extension_path = crate::agent_paths::user_path(crate::agent_paths::AgentPath::Pi)?
         .join("extensions")
         .join(PI_EXTENSION_SCRIPT_NAME);
-    if let Ok(existing) = fs::read_to_string(&extension_path) {
+    install_pi_extension_at(&extension_path)
+}
+
+fn install_pi_extension_at(extension_path: &Path) -> Result<AgentHookStatus, String> {
+    if let Ok(existing) = fs::read_to_string(extension_path) {
         if !existing.starts_with("// Termflow managed Pi status extension") {
             return Err(format!(
                 "Pi 扩展路径已被其他文件占用: {}",
@@ -401,7 +405,7 @@ fn install_pi_extension() -> Result<AgentHookStatus, String> {
             ));
         }
     }
-    write_if_changed(&extension_path, pi_extension_source().as_bytes())?;
+    write_if_changed(extension_path, pi_extension_source().as_bytes())?;
     Ok(AgentHookStatus {
         codex_activation: None,
         agent: "pi".into(),
@@ -897,12 +901,13 @@ mod tests {
     use super::{
         antigravity_statusline_script, definition_contains_owned_command,
         hook_action_contains_owned_command, install_antigravity_hook_group,
-        install_antigravity_statusline_config, install_json_hooks, managed_hook_script,
-        opencode_plugin_source, pi_extension_source, remove_legacy_codex_trust,
-        remove_owned_json_hooks, supports_agent_status_hook, ANTIGRAVITY_HOOK_GROUP,
-        QODER_HOOK_EVENTS,
+        install_antigravity_statusline_config, install_json_hooks, install_pi_extension_at,
+        managed_hook_script, opencode_plugin_source, pi_extension_source,
+        remove_legacy_codex_trust, remove_owned_json_hooks, supports_agent_status_hook,
+        ANTIGRAVITY_HOOK_GROUP, PI_EXTENSION_SCRIPT_NAME, QODER_HOOK_EVENTS,
     };
     use serde_json::json;
+    use std::fs;
 
     #[test]
     #[cfg(windows)]
@@ -945,6 +950,30 @@ mod tests {
         assert!(source.contains("outcome === 'error'"));
         assert!(source.contains("outcome === 'aborted'"));
         assert!(source.contains("'assistant_complete'"));
+    }
+
+    #[test]
+    fn pi_extension_install_repairs_managed_files_and_preserves_unowned_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp
+            .path()
+            .join("extensions")
+            .join(PI_EXTENSION_SCRIPT_NAME);
+        let status = install_pi_extension_at(&path).unwrap();
+        assert!(status.configured);
+        assert_eq!(fs::read_to_string(&path).unwrap(), pi_extension_source());
+        fs::write(
+            &path,
+            "// Termflow managed Pi status extension\n// outdated",
+        )
+        .unwrap();
+        install_pi_extension_at(&path).unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), pi_extension_source());
+        install_pi_extension_at(&path).unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), pi_extension_source());
+        fs::write(&path, "// user extension").unwrap();
+        assert!(install_pi_extension_at(&path).is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), "// user extension");
     }
 
     #[test]

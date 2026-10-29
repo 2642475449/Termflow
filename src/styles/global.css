@@ -2804,6 +2804,7 @@ html, body, #root {
 .app-task-monitor-project + .app-task-monitor-project { margin-top: 12px; }
 .app-task-monitor-project-name { display: flex; align-items: center; gap: 9px; min-height: 32px; padding: 5px 8px; color: var(--cs-text-secondary); }
 .app-task-monitor-project-name > .anticon { flex-shrink: 0; font-size: 14px; }
+.app-task-monitor-current { flex-shrink: 0; padding: 1px 6px; border-radius: 4px; background: var(--cs-bg-active); color: var(--cs-text-primary); font-size: 11px; line-height: 18px; }
 .app-task-monitor-project-close { opacity: 0; pointer-events: none; transition: opacity 120ms ease; }
 .app-task-monitor-project-name:hover .app-task-monitor-project-close,
 .app-task-monitor-project-name:focus-within .app-task-monitor-project-close { opacity: 1; pointer-events: auto; }
@@ -2817,7 +2818,8 @@ html, body, #root {
 .app-task-monitor-dot { width: 8px; height: 8px; flex-shrink: 0; border-radius: 50%; background: var(--cs-text-tertiary); }
 .app-task-monitor-dot[data-status="starting"], .app-task-monitor-dot[data-status="running"] { background: transparent; border: 1.5px solid var(--cs-text-tertiary); border-top-color: transparent; }
 .app-task-monitor-dot[data-status="running"], .app-task-monitor-dot[data-status="starting"] { animation: app-task-monitor-spin 1s linear infinite; }
-.app-task-monitor-dot[data-status="waiting"], .app-task-monitor-dot[data-status="idle"], .app-task-monitor-dot[data-status="stopped"] { visibility: hidden; }
+.app-task-monitor-dot[data-status="waiting"] { background: var(--cs-warning); }
+.app-task-monitor-dot[data-status="idle"], .app-task-monitor-dot[data-status="stopped"] { visibility: hidden; }
 .app-task-monitor-dot[data-status="completed"] { background: var(--cs-success); }
 .app-task-monitor-dot[data-status="error"] { background: var(--cs-error); }
 .app-task-monitor-row[data-closable="true"]:hover .app-task-monitor-dot,

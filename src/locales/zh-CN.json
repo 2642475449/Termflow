@@ -26,7 +26,8 @@
       "completed": "已完成",
       "error": "执行失败 (退出码：{{code}})",
       "stopped": "已手动终止"
-    }
+    },
+    "runningTasks": "运行中任务：{{count}}"
   },
   "projectLaunchers": {
     "openFile": "打开配置文件修复",
@@ -250,7 +251,8 @@
     "disabled": "已停用",
     "unknown": "未知",
     "on": "开",
-    "off": "关"
+    "off": "关",
+    "close": "关闭"
   },
   "editorContextMenu": {
     "undo": "撤销",
@@ -290,7 +292,6 @@
     "newLine": "换行",
     "keepOpen": "保持窗口",
     "close": "关闭",
-
     "title": "在文件中查找",
     "placeholder": "输入要在项目中查找的文字",
     "entireProject": "整个项目 · {{name}}",
@@ -387,7 +388,9 @@
       "unavailable": "启动 Antigravity 会话并发送消息后显示额度",
       "unavailableShort": "用量不可用"
     },
-    "usage": { "stale": "数据已过期" },
+    "usage": {
+      "stale": "数据已过期"
+    },
     "codexUsage": {
       "title": "Codex 用量",
       "loading": "Codex 用量…",
@@ -964,7 +967,8 @@
     "gitConflictResolverBinary": "二进制文件无法在内置编辑器中合并",
     "gitConflictResolverBinaryDescription": "请选择保留当前版本或传入版本；选择后会立即暂存该文件。",
     "gitConflictResolverLoadFailed": "无法加载冲突详情",
-    "gitConflictResolverResolveFailed": "解决冲突失败",    "gitAbortMerge": "中止合并",
+    "gitConflictResolverResolveFailed": "解决冲突失败",
+    "gitAbortMerge": "中止合并",
     "gitResolveSuccess": "冲突已解决",
     "gitResolveFailed": "解决冲突失败",
     "gitAbortMergeSuccess": "合并已中止",
@@ -1423,8 +1427,26 @@
         }
       },
       "quota": {
-        "loading": "正在读取额度…", "installFirst": "安装并登录后显示额度", "unsupported": "暂不支持读取额度", "unavailable": "暂时无法读取额度", "startSession": "启动一次会话后显示额度", "refreshFailed": "额度更新失败，当前显示上次成功查询的结果",
-        "healthy": "额度充足", "low": "额度较低", "exhausted": "额度即将耗尽", "session": "5 小时 {{value}}%", "weekly": "每周 {{value}}%", "remainingPercent": "剩余 {{value}}%", "remainingCredits": "剩余 {{value}}", "signInAntigravity": "请先登录 Antigravity CLI", "timeout": "额度查询超时", "gemini": "Gemini", "claudeGpt": "Claude/GPT", "argon": "Gemini 4 Argon", "sessionShort": "5小时", "weeklyShort": "每周"
+        "loading": "正在读取额度…",
+        "installFirst": "安装并登录后显示额度",
+        "unsupported": "暂不支持读取额度",
+        "unavailable": "暂时无法读取额度",
+        "startSession": "启动一次会话后显示额度",
+        "refreshFailed": "额度更新失败，当前显示上次成功查询的结果",
+        "healthy": "额度充足",
+        "low": "额度较低",
+        "exhausted": "额度即将耗尽",
+        "session": "5 小时 {{value}}%",
+        "weekly": "每周 {{value}}%",
+        "remainingPercent": "剩余 {{value}}%",
+        "remainingCredits": "剩余 {{value}}",
+        "signInAntigravity": "请先登录 Antigravity CLI",
+        "timeout": "额度查询超时",
+        "gemini": "Gemini",
+        "claudeGpt": "Claude/GPT",
+        "argon": "Gemini 4 Argon",
+        "sessionShort": "5小时",
+        "weeklyShort": "每周"
       },
       "viewDetails": "查看详情",
       "pathHint": "检测结果以 Termflow 当前读取到的系统 PATH 为准。安装或更新智能体后，如果仍未检测到，请重启电脑再试。"
@@ -1502,7 +1524,12 @@
       "remoteThresholdDesc": "仅任务完成事件使用该阈值；失败、等待输入和权限请求会立即通知",
       "feishuThreshold": "飞书长任务阈值",
       "feishuThresholdDesc": "仅任务完成事件使用该阈值；失败、等待输入和权限请求会立即通知",
-      "threshold": { "min5": "5 分钟", "min10": "10 分钟", "min30": "30 分钟", "hour1": "1 小时" },
+      "threshold": {
+        "min5": "5 分钟",
+        "min10": "10 分钟",
+        "min30": "30 分钟",
+        "hour1": "1 小时"
+      },
       "terminalCompletion": {
         "section": "终端命令",
         "enabled": "长命令完成提醒",
@@ -1510,7 +1537,12 @@
         "threshold": "长命令提醒阈值",
         "thresholdDesc": "运行时间达到该值后，命令完成时才会提醒。",
         "integrationStatus": "当前终端集成状态",
-        "status": { "pending": "等待确认", "available": "已启用", "unavailable": "不可用", "noActiveTerminal": "没有活动终端" },
+        "status": {
+          "pending": "等待确认",
+          "available": "已启用",
+          "unavailable": "不可用",
+          "noActiveTerminal": "没有活动终端"
+        },
         "statusReason": {
           "available": "已收到 PowerShell 集成的生命周期标记。",
           "pending": "正在等待当前终端报告集成状态。",
@@ -1529,39 +1561,96 @@
         "unknownBody": "命令已结束，结果未知，耗时 {{duration}}。"
       },
       "events": {
-        "completed": "长任务完成", "completedDesc": "任务执行时间超过飞书阈值后发送完成卡片",
-        "error": "任务失败", "errorDesc": "任务发生进程或 Hook 错误时立即通知",
-        "waiting": "等待输入", "waitingDesc": "智能体需要你回答问题时立即通知",
-        "permission": "权限请求", "permissionDesc": "智能体等待权限批准时立即通知"
+        "completed": "长任务完成",
+        "completedDesc": "任务执行时间超过飞书阈值后发送完成卡片",
+        "error": "任务失败",
+        "errorDesc": "任务发生进程或 Hook 错误时立即通知",
+        "waiting": "等待输入",
+        "waitingDesc": "智能体需要你回答问题时立即通知",
+        "permission": "权限请求",
+        "permissionDesc": "智能体等待权限批准时立即通知"
       },
       "remote": {
-        "channelName": "远程通知", "channelDesc": "将任务状态投递到已配置的远程服务；可逐步接入多个服务商",
-        "configured": "已配置", "notConfigured": "未配置", "configuration": "远程通知配置", "provider": "通知服务",
-        "comingSoon": "即将支持", "providers": { "feishu": "飞书", "dingtalk": "钉钉", "wechat": "微信", "qq": "QQ", "telegram": "Telegram" },
-        "saved": "远程通知配置已安全保存", "cleared": "远程通知配置已清除", "configureFirst": "请先保存并测试通知服务配置",
-        "loadFailed": "读取远程通知配置失败：{{error}}", "saveFailed": "保存远程通知配置失败：{{error}}", "clearFailed": "清除远程通知配置失败：{{error}}",
-        "testSent": "测试通知已发送", "testFailed": "远程通知测试发送失败：{{error}}", "sendTest": "发送测试", "clear": "清除配置", "clearConfirm": "确定清除当前通知服务配置吗？"
+        "channelName": "远程通知",
+        "channelDesc": "将任务状态投递到已配置的远程服务；可逐步接入多个服务商",
+        "configured": "已配置",
+        "notConfigured": "未配置",
+        "configuration": "远程通知配置",
+        "provider": "通知服务",
+        "comingSoon": "即将支持",
+        "providers": {
+          "feishu": "飞书",
+          "dingtalk": "钉钉",
+          "wechat": "微信",
+          "qq": "QQ",
+          "telegram": "Telegram"
+        },
+        "saved": "远程通知配置已安全保存",
+        "cleared": "远程通知配置已清除",
+        "configureFirst": "请先保存并测试通知服务配置",
+        "loadFailed": "读取远程通知配置失败：{{error}}",
+        "saveFailed": "保存远程通知配置失败：{{error}}",
+        "clearFailed": "清除远程通知配置失败：{{error}}",
+        "testSent": "测试通知已发送",
+        "testFailed": "远程通知测试发送失败：{{error}}",
+        "sendTest": "发送测试",
+        "clear": "清除配置",
+        "clearConfirm": "确定清除当前通知服务配置吗？",
+        "configure": "配置",
+        "editConfig": "修改配置",
+        "modalTitle": "配置 {{provider}} 通知"
       },
       "feishu": {
-        "channelName": "飞书通知", "channelDesc": "通过群自定义机器人 Webhook 推送长任务状态卡片",
-        "configured": "已配置", "notConfigured": "未配置", "configuration": "飞书配置",
+        "channelName": "飞书通知",
+        "channelDesc": "通过群自定义机器人 Webhook 推送长任务状态卡片",
+        "configured": "已配置",
+        "notConfigured": "未配置",
+        "configuration": "飞书配置",
         "securityHint": "Webhook 与签名密钥保存在 Windows 凭据管理器中，不会写入项目、普通设置数据库或日志。建议在飞书机器人中开启签名校验。",
-        "currentWebhook": "当前 Webhook", "webhook": "Webhook 地址", "webhookPlaceholder": "https://open.feishu.cn/open-apis/bot/v2/hook/...",
-        "signingSecret": "签名密钥", "signingSecretPlaceholder": "建议填写飞书机器人签名密钥", "signingSecretKeepPlaceholder": "已配置；留空则保留现有密钥",
+        "currentWebhook": "当前 Webhook",
+        "webhook": "Webhook 地址",
+        "webhookPlaceholder": "https://open.feishu.cn/open-apis/bot/v2/hook/...",
+        "signingSecret": "签名密钥",
+        "signingSecretPlaceholder": "建议填写飞书机器人签名密钥",
+        "signingSecretKeepPlaceholder": "已配置；留空则保留现有密钥",
         "secureStorageUnavailable": "当前系统暂不支持安全凭据存储，无法启用飞书通知。",
-        "sendTest": "发送测试", "clear": "清除配置", "clearConfirm": "确定清除飞书 Webhook 和签名密钥吗？",
-        "saved": "飞书配置已安全保存", "cleared": "飞书配置已清除", "configureFirst": "请先保存并测试飞书 Webhook",
-        "loadFailed": "读取飞书配置失败：{{error}}", "saveFailed": "保存飞书配置失败：{{error}}", "clearFailed": "清除飞书配置失败：{{error}}",
-        "testSent": "测试卡片已发送，请查看飞书群", "testFailed": "飞书测试发送失败：{{error}}",
-        "testCardTitle": "Termflow 通知测试", "testCardChannel": "通知渠道", "testCardStatus": "连接状态", "testCardSuccess": "配置正常",
-        "card": { "completed": "任务已完成", "error": "任务执行失败", "waiting": "任务等待输入", "permission": "任务等待权限", "project": "项目", "task": "任务", "agent": "智能体", "duration": "耗时", "occurredAt": "时间" }
+        "sendTest": "发送测试",
+        "clear": "清除配置",
+        "clearConfirm": "确定清除飞书 Webhook 和签名密钥吗？",
+        "saved": "飞书配置已安全保存",
+        "cleared": "飞书配置已清除",
+        "configureFirst": "请先保存并测试飞书 Webhook",
+        "loadFailed": "读取飞书配置失败：{{error}}",
+        "saveFailed": "保存飞书配置失败：{{error}}",
+        "clearFailed": "清除飞书配置失败：{{error}}",
+        "testSent": "测试卡片已发送，请查看飞书群",
+        "testFailed": "飞书测试发送失败：{{error}}",
+        "testCardTitle": "Termflow 通知测试",
+        "testCardChannel": "通知渠道",
+        "testCardStatus": "连接状态",
+        "testCardSuccess": "配置正常",
+        "card": {
+          "completed": "任务已完成",
+          "error": "任务执行失败",
+          "waiting": "任务等待输入",
+          "permission": "任务等待权限",
+          "project": "项目",
+          "task": "任务",
+          "agent": "智能体",
+          "duration": "耗时",
+          "occurredAt": "时间"
+        }
       }
     },
     "network": {
       "title": "网络代理",
       "description": "为终端、智能体 CLI、Git、应用更新和 Termflow 网络请求配置统一代理。",
       "proxyMode": "HTTP 代理",
-      "mode": { "disabled": "不使用代理", "system": "使用系统代理（推荐）", "custom": "自定义代理" },
+      "mode": {
+        "disabled": "不使用代理",
+        "system": "使用系统代理（推荐）",
+        "custom": "自定义代理"
+      },
       "customProxyUrl": "代理地址",
       "noProxy": "不使用代理的地址",
       "noProxyHint": "使用逗号分隔；localhost、127.0.0.1 和 ::1 始终保留。",
@@ -1569,8 +1658,22 @@
       "resolvedProxy": "当前代理：{{proxy}}",
       "resolvedDirect": "当前连接方式：直连",
       "source": "配置来源：{{source}}",
-      "sources": { "disabled": "已禁用", "custom": "自定义设置", "windows-system": "Windows 系统代理", "system-none": "Windows 系统（未配置代理）", "environment": "进程环境变量", "unknown": "未知" },
-      "warnings": { "pacUnsupported": "检测到 PAC 自动配置；首版暂不解析 PAC，请改用自定义代理。", "pacManualUsed": "同时检测到 PAC；Termflow 当前使用 Windows 手动代理地址。", "systemReadFailed": "无法读取 Windows 系统代理，当前使用直连。", "systemServerReadFailed": "系统代理已启用，但无法读取代理服务器，当前使用直连。", "systemParseFailed": "无法解析 Windows 系统代理，当前使用直连。", "systemUnsupported": "当前平台暂不支持自动读取系统代理，请使用自定义代理。" },
+      "sources": {
+        "disabled": "已禁用",
+        "custom": "自定义设置",
+        "windows-system": "Windows 系统代理",
+        "system-none": "Windows 系统（未配置代理）",
+        "environment": "进程环境变量",
+        "unknown": "未知"
+      },
+      "warnings": {
+        "pacUnsupported": "检测到 PAC 自动配置；首版暂不解析 PAC，请改用自定义代理。",
+        "pacManualUsed": "同时检测到 PAC；Termflow 当前使用 Windows 手动代理地址。",
+        "systemReadFailed": "无法读取 Windows 系统代理，当前使用直连。",
+        "systemServerReadFailed": "系统代理已启用，但无法读取代理服务器，当前使用直连。",
+        "systemParseFailed": "无法解析 Windows 系统代理，当前使用直连。",
+        "systemUnsupported": "当前平台暂不支持自动读取系统代理，请使用自定义代理。"
+      },
       "newTerminalHint": "代理修改仅对新建终端生效；现有终端不会被重启或修改。",
       "connectivityTitle": "连接测试",
       "connectivityHint": "HTTP 401、403、404 或 405 同样表示网络可达；测试不会发送 API Key 或业务数据。",
@@ -1579,8 +1682,19 @@
       "notTested": "尚未测试",
       "reachable": "可达",
       "unreachable": "不可达",
-      "route": { "direct": "直连", "proxy": "代理" },
-      "targets": { "googleOAuth": "Google OAuth", "github": "GitHub", "openai": "OpenAI", "claude": "Claude", "gemini": "Gemini", "glm": "GLM", "qwen": "Qwen" }
+      "route": {
+        "direct": "直连",
+        "proxy": "代理"
+      },
+      "targets": {
+        "googleOAuth": "Google OAuth",
+        "github": "GitHub",
+        "openai": "OpenAI",
+        "claude": "Claude",
+        "gemini": "Gemini",
+        "glm": "GLM",
+        "qwen": "Qwen"
+      }
     },
     "general": {
       "appearance": {
@@ -1741,7 +1855,15 @@
       "nextPage": "下一页",
       "searchResults": "搜索结果",
       "categoryFilter": "按用途筛选技能",
-      "categories": {"all": "全部", "development": "开发工具", "design": "界面设计", "content": "内容创作", "productivity": "效率提升", "data": "数据分析", "other": "其他"},
+      "categories": {
+        "all": "全部",
+        "development": "开发工具",
+        "design": "界面设计",
+        "content": "内容创作",
+        "productivity": "效率提升",
+        "data": "数据分析",
+        "other": "其他"
+      },
       "loadedCount": "已加载 {{count}} 个技能",
       "categoryHint": "分类数量仅统计已加载内容，按技能名称自动归类，可能存在偏差。",
       "loadMore": "加载更多技能",
@@ -1957,15 +2079,44 @@
     },
     "claudeMd": {
       "title": "智能体指令",
-      "headerDesc": "为每个智能体分别维护规则文件，内容互不自动同步。",
+      "targets": {
+        "agentsWorkspace": {
+          "label": "项目通用规范",
+          "note": "项目根目录的开源通用 AI 协作规范，随 Git 提交，所有兼容智能体均会读取"
+        },
+        "agentsLocal": {
+          "label": "本地私有覆盖",
+          "note": "当前机器专属私有覆盖（建议加入 .gitignore），不污染远程共享仓库"
+        },
+        "geminiCompat": {
+          "label": "Antigravity 兼容",
+          "note": "Antigravity CLI 原生兼容的传统规则文件；建议新项目统一使用 AGENTS.md"
+        }
+      },
+      "headerDesc": "管理多智能体协作通用规范与各智能体专属规则，确保项目约定一致生效。",
       "agentLabel": "智能体",
       "unsaved": "未保存",
       "save": "保存",
       "openLocation": "打开位置",
-      "loadFailed": "加载 CLAUDE.md 失败",
-      "saveSuccess": "CLAUDE.md 已保存",
-      "saveFailed": "保存 CLAUDE.md 失败",
-      "openFailed": "打开 CLAUDE.md 位置失败",
+      "standardLabel": "规范标准",
+      "agentsMdStandard": "多智能体通用规范 (AGENTS.md)",
+      "claudeMdStandard": "Claude Code 专属规范 (CLAUDE.md)",
+      "agentsMdDesc": "遵循开源开放标准，为项目中协同工作的所有智能体提供统一的角色、代码约定与工作流说明。",
+      "claudeMdDesc": "Claude Code 原生级联规则体系，涵盖全局个人偏好、项目主指令与本地私有覆盖。",
+      "compatibleAgents": "生效智能体",
+      "exclusiveAgent": "专属智能体",
+      "sharedFileNotice": "此文件遵循开源智能体规范，修改将同时作为上述所有兼容智能体的行为准则。",
+      "openInWorkspace": "在主标签页中全屏编辑",
+      "applyTemplate": "从模板填入",
+      "applyTemplateDesc": "选择预置的最佳实践规范片段填入编辑器",
+      "confirmApplyTemplateTitle": "覆盖还是追加内容？",
+      "confirmApplyTemplateDesc": "你可以将模板内容追加到现有指令末尾，或者完全替换当前编辑区的内容。",
+      "appendTemplate": "追加到末尾",
+      "replaceTemplate": "完全替换",
+      "loadFailed": "加载指令文件失败",
+      "saveSuccess": "指令文件已保存",
+      "saveFailed": "保存指令文件失败",
+      "openFailed": "打开指令文件位置失败",
       "confirmRefreshTitle": "放弃未保存的修改？",
       "confirmRefreshDesc": "刷新会重新读取磁盘上的内容，当前编辑区中的未保存修改将丢失。",
       "currentPath": "当前文件路径",
@@ -2097,7 +2248,25 @@
       "confirmDeleteTitle": "确认删除这个 Hook？",
       "confirmDelete": "确认删除",
       "confirmDeleteDefaultDesc": "该 Hook 由 Termflow 默认维护，删除后可能导致任务完成通知或权限请求联动失效。你之后可以通过“检查并修复全局 Hook”重新生成。",
-      "confirmDeleteDesc": "删除后，Claude Code 将不再执行这个 Hook；该操作会直接修改 settings.json。"
+      "confirmDeleteDesc": "删除后，Claude Code 将不再执行这个 Hook；该操作会直接修改 settings.json。",
+      "piExtensionHint": "展示全局与项目内 termflow-agent-status.js，不枚举第三方扩展包。修复仅更新全局 Termflow 扩展，请在已打开的 Pi 会话中执行 /reload 或重启生效。",
+      "retryLoad": "重试加载",
+      "registrationDisabled": "已禁用",
+      "viewDetails": "查看详情",
+      "matchingRegistrations": "匹配 {{count}} / {{total}} 项注册",
+      "registrationOverview": "{{count}} 项注册 · {{events}} 种事件 · {{sources}} 个来源",
+      "registrationCount": "{{count}} 项注册",
+      "managedSourceHint": "此注册由 Termflow 管理以同步会话状态与通知。可在详情中查看完整命令。",
+      "inferredSourceHint": "来源根据命令文件名推断，可在详情中查看具体命令与配置。",
+      "managedRegistrationSummary": "{{agent}} 全局 Termflow 集成：已注册 {{count}} 项",
+      "managedRegistrationHint": "检查与修复仅管理当前智能体的全局 Termflow 配置。即使存在注册，也不保证运行时一定能接收到回调。",
+      "sourceLabel": "来源",
+      "sources": {
+        "termflow": "Termflow 管理",
+        "orca": "Orca",
+        "pebrel": "Pebrel",
+        "other": "其他 / 未识别"
+      }
     },
     "mcpServers": {
       "overviewDesc": "为你的智能体连接外部工具与服务。",
@@ -2204,12 +2373,44 @@
       "contextContinuityDesc": "检查点与会话历史帮助你回看关键决策，在长任务中从正确的位置继续。",
       "localControl": "本地掌控",
       "localControlDesc": "项目和运行数据由本机掌控；把常用的 Skills、Hooks 与 MCP 沉淀为可复用流程。",
+      "licenseAndLegal": "软件协议与授权",
+      "licenseAndLegalDesc": "开源许可证、本地数据隐私承诺与第三方组件致谢",
+      "license": "开源许可协议",
+      "licenseDesc": "MIT License · Copyright © 2026 降蓝",
+      "viewLicense": "查看协议",
+      "licenseModalTitle": "开源许可协议 (MIT License)",
+      "privacyPolicy": "本地数据与隐私承诺",
+      "privacyPolicyDesc": "本地优先架构：所有项目代码、会话上下文与凭证均保存在本机，绝不上传私有数据。",
+      "managePrivacy": "前往数据与隐私设置",
+      "localFirstBadge": "本地存储",
+      "thirdPartyNotices": "第三方开源致谢",
+      "thirdPartyNoticesDesc": "Termflow 由包括 Tauri、React、Monaco Editor、xterm.js、Ant Design 在内的优秀开源生态驱动。",
+      "viewThirdParty": "开源致谢",
+      "thirdPartyModalTitle": "第三方开源软件致谢与许可",
+      "thirdPartyNoticeIntro": "Termflow 秉持开源协同理念，深切感谢以下开源项目及其社区的卓越贡献：",
+      "thirdPartyTauri": "基于 Rust 的安全极简跨平台桌面应用构建框架",
+      "thirdPartyReact": "构建现代交互式用户界面的前端声明式库",
+      "thirdPartyMonaco": "驱动 VS Code 的工业级富文本代码编辑器",
+      "thirdPartyXterm": "功能完备、性能卓越的前端终端模拟器组件",
+      "thirdPartyAntd": "企业级高质量 React UI 组件库",
+      "thirdPartyPty": "跨平台底层伪终端 (PTY) 抽象运行时",
+      "thirdPartyGit2": "安全高效的 libgit2 本地 Git 仓库引擎绑定",
+      "thirdPartyRusqlite": "稳定可靠的嵌入式 SQLite 数据库 Rust 运行时",
+      "thirdPartyZustand": "轻量级、响应式的前端全局状态管理方案",
+      "disclaimer": "AI 协作免责声明",
+      "disclaimerDesc": "Termflow 为本地 AI 编程智能体提供统一调度工作台。智能体生成的代码及终端命令均在本地受控执行，请审慎确认敏感操作。",
+      "localExecutionBadge": "本地受控执行",
+      "softwareInfo": "软件与诊断信息",
+      "version": "版本",
+      "copyDiagnostics": "复制诊断信息",
+      "diagnosticsCopied": "系统诊断信息已复制到剪贴板",
+      "copyFailed": "复制失败，请手动选择复制",
       "techStack": "技术栈",
       "framework": "框架",
       "terminal": "终端",
       "stateManagement": "状态管理",
       "appId": "应用标识",
-      "description": "Termflow 不是另一个智能体，而是为本地 AI 编程智能体打造的统一工作台。它将 Claude Code、Codex、Antigravity CLI、OpenCode 与 Qoder CLI 放进同一条工作流：从项目与会话，到嵌入式终端、Skills、Hooks 和 MCP，你可以保持上下文、切换协作者，并持续推进复杂任务。"
+      "description": "Termflow 是为本地 AI 编程智能体打造的统一工作台。它将 Claude Code、Codex、Antigravity CLI、OpenCode 与 Qoder CLI 放进同一条工作流：从项目与会话，到嵌入式终端、Skills、Hooks 和 MCP，你可以保持上下文、切换协作者，并持续推进复杂任务。"
     },
     "quickMenu": {
       "reportIssue": "报告问题",
@@ -2643,8 +2844,17 @@
     "turnLabel": "第 {{index}} 轮",
     "files": "个文件",
     "attributionHint": "共享工作目录只能确认本轮期间发生的变化；独立 Worktree 才能提供强归属。",
-    "attribution": { "strong": "归属可靠", "medium": "归属中等", "ambiguous": "归属不确定" },
-    "completionSource": { "provider_event": "自动完成", "next_prompt": "下一轮补全", "process_exit": "进程退出", "user_confirmed": "用户确认" },
+    "attribution": {
+      "strong": "归属可靠",
+      "medium": "归属中等",
+      "ambiguous": "归属不确定"
+    },
+    "completionSource": {
+      "provider_event": "自动完成",
+      "next_prompt": "下一轮补全",
+      "process_exit": "进程退出",
+      "user_confirmed": "用户确认"
+    },
     "restoreTurn": "回退到第 {{index}} 轮",
     "restoreConfirm": "回退到第 {{index}} 轮？",
     "restoreConfirmDesc": "工作区将恢复到第 {{index}} 轮结束时，并删除其后的 {{count}} 轮。Termflow 会先创建安全 Checkpoint；如果后续轮仍在运行或涉及已暂存文件，操作会安全停止。",
@@ -2666,8 +2876,19 @@
     "acceptHunk": "保留",
     "rejectHunk": "撤销",
     "rejectHunkConfirm": "仅撤销这个变更块？",
-    "decision": { "pending": "待审阅", "accepted": "已保留", "rejected": "已撤销" },
-    "fileStatus": { "added": "新增", "deleted": "删除", "renamed": "重命名", "copied": "复制", "typechange": "类型", "modified": "修改" },
+    "decision": {
+      "pending": "待审阅",
+      "accepted": "已保留",
+      "rejected": "已撤销"
+    },
+    "fileStatus": {
+      "added": "新增",
+      "deleted": "删除",
+      "renamed": "重命名",
+      "copied": "复制",
+      "typechange": "类型",
+      "modified": "修改"
+    },
     "summary": {
       "title": "本轮变更",
       "running": "正在记录本轮变更",

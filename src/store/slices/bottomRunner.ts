@@ -60,6 +60,7 @@ export const useBottomRunnerStore = create<BottomRunnerState>()(persist((set, ge
     set((state) => ({
       tabsByProject: { ...state.tabsByProject, [projectPath]: tabs },
       activeTabIdByProject: { ...state.activeTabIdByProject, [projectPath]: tab.id },
+      autoScroll: true,
     }));
     get().setOpen(true);
     // 调用者必须清理被回收的 PTY 和 AppStore 会话。
@@ -97,12 +98,13 @@ export const useBottomRunnerStore = create<BottomRunnerState>()(persist((set, ge
   storage: createJSONStorage(() => typeof localStorage !== "undefined" ? localStorage : {
     getItem: () => null, setItem: () => {}, removeItem: () => {},
   }),
-  partialize: (state) => ({ height: state.height, autoScroll: state.autoScroll, wordWrap: state.wordWrap }),
+  // 翻阅日志造成的暂停只在当前运行期间生效，不带到下次启动。
+  partialize: (state) => ({ height: state.height, wordWrap: state.wordWrap }),
   merge: (saved, current) => {
     const prefs = (saved && typeof saved === "object" ? saved : {}) as Partial<BottomRunnerState>;
     return { ...current,
       height: clampBottomRunnerHeight(typeof prefs.height === "number" ? prefs.height : DEFAULT_BOTTOM_RUNNER_HEIGHT, 1000),
-      autoScroll: typeof prefs.autoScroll === "boolean" ? prefs.autoScroll : true,
+      autoScroll: true,
       wordWrap: typeof prefs.wordWrap === "boolean" ? prefs.wordWrap : false,
     };
   },

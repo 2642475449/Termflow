@@ -1,5 +1,28 @@
-import type { Session } from "@/types";
+import type { Session, WindowProjectContext } from "@/types";
 import { isAiAgentId } from "@/lib/agents";
+import { collectOpenProjects, projectPathKey } from "@/lib/openProjects";
+import type { ProjectInfo } from "@/store/utils/recentProjects";
+
+const PROJECT_NAME_COLLATOR = new Intl.Collator("en", { sensitivity: "accent" });
+
+export function collectTaskMonitorProjects(
+  contexts: WindowProjectContext[],
+  current: ProjectInfo | null,
+): ProjectInfo[] {
+  // 优先使用各窗口共享的项目名称，当前项目只在窗口信息尚未同步时补齐。
+  const projects = collectOpenProjects(contexts, null);
+  if (current && !projects.some((project) => projectPathKey(project.path) === projectPathKey(current.path))) {
+    projects.push(current);
+  }
+  return projects.sort((left, right) => {
+    // 固定排序语言，避免窗口语言或焦点变化影响顺序；同名项目按完整路径排序。
+    const byName = PROJECT_NAME_COLLATOR.compare(left.name, right.name);
+    if (byName !== 0) return byName;
+    const leftPath = projectPathKey(left.path);
+    const rightPath = projectPathKey(right.path);
+    return leftPath < rightPath ? -1 : leftPath > rightPath ? 1 : 0;
+  });
+}
 
 export interface TaskMonitorTab {
   id: string;

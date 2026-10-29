@@ -274,6 +274,7 @@ fn normalize_hook_agent(agent: &str) -> Result<&'static str, String> {
         "qoder" => Ok("qoder"),
         "antigravity" => Ok("antigravity"),
         "opencode" => Ok("opencode"),
+        "pi" => Ok("pi"),
         _ => Err("该智能体不支持 Hook 设置".to_string()),
     }
 }
@@ -333,6 +334,18 @@ fn get_agent_scope_config_path(
                 .join("hooks.json"))
         }
         ("opencode", "user") => get_user_opencode_plugin_path(),
+        ("pi", "user") => Ok(
+            crate::agent_paths::user_path(crate::agent_paths::AgentPath::Pi)?
+                .join("extensions")
+                .join(super::agent_hooks::PI_EXTENSION_SCRIPT_NAME),
+        ),
+        ("pi", "workspace") => {
+            let project_path = project_path.ok_or("当前未打开项目，无法读取项目级 Pi 扩展配置")?;
+            Ok(normalize_input_path(project_path)
+                .join(".pi")
+                .join("extensions")
+                .join(super::agent_hooks::PI_EXTENSION_SCRIPT_NAME))
+        }
         ("opencode", "workspace") => {
             let project_path =
                 project_path.ok_or("当前未打开项目，无法读取项目级 OpenCode Plugin 配置")?;
@@ -3840,6 +3853,31 @@ fn collect_opencode_plugin_record(
     }])
 }
 
+fn collect_pi_extension_record(scope: &str, config_path: &Path) -> Result<Vec<HookRecord>, String> {
+    let content = match fs::read_to_string(config_path) {
+        Ok(content) => content,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(format!("读取 Pi 状态扩展失败: {error}")),
+    };
+    Ok(vec![HookRecord {
+        info: HookInfo {
+            agent: "pi".to_string(),
+            id: build_hook_id(scope, "extension:event", "", &display_path(config_path)),
+            name: "Pi Status Extension".to_string(),
+            enabled: true,
+            scope: scope.to_string(),
+            event: "extension:event".to_string(),
+            matcher: String::new(),
+            command: display_path(config_path),
+            command_preview: "termflow-agent-status.js".to_string(),
+            timeout: None,
+            config_path: display_path(config_path),
+            updated_at: resolve_updated_at(config_path),
+        },
+        raw_config: Value::String(content),
+    }])
+}
+
 fn list_agent_hook_records_for_scope(
     agent: &str,
     scope: &str,
@@ -3849,6 +3887,7 @@ fn list_agent_hook_records_for_scope(
     let config_path = get_agent_scope_config_path(agent, scope, project_path)?;
     match agent {
         "opencode" => collect_opencode_plugin_record(scope, &config_path),
+        "pi" => collect_pi_extension_record(scope, &config_path),
         "antigravity" => collect_antigravity_hook_records(scope, &config_path),
         _ => collect_agent_json_hook_records(agent, scope, &config_path),
     }
@@ -4241,6 +4280,48 @@ pub fn configure_claude_hook() -> Result<HookStatus, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pi_catalog_uses_global_and_project_extension_paths() {
+        assert_eq!(normalize_hook_agent("pi").unwrap(), "pi");
+        assert_eq!(
+            get_agent_scope_config_path("pi", "user", None).unwrap(),
+            crate::agent_paths::user_path(crate::agent_paths::AgentPath::Pi)
+                .unwrap()
+                .join("extensions")
+                .join("termflow-agent-status.js")
+        );
+        assert_eq!(
+            get_agent_scope_config_path("pi", "workspace", Some("project")).unwrap(),
+            normalize_input_path("project")
+                .join(".pi")
+                .join("extensions")
+                .join("termflow-agent-status.js")
+        );
+        assert!(get_agent_scope_config_path("pi", "workspace", None).is_err());
+    }
+
+    #[test]
+    fn pi_catalog_reads_source_and_keeps_scope_identities_separate() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("termflow-agent-status.js");
+        assert!(collect_pi_extension_record("user", &path)
+            .unwrap()
+            .is_empty());
+        let source = "// Termflow managed Pi status extension\nexport default function(pi) {}";
+        fs::write(&path, source).unwrap();
+        let user = collect_pi_extension_record("user", &path).unwrap();
+        let project = collect_pi_extension_record("workspace", &path).unwrap();
+        assert_eq!(user.len(), 1);
+        assert_eq!(user[0].info.agent, "pi");
+        assert_eq!(user[0].info.scope, "user");
+        assert_ne!(user[0].info.id, project[0].info.id);
+        assert_eq!(user[0].raw_config, Value::String(source.into()));
+        assert_eq!(user[0].info.command, display_path(&path));
+        assert!(user[0].info.updated_at.is_some());
+        // 无法读取的路径不能伪装成“未安装”。
+        assert!(collect_pi_extension_record("user", temp.path()).is_err());
+    }
 
     #[test]
     fn pi_usage_reads_assistant_messages_and_separate_cache_tokens() {

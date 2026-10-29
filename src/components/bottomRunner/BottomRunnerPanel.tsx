@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect } from "react";
 import { DeleteOutlined, CloseOutlined, MinusOutlined, FullscreenExitOutlined, FullscreenOutlined,
-  ReloadOutlined, StopOutlined, VerticalAlignBottomOutlined, EnterOutlined } from "@ant-design/icons";
+  ReloadOutlined, StopOutlined, VerticalAlignBottomOutlined, EnterOutlined, ClearOutlined } from "@ant-design/icons";
 import { Tooltip, message } from "antd";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "@/store";
@@ -40,7 +40,7 @@ export function BottomRunnerPanel() {
   };
   const tool = (key: string, icon: React.ReactNode, onClick: () => void, disabled = false, pressed?: boolean) => (
     <Tooltip key={key} title={t(`bottomRunner.${key}`)}>
-      <button type="button" className="app-bottom-runner-tool flex h-7 w-7 shrink-0 items-center justify-center rounded"
+      <button type="button" className="app-bottom-runner-tool flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sm"
         aria-label={t(`bottomRunner.${key}`)} aria-pressed={pressed} disabled={disabled} onClick={onClick}>{icon}</button>
     </Tooltip>
   );
@@ -72,13 +72,15 @@ export function BottomRunnerPanel() {
               onClick={() => runAction(closeRunnerTab(tab))}><CloseOutlined /></button>
           </div>)}
         </div>
-        <div className="flex shrink-0 items-center gap-0.5">
+        <div className="flex shrink-0 items-center gap-1">
           {tool("rerun", <ReloadOutlined />, () => active && runAction(rerunRunner(active)), !active || active.status === "starting")}
           {tool("stop", <StopOutlined />, () => active && runAction(stopRunner(active)), !active || !isRunnerRunning(active))}
           {tool("clear", <DeleteOutlined />, clear, !active)}
+          <span aria-hidden="true" className="app-bottom-runner-tool-divider mx-1 h-4" />
           {tool("autoScroll", <VerticalAlignBottomOutlined />, store.toggleAutoScroll, false, store.autoScroll)}
           {tool("wordWrap", <EnterOutlined />, store.toggleWordWrap, false, store.wordWrap)}
-          {tool("clearFinished", <CloseOutlined />, () => runAction(clearFinishedRunnerTabs(projectPath)), !tabs.some((tab) => !isRunnerRunning(tab)))}
+          <span aria-hidden="true" className="app-bottom-runner-tool-divider mx-1 h-4" />
+          {tool("clearFinished", <ClearOutlined />, () => runAction(clearFinishedRunnerTabs(projectPath)), !tabs.some((tab) => !isRunnerRunning(tab)))}
           {tool(store.maximized ? "restore" : "maximize", store.maximized ? <FullscreenExitOutlined /> : <FullscreenOutlined />, store.toggleMaximized)}
           {tool("collapse", <MinusOutlined />, () => store.setOpen(false))}
         </div>
@@ -96,10 +98,6 @@ export function BottomRunnerPanel() {
           </Suspense>
         </div>)}
       </div>
-      {active && <div className="app-bottom-runner-footer flex h-6 shrink-0 items-center gap-2 px-3 text-xs">
-        <RunnerStatusIcon status={active.status} /><span>{t(`bottomRunner.status.${active.status}`, { code: active.exitCode })}</span>
-        <span className="truncate">{active.commandText}</span>
-      </div>}
     </section>
   </>;
 }

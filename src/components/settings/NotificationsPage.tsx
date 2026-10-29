@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { NotificationOutlined, PlayCircleOutlined, SoundOutlined } from "@ant-design/icons";
-import { Button, Input, message, Popconfirm, Select, Spin, Switch, Tag } from "antd";
+import { Button, Input, message, Modal, Popconfirm, Select, Spin, Switch, Tag } from "antd";
 import { useTranslation } from "react-i18next";
 import {
   clearRemoteNotificationCredentials,
@@ -21,7 +21,7 @@ import {
   type NotificationSoundType,
 } from "@/store";
 import { SettingsPageHeader } from "./SettingsPageHeader";
-import { SettingsSection as NotificationSection } from "./SettingsSection";
+import { SettingsField, SettingsSection as NotificationSection } from "./SettingsSection";
 import { SettingRow } from "./SettingRow";
 import feishuIcon from "@/assets/remote-notification-icons/feishu.svg";
 import dingtalkIcon from "@/assets/remote-notification-icons/dingtalk.svg";
@@ -49,8 +49,7 @@ function RemoteNotificationProviderIcon({
       src={REMOTE_NOTIFICATION_PROVIDER_ICONS[provider]}
       alt=""
       aria-hidden="true"
-      className="h-4 w-4 shrink-0 object-contain"
-      style={muted ? { opacity: 0.45 } : undefined}
+      className={`h-4 w-4 shrink-0 object-contain ${muted ? "opacity-45" : ""}`}
     />
   );
 }
@@ -103,6 +102,8 @@ export function NotificationsPage() {
   const [credentialLoading, setCredentialLoading] = useState(true);
   const [credentialSaving, setCredentialSaving] = useState(false);
   const [testingRemote, setTestingRemote] = useState(false);
+  const [configModalOpen, setConfigModalOpen] = useState(false);
+  const [enableOnSave, setEnableOnSave] = useState(false);
   const [webhookUrl, setWebhookUrl] = useState("");
   const [signingSecret, setSigningSecret] = useState("");
   const [signingSecretTouched, setSigningSecretTouched] = useState(false);
@@ -181,6 +182,23 @@ export function NotificationsPage() {
     },
   ];
 
+  function openConfigModal(shouldEnableOnSave = false) {
+    setWebhookUrl("");
+    setSigningSecret("");
+    setSigningSecretTouched(false);
+    setEnableOnSave(shouldEnableOnSave);
+    setConfigModalOpen(true);
+  }
+
+  function closeConfigModal() {
+    if (credentialSaving) return;
+    setConfigModalOpen(false);
+    setEnableOnSave(false);
+    setWebhookUrl("");
+    setSigningSecret("");
+    setSigningSecretTouched(false);
+  }
+
   async function saveCredentials() {
     if (!webhookUrl.trim() || credentialSaving) return;
     setCredentialSaving(true);
@@ -191,6 +209,11 @@ export function NotificationsPage() {
         signingSecretTouched ? signingSecret : null
       );
       setCredentialStatus(status);
+      if (enableOnSave) {
+        setRemoteEnabled(selectedProvider, true);
+      }
+      setConfigModalOpen(false);
+      setEnableOnSave(false);
       setWebhookUrl("");
       setSigningSecret("");
       setSigningSecretTouched(false);
@@ -244,7 +267,7 @@ export function NotificationsPage() {
 
   function changeRemoteEnabled(enabled: boolean) {
     if (enabled && !credentialStatus?.configured) {
-      message.warning(t("settings.notifications.remote.configureFirst"));
+      openConfigModal(true);
       return;
     }
     setRemoteEnabled(selectedProvider, enabled);
@@ -255,7 +278,7 @@ export function NotificationsPage() {
     ? `settings.notifications.terminalCompletion.status.${terminalCompletionIntegration.status}`
     : "settings.notifications.terminalCompletion.status.noActiveTerminal";
   const terminalCompletionStatusDescriptionKey = !terminalCompletionIntegration
-    ? "settings.notifications.terminalCompletion.status.noActiveTerminalDesc"
+    ? "settings.notifications.terminalCompletion.noActiveTerminalDesc"
     : terminalCompletionIntegration.reason
       ? `settings.notifications.terminalCompletion.statusReason.${terminalCompletionIntegration.reason}`
       : terminalCompletionIntegration.status === "available"
@@ -295,6 +318,18 @@ export function NotificationsPage() {
                 )}
               </Tag>
             )}
+            {!selectedChannel.enabled && !credentialLoading && (
+              <Button
+                size="small"
+                onClick={() => openConfigModal(!credentialStatus?.configured)}
+              >
+                {t(
+                  credentialStatus?.configured
+                    ? "settings.notifications.remote.editConfig"
+                    : "settings.notifications.remote.configure"
+                )}
+              </Button>
+            )}
             <Switch
               checked={selectedChannel.enabled}
               disabled={credentialLoading}
@@ -310,10 +345,10 @@ export function NotificationsPage() {
         >
           <Select
             size="small"
+            className="w-[140px]"
             value={notificationThresholdMs}
             options={systemThresholdOptions}
             onChange={setNotificationThreshold}
-            style={{ width: 140 }}
           />
         </NotificationRow>
         {selectedChannel.enabled && (
@@ -323,10 +358,10 @@ export function NotificationsPage() {
             >
               <Select
                 size="small"
+                className="w-[140px]"
                 value={selectedChannel.thresholdMs}
                 options={remoteThresholdOptions}
                 onChange={(value) => setRemoteThreshold(selectedProvider, value)}
-                style={{ width: 140 }}
               />
             </NotificationRow>
             {remoteEventEntries.map(({ event, label }) => (
@@ -356,10 +391,10 @@ export function NotificationsPage() {
           >
             <Select
               size="small"
+              className="w-[140px]"
               value={terminalCompletionNotificationThresholdMs}
               options={terminalCompletionThresholdOptions}
               onChange={setTerminalCompletionNotificationThreshold}
-              style={{ width: 140 }}
             />
           </NotificationRow>
         )}
@@ -373,12 +408,10 @@ export function NotificationsPage() {
 
       {selectedChannel.enabled && (
         <NotificationSection title={t("settings.notifications.remote.configuration")}>
-          <div className="space-y-4">
-          <div>
-            <div className="mb-1.5 text-xs" style={{ color: "var(--cs-text-secondary)" }}>
-              {t("settings.notifications.remote.provider")}
-            </div>
+          <NotificationRow label={t("settings.notifications.remote.provider")}>
             <Select
+              size="small"
+              className="w-[160px]"
               value={selectedProvider}
               options={REMOTE_NOTIFICATION_PROVIDERS.map(({ id, supported }) => ({
                 value: id,
@@ -394,70 +427,26 @@ export function NotificationsPage() {
                 ),
               }))}
               onChange={setSelectedProvider}
-              style={{ width: 240 }}
             />
-          </div>
-          <div
-            className="rounded-lg px-3 py-2 text-[11px] leading-5"
-            style={{ background: "var(--cs-bg-hover)", color: "var(--cs-text-secondary)" }}
+          </NotificationRow>
+          <NotificationRow
+            label={t("settings.notifications.feishu.webhook")}
+            status={
+              credentialStatus?.configured
+                ? `${t("settings.notifications.feishu.currentWebhook")}：${credentialStatus.endpointHint}`
+                : t("settings.notifications.remote.notConfigured")
+            }
           >
-            {t("settings.notifications.feishu.securityHint")}
-          </div>
-          {credentialStatus?.configured && (
-            <div className="flex items-center justify-between gap-3 text-xs">
-              <span style={{ color: "var(--cs-text-tertiary)" }}>
-                {t("settings.notifications.feishu.currentWebhook")}
-              </span>
-              <span className="font-mono" style={{ color: "var(--cs-text-primary)" }}>
-                {credentialStatus.endpointHint}
-              </span>
-            </div>
-          )}
-          <div>
-            <div className="mb-1.5 text-xs" style={{ color: "var(--cs-text-secondary)" }}>
-              {t("settings.notifications.feishu.webhook")}
-            </div>
-            <Input.Password
-              value={webhookUrl}
-              autoComplete="off"
-              placeholder={t("settings.notifications.feishu.webhookPlaceholder")}
-              onChange={(event) => setWebhookUrl(event.target.value)}
-            />
-          </div>
-          <div>
-            <div className="mb-1.5 text-xs" style={{ color: "var(--cs-text-secondary)" }}>
-              {t("settings.notifications.feishu.signingSecret")}
-            </div>
-            <Input.Password
-              value={signingSecret}
-              autoComplete="new-password"
-              placeholder={t(
-                credentialStatus?.signingSecretConfigured
-                  ? "settings.notifications.feishu.signingSecretKeepPlaceholder"
-                  : "settings.notifications.feishu.signingSecretPlaceholder"
-              )}
-              onChange={(event) => {
-                setSigningSecret(event.target.value);
-                setSigningSecretTouched(true);
-              }}
-            />
-          </div>
-          {!credentialStatus?.secureStorageAvailable && !credentialLoading && (
-            <div className="app-settings-warning px-3 py-2 text-xs">
-              {t("settings.notifications.feishu.secureStorageUnavailable")}
-            </div>
-          )}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Button
-                type="primary"
-                loading={credentialSaving}
-                disabled={!webhookUrl.trim() || !credentialStatus?.secureStorageAvailable}
-                onClick={() => void saveCredentials()}
-              >
-                {t("common.save")}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="small" onClick={() => openConfigModal()}>
+                {t(
+                  credentialStatus?.configured
+                    ? "settings.notifications.remote.editConfig"
+                    : "settings.notifications.remote.configure"
+                )}
               </Button>
               <Button
+                size="small"
                 icon={<NotificationOutlined />}
                 loading={testingRemote}
                 disabled={!credentialStatus?.configured}
@@ -465,17 +454,18 @@ export function NotificationsPage() {
               >
                 {t("settings.notifications.remote.sendTest")}
               </Button>
+              {credentialStatus?.configured && (
+                <Popconfirm
+                  title={t("settings.notifications.remote.clearConfirm")}
+                  onConfirm={() => void clearCredentials()}
+                >
+                  <Button size="small" danger>
+                    {t("settings.notifications.remote.clear")}
+                  </Button>
+                </Popconfirm>
+              )}
             </div>
-            {credentialStatus?.configured && (
-              <Popconfirm
-                title={t("settings.notifications.remote.clearConfirm")}
-                onConfirm={() => void clearCredentials()}
-              >
-                <Button danger>{t("settings.notifications.remote.clear")}</Button>
-              </Popconfirm>
-            )}
-          </div>
-          </div>
+          </NotificationRow>
         </NotificationSection>
       )}
 
@@ -487,24 +477,25 @@ export function NotificationsPage() {
           soundEntries.map(({ event, label }, index) => (
             <div
               key={event}
-              className="flex items-center px-4 py-3"
-              style={{ borderTop: index === 0 ? "1px solid var(--cs-border-card)" : undefined }}
+              className={`flex items-center px-4 py-3 ${
+                index === 0 ? "border-t border-[var(--cs-border-card)]" : ""
+              }`}
             >
               <div className="mr-4 flex min-w-0 flex-1 items-center gap-2">
-                <SoundOutlined className="text-xs" style={{ color: "var(--cs-primary)" }} />
-                <span className="text-sm" style={{ color: "var(--cs-text-primary)" }}>
+                <SoundOutlined className="text-xs text-[var(--cs-primary)]" />
+                <span className="text-sm text-[var(--cs-text-primary)]">
                   {label}
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 <Select
                   size="small"
+                  className="w-[220px]"
                   value={soundMap[event]}
                   options={soundOptions}
                   onChange={(value) => setSoundMap(event, value)}
                   showSearch
                   optionFilterProp="label"
-                  style={{ width: 220 }}
                 />
                 <Button
                   type="text"
@@ -518,6 +509,78 @@ export function NotificationsPage() {
           ))}
       </NotificationSection>
 
+      <Modal
+        open={configModalOpen}
+        title={t("settings.notifications.remote.modalTitle", {
+          provider: t(`settings.notifications.remote.providers.${selectedProvider}`),
+        })}
+        okText={t("common.save")}
+        cancelText={t("common.cancel", { defaultValue: "取消" })}
+        onOk={() => void saveCredentials()}
+        onCancel={closeConfigModal}
+        confirmLoading={credentialSaving}
+        closable={!credentialSaving}
+        maskClosable={!credentialSaving}
+        cancelButtonProps={{ disabled: credentialSaving }}
+        okButtonProps={{
+          disabled: !webhookUrl.trim() || !credentialStatus?.secureStorageAvailable,
+        }}
+        destroyOnHidden
+        centered
+        width={520}
+      >
+        <div className="space-y-4 pt-2">
+          <div className="rounded-lg bg-[var(--cs-bg-hover)] px-3 py-2 text-xs leading-5 text-[var(--cs-text-secondary)]">
+            {t("settings.notifications.feishu.securityHint")}
+          </div>
+          {credentialStatus?.configured && (
+            <div className="flex items-center justify-between gap-3 text-xs">
+              <span className="text-[var(--cs-text-tertiary)]">
+                {t("settings.notifications.feishu.currentWebhook")}
+              </span>
+              <span className="font-mono text-[var(--cs-text-primary)]">
+                {credentialStatus.endpointHint}
+              </span>
+            </div>
+          )}
+          <SettingsField
+            htmlFor="remote-notification-webhook"
+            label={t("settings.notifications.feishu.webhook")}
+          >
+            <Input.Password
+              id="remote-notification-webhook"
+              value={webhookUrl}
+              autoComplete="off"
+              placeholder={t("settings.notifications.feishu.webhookPlaceholder")}
+              onChange={(event) => setWebhookUrl(event.target.value)}
+            />
+          </SettingsField>
+          <SettingsField
+            htmlFor="remote-notification-signing-secret"
+            label={t("settings.notifications.feishu.signingSecret")}
+          >
+            <Input.Password
+              id="remote-notification-signing-secret"
+              value={signingSecret}
+              autoComplete="new-password"
+              placeholder={t(
+                credentialStatus?.signingSecretConfigured
+                  ? "settings.notifications.feishu.signingSecretKeepPlaceholder"
+                  : "settings.notifications.feishu.signingSecretPlaceholder"
+              )}
+              onChange={(event) => {
+                setSigningSecret(event.target.value);
+                setSigningSecretTouched(true);
+              }}
+            />
+          </SettingsField>
+          {!credentialStatus?.secureStorageAvailable && !credentialLoading && (
+            <div className="app-settings-warning px-3 py-2 text-xs">
+              {t("settings.notifications.feishu.secureStorageUnavailable")}
+            </div>
+          )}
+        </div>
+      </Modal>
     </>
   );
 }

@@ -1,3 +1,4 @@
+import { getHookCommandName, getHookSource, groupHooksBySource, isTermflowHook } from "@/lib/hookPresentation";
 import { SkillsSettingsPage } from "./settings/SkillsSettingsPage";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { BackgroundSettings } from "./settings/BackgroundSettings";
@@ -24,13 +25,13 @@ import {
   CloudServerOutlined,
   RobotOutlined,
   GlobalOutlined,
-  GithubOutlined,
+
   SafetyCertificateOutlined,
   DatabaseOutlined,
 } from "@ant-design/icons";
 import { Pagination, Segmented, Tag, Select, Spin, Empty, Button, message, Switch, Input, Drawer, Modal, Tooltip, Popover } from "antd";
 import { invoke } from "@tauri-apps/api/core";
-import { openUrl } from "@tauri-apps/plugin-opener";
+
 import { useTranslation } from "react-i18next";
 import {
   useAppStore,
@@ -110,19 +111,15 @@ import { McpServersView } from "@/components/settings/McpServersView";
 import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
 import { SettingsSection as SettingSection } from "@/components/settings/SettingsSection";
 import { NotificationsPage } from "@/components/settings/NotificationsPage";
+import { AboutPage } from "@/components/settings/AboutPage";
 import { NetworkSettingsPage } from "@/components/settings/NetworkSettingsPage";
 import {
   AGENT_DEFINITIONS,
-  AI_AGENT_ORDER,
+
   getAgentIdsWithCapability,
 } from "@/lib/agents";
-import packageJson from "../../package.json";
 
-// Fill in the website URL when it is ready.
-const ABOUT_LINKS: Record<"website" | "github", string | null> = {
-  website: null,
-  github: "https://github.com/2642475449/Termflow",
-};
+
 
 type SettingsPage = "general" | "network" | "notifications" | "agents" | "git" | "terminal" | "voiceRecognition" | "shortcuts" | "skills" | "hooks" | "mcpServers" | "commands" | "quickCommands" | "claudeMd" | "searchIndex" | "dataPrivacy" | "archived" | "about";
 
@@ -189,14 +186,6 @@ interface ThemeOption {
   category: "light" | "dark";
 }
 
-type AboutFlowHexPalette = {
-  base: string;
-  pale: string;
-  vivid: string;
-  cobalt: string;
-  deep: string;
-  highlight: string;
-};
 
 const themeOptions: ThemeOption[] = [
   {
@@ -2019,9 +2008,7 @@ function formatHookMatcher(matcher: string, t: (key: string) => string) {
 }
 
 function isDefaultHook(hook: HookInfo) {
-  return hook.command.includes("termflow-hook.cjs")
-    || hook.command.includes("termflow-agent-hook.cjs")
-    || hook.command.includes("termflow-status.js");
+  return isTermflowHook(hook);
 }
 
 function buildHookEmptyState(params: {
@@ -2063,53 +2050,22 @@ function buildHookEmptyState(params: {
   };
 }
 
-function HookRow({
-  hook,
-  deleting,
-  canDelete,
-  onDelete,
-  onOpen,
-}: {
-  hook: HookInfo;
-  deleting: boolean;
-  canDelete: boolean;
-  onDelete: () => void;
-  onOpen: () => void;
-}) {
+function HookRow({ hook, onOpen }: { hook: HookInfo; onOpen: () => void }) {
   const { t } = useTranslation();
   return (
     <div className="app-settings-resource-row">
       <button type="button" className="app-settings-resource-row__open" onClick={onOpen}>
         <div className="app-settings-resource-row__name">
-          <ApiOutlined style={{ color: "var(--cs-primary)", fontSize: 14 }} />
-          <span className="text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>
-            {hook.name}
-          </span>
-          <Tag className="!m-0" color="purple">
-            {formatHookEventLabel(hook.event)}
-          </Tag>
-          {isDefaultHook(hook) && (
-            <Tag className="!m-0" color="cyan">
-              {t("settings.hooks.default")}
-            </Tag>
-          )}
+          <ApiOutlined className="text-[var(--cs-primary)]" aria-hidden="true" />
+          <span className="text-sm font-medium text-[var(--cs-text-primary)]">{formatHookEventLabel(hook.event)}</span>
+          {!hook.enabled && <Tag>{t("settings.hooks.registrationDisabled")}</Tag>}
         </div>
-        <div className="app-settings-resource-row__summary">{hook.commandPreview}</div>
+        <div className="app-settings-resource-row__summary">
+          {t("settings.hooks.matcher")}: {formatHookMatcher(hook.matcher, t)}
+          <span className="ml-3 break-all">{getHookCommandName(hook)}</span>
+        </div>
       </button>
-      {canDelete && (
-        <Button
-          danger
-          size="small"
-          icon={<DeleteOutlined />}
-          loading={deleting}
-          onClick={(event) => {
-            event.stopPropagation();
-            void onDelete();
-          }}
-        >
-          {t("common.delete")}
-        </Button>
-      )}
+      <Button type="text" size="small" onClick={onOpen}>{t("settings.hooks.viewDetails")}</Button>
     </div>
   );
 }
@@ -2170,6 +2126,9 @@ function HookDetailPanel({
           )}
           <p className="m-0 text-xs text-[var(--cs-text-secondary)]">
             {t("settings.shared.updatedAt", { value: formatHookUpdatedAt(detail.hook.updatedAt) ?? t("common.unknown") })}
+          </p>
+          <p className="text-xs text-[var(--cs-text-secondary)]">
+            {t("settings.hooks.sourceLabel")}: {t(`settings.hooks.sources.${getHookSource(detail.hook)}`)}. {t("settings.hooks.inferredSourceHint")}
           </p>
           <div className="space-y-1">
             <div className="text-xs" style={{ color: "var(--cs-text-tertiary)" }}>{t("settings.hooks.matcher")}</div>
@@ -2243,10 +2202,21 @@ function hookAgentLabel(agent: HookAgent, t: (key: string) => string) {
 }
 
 function HooksPage() {
-  const { t } = useTranslation();
-  const currentProject = useAppStore((s) => s.currentProject);
-  const projectPath = currentProject?.path ?? null;
+  const projectPath = useAppStore((state) => state.currentProject?.path ?? null);
   const [activeAgent, setActiveAgent] = useState<HookAgent>("claude");
+  // 切换上下文时重新挂载，旧请求、详情和确认目标不能带入另一个智能体。
+  return <HooksAgentPage key={JSON.stringify([activeAgent, projectPath])}
+    activeAgent={activeAgent} setActiveAgent={setActiveAgent} projectPath={projectPath} />;
+}
+
+function HooksAgentPage({ activeAgent, setActiveAgent, projectPath }: {
+  activeAgent: HookAgent;
+  setActiveAgent: (agent: HookAgent) => void;
+  projectPath: string | null;
+}) {
+  const { t } = useTranslation();
+  const catalogRequest = useRef(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<HookCatalog | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -2264,24 +2234,23 @@ function HooksPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<HookInfo | null>(null);
-  const [page, setPage] = useState(1);
 
   const loadCatalog = useCallback(async (silent = false) => {
-    if (silent) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
-    }
+    const request = ++catalogRequest.current;
+    setLoadError(null);
+    setRefreshing(silent);
+    setLoading(!silent);
     try {
       const next = await listAgentHooks(activeAgent, projectPath);
-      setCatalog(next);
+      if (request === catalogRequest.current) setCatalog(next);
     } catch (error) {
+      if (request !== catalogRequest.current) return;
+      setCatalog(null);
+      setLoadError(error instanceof Error ? error.message : String(error));
       console.error("Failed to load hooks:", error);
-      message.error(t("settings.hooks.loadFailed"));
     } finally {
-      if (silent) {
+      if (request === catalogRequest.current) {
         setRefreshing(false);
-      } else {
         setLoading(false);
       }
     }
@@ -2294,12 +2263,9 @@ function HooksPage() {
   }, [projectPath]);
 
   useEffect(() => {
-    loadCatalog();
+    void loadCatalog();
+    return () => { catalogRequest.current += 1; };
   }, [loadCatalog]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [search, activeAgent, activeScope, eventFilter, catalog?.hooks]);
 
   const eventOptions = useMemo(() => {
     const uniqueEvents = Array.from(
@@ -2336,16 +2302,16 @@ function HooksPage() {
     });
   }, [catalog?.hooks, eventFilter, search]);
 
-  const workspaceCount = baseFilteredHooks.filter((hook) => hook.scope === "workspace").length;
-  const userCount = baseFilteredHooks.filter((hook) => hook.scope === "user").length;
+  const workspaceCount = (catalog?.hooks ?? []).filter((hook) => hook.scope === "workspace").length;
+  const userCount = (catalog?.hooks ?? []).filter((hook) => hook.scope === "user").length;
   const workspaceManagedHookCount = (catalog?.hooks ?? []).filter(
     (hook) => hook.agent === "claude" && hook.scope === "workspace" && isDefaultHook(hook)
   ).length;
   const filteredHooks = baseFilteredHooks.filter((hook) => hook.scope === activeScope);
-  const pagedHooks = filteredHooks.slice(
-    (page - 1) * SETTINGS_LIST_PAGE_SIZE,
-    page * SETTINGS_LIST_PAGE_SIZE
-  );
+  const scopeHooks = (catalog?.hooks ?? []).filter((hook) => hook.scope === activeScope);
+  const sourceGroups = groupHooksBySource(filteredHooks);
+  const hasHookFilter = search.trim().length > 0 || eventFilter !== "all";
+  const managedCount = (catalog?.hooks ?? []).filter((hook) => hook.scope === "user" && isDefaultHook(hook)).length;
 
   async function handleOpenDetail(hook: HookInfo) {
     setSelectedHook(hook);
@@ -2402,9 +2368,12 @@ function HooksPage() {
   }
 
   async function handleRepair() {
+    const request = ++catalogRequest.current;
     setRepairing(true);
     try {
       const next = await repairAgentHooks(activeAgent, "user", projectPath);
+      if (request !== catalogRequest.current) return;
+      setLoadError(null);
       setCatalog(next);
       setActiveScope("user");
       message.success(t("settings.hooks.repairUserSuccess", { agent: hookAgentLabel(activeAgent, t) }));
@@ -2415,6 +2384,8 @@ function HooksPage() {
       }));
     } finally {
       setRepairing(false);
+      setRefreshing(false);
+      setLoading(false);
     }
   }
 
@@ -2442,97 +2413,41 @@ function HooksPage() {
   }
 
   function renderHookSection() {
-    const currentScope = activeScope;
-    const configPath = currentScope === "workspace" ? catalog?.workspaceConfigPath : catalog?.userConfigPath;
-    const totalItems = filteredHooks.length;
-    const items = pagedHooks;
-    const emptyState = buildHookEmptyState({
-      agent: activeAgent,
-      scope: currentScope,
-      projectPath,
-      search,
-      eventFilter,
-      t,
-    });
-
-    return (
-      <SettingSection title={`${t("settings.menu.hooks")} (${totalItems})`}>
-        <div className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
-          <div className="min-w-0">
-
-            <div className="text-[11px] mt-1 break-all" style={{ color: "var(--cs-text-tertiary)" }}>
-              {configPath || (currentScope === "workspace" ? t("settings.hooks.workspaceConfigUnavailable") : t("settings.hooks.userConfigUnavailable"))}
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              size="small"
-              icon={<FolderOpenOutlined />}
-              onClick={() => configPath && openInFileManager(configPath)}
-              disabled={!configPath}
-            >
-              {t("settings.hooks.openConfigFile")}
-            </Button>
-            {currentScope === "user" && (
-              <Button
-                size="small"
-                type="primary"
-                onClick={handleRepair}
-                loading={repairing}
-              >
-                {t("settings.hooks.repairGlobalHook")}
-              </Button>
-            )}
-          </div>
-        </div>
-        {items.length === 0 ? (
-          <Empty
-            description={emptyState.description}
-            style={{ padding: "28px 0" }}
-          >
-            <div
-              className="text-xs mb-4"
-              style={{ color: "var(--cs-text-tertiary)" }}
-            >
-              {emptyState.detail}
-            </div>
-            {currentScope === "user" && (
-              <Button type="primary" onClick={handleRepair} loading={repairing}>
-                {t("settings.hooks.repairGlobalHook")}
-              </Button>
-            )}
-          </Empty>
-        ) : (
-          <>
-            {items.map((hook) => (
-              <HookRow
-                key={hook.id}
-                hook={hook}
-                deleting={deletingId === hook.id}
-                canDelete={hook.agent === "claude"}
-                onOpen={() => handleOpenDetail(hook)}
-                onDelete={() => handleRequestDelete(hook)}
-              />
-            ))}
-            <ListPagination
-              current={page}
-              onChange={setPage}
-              pageSize={SETTINGS_LIST_PAGE_SIZE}
-              total={totalItems}
-            />
-          </>
-        )}
-      </SettingSection>
-    );
-  }
-
-  if (loading) {
-    return (
-      <div className="flex justify-center py-20">
-        <Spin />
+    const configPath = activeScope === "workspace" ? catalog?.workspaceConfigPath : catalog?.userConfigPath;
+    const emptyState = buildHookEmptyState({ agent: activeAgent, scope: activeScope, projectPath, search, eventFilter, t });
+    return <section className="space-y-4" aria-label={t("settings.menu.hooks")}>
+      <div className="text-sm text-[var(--cs-text-secondary)]">
+        {hasHookFilter
+          ? t("settings.hooks.matchingRegistrations", { count: filteredHooks.length, total: scopeHooks.length })
+          : t("settings.hooks.registrationOverview", {
+              count: scopeHooks.length,
+              events: new Set(scopeHooks.map((hook) => hook.event)).size,
+              sources: groupHooksBySource(scopeHooks).length,
+            })}
       </div>
-    );
+      {sourceGroups.length === 0 ? <Empty description={emptyState.description}>
+        <p className="text-xs text-[var(--cs-text-secondary)]">{emptyState.detail}</p>
+      </Empty> : sourceGroups.map((group) => <details key={`${activeAgent}:${activeScope}:${group.source}:${search}:${eventFilter}`}
+        open={hasHookFilter || undefined} className="app-hook-source-group rounded-lg border border-[var(--cs-border)]">
+        <summary className="cursor-pointer rounded-lg px-4 py-3 text-sm text-[var(--cs-text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--cs-primary)]">
+          <span className="ml-2 font-medium">{t(`settings.hooks.sources.${group.source}`)}</span>
+          <span className="ml-3 text-xs text-[var(--cs-text-secondary)]">{t("settings.hooks.registrationCount", { count: group.hooks.length })}</span>
+        </summary>
+        <div className="border-t border-[var(--cs-border)] px-4">
+          <p className="my-3 text-xs text-[var(--cs-text-secondary)]">{t(group.source === "termflow" ? "settings.hooks.managedSourceHint" : "settings.hooks.inferredSourceHint")}</p>
+          {group.hooks.map((hook) => <HookRow key={hook.id} hook={hook} onOpen={() => void handleOpenDetail(hook)} />)}
+        </div>
+      </details>)}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--cs-border)] py-4">
+        <span className="min-w-0 break-all text-xs text-[var(--cs-text-secondary)]">{t("settings.hooks.configFile")}: {configPath || t("settings.hooks.notSet")}</span>
+        <Button size="small" icon={<FolderOpenOutlined />} disabled={!configPath}
+          onClick={() => { if (configPath) void openInFileManager(configPath).catch(() => message.error(t("settings.hooks.openConfigFailed"))); }}>
+          {t("settings.hooks.openConfigFile")}
+        </Button>
+      </div>
+    </section>;
   }
+
 
   return (
     <>
@@ -2541,15 +2456,9 @@ function HooksPage() {
         actions={
           <>
             <Button
-              type="primary"
-              onClick={handleRepair}
-              loading={repairing}
-            >
-              {t("settings.hooks.repairGlobalHook")}
-            </Button>
-            <Button
               icon={<ReloadOutlined spin={refreshing} />}
-              onClick={() => loadCatalog(true)}
+              disabled={refreshing || repairing || loading}
+              onClick={() => void loadCatalog(true)}
             >
               {t("common.refresh")}
             </Button>
@@ -2577,41 +2486,42 @@ function HooksPage() {
             </Button>
           </div>
         )}
-        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_auto]">
-          <Input
-            allowClear
-            prefix={<SearchOutlined style={{ color: "var(--cs-text-tertiary)" }} />}
-            placeholder={t("settings.hooks.searchPlaceholder")}
-            aria-label={t("settings.hooks.searchPlaceholder")}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <div className="flex items-center gap-3 flex-wrap xl:justify-end">
-            <div className="app-settings-choices" role="group" aria-label={t("settings.mcpServers.selectAgent")}>
-              {HOOK_AGENTS.map(agent => <button key={agent} type="button"
-                aria-pressed={agent === activeAgent} onClick={() => setActiveAgent(agent)}>
-                <AgentIcon agentId={agent} size={14} />{hookAgentLabel(agent, t)}
-              </button>)}
-            </div>
-            <Select
-              size="middle"
-              value={eventFilter}
-              onChange={setEventFilter}
-              options={eventOptions}
-              style={{ minWidth: 160 }}
-            />
-          </div>
+        <div className="app-settings-choices mb-4 flex flex-wrap" role="group" aria-label={t("settings.mcpServers.selectAgent")}>
+          {HOOK_AGENTS.map(agent => <button key={agent} type="button" aria-pressed={agent === activeAgent} onClick={() => setActiveAgent(agent)}>
+            <AgentIcon agentId={agent} size={14} />{hookAgentLabel(agent, t)}
+          </button>)}
         </div>
-        <ScopeTabs
+        {!loading && !loadError && <ScopeTabs
           value={activeScope}
           workspaceCount={workspaceCount}
           userCount={userCount}
           projectAvailable={!!projectPath}
           onChange={setActiveScope}
-        />
+        />}
       </SettingsPageHeader>
 
+      {loading ? <div className="flex justify-center py-20"><Spin /></div>
+        : loadError ? <div role="alert" className="rounded-lg border border-[var(--cs-border)] p-6 text-[var(--cs-text-primary)]">
+          <p className="font-medium">{t("settings.hooks.loadFailed")}</p>
+          <p className="break-words text-sm text-[var(--cs-text-secondary)]">{loadError}</p>
+          <Button onClick={() => void loadCatalog()}>{t("settings.hooks.retryLoad")}</Button>
+        </div> : <>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--cs-border)] bg-[var(--cs-bg-hover)] p-4 text-[var(--cs-text-primary)]">
+        <div>
+          <div className="text-sm font-medium">{t("settings.hooks.managedRegistrationSummary", { agent: hookAgentLabel(activeAgent, t), count: managedCount })}</div>
+          <p className="mb-0 mt-1 text-xs text-[var(--cs-text-secondary)]">{t("settings.hooks.managedRegistrationHint")}</p>
+        </div>
+        <Button type="primary" onClick={handleRepair} loading={repairing}>{t("settings.hooks.repairGlobalHook")}</Button>
+      </div>
+      <div className="mb-4 flex flex-wrap gap-3">
+        <Input className="min-w-48 flex-1" allowClear prefix={<SearchOutlined aria-hidden="true" />}
+          placeholder={t("settings.hooks.searchPlaceholder")} aria-label={t("settings.hooks.searchPlaceholder")}
+          value={search} onChange={(e) => setSearch(e.target.value)} />
+        <Select className="min-w-44" aria-label={t("settings.hooks.allEvents")} value={eventFilter} onChange={setEventFilter} options={eventOptions} />
+      </div>
+      {activeAgent === "pi" && <p className="text-xs text-[var(--cs-text-secondary)]">{t("settings.hooks.piExtensionHint")}</p>}
       {renderHookSection()}
+      </>}
 
       <HookDetailPanel
         open={!!selectedHook}
@@ -2624,6 +2534,7 @@ function HooksPage() {
         onDelete={() => {
           if (selectedHook) {
             handleRequestDelete(selectedHook);
+            setSelectedHook(null);
           }
         }}
         deleting={deletingId === selectedHook?.id}
@@ -3278,529 +3189,6 @@ export function McpServersPage() {
   );
 }
 
-/* ────────────── About Page ────────────── */
-const ABOUT_FLOW_VERTEX_SHADER = `
-  attribute vec2 aPosition;
-
-  void main() {
-    gl_Position = vec4(aPosition, 0.0, 1.0);
-  }
-`;
-
-const ABOUT_FLOW_FRAGMENT_SHADER = `
-  precision highp float;
-
-  uniform vec2 uResolution;
-  uniform float uTime;
-  uniform float uEnergy;
-  uniform vec3 uBaseColor;
-  uniform vec3 uPaleColor;
-  uniform vec3 uVividColor;
-  uniform vec3 uCobaltColor;
-  uniform vec3 uDeepColor;
-  uniform vec3 uHighlightColor;
-
-  float hash(vec2 point) {
-    point = fract(point * vec2(123.34, 456.21));
-    point += dot(point, point + 45.32);
-    return fract(point.x * point.y);
-  }
-
-  float noise(vec2 point) {
-    vec2 cell = floor(point);
-    vec2 local = fract(point);
-    local = local * local * (3.0 - 2.0 * local);
-
-    return mix(
-      mix(hash(cell), hash(cell + vec2(1.0, 0.0)), local.x),
-      mix(hash(cell + vec2(0.0, 1.0)), hash(cell + vec2(1.0, 1.0)), local.x),
-      local.y
-    );
-  }
-
-  float fbm(vec2 point) {
-    float value = 0.0;
-    float amplitude = 0.56;
-    mat2 rotation = mat2(0.8, 0.6, -0.6, 0.8);
-
-    for (int index = 0; index < 5; index++) {
-      value += amplitude * noise(point);
-      point = rotation * point * 2.0 + 3.7;
-      amplitude *= 0.5;
-    }
-
-    return value;
-  }
-
-  void main() {
-    vec2 uv = gl_FragCoord.xy / uResolution;
-    vec2 point = uv * vec2(uResolution.x / uResolution.y, 1.0) * 1.62;
-    float time = uTime;
-
-    vec2 flow = vec2(
-      fbm(point + time * vec2(0.58, 0.18)),
-      fbm(point + time * vec2(-0.38, 0.48) + 5.2)
-    );
-    vec2 eddy = vec2(
-      fbm(point + 2.25 * flow + time * vec2(0.31, -0.42) + 1.7),
-      fbm(point + 2.25 * flow + time * vec2(-0.22, 0.34) + 8.3)
-    );
-    float cloud = fbm(point + 2.55 * eddy);
-
-    vec3 fluid = mix(uPaleColor, uCobaltColor, smoothstep(0.18, 0.64, cloud));
-    fluid = mix(fluid, uVividColor, smoothstep(0.48, 0.9, flow.x));
-    fluid = mix(fluid, uDeepColor, smoothstep(0.58, 0.94, eddy.y));
-
-    float folded = abs((cloud + 0.44 * eddy.x + 0.18 * flow.y) - 0.73);
-    float vein = 1.0 - smoothstep(0.055, 0.2, folded);
-    fluid = mix(fluid, uHighlightColor, vein * 0.62);
-    fluid += 0.14 * eddy.x * uPaleColor;
-    fluid = mix(fluid, fluid * fluid * 1.32 + fluid * 0.1, uEnergy * 0.48);
-
-    // Preserve a clean reading area on the left while avoiding a straight transition boundary.
-    float transitionWarp = uv.x + 0.22 * (flow.y - 0.5) + 0.12 * (eddy.x - 0.5);
-    float colourZone = smoothstep(0.18, 0.92, transitionWarp);
-    float density = smoothstep(0.22, 0.82, cloud + 0.28 * eddy.x);
-    float pigment = clamp(colourZone * (0.28 + 0.88 * density), 0.0, 1.0);
-    float rightDepth = smoothstep(0.58, 1.0, uv.x + 0.1 * eddy.y);
-    fluid = mix(fluid, uDeepColor, rightDepth * 0.34);
-
-    vec3 colour = mix(uBaseColor, fluid, pigment);
-    float topGlass = smoothstep(0.56, 1.0, uv.y) * (1.0 - pigment * 0.7);
-    colour = mix(colour, uBaseColor, topGlass * 0.34);
-
-    gl_FragColor = vec4(colour, 1.0);
-  }
-`;
-
-type AboutFlowRgb = readonly [number, number, number];
-
-type AboutFlowPalette = {
-  base: AboutFlowRgb;
-  pale: AboutFlowRgb;
-  vivid: AboutFlowRgb;
-  cobalt: AboutFlowRgb;
-  deep: AboutFlowRgb;
-  highlight: AboutFlowRgb;
-};
-
-const parseAboutFlowColor = (value: string): AboutFlowRgb | null => {
-  const match = /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(value.trim());
-  if (!match) return null;
-
-  return [
-    Number.parseInt(match[1], 16) / 255,
-    Number.parseInt(match[2], 16) / 255,
-    Number.parseInt(match[3], 16) / 255,
-  ];
-};
-
-const readAboutFlowPalette = (): AboutFlowPalette | null => {
-  const styles = getComputedStyle(document.documentElement);
-  const readColor = (name: string) => parseAboutFlowColor(styles.getPropertyValue(name));
-  const base = readColor("--cs-about-flow-base");
-  const pale = readColor("--cs-about-flow-pale");
-  const vivid = readColor("--cs-about-flow-vivid");
-  const cobalt = readColor("--cs-about-flow-cobalt");
-  const deep = readColor("--cs-about-flow-deep");
-  const highlight = readColor("--cs-about-flow-highlight");
-
-  if (!base || !pale || !vivid || !cobalt || !deep || !highlight) return null;
-  return { base, pale, vivid, cobalt, deep, highlight };
-};
-
-const parseAboutFlowPalette = (palette: AboutFlowHexPalette): AboutFlowPalette | null => {
-  const base = parseAboutFlowColor(palette.base);
-  const pale = parseAboutFlowColor(palette.pale);
-  const vivid = parseAboutFlowColor(palette.vivid);
-  const cobalt = parseAboutFlowColor(palette.cobalt);
-  const deep = parseAboutFlowColor(palette.deep);
-  const highlight = parseAboutFlowColor(palette.highlight);
-
-  if (!base || !pale || !vivid || !cobalt || !deep || !highlight) return null;
-  return { base, pale, vivid, cobalt, deep, highlight };
-};
-
-function AboutFlowBackdrop({
-  palette,
-  animate = true,
-  preserveDrawingBuffer = true,
-}: {
-  palette?: AboutFlowHexPalette;
-  animate?: boolean;
-  preserveDrawingBuffer?: boolean;
-} = {}) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const card = canvas?.closest<HTMLElement>(".app-flow-surface");
-    if (!canvas || !card) return;
-    canvas.style.visibility = "hidden";
-
-    const initialPalette = palette
-      ? parseAboutFlowPalette(palette)
-      : readAboutFlowPalette();
-    if (!initialPalette) return;
-
-    const gl = canvas.getContext("webgl", {
-      alpha: false,
-      antialias: false,
-      depth: false,
-      premultipliedAlpha: false,
-      preserveDrawingBuffer,
-    });
-    if (!gl) return;
-
-    const compileShader = (type: number, source: string) => {
-      const shader = gl.createShader(type);
-      if (!shader) return null;
-
-      gl.shaderSource(shader, source);
-      gl.compileShader(shader);
-      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        gl.deleteShader(shader);
-        return null;
-      }
-      return shader;
-    };
-
-    const vertexShader = compileShader(gl.VERTEX_SHADER, ABOUT_FLOW_VERTEX_SHADER);
-    const fragmentShader = compileShader(gl.FRAGMENT_SHADER, ABOUT_FLOW_FRAGMENT_SHADER);
-    if (!vertexShader || !fragmentShader) {
-      if (vertexShader) gl.deleteShader(vertexShader);
-      if (fragmentShader) gl.deleteShader(fragmentShader);
-      return;
-    }
-
-    const program = gl.createProgram();
-    if (!program) {
-      gl.deleteShader(vertexShader);
-      gl.deleteShader(fragmentShader);
-      return;
-    }
-
-    gl.attachShader(program, vertexShader);
-    gl.attachShader(program, fragmentShader);
-    gl.linkProgram(program);
-    gl.deleteShader(vertexShader);
-    gl.deleteShader(fragmentShader);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      gl.deleteProgram(program);
-      return;
-    }
-
-    const buffer = gl.createBuffer();
-    if (!buffer) {
-      gl.deleteProgram(program);
-      return;
-    }
-
-    gl.useProgram(program);
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-
-    const position = gl.getAttribLocation(program, "aPosition");
-    const resolution = gl.getUniformLocation(program, "uResolution");
-    const time = gl.getUniformLocation(program, "uTime");
-    const energy = gl.getUniformLocation(program, "uEnergy");
-    const paletteUniforms = {
-      base: gl.getUniformLocation(program, "uBaseColor"),
-      pale: gl.getUniformLocation(program, "uPaleColor"),
-      vivid: gl.getUniformLocation(program, "uVividColor"),
-      cobalt: gl.getUniformLocation(program, "uCobaltColor"),
-      deep: gl.getUniformLocation(program, "uDeepColor"),
-      highlight: gl.getUniformLocation(program, "uHighlightColor"),
-    };
-    gl.enableVertexAttribArray(position);
-    gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
-
-    const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const targetFrameInterval = 1000 / 30;
-    let animationFrame = 0;
-    let flowTime = 8.4;
-    let stirEnergy = 0;
-    let previousFrame = performance.now();
-    let previousDraw = 0;
-    let previousPointer: { x: number; y: number } | null = null;
-    let isVisible = true;
-
-    const applyPalette = (palette: AboutFlowPalette) => {
-      gl.useProgram(program);
-      (Object.keys(paletteUniforms) as Array<keyof AboutFlowPalette>).forEach((key) => {
-        const [red, green, blue] = palette[key];
-        gl.uniform3f(paletteUniforms[key], red, green, blue);
-      });
-    };
-
-    const resize = () => {
-      const bounds = canvas.getBoundingClientRect();
-      const dpr = Math.min(window.devicePixelRatio || 1, 1);
-      const width = Math.max(1, Math.round(bounds.width * dpr));
-      const height = Math.max(1, Math.round(bounds.height * dpr));
-      if (canvas.width !== width || canvas.height !== height) {
-        canvas.width = width;
-        canvas.height = height;
-        gl.viewport(0, 0, width, height);
-      }
-    };
-
-    const draw = (now: number) => {
-      if (!isVisible) return;
-
-      const shouldAnimate = animate && !motionQuery.matches && !document.hidden;
-      if (
-        shouldAnimate &&
-        previousDraw > 0 &&
-        now - previousDraw < targetFrameInterval
-      ) {
-        animationFrame = window.requestAnimationFrame(draw);
-        return;
-      }
-
-      previousDraw = now;
-      resize();
-      const delta = Math.min((now - previousFrame) / 1000, 0.1);
-      previousFrame = now;
-
-      if (shouldAnimate) {
-        stirEnergy *= Math.exp(-delta * 1.55);
-        flowTime += delta * (0.25 + stirEnergy * 0.82);
-      }
-
-      gl.useProgram(program);
-      gl.uniform2f(resolution, canvas.width, canvas.height);
-      gl.uniform1f(time, flowTime);
-      gl.uniform1f(energy, stirEnergy);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-      canvas.style.visibility = "visible";
-
-      if (shouldAnimate) {
-        animationFrame = window.requestAnimationFrame(draw);
-      }
-    };
-
-    const restart = () => {
-      window.cancelAnimationFrame(animationFrame);
-      previousFrame = performance.now();
-      if (isVisible) draw(previousFrame);
-    };
-
-    const handleThemeChange = () => {
-      if (palette) return;
-      const currentPalette = readAboutFlowPalette();
-      if (!currentPalette) return;
-      applyPalette(currentPalette);
-      restart();
-    };
-
-    const handlePointerMove = (event: PointerEvent) => {
-      if (!animate || motionQuery.matches) return;
-      if (previousPointer) {
-        const distance = Math.hypot(event.clientX - previousPointer.x, event.clientY - previousPointer.y);
-        stirEnergy = Math.min(1, stirEnergy + distance * 0.012);
-      }
-      previousPointer = { x: event.clientX, y: event.clientY };
-    };
-
-    const clearPointer = () => {
-      previousPointer = null;
-    };
-
-    const handleDocumentVisibilityChange = () => {
-      if (document.hidden) {
-        window.cancelAnimationFrame(animationFrame);
-      } else {
-        restart();
-      }
-    };
-
-    const resizeObserver = new ResizeObserver(resize);
-    const visibilityObserver = new IntersectionObserver(([entry]) => {
-      const nextVisible = entry?.isIntersecting ?? true;
-      if (nextVisible === isVisible) return;
-
-      isVisible = nextVisible;
-      if (isVisible) {
-        restart();
-      } else {
-        window.cancelAnimationFrame(animationFrame);
-      }
-    });
-    const themeObserver = palette ? null : new MutationObserver(handleThemeChange);
-    resizeObserver.observe(canvas);
-    visibilityObserver.observe(card);
-    themeObserver?.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["data-theme"],
-    });
-    motionQuery.addEventListener("change", restart);
-    document.addEventListener("visibilitychange", handleDocumentVisibilityChange);
-    if (animate) {
-      card.addEventListener("pointermove", handlePointerMove);
-      card.addEventListener("pointerleave", clearPointer);
-    }
-    applyPalette(initialPalette);
-    restart();
-
-    return () => {
-      window.cancelAnimationFrame(animationFrame);
-      resizeObserver.disconnect();
-      visibilityObserver.disconnect();
-      themeObserver?.disconnect();
-      motionQuery.removeEventListener("change", restart);
-      document.removeEventListener("visibilitychange", handleDocumentVisibilityChange);
-      card.removeEventListener("pointermove", handlePointerMove);
-      card.removeEventListener("pointerleave", clearPointer);
-      gl.deleteBuffer(buffer);
-      gl.deleteProgram(program);
-    };
-  }, [animate, palette, preserveDrawingBuffer]);
-
-  const fallbackBackground = palette
-    ? `linear-gradient(104deg, ${palette.base} 0%, ${palette.pale} 48%, ${palette.vivid} 72%, ${palette.deep} 100%)`
-    : undefined;
-
-  return (
-    <div
-      aria-hidden="true"
-      className="about-flow-backdrop pointer-events-none absolute inset-0 overflow-hidden"
-      style={{ background: fallbackBackground }}
-    >
-      <canvas ref={canvasRef} className="about-flow-canvas absolute inset-0 h-full w-full" />
-      <div
-        className="about-flow-gloss"
-        style={palette ? {
-          background: `linear-gradient(180deg, ${palette.base}3d, transparent 38%), radial-gradient(ellipse 78% 150% at 0% 50%, ${palette.base}52, ${palette.vivid}14 48%, transparent 100%)`,
-        } : undefined}
-      />
-    </div>
-  );
-}
-function AboutPage() {
-  const { t } = useTranslation();
-  const supportedAgents = AI_AGENT_ORDER.map((id) => ({
-    id,
-    name: AGENT_DEFINITIONS[id].displayName,
-  }));
-  const productHighlights = [
-    {
-      key: "agent-orchestration",
-      icon: <AppstoreOutlined />,
-      title: t("settings.about.agentOrchestration"),
-      desc: t("settings.about.agentOrchestrationDesc"),
-    },
-    {
-      key: "context-continuity",
-      icon: <ReloadOutlined />,
-      title: t("settings.about.contextContinuity"),
-      desc: t("settings.about.contextContinuityDesc"),
-    },
-    {
-      key: "local-control",
-      icon: <SafetyCertificateOutlined />,
-      title: t("settings.about.localControl"),
-      desc: t("settings.about.localControlDesc"),
-    },
-  ];
-  const techStack = [
-    { label: t("settings.about.framework"), value: "Tauri 2 + React 19" },
-    { label: t("settings.about.terminal"), value: "xterm.js + ConPTY" },
-    { label: t("settings.about.stateManagement"), value: "Zustand + persist" },
-    { label: t("settings.about.appId"), value: "com.termflow.desktop", mono: true },
-  ];
-
-  const openAboutLink = (url: string | null) => {
-    if (url) void openUrl(url);
-  };
-
-  return (
-    <div className="app-about-settings">
-      <div className="app-about-hero app-flow-surface app-glass-card relative overflow-hidden rounded-2xl">
-        <AboutFlowBackdrop />
-        <div className="app-about-hero-glow-primary pointer-events-none absolute -right-16 -top-28 h-64 w-64 rounded-full blur-3xl" />
-        <div className="app-about-hero-glow-secondary pointer-events-none absolute -bottom-24 left-1/3 h-48 w-48 rounded-full blur-3xl" />
-
-        <div className="app-about-hero-content relative flex flex-col gap-6 px-6 py-7 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex min-w-0 items-center gap-4">
-            <img
-              src="/logo.png"
-              alt="Termflow"
-              className="h-16 w-16 shrink-0 object-contain"
-            />
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2.5">
-                <h1 className="app-about-hero-title m-0 text-2xl font-semibold tracking-tight">
-                  Termflow
-                </h1>
-                <Tag className="app-about-hero-version !m-0 rounded-full !px-2.5">v{packageJson.version}</Tag>
-              </div>
-
-
-            </div>
-          </div>
-
-          <div className="flex shrink-0 flex-wrap gap-2">
-            <Button
-              icon={<GlobalOutlined />}
-              disabled={!ABOUT_LINKS.website}
-              onClick={() => openAboutLink(ABOUT_LINKS.website)}
-            >
-              {t("settings.about.officialWebsite")}
-            </Button>
-            <Button
-              icon={<GithubOutlined />}
-              disabled={!ABOUT_LINKS.github}
-              onClick={() => openAboutLink(ABOUT_LINKS.github)}
-            >
-              GitHub
-            </Button>
-            {!ABOUT_LINKS.website && !ABOUT_LINKS.github && (
-              <Tag className="!m-0 flex items-center rounded-full !px-2.5">
-                {t("settings.about.comingSoon")}
-              </Tag>
-            )}
-          </div>
-        </div>
-
-        <div className="app-about-hero-footer relative flex flex-wrap items-center gap-2 border-t px-6 py-4">
-          <span className="app-about-hero-agents-label mr-1 text-xs font-medium">
-            {t("settings.about.supportedAgents")}
-          </span>
-          {supportedAgents.map((agent) => (
-            <div
-              key={agent.id}
-              className="app-about-hero-agent flex items-center gap-1.5 rounded-lg px-2.5 py-1.5"
-            >
-              <AgentIcon agentId={agent.id} size={15} />
-              <span className="text-xs font-medium">{agent.name}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <SettingSection title={t("settings.menu.about")}>
-        <p className="m-0 text-sm leading-7 text-[var(--cs-text-secondary)]">{t("settings.about.description")}</p>
-      </SettingSection>
-      <SettingSection title={t("settings.about.capabilities")}>
-        <div className="app-about-highlights">
-          {productHighlights.map((item) => <div key={item.key} className="min-w-0">
-            <h3 className="m-0 flex items-center gap-2 text-sm font-medium text-[var(--cs-text-primary)]">
-              <span className="text-[var(--cs-primary)]" aria-hidden="true">{item.icon}</span>{item.title}
-            </h3>
-            <p className="mb-0 mt-2 text-xs leading-6 text-[var(--cs-text-secondary)]">{item.desc}</p>
-          </div>)}
-        </div>
-      </SettingSection>
-      <SettingSection title={t("settings.about.techStack")}>
-        {techStack.map((item) => <SettingRow key={item.label} label={item.label}>
-          <span className={item.mono ? "break-all font-mono text-xs text-[var(--cs-text-secondary)]" : "text-sm text-[var(--cs-text-primary)]"}>{item.value}</span>
-        </SettingRow>)}
-      </SettingSection>
-    </div>
-  );
-}
-
 const pageComponents: Record<SettingsPage, React.FC> = {
   general: GeneralPage,
   network: NetworkSettingsPage,
@@ -3937,7 +3325,7 @@ function SettingsPanel() {
         className="app-settings-scroll"
       >
         <div className={`app-settings-content ${contentLayout}`} data-settings-page={activePage}>
-          <PageComponent />
+          {activePage === "about" ? <AboutPage onNavigate={(page) => selectPage(page as SettingsPage)} /> : <PageComponent />}
         </div>
       </div>
     </div>

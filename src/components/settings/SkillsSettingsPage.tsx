@@ -203,23 +203,34 @@ export function SkillsSettingsPage() {
         <Button icon={<ShopOutlined />} onClick={openSkillMarketplaceTab}>{t("settings.skillMarket.title")}</Button>
         <Button icon={<ReloadOutlined spin={loading} />} onClick={() => void refresh()}>{t("common.refresh")}</Button>
         <Button type="primary" icon={<PlusOutlined />} disabled={!catalog} onClick={openAdd}>{t("settings.skills.addSkill")}</Button>
-      </div>} />
+      </div>}>
+      <div className="app-settings-choices" role="group" aria-label={t("settings.skills.filterByAgent")}>
+        <button type="button" aria-pressed={agent === "all"} onClick={() => { setAgent("all"); changeFilter(); }}>
+          {t("settings.skills.allAgents")}
+        </button>
+        {SKILL_AGENTS.map((id) => (
+          <button key={id} type="button" aria-pressed={agent === id} onClick={() => { setAgent(id); changeFilter(); }}>
+            <AgentIcon agentId={id} size={14} />{label(id)}
+          </button>
+        ))}
+      </div>
+      <div className="app-settings-scope-tabs" role="group" aria-label={t("settings.skills.skillScope")}>
+        <button type="button" aria-pressed={scope === "all"} onClick={() => { setScope("all"); changeFilter(); }}>
+          {t("settings.skills.allScopes")}<span>{groups.length}</span>
+        </button>
+        <button type="button" aria-pressed={scope === "workspace"} disabled={!projectPath}
+          onClick={() => { setScope("workspace"); changeFilter(); }}>
+          {scopeLabel("workspace")}<span>{groups.filter((group) => group.locations.some((item) => item.scope === "workspace")).length}</span>
+        </button>
+        <button type="button" aria-pressed={scope === "user"} onClick={() => { setScope("user"); changeFilter(); }}>
+          {scopeLabel("user")}<span>{groups.filter((group) => group.locations.some((item) => item.scope === "user")).length}</span>
+        </button>
+      </div>
+    </SettingsPageHeader>
     <div className="app-skills-filters">
       <div className="flex flex-wrap items-center gap-3">
-        <Segmented value={scope} onChange={(value) => { setScope(value as typeof scope); changeFilter(); }} options={[
-          { value: "all", label: `${t("settings.skills.allScopes")} (${groups.length})` },
-          { value: "workspace", label: `${scopeLabel("workspace")} (${groups.filter((group) => group.locations.some((item) => item.scope === "workspace")).length})`, disabled: !projectPath },
-          { value: "user", label: `${scopeLabel("user")} (${groups.filter((group) => group.locations.some((item) => item.scope === "user")).length})` },
-        ]} />
         <Input className="app-skills-search" allowClear prefix={<SearchOutlined />} placeholder={t("settings.skills.searchPlaceholder")} aria-label={t("settings.skills.searchPlaceholder")}
           value={search} onChange={(event) => { setSearch(event.target.value); changeFilter(); }} />
-      </div>
-      <div className="flex flex-wrap items-center gap-3">
-        <Select className="app-skills-agent-filter" aria-label={t("settings.skills.filterByAgent")} value={agent}
-          onChange={(value) => { setAgent(value); changeFilter(); }} options={[
-            { value: "all", label: t("settings.skills.allAgents") },
-            ...SKILL_AGENTS.map((id) => ({ value: id, label: <span className="inline-flex items-center gap-2"><AgentIcon agentId={id} size={14} />{label(id)}</span> })),
-          ]} />
         <Segmented value={status} onChange={(value) => { setStatus(value as typeof status); changeFilter(); }} options={[
           { value: "all", label: t("settings.shared.allStatus") }, { value: "enabled", label: t("common.enabled") }, { value: "disabled", label: t("common.disabled") },
         ]} />

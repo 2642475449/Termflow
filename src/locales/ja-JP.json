@@ -3,6 +3,7 @@
     "terminalNotReady": "ターミナルの初期化がタイムアウトしました。再実行してください",
     "title": "スクリプトランナー",
     "toggle": "スクリプトランナーの表示切替",
+    "runningTasks": "実行中のタスク：{{count}}",
     "toggleShortcut": "スクリプトランナーの表示切替 ({{shortcut}})",
     "rerun": "再実行",
     "stop": "停止",
@@ -250,7 +251,8 @@
     "disabled": "無効",
     "unknown": "不明",
     "on": "オン",
-    "off": "オフ"
+    "off": "オフ",
+    "close": "閉じる"
   },
   "editorContextMenu": {
     "undo": "元に戻す",
@@ -290,7 +292,6 @@
     "newLine": "改行",
     "keepOpen": "ウィンドウを保持",
     "close": "閉じる",
-
     "title": "ファイル内検索",
     "placeholder": "プロジェクト内で検索するテキストを入力",
     "entireProject": "プロジェクト全体 · {{name}}",
@@ -387,7 +388,9 @@
       "unavailable": "Antigravity セッションを開始してメッセージを送信すると割り当てを表示します",
       "unavailableShort": "使用量を取得できません"
     },
-    "usage": { "stale": "データが古くなっています" },
+    "usage": {
+      "stale": "データが古くなっています"
+    },
     "codexUsage": {
       "title": "Codex 使用状況",
       "loading": "Codex 使用状況...",
@@ -964,7 +967,8 @@
     "gitConflictResolverBinary": "バイナリファイルは内蔵エディターでマージできません",
     "gitConflictResolverBinaryDescription": "現在側または受信側を選択してください。選択した版は直ちにステージされます。",
     "gitConflictResolverLoadFailed": "コンフリクト詳細を読み込めませんでした",
-    "gitConflictResolverResolveFailed": "コンフリクトを解決できませんでした",    "gitAbortMerge": "マージを中止",
+    "gitConflictResolverResolveFailed": "コンフリクトを解決できませんでした",
+    "gitAbortMerge": "マージを中止",
     "gitResolveSuccess": "コンフリクトを解決しました",
     "gitResolveFailed": "コンフリクト解決に失敗しました",
     "gitAbortMergeSuccess": "マージを中止しました",
@@ -1376,7 +1380,7 @@
         "title": "Git AI コミットメッセージスタイル",
         "description": "AI がコミットメッセージを生成するときの名前付きスタイルを管理します。AI をクリックするとデフォルトを使用し、メニューから一時的に別のスタイルを選べます。",
         "add": "新規スタイル",
-        "default": "デフォルト",
+        "default": "Termflow 管理",
         "setDefault": "デフォルトに設定",
         "createTitle": "コミットメッセージスタイルを作成",
         "editTitle": "コミットメッセージスタイルを編集",
@@ -1423,8 +1427,26 @@
         }
       },
       "quota": {
-        "loading": "利用枠を読み込み中…", "installFirst": "インストールしてログインすると利用枠を表示します", "unsupported": "利用枠の読み取りには未対応です", "unavailable": "利用枠を一時的に取得できません", "startSession": "セッションを開始すると利用枠を表示します", "refreshFailed": "利用枠の更新に失敗したため、前回取得した結果を表示しています",
-        "healthy": "利用枠は十分です", "low": "利用枠が少なくなっています", "exhausted": "利用枠がまもなくなくなります", "session": "5 時間 {{value}}%", "weekly": "週間 {{value}}%", "remainingPercent": "残り {{value}}%", "remainingCredits": "残り {{value}}", "signInAntigravity": "Antigravity CLI にログインしてください", "timeout": "利用枠の照会がタイムアウトしました", "gemini": "Gemini", "claudeGpt": "Claude/GPT", "argon": "Gemini 4 Argon", "sessionShort": "5時間", "weeklyShort": "週間"
+        "loading": "利用枠を読み込み中…",
+        "installFirst": "インストールしてログインすると利用枠を表示します",
+        "unsupported": "利用枠の読み取りには未対応です",
+        "unavailable": "利用枠を一時的に取得できません",
+        "startSession": "セッションを開始すると利用枠を表示します",
+        "refreshFailed": "利用枠の更新に失敗したため、前回取得した結果を表示しています",
+        "healthy": "利用枠は十分です",
+        "low": "利用枠が少なくなっています",
+        "exhausted": "利用枠がまもなくなくなります",
+        "session": "5 時間 {{value}}%",
+        "weekly": "週間 {{value}}%",
+        "remainingPercent": "残り {{value}}%",
+        "remainingCredits": "残り {{value}}",
+        "signInAntigravity": "Antigravity CLI にログインしてください",
+        "timeout": "利用枠の照会がタイムアウトしました",
+        "gemini": "Gemini",
+        "claudeGpt": "Claude/GPT",
+        "argon": "Gemini 4 Argon",
+        "sessionShort": "5時間",
+        "weeklyShort": "週間"
       },
       "viewDetails": "詳細を見る",
       "pathHint": "検出には Termflow から利用できる現在のシステム PATH を使用します。新しくインストールまたは更新したエージェントが検出されない場合は、コンピューターを再起動して再試行してください。"
@@ -1495,9 +1517,19 @@
       "resetSuccess": "既定のショートカットに戻しました"
     },
     "notifications": {
-      "channels": "通知チャネル", "triggerPolicy": "通知条件", "systemThreshold": "システム通知のしきい値", "feishuThreshold": "Feishu 長時間タスクのしきい値",
-      "feishuThresholdDesc": "完了通知だけに適用され、エラー・入力待ち・権限要求は直ちに通知されます", "remoteThreshold": "リモート通知の長時間タスクしきい値", "remoteThresholdDesc": "完了通知だけに適用され、エラー・入力待ち・権限要求は直ちに通知されます",
-      "threshold": { "min5": "5 分", "min10": "10 分", "min30": "30 分", "hour1": "1 時間" },
+      "channels": "通知チャネル",
+      "triggerPolicy": "通知条件",
+      "systemThreshold": "システム通知のしきい値",
+      "feishuThreshold": "Feishu 長時間タスクのしきい値",
+      "feishuThresholdDesc": "完了通知だけに適用され、エラー・入力待ち・権限要求は直ちに通知されます",
+      "remoteThreshold": "リモート通知の長時間タスクしきい値",
+      "remoteThresholdDesc": "完了通知だけに適用され、エラー・入力待ち・権限要求は直ちに通知されます",
+      "threshold": {
+        "min5": "5 分",
+        "min10": "10 分",
+        "min30": "30 分",
+        "hour1": "1 時間"
+      },
       "terminalCompletion": {
         "section": "ターミナルコマンド",
         "enabled": "長時間コマンド完了通知",
@@ -1505,7 +1537,12 @@
         "threshold": "長時間コマンド通知のしきい値",
         "thresholdDesc": "コマンド完了時、この時間以上実行されていた場合のみ通知します。",
         "integrationStatus": "現在のターミナル統合状態",
-        "status": { "pending": "確認待ち", "available": "有効", "unavailable": "利用不可", "noActiveTerminal": "アクティブなターミナルがありません" },
+        "status": {
+          "pending": "確認待ち",
+          "available": "有効",
+          "unavailable": "利用不可",
+          "noActiveTerminal": "アクティブなターミナルがありません"
+        },
         "statusReason": {
           "available": "PowerShell シェル統合のライフサイクルマーカーを受信しました。",
           "pending": "現在のターミナルから統合状態が報告されるのを待っています。",
@@ -1524,39 +1561,96 @@
         "unknownBody": "コマンドは {{duration}} 後に終了しましたが、結果は不明です。"
       },
       "events": {
-        "completed": "長時間タスクの完了", "completedDesc": "実行時間が Feishu のしきい値を超えた場合に完了カードを送信",
-        "error": "タスク失敗", "errorDesc": "プロセスまたは Hook のエラーを直ちに通知",
-        "waiting": "入力待ち", "waitingDesc": "エージェントが回答を必要とするときに通知",
-        "permission": "権限要求", "permissionDesc": "エージェントが承認を待っているときに通知"
+        "completed": "長時間タスクの完了",
+        "completedDesc": "実行時間が Feishu のしきい値を超えた場合に完了カードを送信",
+        "error": "タスク失敗",
+        "errorDesc": "プロセスまたは Hook のエラーを直ちに通知",
+        "waiting": "入力待ち",
+        "waitingDesc": "エージェントが回答を必要とするときに通知",
+        "permission": "権限要求",
+        "permissionDesc": "エージェントが承認を待っているときに通知"
       },
       "remote": {
-        "channelName": "リモート通知", "channelDesc": "設定済みのリモートサービスへタスクの状態を送信します。複数のサービスを順次追加できます。",
-        "configured": "設定済み", "notConfigured": "未設定", "configuration": "リモート通知の設定", "provider": "通知サービス",
-        "comingSoon": "対応予定", "providers": { "feishu": "Feishu", "dingtalk": "DingTalk", "wechat": "WeChat", "qq": "QQ", "telegram": "Telegram" },
-        "saved": "リモート通知の設定を安全に保存しました", "cleared": "リモート通知の設定を消去しました", "configureFirst": "先にこの通知サービスを保存してテストしてください",
-        "loadFailed": "リモート通知の設定読み込みに失敗しました：{{error}}", "saveFailed": "リモート通知の設定保存に失敗しました：{{error}}", "clearFailed": "リモート通知の設定消去に失敗しました：{{error}}",
-        "testSent": "テスト通知を送信しました", "testFailed": "リモート通知テストに失敗しました：{{error}}", "sendTest": "テスト送信", "clear": "設定を消去", "clearConfirm": "現在の通知サービス設定を消去しますか？"
+        "channelName": "リモート通知",
+        "channelDesc": "設定済みのリモートサービスへタスクの状態を送信します。複数のサービスを順次追加できます。",
+        "configured": "設定済み",
+        "notConfigured": "未設定",
+        "configuration": "リモート通知の設定",
+        "provider": "通知サービス",
+        "configure": "設定",
+        "editConfig": "設定を変更",
+        "modalTitle": "{{provider}} 通知の設定",
+        "comingSoon": "対応予定",
+        "providers": {
+          "feishu": "Feishu",
+          "dingtalk": "DingTalk",
+          "wechat": "WeChat",
+          "qq": "QQ",
+          "telegram": "Telegram"
+        },
+        "saved": "リモート通知の設定を安全に保存しました",
+        "cleared": "リモート通知の設定を消去しました",
+        "configureFirst": "先にこの通知サービスを保存してテストしてください",
+        "loadFailed": "リモート通知の設定読み込みに失敗しました：{{error}}",
+        "saveFailed": "リモート通知の設定保存に失敗しました：{{error}}",
+        "clearFailed": "リモート通知の設定消去に失敗しました：{{error}}",
+        "testSent": "テスト通知を送信しました",
+        "testFailed": "リモート通知テストに失敗しました：{{error}}",
+        "sendTest": "テスト送信",
+        "clear": "設定を消去",
+        "clearConfirm": "現在の通知サービス設定を消去しますか？"
       },
       "feishu": {
-        "channelName": "Feishu 通知", "channelDesc": "グループのカスタム Bot Webhook で長時間タスクの状態カードを送信",
-        "configured": "設定済み", "notConfigured": "未設定", "configuration": "Feishu 設定",
+        "channelName": "Feishu 通知",
+        "channelDesc": "グループのカスタム Bot Webhook で長時間タスクの状態カードを送信",
+        "configured": "設定済み",
+        "notConfigured": "未設定",
+        "configuration": "Feishu 設定",
         "securityHint": "Webhook と署名シークレットは Windows 資格情報マネージャーに保存され、プロジェクト、通常の設定 DB、ログには書き込まれません。Feishu 側で署名検証を有効にすることを推奨します。",
-        "currentWebhook": "現在の Webhook", "webhook": "Webhook URL", "webhookPlaceholder": "https://open.feishu.cn/open-apis/bot/v2/hook/...",
-        "signingSecret": "署名シークレット", "signingSecretPlaceholder": "Feishu Bot の署名シークレットを入力", "signingSecretKeepPlaceholder": "設定済み。空欄なら現在の値を維持",
+        "currentWebhook": "現在の Webhook",
+        "webhook": "Webhook URL",
+        "webhookPlaceholder": "https://open.feishu.cn/open-apis/bot/v2/hook/...",
+        "signingSecret": "署名シークレット",
+        "signingSecretPlaceholder": "Feishu Bot の署名シークレットを入力",
+        "signingSecretKeepPlaceholder": "設定済み。空欄なら現在の値を維持",
         "secureStorageUnavailable": "このシステムでは安全な資格情報ストレージを利用できないため、Feishu 通知を有効にできません。",
-        "sendTest": "テスト送信", "clear": "設定を消去", "clearConfirm": "Feishu Webhook と署名シークレットを消去しますか？",
-        "saved": "Feishu 設定を安全に保存しました", "cleared": "Feishu 設定を消去しました", "configureFirst": "先に Feishu Webhook を保存してテストしてください",
-        "loadFailed": "Feishu 設定の読み込みに失敗しました：{{error}}", "saveFailed": "Feishu 設定の保存に失敗しました：{{error}}", "clearFailed": "Feishu 設定の消去に失敗しました：{{error}}",
-        "testSent": "テストカードを送信しました。Feishu グループを確認してください。", "testFailed": "Feishu テストに失敗しました：{{error}}",
-        "testCardTitle": "Termflow 通知テスト", "testCardChannel": "通知チャネル", "testCardStatus": "接続状態", "testCardSuccess": "正常に設定されています",
-        "card": { "completed": "タスク完了", "error": "タスク失敗", "waiting": "入力待ち", "permission": "権限待ち", "project": "プロジェクト", "task": "タスク", "agent": "エージェント", "duration": "所要時間", "occurredAt": "時刻" }
+        "sendTest": "テスト送信",
+        "clear": "設定を消去",
+        "clearConfirm": "Feishu Webhook と署名シークレットを消去しますか？",
+        "saved": "Feishu 設定を安全に保存しました",
+        "cleared": "Feishu 設定を消去しました",
+        "configureFirst": "先に Feishu Webhook を保存してテストしてください",
+        "loadFailed": "Feishu 設定の読み込みに失敗しました：{{error}}",
+        "saveFailed": "Feishu 設定の保存に失敗しました：{{error}}",
+        "clearFailed": "Feishu 設定の消去に失敗しました：{{error}}",
+        "testSent": "テストカードを送信しました。Feishu グループを確認してください。",
+        "testFailed": "Feishu テストに失敗しました：{{error}}",
+        "testCardTitle": "Termflow 通知テスト",
+        "testCardChannel": "通知チャネル",
+        "testCardStatus": "接続状態",
+        "testCardSuccess": "正常に設定されています",
+        "card": {
+          "completed": "タスク完了",
+          "error": "タスク失敗",
+          "waiting": "入力待ち",
+          "permission": "権限待ち",
+          "project": "プロジェクト",
+          "task": "タスク",
+          "agent": "エージェント",
+          "duration": "所要時間",
+          "occurredAt": "時刻"
+        }
       }
     },
     "network": {
       "title": "ネットワークプロキシ",
       "description": "ターミナル、エージェント CLI、Git、アプリ更新、Termflow の通信に共通のプロキシを設定します。",
       "proxyMode": "HTTP プロキシ",
-      "mode": { "disabled": "プロキシを使用しない", "system": "システムプロキシを使用（推奨）", "custom": "カスタムプロキシ" },
+      "mode": {
+        "disabled": "プロキシを使用しない",
+        "system": "システムプロキシを使用（推奨）",
+        "custom": "カスタムプロキシ"
+      },
       "customProxyUrl": "プロキシ URL",
       "noProxy": "プロキシを使用しないアドレス",
       "noProxyHint": "カンマ区切り。localhost、127.0.0.1、::1 は常に保持されます。",
@@ -1564,8 +1658,22 @@
       "resolvedProxy": "現在のプロキシ：{{proxy}}",
       "resolvedDirect": "現在の接続：直接接続",
       "source": "設定元：{{source}}",
-      "sources": { "disabled": "無効", "custom": "カスタム設定", "windows-system": "Windows システムプロキシ", "system-none": "Windows システム（プロキシなし）", "environment": "プロセス環境変数", "unknown": "不明" },
-      "warnings": { "pacUnsupported": "PAC 自動設定が検出されました。このバージョンでは PAC を解析できないため、カスタムプロキシを使用してください。", "pacManualUsed": "PAC も検出されました。Termflow は Windows の手動プロキシを使用しています。", "systemReadFailed": "Windows システムプロキシを読み取れないため、直接接続を使用します。", "systemServerReadFailed": "システムプロキシは有効ですがサーバーを読み取れないため、直接接続を使用します。", "systemParseFailed": "Windows システムプロキシを解析できないため、直接接続を使用します。", "systemUnsupported": "このプラットフォームではシステムプロキシの自動検出を利用できません。カスタムプロキシを使用してください。" },
+      "sources": {
+        "disabled": "無効",
+        "custom": "カスタム設定",
+        "windows-system": "Windows システムプロキシ",
+        "system-none": "Windows システム（プロキシなし）",
+        "environment": "プロセス環境変数",
+        "unknown": "不明"
+      },
+      "warnings": {
+        "pacUnsupported": "PAC 自動設定が検出されました。このバージョンでは PAC を解析できないため、カスタムプロキシを使用してください。",
+        "pacManualUsed": "PAC も検出されました。Termflow は Windows の手動プロキシを使用しています。",
+        "systemReadFailed": "Windows システムプロキシを読み取れないため、直接接続を使用します。",
+        "systemServerReadFailed": "システムプロキシは有効ですがサーバーを読み取れないため、直接接続を使用します。",
+        "systemParseFailed": "Windows システムプロキシを解析できないため、直接接続を使用します。",
+        "systemUnsupported": "このプラットフォームではシステムプロキシの自動検出を利用できません。カスタムプロキシを使用してください。"
+      },
       "newTerminalHint": "変更は新しいターミナルだけに適用されます。既存のターミナルは再起動・変更されません。",
       "connectivityTitle": "接続テスト",
       "connectivityHint": "HTTP 401、403、404、405 も到達可能を示します。API キーや業務データは送信しません。",
@@ -1574,8 +1682,19 @@
       "notTested": "未テスト",
       "reachable": "到達可能",
       "unreachable": "到達不可",
-      "route": { "direct": "直接", "proxy": "プロキシ" },
-      "targets": { "googleOAuth": "Google OAuth", "github": "GitHub", "openai": "OpenAI", "claude": "Claude", "gemini": "Gemini", "glm": "GLM", "qwen": "Qwen" }
+      "route": {
+        "direct": "直接",
+        "proxy": "プロキシ"
+      },
+      "targets": {
+        "googleOAuth": "Google OAuth",
+        "github": "GitHub",
+        "openai": "OpenAI",
+        "claude": "Claude",
+        "gemini": "Gemini",
+        "glm": "GLM",
+        "qwen": "Qwen"
+      }
     },
     "general": {
       "appearance": {
@@ -1736,7 +1855,15 @@
       "nextPage": "次へ",
       "searchResults": "検索結果",
       "categoryFilter": "用途でスキルを絞り込む",
-      "categories": {"all": "すべて", "development": "開発ツール", "design": "UI デザイン", "content": "コンテンツ制作", "productivity": "生産性", "data": "データ分析", "other": "その他"},
+      "categories": {
+        "all": "すべて",
+        "development": "開発ツール",
+        "design": "UI デザイン",
+        "content": "コンテンツ制作",
+        "productivity": "生産性",
+        "data": "データ分析",
+        "other": "その他"
+      },
       "loadedCount": "{{count}} 件のスキルを読み込み済み",
       "categoryHint": "件数は読み込み済みのスキルのみです。名前から自動分類しているため、誤分類の可能性があります。",
       "loadMore": "スキルをさらに読み込む",
@@ -1952,6 +2079,20 @@
     },
     "claudeMd": {
       "title": "エージェント指示",
+      "targets": {
+        "agentsWorkspace": {
+          "label": "プロジェクト共通規約",
+          "note": "プロジェクトルートにあるオープンなAI協調規約。Gitでコミットされ、すべての対応エージェントに読み込まれます"
+        },
+        "agentsLocal": {
+          "label": "ローカル個別上書き",
+          "note": "この端末固有のプライベートな上書き設定（.gitignore推奨）。共有リポジトリには反映されません"
+        },
+        "geminiCompat": {
+          "label": "Antigravity 互换",
+          "note": "Antigravity CLIネイティブ対応の従来のルールファイル。新規プロジェクトではAGENTS.mdの使用を推奨します"
+        }
+      },
       "headerDesc": "エージェントごとにルールファイルを管理します。内容は自動同期されません。",
       "agentLabel": "エージェント",
       "unsaved": "未保存",
@@ -2005,9 +2146,42 @@
         "commands": "Commands セクション",
         "architecture": "Architecture セクション",
         "workflow": "Workflow セクション"
-      }
+      },
+      "standardLabel": "仕様標準",
+      "agentsMdStandard": "マルチエージェント共通仕様 (AGENTS.md)",
+      "claudeMdStandard": "Claude Code 専用仕様 (CLAUDE.md)",
+      "agentsMdDesc": "オープン標準に準拠し、プロジェクト内で協調動作するすべてのエージェントに統一された役割、コード規約、ワークフローを提供します。",
+      "claudeMdDesc": "Claude Code ネイティブの階層ルール体系。グローバル個人設定、プロジェクト指示、ローカルプライベートオーバーライドを含みます。",
+      "compatibleAgents": "適用対象エージェント",
+      "exclusiveAgent": "専用エージェント",
+      "sharedFileNotice": "このファイルはオープンなエージェント仕様に準拠しており、変更は上記のすべての互換エージェントの動作基準として適用されます。",
+      "openInWorkspace": "ワークスペースタブで全画面編集",
+      "applyTemplate": "テンプレートから挿入",
+      "applyTemplateDesc": "ベストプラクティスに基づいたプリセットの規約スニペットを選択してエディタに挿入します",
+      "confirmApplyTemplateTitle": "上書きしますか、それとも末尾に追加しますか？",
+      "confirmApplyTemplateDesc": "テンプレートの内容を現在の指示の末尾に追加するか、エディタの内容を完全に置き換えるかを選択できます。",
+      "appendTemplate": "末尾に追加",
+      "replaceTemplate": "完全に置き換え"
     },
     "hooks": {
+      "piExtensionHint": "グローバルとプロジェクト内の termflow-agent-status.js を表示します。サードパーティの拡張パッケージは列挙しません。修復はグローバルの Termflow 拡張のみを更新します。既存の Pi セッションで /reload を実行するか、再起動してください。",
+      "retryLoad": "再読み込み",
+      "registrationDisabled": "無効",
+      "viewDetails": "詳細を表示",
+      "matchingRegistrations": "{{total}} 件の登録中 {{count}} 件が一致",
+      "registrationOverview": "{{count}} 件の登録 · {{events}} 種のイベント · {{sources}} 件の提供元",
+      "registrationCount": "{{count}} 件の登録",
+      "managedSourceHint": "セッション状態と通知のために Termflow が管理する登録です。詳細でコマンドを確認できます。",
+      "inferredSourceHint": "提供元はコマンドのファイル名から推定しています。詳細でコマンドと設定を確認してください。",
+      "managedRegistrationSummary": "{{agent}} のグローバル Termflow 連携：{{count}} 件登録済み",
+      "managedRegistrationHint": "確認・修復は現在のエージェントのグローバル Termflow 設定のみを管理します。登録が存在しても実行時のコールバック受信は保証されません。",
+      "sourceLabel": "提供元",
+      "sources": {
+        "termflow": "Termflow 管理",
+        "orca": "Orca",
+        "pebrel": "Pebrel",
+        "other": "その他 / 未識別"
+      },
       "health": {
         "title": "Codex ステータス接続",
         "unknown": "未確認",
@@ -2024,7 +2198,7 @@
       },
       "matchAll": "すべて一致",
       "default": "デフォルト",
-      "defaultHook": "デフォルト Hook",
+      "defaultHook": "Termflow 管理",
       "detailTitle": "Hook 詳細",
       "defaultHookNotice": "この Hook は Termflow がデフォルトで管理しています。削除すると完了通知などの機能が動作しなくなる可能性があります。",
       "matcher": "マッチャー",
@@ -2060,7 +2234,7 @@
       "workspaceConfigUnavailable": "プロジェクトが開かれていないため、ワークスペース Hook 設定を読み取れません",
       "userConfigUnavailable": "ユーザー Hook 設定が見つかりません",
       "repairDefaultHook": "デフォルト Hook を修復",
-      "repairGlobalHook": "グローバル Hooks を確認して修復",
+      "repairGlobalHook": "Termflow 連携を確認・修復",
       "globalManagedNotice": "Termflow のデフォルト Hooks はユーザー設定にインストールされ、このマシン上のすべてのプロジェクトに自動適用されます。新しいプロジェクトでの設定は不要です。",
       "workspaceDuplicateNotice": "従来のプロジェクトレベル Termflow Hooks が {{count}} 個見つかりました。ユーザー Hooks とプロジェクト Hooks は加算されるため、重複イベントを避けるには移行してください。",
       "migrateToGlobal": "グローバルへ移行",
@@ -2199,12 +2373,44 @@
       "contextContinuityDesc": "チェックポイントとセッション履歴により、重要な判断を振り返り、長い作業を正しい位置から再開できます。",
       "localControl": "ローカルでの管理",
       "localControlDesc": "プロジェクトと実行データは手元で管理し、Skills、Hooks、MCP を再利用可能なワークフローとして育てられます。",
+      "licenseAndLegal": "ソフトウェアライセンスと規約",
+      "licenseAndLegalDesc": "オープンソースライセンス、ローカルデータ保護、サードパーティ謝辞",
+      "license": "オープンソースライセンス",
+      "licenseDesc": "MIT License · Copyright © 2026 降蓝",
+      "viewLicense": "ライセンスを表示",
+      "licenseModalTitle": "オープンソースライセンス (MIT License)",
+      "privacyPolicy": "ローカルデータとプライバシー保護",
+      "privacyPolicyDesc": "ローカルファースト設計：すべてのコード、セッション履歴、認証情報は端末内に安全に保持され、外部に送信されません。",
+      "managePrivacy": "データとプライバシー設定へ",
+      "localFirstBadge": "ローカル保存",
+      "thirdPartyNotices": "サードパーティライセンス",
+      "thirdPartyNoticesDesc": "Termflow は Tauri、React、Monaco Editor、xterm.js、Ant Design などのオープンソースエコシステムによって支えられています。",
+      "viewThirdParty": "オープンソース謝辞",
+      "thirdPartyModalTitle": "サードパーティソフトウェア謝辞とライセンス",
+      "thirdPartyNoticeIntro": "Termflow はオープンソースコミュニティの理念を尊重し、以下の優れたライブラリに深く感謝いたします：",
+      "thirdPartyTauri": "Rust ベースの安全で軽量なデスクトップアプリ構築フレームワーク",
+      "thirdPartyReact": "モダンなユーザーインターフェースを構築するフロントエンドライブラリ",
+      "thirdPartyMonaco": "VS Code を駆動する高機能コードエディタ",
+      "thirdPartyXterm": "高速で多機能なフロントエンドターミナルコンポーネント",
+      "thirdPartyAntd": "エンタープライズ向け React UI コンポーネントライブラリ",
+      "thirdPartyPty": "クロスプラットフォーム擬似端末 (PTY) ランタイム",
+      "thirdPartyGit2": "安全で高速な libgit2 Git エンジンバインディング",
+      "thirdPartyRusqlite": "安定した組み込み SQLite データベース Rust ランタイム",
+      "thirdPartyZustand": "軽量でリアクティブな状態管理ライブラリ",
+      "disclaimer": "AI協調免責事項",
+      "disclaimerDesc": "Termflow はローカル AI コーディングエージェントの統合ワークベンチです。生成されたコードやターミナルコマンドは端末内で実行されます。重要な操作は事前にご確認ください。",
+      "localExecutionBadge": "ローカル受控実行",
+      "softwareInfo": "ソフトウェアと診断情報",
+      "version": "バージョン",
+      "copyDiagnostics": "診断情報をコピー",
+      "diagnosticsCopied": "診断情報をクリップボードにコピーしました",
+      "copyFailed": "コピーに失敗しました。手動でコピーしてください",
       "techStack": "技術スタック",
       "framework": "フレームワーク",
       "terminal": "ターミナル",
       "stateManagement": "状態管理",
       "appId": "アプリ識別子",
-      "description": "Termflow は新しいエージェントではありません。すでに使っているローカル AI コーディングエージェントのための共有デスクトップワークスペースです。Claude Code、Codex、Antigravity CLI、OpenCode、Qoder CLI を、プロジェクト、セッション、組み込みターミナル、Skills、Hooks、MCP まで含む一つの流れにまとめ、コンテキストを保ちながら協業相手を切り替え、複雑な作業を進め続けられます。"
+      "description": "Termflow はローカル AI コーディングエージェントのための共有デスクトップワークスペースです。Claude Code、Codex、Antigravity CLI、OpenCode、Qoder CLI を、プロジェクト、セッション、組み込みターミナル、Skills、Hooks、MCP まで含む一つの流れにまとめ、コンテキストを保ちながら協業相手を切り替え、複雑な作業を進め続けられます。"
     },
     "quickMenu": {
       "reportIssue": "問題を報告",
@@ -2638,8 +2844,17 @@
     "turnLabel": "ターン {{index}}",
     "files": "ファイル",
     "attributionHint": "共有作業ディレクトリではターン中の変更のみ特定できます。専用 Worktree では確実に帰属できます。",
-    "attribution": { "strong": "帰属：高", "medium": "帰属：中", "ambiguous": "帰属：不明" },
-    "completionSource": { "provider_event": "自動完了", "next_prompt": "次ターンで補完", "process_exit": "プロセス終了", "user_confirmed": "ユーザー確認" },
+    "attribution": {
+      "strong": "帰属：高",
+      "medium": "帰属：中",
+      "ambiguous": "帰属：不明"
+    },
+    "completionSource": {
+      "provider_event": "自動完了",
+      "next_prompt": "次ターンで補完",
+      "process_exit": "プロセス終了",
+      "user_confirmed": "ユーザー確認"
+    },
     "restoreTurn": "第 {{index}} ターンに戻す",
     "restoreConfirm": "第 {{index}} ターンに戻しますか？",
     "restoreConfirmDesc": "ワークスペースを第 {{index}} ターン終了時に戻し、それ以降の {{count}} ターンを削除します。Termflow は先に安全 Checkpoint を作成し、後続ターンが実行中または対象ファイルがステージ済みの場合は安全に停止します。",
@@ -2661,8 +2876,19 @@
     "acceptHunk": "保持",
     "rejectHunk": "取り消す",
     "rejectHunkConfirm": "この変更ブロックだけを取り消しますか？",
-    "decision": { "pending": "未レビュー", "accepted": "保持", "rejected": "取り消し済み" },
-    "fileStatus": { "added": "追加", "deleted": "削除", "renamed": "名前変更", "copied": "コピー", "typechange": "型変更", "modified": "変更" },
+    "decision": {
+      "pending": "未レビュー",
+      "accepted": "保持",
+      "rejected": "取り消し済み"
+    },
+    "fileStatus": {
+      "added": "追加",
+      "deleted": "削除",
+      "renamed": "名前変更",
+      "copied": "コピー",
+      "typechange": "型変更",
+      "modified": "変更"
+    },
     "summary": {
       "title": "このターンの変更",
       "running": "ターンの変更を記録中",

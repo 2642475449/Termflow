@@ -26,7 +26,8 @@
       "completed": "Completed",
       "error": "Failed (exit code: {{code}})",
       "stopped": "Terminated"
-    }
+    },
+    "runningTasks": "Running tasks: {{count}}"
   },
   "projectLaunchers": {
     "openFile": "Open config file to repair",
@@ -250,7 +251,8 @@
     "disabled": "Disabled",
     "unknown": "Unknown",
     "on": "On",
-    "off": "Off"
+    "off": "Off",
+    "close": "Close"
   },
   "editorContextMenu": {
     "undo": "Undo",
@@ -290,7 +292,6 @@
     "newLine": "New line",
     "keepOpen": "Keep open",
     "close": "Close",
-
     "title": "Find in Files",
     "placeholder": "Search text across the project",
     "entireProject": "Entire project · {{name}}",
@@ -387,7 +388,9 @@
       "unavailable": "Start an Antigravity session and send a message to view quota",
       "unavailableShort": "Usage unavailable"
     },
-    "usage": { "stale": "Data is stale" },
+    "usage": {
+      "stale": "Data is stale"
+    },
     "codexUsage": {
       "title": "Codex Usage",
       "loading": "Codex usage…",
@@ -964,7 +967,8 @@
     "gitConflictResolverBinary": "Binary files cannot be merged in the built-in editor",
     "gitConflictResolverBinaryDescription": "Choose the current or incoming version. The selected version is staged immediately.",
     "gitConflictResolverLoadFailed": "Could not load conflict details",
-    "gitConflictResolverResolveFailed": "Failed to resolve conflict",    "gitAbortMerge": "Abort Merge",
+    "gitConflictResolverResolveFailed": "Failed to resolve conflict",
+    "gitAbortMerge": "Abort Merge",
     "gitResolveSuccess": "Conflict resolved",
     "gitResolveFailed": "Failed to resolve conflict",
     "gitAbortMergeSuccess": "Merge aborted",
@@ -1423,8 +1427,26 @@
         }
       },
       "quota": {
-        "loading": "Loading quota…", "installFirst": "Install and sign in to view quota", "unsupported": "Quota reading is not supported", "unavailable": "Quota is temporarily unavailable", "startSession": "Start a session to view quota", "refreshFailed": "Quota update failed; showing the last successful result",
-        "healthy": "Quota available", "low": "Quota running low", "exhausted": "Quota nearly exhausted", "session": "5-hour {{value}}%", "weekly": "Weekly {{value}}%", "remainingPercent": "{{value}}% remaining", "remainingCredits": "{{value}} remaining", "signInAntigravity": "Sign in to Antigravity CLI", "timeout": "Quota query timed out", "gemini": "Gemini", "claudeGpt": "Claude/GPT", "argon": "Gemini 4 Argon", "sessionShort": "5h", "weeklyShort": "weekly"
+        "loading": "Loading quota…",
+        "installFirst": "Install and sign in to view quota",
+        "unsupported": "Quota reading is not supported",
+        "unavailable": "Quota is temporarily unavailable",
+        "startSession": "Start a session to view quota",
+        "refreshFailed": "Quota update failed; showing the last successful result",
+        "healthy": "Quota available",
+        "low": "Quota running low",
+        "exhausted": "Quota nearly exhausted",
+        "session": "5-hour {{value}}%",
+        "weekly": "Weekly {{value}}%",
+        "remainingPercent": "{{value}}% remaining",
+        "remainingCredits": "{{value}} remaining",
+        "signInAntigravity": "Sign in to Antigravity CLI",
+        "timeout": "Quota query timed out",
+        "gemini": "Gemini",
+        "claudeGpt": "Claude/GPT",
+        "argon": "Gemini 4 Argon",
+        "sessionShort": "5h",
+        "weeklyShort": "weekly"
       },
       "viewDetails": "View details",
       "pathHint": "Detection uses the system PATH currently available to Termflow. If a newly installed or updated agent is not detected, restart your computer and try again."
@@ -1502,7 +1524,12 @@
       "remoteThresholdDesc": "Only completion uses this threshold; errors, input waits, and permission requests notify immediately",
       "feishuThreshold": "Feishu long-task threshold",
       "feishuThresholdDesc": "Only completion uses this threshold; errors, input waits, and permission requests notify immediately",
-      "threshold": { "min5": "5 minutes", "min10": "10 minutes", "min30": "30 minutes", "hour1": "1 hour" },
+      "threshold": {
+        "min5": "5 minutes",
+        "min10": "10 minutes",
+        "min30": "30 minutes",
+        "hour1": "1 hour"
+      },
       "terminalCompletion": {
         "section": "Terminal commands",
         "enabled": "Long command completion alerts",
@@ -1510,7 +1537,12 @@
         "threshold": "Long command alert threshold",
         "thresholdDesc": "An alert is sent only when a completed command ran for at least this long.",
         "integrationStatus": "Current terminal integration",
-        "status": { "pending": "Waiting for verification", "available": "Enabled", "unavailable": "Unavailable", "noActiveTerminal": "No active terminal" },
+        "status": {
+          "pending": "Waiting for verification",
+          "available": "Enabled",
+          "unavailable": "Unavailable",
+          "noActiveTerminal": "No active terminal"
+        },
         "statusReason": {
           "available": "PowerShell shell-integration lifecycle markers were received.",
           "pending": "Waiting for the current terminal to report its integration status.",
@@ -1529,39 +1561,96 @@
         "unknownBody": "The command ended with an unknown result after {{duration}}."
       },
       "events": {
-        "completed": "Long task completed", "completedDesc": "Send a completion card when runtime exceeds the Feishu threshold",
-        "error": "Task failed", "errorDesc": "Notify immediately on process or hook errors",
-        "waiting": "Waiting for input", "waitingDesc": "Notify when the agent needs an answer",
-        "permission": "Permission request", "permissionDesc": "Notify when the agent is waiting for approval"
+        "completed": "Long task completed",
+        "completedDesc": "Send a completion card when runtime exceeds the Feishu threshold",
+        "error": "Task failed",
+        "errorDesc": "Notify immediately on process or hook errors",
+        "waiting": "Waiting for input",
+        "waitingDesc": "Notify when the agent needs an answer",
+        "permission": "Permission request",
+        "permissionDesc": "Notify when the agent is waiting for approval"
       },
       "remote": {
-        "channelName": "Remote notifications", "channelDesc": "Deliver task status to configured remote services; multiple providers can be added over time.",
-        "configured": "Configured", "notConfigured": "Not configured", "configuration": "Remote notification configuration", "provider": "Notification service",
-        "comingSoon": "Coming soon", "providers": { "feishu": "Feishu", "dingtalk": "DingTalk", "wechat": "WeChat", "qq": "QQ", "telegram": "Telegram" },
-        "saved": "Remote notification configuration saved securely", "cleared": "Remote notification configuration cleared", "configureFirst": "Save and test this notification service first",
-        "loadFailed": "Failed to load remote notification configuration: {{error}}", "saveFailed": "Failed to save remote notification configuration: {{error}}", "clearFailed": "Failed to clear remote notification configuration: {{error}}",
-        "testSent": "Test notification sent", "testFailed": "Remote notification test failed: {{error}}", "sendTest": "Send test", "clear": "Clear configuration", "clearConfirm": "Clear the current notification service configuration?"
+        "channelName": "Remote notifications",
+        "channelDesc": "Deliver task status to configured remote services; multiple providers can be added over time.",
+        "configured": "Configured",
+        "notConfigured": "Not configured",
+        "configuration": "Remote notification configuration",
+        "provider": "Notification service",
+        "comingSoon": "Coming soon",
+        "providers": {
+          "feishu": "Feishu",
+          "dingtalk": "DingTalk",
+          "wechat": "WeChat",
+          "qq": "QQ",
+          "telegram": "Telegram"
+        },
+        "saved": "Remote notification configuration saved securely",
+        "cleared": "Remote notification configuration cleared",
+        "configureFirst": "Save and test this notification service first",
+        "loadFailed": "Failed to load remote notification configuration: {{error}}",
+        "saveFailed": "Failed to save remote notification configuration: {{error}}",
+        "clearFailed": "Failed to clear remote notification configuration: {{error}}",
+        "testSent": "Test notification sent",
+        "testFailed": "Remote notification test failed: {{error}}",
+        "sendTest": "Send test",
+        "clear": "Clear configuration",
+        "clearConfirm": "Clear the current notification service configuration?",
+        "configure": "Configure",
+        "editConfig": "Edit Configuration",
+        "modalTitle": "Configure {{provider}} Notifications"
       },
       "feishu": {
-        "channelName": "Feishu notifications", "channelDesc": "Send long-task status cards through a group custom-bot webhook",
-        "configured": "Configured", "notConfigured": "Not configured", "configuration": "Feishu configuration",
+        "channelName": "Feishu notifications",
+        "channelDesc": "Send long-task status cards through a group custom-bot webhook",
+        "configured": "Configured",
+        "notConfigured": "Not configured",
+        "configuration": "Feishu configuration",
         "securityHint": "The webhook and signing secret are stored in Windows Credential Manager, never in the project, regular settings database, or logs. Enabling signature verification in Feishu is recommended.",
-        "currentWebhook": "Current webhook", "webhook": "Webhook URL", "webhookPlaceholder": "https://open.feishu.cn/open-apis/bot/v2/hook/...",
-        "signingSecret": "Signing secret", "signingSecretPlaceholder": "Enter the Feishu bot signing secret", "signingSecretKeepPlaceholder": "Configured; leave blank to keep the current secret",
+        "currentWebhook": "Current webhook",
+        "webhook": "Webhook URL",
+        "webhookPlaceholder": "https://open.feishu.cn/open-apis/bot/v2/hook/...",
+        "signingSecret": "Signing secret",
+        "signingSecretPlaceholder": "Enter the Feishu bot signing secret",
+        "signingSecretKeepPlaceholder": "Configured; leave blank to keep the current secret",
         "secureStorageUnavailable": "Secure credential storage is not available on this system, so Feishu notifications cannot be enabled.",
-        "sendTest": "Send test", "clear": "Clear configuration", "clearConfirm": "Clear the Feishu webhook and signing secret?",
-        "saved": "Feishu configuration saved securely", "cleared": "Feishu configuration cleared", "configureFirst": "Save and test a Feishu webhook first",
-        "loadFailed": "Failed to load Feishu configuration: {{error}}", "saveFailed": "Failed to save Feishu configuration: {{error}}", "clearFailed": "Failed to clear Feishu configuration: {{error}}",
-        "testSent": "Test card sent. Check the Feishu group.", "testFailed": "Feishu test failed: {{error}}",
-        "testCardTitle": "Termflow notification test", "testCardChannel": "Channel", "testCardStatus": "Connection", "testCardSuccess": "Configured correctly",
-        "card": { "completed": "Task completed", "error": "Task failed", "waiting": "Task waiting for input", "permission": "Task waiting for permission", "project": "Project", "task": "Task", "agent": "Agent", "duration": "Duration", "occurredAt": "Time" }
+        "sendTest": "Send test",
+        "clear": "Clear configuration",
+        "clearConfirm": "Clear the Feishu webhook and signing secret?",
+        "saved": "Feishu configuration saved securely",
+        "cleared": "Feishu configuration cleared",
+        "configureFirst": "Save and test a Feishu webhook first",
+        "loadFailed": "Failed to load Feishu configuration: {{error}}",
+        "saveFailed": "Failed to save Feishu configuration: {{error}}",
+        "clearFailed": "Failed to clear Feishu configuration: {{error}}",
+        "testSent": "Test card sent. Check the Feishu group.",
+        "testFailed": "Feishu test failed: {{error}}",
+        "testCardTitle": "Termflow notification test",
+        "testCardChannel": "Channel",
+        "testCardStatus": "Connection",
+        "testCardSuccess": "Configured correctly",
+        "card": {
+          "completed": "Task completed",
+          "error": "Task failed",
+          "waiting": "Task waiting for input",
+          "permission": "Task waiting for permission",
+          "project": "Project",
+          "task": "Task",
+          "agent": "Agent",
+          "duration": "Duration",
+          "occurredAt": "Time"
+        }
       }
     },
     "network": {
       "title": "Network proxy",
       "description": "Configure one proxy for terminals, agent CLIs, Git, application updates, and Termflow network requests.",
       "proxyMode": "HTTP proxy",
-      "mode": { "disabled": "Do not use a proxy", "system": "Use system proxy (recommended)", "custom": "Custom proxy" },
+      "mode": {
+        "disabled": "Do not use a proxy",
+        "system": "Use system proxy (recommended)",
+        "custom": "Custom proxy"
+      },
       "customProxyUrl": "Proxy URL",
       "noProxy": "Addresses that bypass the proxy",
       "noProxyHint": "Separate entries with commas. localhost, 127.0.0.1, and ::1 are always retained.",
@@ -1569,8 +1658,22 @@
       "resolvedProxy": "Current proxy: {{proxy}}",
       "resolvedDirect": "Current connection: direct",
       "source": "Configuration source: {{source}}",
-      "sources": { "disabled": "Disabled", "custom": "Custom settings", "windows-system": "Windows system proxy", "system-none": "Windows system (no proxy configured)", "environment": "Process environment", "unknown": "Unknown" },
-      "warnings": { "pacUnsupported": "A PAC configuration was detected. PAC is not supported in this version; use a custom proxy.", "pacManualUsed": "A PAC configuration was also detected. Termflow is using the Windows manual proxy address.", "systemReadFailed": "The Windows system proxy could not be read. Direct connection is being used.", "systemServerReadFailed": "The system proxy is enabled, but its server could not be read. Direct connection is being used.", "systemParseFailed": "The Windows system proxy could not be parsed. Direct connection is being used.", "systemUnsupported": "Automatic system proxy detection is not available on this platform. Use a custom proxy." },
+      "sources": {
+        "disabled": "Disabled",
+        "custom": "Custom settings",
+        "windows-system": "Windows system proxy",
+        "system-none": "Windows system (no proxy configured)",
+        "environment": "Process environment",
+        "unknown": "Unknown"
+      },
+      "warnings": {
+        "pacUnsupported": "A PAC configuration was detected. PAC is not supported in this version; use a custom proxy.",
+        "pacManualUsed": "A PAC configuration was also detected. Termflow is using the Windows manual proxy address.",
+        "systemReadFailed": "The Windows system proxy could not be read. Direct connection is being used.",
+        "systemServerReadFailed": "The system proxy is enabled, but its server could not be read. Direct connection is being used.",
+        "systemParseFailed": "The Windows system proxy could not be parsed. Direct connection is being used.",
+        "systemUnsupported": "Automatic system proxy detection is not available on this platform. Use a custom proxy."
+      },
       "newTerminalHint": "Proxy changes apply only to new terminals. Existing terminals are not restarted or modified.",
       "connectivityTitle": "Connectivity tests",
       "connectivityHint": "HTTP 401, 403, 404, or 405 still means the service is reachable. Tests never send API keys or business data.",
@@ -1579,8 +1682,19 @@
       "notTested": "Not tested",
       "reachable": "Reachable",
       "unreachable": "Unreachable",
-      "route": { "direct": "Direct", "proxy": "Proxy" },
-      "targets": { "googleOAuth": "Google OAuth", "github": "GitHub", "openai": "OpenAI", "claude": "Claude", "gemini": "Gemini", "glm": "GLM", "qwen": "Qwen" }
+      "route": {
+        "direct": "Direct",
+        "proxy": "Proxy"
+      },
+      "targets": {
+        "googleOAuth": "Google OAuth",
+        "github": "GitHub",
+        "openai": "OpenAI",
+        "claude": "Claude",
+        "gemini": "Gemini",
+        "glm": "GLM",
+        "qwen": "Qwen"
+      }
     },
     "general": {
       "appearance": {
@@ -1741,7 +1855,15 @@
       "nextPage": "Next",
       "searchResults": "Search results",
       "categoryFilter": "Filter skills by purpose",
-      "categories": {"all": "All", "development": "Development", "design": "Interface design", "content": "Content creation", "productivity": "Productivity", "data": "Data analysis", "other": "Other"},
+      "categories": {
+        "all": "All",
+        "development": "Development",
+        "design": "Interface design",
+        "content": "Content creation",
+        "productivity": "Productivity",
+        "data": "Data analysis",
+        "other": "Other"
+      },
       "loadedCount": "{{count}} skills loaded",
       "categoryHint": "Counts cover loaded skills only. Categories are inferred from skill names and may be inaccurate.",
       "loadMore": "Load more skills",
@@ -1957,15 +2079,44 @@
     },
     "claudeMd": {
       "title": "Agent Instructions",
-      "headerDesc": "Maintain rule files separately for each agent; their content is not synchronized automatically.",
+      "targets": {
+        "agentsWorkspace": {
+          "label": "Project Shared Rules",
+          "note": "Open-source shared AI collaboration specification at project root, committed with Git and read by all compatible agents"
+        },
+        "agentsLocal": {
+          "label": "Local Private Override",
+          "note": "Machine-specific private override (recommended to add to .gitignore) without polluting the remote repository"
+        },
+        "geminiCompat": {
+          "label": "Antigravity Compatibility",
+          "note": "Legacy rules file natively supported by Antigravity CLI; AGENTS.md is recommended for new projects"
+        }
+      },
+      "headerDesc": "Manage universal agent standards and exclusive agent rules to maintain consistent project conventions.",
       "agentLabel": "Agent",
       "unsaved": "Unsaved",
       "save": "Save",
       "openLocation": "Open Location",
-      "loadFailed": "Failed to load CLAUDE.md",
-      "saveSuccess": "CLAUDE.md saved",
-      "saveFailed": "Failed to save CLAUDE.md",
-      "openFailed": "Failed to open the CLAUDE.md location",
+      "standardLabel": "Standard",
+      "agentsMdStandard": "Universal Agent Standard (AGENTS.md)",
+      "claudeMdStandard": "Claude Code Exclusive Standard (CLAUDE.md)",
+      "agentsMdDesc": "Open standard providing shared role definitions, coding conventions, and workflow rules across all cooperating agents.",
+      "claudeMdDesc": "Claude Code native cascading system across user global preferences, workspace instructions, and local private overrides.",
+      "compatibleAgents": "Active Agents",
+      "exclusiveAgent": "Exclusive Agent",
+      "sharedFileNotice": "This file follows the open Agent convention; modifications apply to all compatible agents above.",
+      "openInWorkspace": "Open Fullscreen in Workspace Tab",
+      "applyTemplate": "Insert from Template",
+      "applyTemplateDesc": "Choose preset best-practice convention snippets to insert into the editor",
+      "confirmApplyTemplateTitle": "Overwrite or append content?",
+      "confirmApplyTemplateDesc": "You can append the template to the end of the current instructions or completely replace the editor content.",
+      "appendTemplate": "Append to End",
+      "replaceTemplate": "Replace Content",
+      "loadFailed": "Failed to load instruction file",
+      "saveSuccess": "Instruction file saved",
+      "saveFailed": "Failed to save instruction file",
+      "openFailed": "Failed to open instruction file location",
       "confirmRefreshTitle": "Discard unsaved changes?",
       "confirmRefreshDesc": "Refreshing reloads the file from disk and discards the unsaved content in the editor.",
       "currentPath": "Current File Path",
@@ -2097,7 +2248,25 @@
       "confirmDeleteTitle": "Delete this hook?",
       "confirmDelete": "Delete",
       "confirmDeleteDefaultDesc": "This hook is maintained by Termflow by default. Deleting it may break task completion notifications or permission-related linkage. You can regenerate it later with \"Check and Repair Global Hooks\".",
-      "confirmDeleteDesc": "After deletion, Claude Code will no longer execute this hook. This action directly modifies settings.json."
+      "confirmDeleteDesc": "After deletion, Claude Code will no longer execute this hook. This action directly modifies settings.json.",
+      "piExtensionHint": "Shows global and project termflow-agent-status.js; third-party packages are not listed. Repair updates the global Termflow extension only. Run /reload in open Pi sessions or restart to take effect.",
+      "retryLoad": "Retry",
+      "registrationDisabled": "Disabled",
+      "viewDetails": "View Details",
+      "matchingRegistrations": "{{count}} of {{total}} registrations match",
+      "registrationOverview": "{{count}} registrations · {{events}} events · {{sources}} sources",
+      "registrationCount": "{{count}} registrations",
+      "managedSourceHint": "Managed by Termflow for session state and notifications. View command details in the drawer.",
+      "inferredSourceHint": "Source inferred from command filename; view command and config in details.",
+      "managedRegistrationSummary": "{{agent}} Global Termflow Integration: {{count}} registered",
+      "managedRegistrationHint": "Check and repair only manages global Termflow configuration for the active agent. Registration does not guarantee callback delivery at runtime.",
+      "sourceLabel": "Source",
+      "sources": {
+        "termflow": "Termflow Managed",
+        "orca": "Orca",
+        "pebrel": "Pebrel",
+        "other": "Other / Unrecognized"
+      }
     },
     "mcpServers": {
       "overviewDesc": "Connect your agents to external tools and services.",
@@ -2204,12 +2373,44 @@
       "contextContinuityDesc": "Checkpoints and session history let you revisit key decisions and continue long-running work from the right place.",
       "localControl": "Local control",
       "localControlDesc": "Projects and runtime data remain under your control, while Skills, Hooks, and MCP become reusable workflows.",
+      "licenseAndLegal": "License & Agreements",
+      "licenseAndLegalDesc": "Open source license, local data privacy policy, and third-party acknowledgements",
+      "license": "Open Source License",
+      "licenseDesc": "MIT License · Copyright © 2026 降蓝",
+      "viewLicense": "View License",
+      "licenseModalTitle": "Open Source License (MIT License)",
+      "privacyPolicy": "Local Data & Privacy Policy",
+      "privacyPolicyDesc": "Local-first architecture: all project code, session contexts, and credentials stay securely on your machine.",
+      "managePrivacy": "Manage Data & Privacy",
+      "localFirstBadge": "Local Storage",
+      "thirdPartyNotices": "Third-Party Notices",
+      "thirdPartyNoticesDesc": "Termflow is powered by open source software, including Tauri, React, Monaco Editor, xterm.js, and Ant Design.",
+      "viewThirdParty": "Acknowledgements",
+      "thirdPartyModalTitle": "Third-Party Notices & Acknowledgements",
+      "thirdPartyNoticeIntro": "Termflow is grateful to the open source community for the following exceptional libraries and frameworks:",
+      "thirdPartyTauri": "Safe, lightweight framework for building cross-platform desktop applications",
+      "thirdPartyReact": "Declarative library for building modern user interfaces",
+      "thirdPartyMonaco": "The code editor that powers VS Code",
+      "thirdPartyXterm": "High-performance front-end terminal component",
+      "thirdPartyAntd": "Enterprise-class React UI component library",
+      "thirdPartyPty": "Cross-platform pseudo-terminal abstraction library",
+      "thirdPartyGit2": "Rust bindings for the libgit2 engine",
+      "thirdPartyRusqlite": "Reliable embedded SQLite database bindings for Rust",
+      "thirdPartyZustand": "Lightweight, reactive state management library",
+      "disclaimer": "AI Service Disclaimer",
+      "disclaimerDesc": "Termflow is a unified workbench for local AI coding agents. Agent-generated code and commands run locally under your control; please review sensitive operations.",
+      "localExecutionBadge": "Local Controlled Execution",
+      "softwareInfo": "Software & Diagnostics",
+      "version": "Version",
+      "copyDiagnostics": "Copy Diagnostics",
+      "diagnosticsCopied": "System diagnostics copied to clipboard",
+      "copyFailed": "Failed to copy; please copy manually",
       "techStack": "Tech Stack",
       "framework": "Framework",
       "terminal": "Terminal",
       "stateManagement": "State Management",
       "appId": "App Identifier",
-      "description": "Termflow is not another agent. It is a shared desktop workspace for the local AI coding agents you already use. Claude Code, Codex, Antigravity CLI, OpenCode, and Qoder CLI can work within one flow—from projects and sessions to an embedded terminal, Skills, Hooks, and MCP—so you can preserve context, switch collaborators, and keep complex work moving."
+      "description": "Termflow is a shared desktop workspace for the local AI coding agents you already use. Claude Code, Codex, Antigravity CLI, OpenCode, and Qoder CLI can work within one flow—from projects and sessions to an embedded terminal, Skills, Hooks, and MCP—so you can preserve context, switch collaborators, and keep complex work moving."
     },
     "quickMenu": {
       "reportIssue": "Report Issue",
@@ -2643,8 +2844,17 @@
     "turnLabel": "Turn {{index}}",
     "files": "files",
     "attributionHint": "A shared working directory can only identify changes made during the turn. A dedicated worktree provides strong attribution.",
-    "attribution": { "strong": "Strong attribution", "medium": "Medium attribution", "ambiguous": "Ambiguous attribution" },
-    "completionSource": { "provider_event": "Automatic completion", "next_prompt": "Completed by next turn", "process_exit": "Process exit", "user_confirmed": "User confirmed" },
+    "attribution": {
+      "strong": "Strong attribution",
+      "medium": "Medium attribution",
+      "ambiguous": "Ambiguous attribution"
+    },
+    "completionSource": {
+      "provider_event": "Automatic completion",
+      "next_prompt": "Completed by next turn",
+      "process_exit": "Process exit",
+      "user_confirmed": "User confirmed"
+    },
     "restoreTurn": "Return to turn {{index}}",
     "restoreConfirm": "Return to turn {{index}}?",
     "restoreConfirmDesc": "The workspace will return to the end of turn {{index}}, and the {{count}} later turn(s) will be deleted. Termflow creates a safety checkpoint first and stops safely if a later turn is still running or affected files are staged.",
@@ -2666,8 +2876,19 @@
     "acceptHunk": "Keep",
     "rejectHunk": "Undo",
     "rejectHunkConfirm": "Undo only this change hunk?",
-    "decision": { "pending": "Pending", "accepted": "Kept", "rejected": "Undone" },
-    "fileStatus": { "added": "Added", "deleted": "Deleted", "renamed": "Renamed", "copied": "Copied", "typechange": "Type", "modified": "Modified" },
+    "decision": {
+      "pending": "Pending",
+      "accepted": "Kept",
+      "rejected": "Undone"
+    },
+    "fileStatus": {
+      "added": "Added",
+      "deleted": "Deleted",
+      "renamed": "Renamed",
+      "copied": "Copied",
+      "typechange": "Type",
+      "modified": "Modified"
+    },
     "summary": {
       "title": "Turn changes",
       "running": "Recording turn changes",
