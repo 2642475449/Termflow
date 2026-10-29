@@ -22,56 +22,6 @@ import {
   startTaskMonitorSync,
   useTaskMonitorStore,
 } from "@/store/slices/taskMonitor";
-import { AgentIcon } from "@/components/AgentIcon";
-import { getAgentDisplayName, isAiAgentId } from "@/lib/agents";
-
-function TaskStatusBadge({ status }: { status: TaskMonitorTab["status"] }) {
-  const { t } = useTranslation();
-
-  if (status === "running" || status === "starting") {
-    return (
-      <span className="app-task-monitor-status-badge" data-status="running">
-        <LoadingOutlined spin className="app-task-monitor-status-icon text-[var(--cs-primary)]" />
-        <span className="app-task-monitor-status-text">{t(`taskMonitor.status.${status}`)}</span>
-      </span>
-    );
-  }
-
-  if (status === "waiting") {
-    return (
-      <span className="app-task-monitor-status-badge" data-status="waiting">
-        <span className="app-task-monitor-pulse-dot" />
-        <span className="app-task-monitor-status-text">{t("taskMonitor.status.waiting")}</span>
-      </span>
-    );
-  }
-
-  if (status === "completed") {
-    return (
-      <span className="app-task-monitor-status-badge" data-status="completed">
-        <CheckCircleOutlined className="app-task-monitor-status-icon text-[var(--cs-success)]" />
-        <span className="app-task-monitor-status-text">{t("taskMonitor.status.completed")}</span>
-      </span>
-    );
-  }
-
-  if (status === "error") {
-    return (
-      <span className="app-task-monitor-status-badge" data-status="error">
-        <CloseCircleOutlined className="app-task-monitor-status-icon text-[var(--cs-error)]" />
-        <span className="app-task-monitor-status-text">{t("taskMonitor.status.error")}</span>
-      </span>
-    );
-  }
-
-  return (
-    <span className="app-task-monitor-status-badge" data-status="idle">
-      <span className="app-task-monitor-idle-dot" />
-      <span className="app-task-monitor-status-text">{t("taskMonitor.status.idle")}</span>
-    </span>
-  );
-}
-
 interface TaskMonitorPanelProps {
   active: boolean;
   embedded?: boolean;
@@ -245,99 +195,49 @@ export function TaskMonitorPanel({
       </div>
 
       <div className="app-task-monitor-projects">
-        {projectsWithTabs.length === 0 && (
-          <div className="app-task-monitor-empty-container">
-            <AppstoreOutlined className="text-2xl text-[var(--cs-text-tertiary)] opacity-60 mb-2" />
-            <p className="app-task-monitor-empty m-0">{t("taskMonitor.noProjects")}</p>
-          </div>
-        )}
-
+        {projects.length === 0 && <p className="app-task-monitor-empty">{t("taskMonitor.noProjects")}</p>}
         {projectsWithTabs.map(({ project, key, isCurrent, targetWindowLabel, projectTabs }) => {
           return (
-            <section
-              key={key}
-              className="app-task-monitor-project"
-              data-current={isCurrent ? "true" : "false"}
-              aria-label={project.name}
-            >
-              <div className="app-task-monitor-project-header">
-                <FolderOpenOutlined className="app-task-monitor-folder-icon" />
-                <span className="app-task-monitor-project-name min-w-0 flex-1 truncate" title={project.path}>
-                  {project.name}
-                </span>
-                {isCurrent && (
-                  <span className="app-task-monitor-current-badge">
-                    {t("taskMonitor.current")}
-                  </span>
-                )}
-                {projectTabs && projectTabs.length > 0 && (
-                  <span className="app-task-monitor-count-badge" title={t("taskMonitor.tabCount", { count: projectTabs.length })}>
-                    {projectTabs.length}
-                  </span>
-                )}
+            <section key={key} className="app-task-monitor-project" aria-label={project.name}>
+              <div className="app-task-monitor-project-name" title={project.path}>
+                <FolderOpenOutlined />
+                <span className="min-w-0 flex-1 truncate">{project.name}</span>
                 {targetWindowLabel && (
                   <Tooltip title={t("taskMonitor.closeProject")}>
-                    <button
-                      type="button"
-                      className="app-task-monitor-project-close"
+                    <button type="button" className="app-task-monitor-project-close flex h-6 w-6 shrink-0 items-center justify-center rounded"
                       aria-label={t("taskMonitor.closeProject")}
-                      onClick={() => void closeProject(targetWindowLabel, project.path)}
-                    >
+                      onClick={() => void closeProject(targetWindowLabel, project.path)}>
                       <CloseOutlined />
                     </button>
                   </Tooltip>
                 )}
               </div>
-
-              {(!projectTabs || projectTabs.length === 0) ? (
-                <div className="app-task-monitor-empty-state">
-                  <span>{t(projectTabs ? "taskMonitor.noTabs" : "taskMonitor.loading")}</span>
-                </div>
-              ) : (
-                <div className="app-task-monitor-tab-list">
-                  {projectTabs.map((tab) => {
-                    const isActive = isCurrent && focusedTabId === tab.id;
-                    const agentName = isAiAgentId(tab.agentId) ? getAgentDisplayName(tab.agentId) : tab.agentId;
-                    return (
-                      <div
-                        key={tab.id}
-                        className="app-task-monitor-row"
-                        data-closable={targetWindowLabel ? "true" : "false"}
-                        data-active={isActive ? "true" : "false"}
-                      >
-                        <button
-                          type="button"
-                          className="app-task-monitor-row-main"
-                          onClick={() => void navigate(project.path, tab)}
-                          title={`${tab.name} · ${agentName}`}
-                        >
-                          <Tooltip title={agentName}>
-                            <span className="app-task-monitor-agent-icon">
-                              <AgentIcon agentId={tab.agentId} size={15} />
-                            </span>
-                          </Tooltip>
-                          <span className="app-task-monitor-row-title min-w-0 flex-1 truncate text-left">
-                            {tab.name}
-                          </span>
-                          <TaskStatusBadge status={tab.status} />
-                        </button>
-                        {targetWindowLabel && (
-                          <Tooltip title={t("taskMonitor.closeTask")}>
-                            <button
-                              type="button"
-                              className="app-task-monitor-close"
-                              aria-label={t("taskMonitor.closeTask")}
-                              onClick={() => void closeTask(targetWindowLabel, tab.id)}
-                            >
-                              <CloseOutlined />
-                            </button>
-                          </Tooltip>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+              {(!projectTabs || projectTabs.length === 0) && (
+                <p className="app-task-monitor-empty">{t(projectTabs ? "taskMonitor.noTabs" : "taskMonitor.loading")}</p>
               )}
+              {projectTabs?.map((tab) => (
+                <div key={tab.id} className="app-task-monitor-row"
+                  data-closable={targetWindowLabel ? "true" : "false"}
+                  data-active={isCurrent && focusedTabId === tab.id ? "true" : "false"}>
+                  <button type="button" className="app-task-monitor-row-main"
+                    onClick={() => void navigate(project.path, tab)} title={tab.name}>
+                    <span className="min-w-0 flex-1 truncate text-left">{tab.name}</span>
+                    <Tooltip title={t(`taskMonitor.status.${tab.status}`)}>
+                      <span className="app-task-monitor-dot" data-status={tab.status}
+                        role="img" aria-label={t(`taskMonitor.status.${tab.status}`)} />
+                    </Tooltip>
+                  </button>
+                  {targetWindowLabel && (
+                    <Tooltip title={t("taskMonitor.closeTask")}>
+                      <button type="button" className="app-task-monitor-close"
+                        aria-label={t("taskMonitor.closeTask")}
+                        onClick={() => void closeTask(targetWindowLabel, tab.id)}>
+                        <CloseOutlined />
+                      </button>
+                    </Tooltip>
+                  )}
+                </div>
+              ))}
             </section>
           );
         })}
