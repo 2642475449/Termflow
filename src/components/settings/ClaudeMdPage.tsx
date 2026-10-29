@@ -146,6 +146,7 @@ export function ClaudeMdPage() {
 
   const [viewMode, setViewMode] = useState<"edit" | "preview">("edit");
   const [templateDrawerOpen, setTemplateDrawerOpen] = useState(false);
+  const [pendingSnippet, setPendingSnippet] = useState<string | null>(null);
 
   // 动态构建 AGENTS.md 规范下的所有真实可选层级目标
   const agentsTargets = useMemo<TargetDescriptor[]>(() => [
@@ -405,7 +406,12 @@ export function ClaudeMdPage() {
 
     try {
       if (!activeExists) {
-        await createProjectFile(projectPath, projectPath, currentAgentsTarget.relativePath);
+        try {
+          await createProjectFile(projectPath, projectPath, currentAgentsTarget.relativePath);
+        } catch (error) {
+          const detail = typeof error === "string" ? error : error instanceof Error ? error.message : "";
+          if (!detail.includes("已存在")) throw error;
+        }
       }
       await writeProjectFile(
         projectPath,
@@ -474,29 +480,25 @@ export function ClaudeMdPage() {
   // 从模板填入
   function applySnippet(content: string) {
     if (activeDraft.trim()) {
-      Modal.confirm({
-        title: t("settings.claudeMd.confirmApplyTemplateTitle"),
-        content: t("settings.claudeMd.confirmApplyTemplateDesc"),
-        okText: t("settings.claudeMd.appendTemplate"),
-        cancelText: t("settings.claudeMd.replaceTemplate"),
-        onOk: () => {
-          const next = `${activeDraft.trimEnd()}\n\n${content.trim()}\n`;
-          handleDraftChange(next);
-          setTemplateDrawerOpen(false);
-          message.success(t("common.saved"));
-        },
-        onCancel: (close) => {
-          handleDraftChange(content.trim() + "\n");
-          setTemplateDrawerOpen(false);
-          close();
-          message.success(t("common.saved"));
-        },
-      });
+      setPendingSnippet(content);
     } else {
       handleDraftChange(content.trim() + "\n");
       setTemplateDrawerOpen(false);
-      message.success(t("common.saved"));
+      message.success(t("settings.claudeMd.templateApplied"));
     }
+  }
+
+  function handleConfirmApply(mode: "append" | "replace") {
+    if (!pendingSnippet) return;
+    if (mode === "append") {
+      const next = `${activeDraft.trimEnd()}\n\n${pendingSnippet.trim()}\n`;
+      handleDraftChange(next);
+    } else {
+      handleDraftChange(pendingSnippet.trim() + "\n");
+    }
+    setPendingSnippet(null);
+    setTemplateDrawerOpen(false);
+    message.success(t("settings.claudeMd.templateApplied"));
   }
 
   return (
@@ -769,7 +771,7 @@ export function ClaudeMdPage() {
                   type="primary"
                   onClick={() => applySnippet(snippet.content)}
                 >
-                  填入
+                  {t("settings.claudeMd.applySnippet")}
                 </Button>
               </div>
               <pre className="max-h-36 overflow-auto rounded bg-[var(--cs-bg-hover)] p-2 text-xs font-mono text-[var(--cs-text-secondary)] whitespace-pre-wrap">
@@ -779,6 +781,36 @@ export function ClaudeMdPage() {
           ))}
         </div>
       </Drawer>
+
+      {/* 确认覆盖或追加模板弹窗 */}
+      <Modal
+        open={pendingSnippet !== null}
+        title={t("settings.claudeMd.confirmApplyTemplateTitle")}
+        onCancel={() => setPendingSnippet(null)}
+        footer={[
+          <Button key="cancel" onClick={() => setPendingSnippet(null)}>
+            {t("common.cancel")}
+          </Button>,
+          <Button
+            key="replace"
+            danger
+            onClick={() => handleConfirmApply("replace")}
+          >
+            {t("settings.claudeMd.replaceTemplate")}
+          </Button>,
+          <Button
+            key="append"
+            type="primary"
+            onClick={() => handleConfirmApply("append")}
+          >
+            {t("settings.claudeMd.appendTemplate")}
+          </Button>,
+        ]}
+      >
+        <p className="m-0 text-sm leading-relaxed text-[var(--cs-text-secondary)]">
+          {t("settings.claudeMd.confirmApplyTemplateDesc")}
+        </p>
+      </Modal>
     </>
   );
 }

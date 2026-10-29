@@ -27,5 +27,6 @@ it("extracts a compact command filename without exposing full paths in the list"
   expect(getHookCommandName({ command: 'node "C:\\My Tools\\termflow-hook.cjs" stop' })).toBe("termflow-hook.cjs");
   expect(getHookCommandName({ command: '"C:/My Tools/pebrel-hook.exe"' })).toBe("pebrel-hook.exe");
   expect(getHookCommandName({ command: 'custom-command --flag' })).toBe("custom-command");
+  expect(getHookCommandName({ command: '"C:\\Program Files\\tool\\"' })).toBe("tool");
   expect(getHookCommandName({ command: '' })).toBe("");
 });

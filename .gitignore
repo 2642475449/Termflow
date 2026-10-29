@@ -60,3 +60,8 @@ Thumbs.db
 !.claude/skills/
 !.claude/skills/termflow-github-release/
 !.claude/skills/termflow-github-release/**
+
+# Locally installed third-party skills
+/.agents/skills/design-taste-frontend/
+/.taste-skill/
+/skills-lock.json

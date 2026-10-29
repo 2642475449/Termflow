@@ -24,5 +24,5 @@ export function getHookCommandName(hook: Pick<HookInfo, "command">): string {
   const tokens = (hook.command.match(/"[^"]*"|'[^']*'|[^\s]+/g) ?? [])
     .map((token) => token.replace(/^["']|["']$/g, ""));
   const executable = tokens.find((token) => /\.(?:cjs|mjs|js|exe|py|sh|ps1)$/i.test(token)) ?? tokens[0] ?? "";
-  return executable.split(/[\\/]/).pop() ?? executable;
+  return executable.split(/[\\/]/).filter(Boolean).pop() ?? executable;
 }
