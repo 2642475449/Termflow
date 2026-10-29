@@ -1,0 +1,26 @@
+.app-bottom-runner-panel {
+  display: flex;
+  background: var(--cs-bg-card-solid);
+  color: var(--cs-text-primary);
+  border-top: 1px solid var(--cs-border);
+  border-left: 1px solid color-mix(in srgb, var(--cs-border-card, var(--cs-border)) 92%, transparent);
+}
+.app-bottom-runner-panel[data-open="false"] { display: none; }
+.app-bottom-runner-panel[data-maximized="true"] { height: min(80vh, 650px, max(120px, calc(100vh - 220px))); }
+.app-bottom-runner-divider { background: var(--cs-bg-card-solid); }
+.app-bottom-runner-divider:hover, .app-bottom-runner-divider:focus-visible { background: var(--cs-primary); }
+.app-bottom-runner-header, .app-bottom-runner-footer { border-bottom: 1px solid var(--cs-border); }
+.app-bottom-runner-footer { border-top: 1px solid var(--cs-border); color: var(--cs-text-secondary); }
+.app-bottom-runner-tool, .app-bottom-runner-tab { color: var(--cs-text-secondary); background: var(--cs-bg-card-solid); }
+.app-bottom-runner-tool:hover, .app-bottom-runner-tab[data-active="true"] { color: var(--cs-text-primary); background: var(--cs-bg-hover); }
+.app-bottom-runner-tool[aria-pressed="true"] { box-shadow: inset 0 -2px var(--cs-primary); }
+.app-bottom-runner-tool:disabled { opacity: .4; cursor: default; }
+.app-bottom-runner-tool:focus-visible, .app-bottom-runner-tab button:focus-visible { outline: 1px solid var(--cs-primary); outline-offset: -1px; }
+.app-bottom-runner-icon[data-status="running"], .app-bottom-runner-icon[data-status="starting"] { color: var(--cs-primary); }
+.app-bottom-runner-icon[data-status="success"] { color: var(--cs-success); }
+.app-bottom-runner-icon[data-status="error"], .app-bottom-runner-badge { color: var(--cs-danger); }
+.app-bottom-runner-badge { background: var(--cs-danger); border: 2px solid var(--cs-bg-card-solid); }
+@media (prefers-reduced-motion: reduce) { .app-bottom-runner-icon .anticon-spin { animation: none; } }
+
+.app-bottom-runner-panel[data-word-wrap="false"] .app-terminal-surface { overflow-x: auto; overflow-y: hidden; }
+.app-bottom-runner-panel[data-word-wrap="false"] .app-terminal-surface > .xterm { width: max-content; min-width: 100%; }

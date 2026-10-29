@@ -1,10 +1,12 @@
-import { DatabaseOutlined, DeleteOutlined, FolderOpenOutlined, ReloadOutlined } from "@ant-design/icons";
+import { DeleteOutlined, FolderOpenOutlined, ReloadOutlined } from "@ant-design/icons";
 import { Button, InputNumber, Modal, Switch, Tag, message } from "antd";
 import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
+import { SettingsSection } from "./SettingsSection";
+import { SettingRow } from "./SettingRow";
 import {
   clearSearchIndexCache,
   deleteProjectIndex,
@@ -39,26 +41,9 @@ function IndexSettingRow({
   onChange,
 }: IndexSettingRowProps) {
   return (
-    <div className="flex items-center justify-between gap-6 px-5 py-4">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>
-            {title}
-          </span>
-          {tag}
-        </div>
-        {description && <div className="mt-1 text-xs leading-5" style={{ color: "var(--cs-text-tertiary)" }}>
-          {description}
-        </div>}
-      </div>
-      <Switch
-        checked={checked}
-        disabled={disabled}
-        loading={loading}
-        aria-label={title}
-        onChange={onChange}
-      />
-    </div>
+    <SettingRow label={<span className="flex flex-wrap items-center gap-2">{title}{tag}</span>} description={description}>
+      <Switch checked={checked} disabled={disabled} loading={loading} aria-label={title} onChange={onChange} />
+    </SettingRow>
   );
 }
 
@@ -392,28 +377,18 @@ export function SearchIndexPage() {
   }, [projectIndexEnabled, status, t]);
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="app-settings-page">
       <SettingsPageHeader
         title={t("settings.searchIndex.title")}
       />
 
-      <div
-        className="mb-2 flex items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-widest"
-        style={{ color: "var(--cs-text-tertiary)" }}
-      >
-        <DatabaseOutlined />
-        {t("settings.searchIndex.repositories")}
-      </div>
-      <section
-        className="app-glass-card overflow-hidden rounded-xl"
-        style={{ background: "var(--cs-bg-card)", border: "1px solid var(--cs-border-card)" }}
-      >
+      <SettingsSection title={t("settings.searchIndex.repositories")}>
         <IndexSettingRow
           title={t("settings.searchIndex.autoIndexTitle")}
           tag={<Tag className="m-0">{t("settings.searchIndex.comingSoon")}</Tag>}
           disabled
         />
-        <div style={{ borderTop: "1px solid var(--cs-border-card)" }}>
+        <div className="border-t border-[var(--cs-border-card)] pt-3">
           <IndexSettingRow
             title={t("settings.searchIndex.instantSearchTitle")}
             description={statusDescription}
@@ -426,7 +401,7 @@ export function SearchIndexPage() {
         </div>
         {projectIndexEnabled && status ? (
           <div
-            className="px-5 py-4"
+            className="py-4"
             style={{ borderTop: "1px solid var(--cs-border-card)" }}
           >
             <div
@@ -456,7 +431,7 @@ export function SearchIndexPage() {
               ) : null}
             </div>
 
-            <div className="mt-3">
+            <div className="app-settings-control-line mt-3">
               <Button
                 size="small"
                 icon={<ReloadOutlined />}
@@ -481,20 +456,10 @@ export function SearchIndexPage() {
             </div>
           </div>
         ) : null}
-      </section>
+      </SettingsSection>
 
-      <div
-        className="mb-2 mt-6 flex items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-widest"
-        style={{ color: "var(--cs-text-tertiary)" }}
-      >
-        <DatabaseOutlined />
-        {t("settings.searchIndex.storage")}
-      </div>
-      <section
-        className="app-glass-card overflow-hidden rounded-xl"
-        style={{ background: "var(--cs-bg-card)", border: "1px solid var(--cs-border-card)" }}
-      >
-        <div className="px-5 py-4">
+      <SettingsSection title={t("settings.searchIndex.storage")}>
+        <div className="py-4">
           <div className="text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>
             {t("settings.searchIndex.storageLocation")}
           </div>
@@ -513,7 +478,7 @@ export function SearchIndexPage() {
             </Button>
           </div>
         </div>
-        <div className="px-5 py-4" style={{ borderTop: "1px solid var(--cs-border-card)" }}>
+        <div className="py-4" style={{ borderTop: "1px solid var(--cs-border-card)" }}>
           <div className="text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>
             {t("settings.searchIndex.storageLimit")}
           </div>
@@ -544,7 +509,7 @@ export function SearchIndexPage() {
             </Button>
           </div>
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4" style={{ borderTop: "1px solid var(--cs-border-card)" }}>
+        <div className="flex flex-wrap items-center justify-between gap-3 py-4" style={{ borderTop: "1px solid var(--cs-border-card)" }}>
           <div>
             <div className="text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>
               {t("settings.searchIndex.clearCache")}
@@ -561,7 +526,7 @@ export function SearchIndexPage() {
             {t("settings.searchIndex.clearCache")}
           </Button>
         </div>
-      </section>
+      </SettingsSection>
 
       <Modal
         open={clearDialogOpen}

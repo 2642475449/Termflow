@@ -11,8 +11,13 @@ use std::{
 };
 use tauri::State;
 
+mod http_security;
+use http_security::{preview_client, preview_url, redirect_policy};
+
 const CACHE_TTL: Duration = Duration::from_secs(600);
 const MAX_FILE: usize = 5 * 1024 * 1024;
+const MAX_MANIFEST: usize = 256 * 1024;
+const MAX_MANIFEST_TOTAL: usize = 20 * 1024 * 1024;
 const MAX_SKILL: usize = 50 * 1024 * 1024;
 const MAX_FILES: usize = 1024;
 const COMMUNITY_LIMIT: usize = 50;
@@ -55,6 +60,7 @@ pub struct MarketDetail {
     pub files: Vec<String>,
     pub total_bytes: u64,
     pub source_url: String,
+    pub preview_only: bool,
 }
 
 #[derive(Clone, Deserialize)]
@@ -87,6 +93,7 @@ type Cache<T> = Mutex<HashMap<String, (Instant, T)>>;
 static REPOSITORIES: LazyLock<Cache<RepositorySnapshot>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 static SUMMARIES: LazyLock<Cache<String>> = LazyLock::new(|| Mutex::new(HashMap::new()));
+static DETAILS: LazyLock<Cache<MarketDetail>> = LazyLock::new(|| Mutex::new(HashMap::new()));
 
 fn cached<T: Clone>(cache: &Cache<T>, key: &str) -> Option<T> {
     cache
@@ -118,6 +125,8 @@ fn client(database: &State<'_, Arc<Database>>) -> Result<Client, String> {
     crate::network_proxy::apply_proxy_to_client_builder(
         Client::builder()
             .no_proxy()
+            .https_only(true)
+            .redirect(redirect_policy(true))
             .user_agent("Termflow skill marketplace")
             .connect_timeout(Duration::from_secs(10))
             .timeout(Duration::from_secs(30)),
@@ -128,37 +137,115 @@ fn client(database: &State<'_, Arc<Database>>) -> Result<Client, String> {
 }
 
 async fn read_bytes(client: &Client, url: reqwest::Url, limit: usize) -> Result<Vec<u8>, String> {
+    let started = Instant::now();
+    let budget = Duration::from_secs(35);
+    for attempt in 1..=3 {
+        let remaining = budget.saturating_sub(started.elapsed());
+        if remaining.is_zero() {
+            return Err(format!(
+                "Response from {} timed out after retries",
+                url.host_str().unwrap_or("remote service")
+            ));
+        }
+        match read_bytes_once(
+            client,
+            url.clone(),
+            limit,
+            remaining.min(Duration::from_secs(30)),
+        )
+        .await
+        {
+            Ok(bytes) => return Ok(bytes),
+            Err(failure) => {
+                if !failure.retryable || attempt == 3 || started.elapsed() >= budget {
+                    return Err(format!(
+                        "{} (host: {}, attempts: {attempt})",
+                        failure.message,
+                        url.host_str().unwrap_or("remote service")
+                    ));
+                }
+                tokio::time::sleep(Duration::from_millis(250 * attempt)).await;
+            }
+        }
+    }
+    Err("Response retry limit reached".into())
+}
+
+struct ResponseReadFailure {
+    message: String,
+    retryable: bool,
+}
+
+impl ResponseReadFailure {
+    fn permanent(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            retryable: false,
+        }
+    }
+
+    fn transport(stage: &str, error: reqwest::Error) -> Self {
+        let retryable =
+            error.is_timeout() || error.is_connect() || error.is_body() || error.is_decode();
+        // Display 只显示泛化错误；保留 source 链，去掉可能包含敏感参数的 URL。
+        let error = error.without_url();
+        let mut message = format!("{stage}: {error}");
+        let mut source = std::error::Error::source(&error);
+        while let Some(cause) = source {
+            message.push_str(&format!(": {cause}"));
+            source = cause.source();
+        }
+        Self { message, retryable }
+    }
+}
+
+async fn read_bytes_once(
+    client: &Client,
+    url: reqwest::Url,
+    limit: usize,
+    timeout: Duration,
+) -> Result<Vec<u8>, ResponseReadFailure> {
     let mut response = client
         .get(url)
+        .timeout(timeout)
         .send()
         .await
-        .map_err(|error| format!("Network request failed: {error}"))?;
+        .map_err(|error| ResponseReadFailure::transport("Network request failed", error))?;
     let status = response.status();
     if !status.is_success() {
-        return Err(
-            if status.as_u16() == 429
-                || (status.as_u16() == 403
-                    && response
-                        .headers()
-                        .get("x-ratelimit-remaining")
-                        .is_some_and(|value| value == "0"))
-            {
+        let rate_limited = status.as_u16() == 429
+            || (status.as_u16() == 403
+                && response
+                    .headers()
+                    .get("x-ratelimit-remaining")
+                    .is_some_and(|value| value == "0"));
+        return Err(ResponseReadFailure {
+            message: if rate_limited {
                 "Service rate limit reached; please retry later".into()
             } else {
                 format!("Service returned HTTP {status}")
             },
-        );
+            retryable: !rate_limited && (status.is_server_error() || status.as_u16() == 408),
+        });
     }
     if response
         .content_length()
         .is_some_and(|length| length > limit as u64)
     {
-        return Err("Remote response exceeds the size limit".into());
+        return Err(ResponseReadFailure::permanent(
+            "Remote response exceeds the size limit",
+        ));
     }
     let mut bytes = Vec::new();
-    while let Some(chunk) = response.chunk().await.map_err(|error| error.to_string())? {
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|error| ResponseReadFailure::transport("Response body read failed", error))?
+    {
         if bytes.len() + chunk.len() > limit {
-            return Err("Remote response exceeds the size limit".into());
+            return Err(ResponseReadFailure::permanent(
+                "Remote response exceeds the size limit",
+            ));
         }
         bytes.extend_from_slice(&chunk);
     }
@@ -296,7 +383,7 @@ async fn resource(
     validate_path(&entry.path)?;
     if entry.kind != "blob"
         || !matches!(entry.mode.as_str(), "100644" | "100755")
-        || entry.size > MAX_FILE as u64
+        || entry.size > MAX_MANIFEST as u64
     {
         return Err(format!(
             "Unsupported or oversized skill resource: {}",
@@ -310,7 +397,7 @@ async fn resource(
         .extend(repository.split('/'))
         .push(revision)
         .extend(entry.path.split('/'));
-    let bytes = read_bytes(client, url, MAX_FILE).await?;
+    let bytes = read_bytes(client, url, MAX_MANIFEST).await?;
     let hash = git2::Oid::hash_object(git2::ObjectType::Blob, &bytes)
         .map_err(|error| error.to_string())?;
     if hash.to_string() != entry.sha {
@@ -592,18 +679,41 @@ fn skill_resources<'a>(
     Ok(files)
 }
 
-fn matching_manifest(
+async fn matching_manifest<S>(
     slug: &str,
-    candidates: Vec<(TreeEntry, String)>,
-) -> Result<(TreeEntry, String), String> {
-    let mut matches = candidates
-        .into_iter()
-        .filter(|(_, content)| parse_skill_frontmatter(content).0 == slug);
-    let selected = matches.next().ok_or_else(|| SKILL_NOT_FOUND.to_string())?;
-    if matches.next().is_some() {
-        return Err(SKILL_AMBIGUOUS.into());
+    candidates: S,
+) -> Result<(TreeEntry, String), String>
+where
+    S: futures_util::Stream<Item = Result<(TreeEntry, String), String>>,
+{
+    futures_util::pin_mut!(candidates);
+    let mut selected = None;
+    let mut total = 0usize;
+    while let Some((entry, content)) = candidates.try_next().await? {
+        total = total.saturating_add(content.len());
+        if content.len() > MAX_MANIFEST || total > MAX_MANIFEST_TOTAL {
+            return Err("Skill manifest resolution exceeds the download size limit".into());
+        }
+        if parse_skill_frontmatter(&content).0 == slug {
+            if selected.is_some() {
+                return Err(SKILL_AMBIGUOUS.into());
+            }
+            selected = Some((entry, content));
+        }
+        // 不匹配的清单在本轮立即释放，只保留唯一候选和有界的在途请求。
     }
-    Ok(selected)
+    selected.ok_or_else(|| SKILL_NOT_FOUND.to_string())
+}
+
+fn validate_manifest_candidates(candidates: &[TreeEntry]) -> Result<(), String> {
+    let total = candidates.iter().fold(0u64, |total, entry| total.saturating_add(entry.size));
+    if candidates.len() > 256
+        || candidates.iter().any(|entry| entry.size > MAX_MANIFEST as u64)
+        || total > MAX_MANIFEST_TOTAL as u64
+    {
+        return Err("Skill manifest resolution exceeds the download size or file count limit".into());
+    }
+    Ok(())
 }
 
 async fn resolve_manifest(
@@ -617,9 +727,6 @@ async fn resolve_manifest(
         .filter(|entry| entry.path == "SKILL.md" || entry.path.ends_with("/SKILL.md"))
         .cloned()
         .collect::<Vec<_>>();
-    if candidates.len() > 256 {
-        return Err("Repository contains too many skills to resolve this selection".into());
-    }
     let direct = candidates
         .iter()
         .filter(|entry| {
@@ -632,6 +739,7 @@ async fn resolve_manifest(
         .cloned()
         .collect::<Vec<_>>();
     if direct.len() == 1 {
+        validate_manifest_candidates(&direct)?;
         let entry = direct
             .into_iter()
             .next()
@@ -646,14 +754,13 @@ async fn resolve_manifest(
     } else {
         candidates
     };
+    validate_manifest_candidates(&candidates)?;
     let contents = stream::iter(candidates.into_iter().map(|entry| async move {
         let content = manifest(client, &skill.repository, repo, &entry).await?;
         Ok::<_, String>((entry, content))
     }))
-    .buffer_unordered(6)
-    .try_collect::<Vec<_>>()
-    .await?;
-    matching_manifest(&skill.slug, contents).map_err(|reason| {
+    .buffer_unordered(6);
+    matching_manifest(&skill.slug, contents).await.map_err(|reason| {
         if ambiguous_directory && reason == SKILL_NOT_FOUND {
             SKILL_AMBIGUOUS.into()
         } else {
@@ -668,11 +775,17 @@ async fn detail_with_client(
 ) -> Result<MarketDetail, String> {
     validate_listing_skill(&skill)?;
     if !skill.repository.contains('/') {
-        return well_known_detail(client, skill).await;
+        return well_known_detail(skill).await;
     }
     validate_skill(&skill)?;
-    let repo = snapshot(client, &skill.repository, None).await?;
-    let (entry, content) = resolve_manifest(client, &skill, &repo).await?;
+    let repo = match snapshot(client, &skill.repository, None).await {
+        Ok(repo) => repo,
+        Err(reason) => return fallback_preview(client, skill, reason).await,
+    };
+    let (entry, content) = match resolve_manifest(client, &skill, &repo).await {
+        Ok(manifest) => manifest,
+        Err(reason) => return fallback_preview(client, skill, reason).await,
+    };
     let directory = entry
         .path
         .strip_suffix("/SKILL.md")
@@ -695,20 +808,84 @@ async fn detail_with_client(
         files: files.iter().map(|(_, path)| path.clone()).collect(),
         total_bytes: files.iter().map(|(entry, _)| entry.size).sum(),
         source_url,
+        preview_only: false,
     })
 }
 
-fn preview_url(url: reqwest::Url) -> Result<reqwest::Url, String> {
-    if url.scheme() != "https"
-        || !url.username().is_empty()
-        || url.password().is_some()
-        || !url
-            .host_str()
-            .is_some_and(|host| host.contains('.') && host.parse::<std::net::IpAddr>().is_err())
-    {
-        return Err("Unsupported skill preview URL".into());
+fn fallback_paths(slug: &str) -> Vec<String> {
+    [
+        format!("skills/{slug}/SKILL.md"),
+        format!(".agents/skills/{slug}/SKILL.md"),
+        format!(".claude/skills/{slug}/SKILL.md"),
+        format!("{slug}/SKILL.md"),
+        "SKILL.md".into(),
+    ]
+    .into()
+}
+
+fn manifest_preview(
+    mut skill: MarketSkill,
+    path: &str,
+    content: String,
+) -> Result<MarketDetail, String> {
+    validate_skill(&skill)?;
+    validate_path(path)?;
+    let (name, description) = parse_skill_frontmatter(&content);
+    if name != skill.slug {
+        return Err(SKILL_NOT_FOUND.into());
     }
-    Ok(url)
+    skill.name = name;
+    skill.description = description;
+    Ok(MarketDetail {
+        source_url: format!("https://github.com/{}/blob/HEAD/{path}", skill.repository),
+        skill,
+        total_bytes: content.len() as u64,
+        content,
+        files: Vec::new(),
+        file_count: 0,
+        preview_only: true,
+    })
+}
+
+async fn fallback_preview(
+    client: &Client,
+    skill: MarketSkill,
+    original_error: String,
+) -> Result<MarketDetail, String> {
+    // 仅在传输或服务故障时降级；不存在、歧义、完整性校验失败仍保留原判定。
+    if ![
+        "Network request failed",
+        "Response body read failed",
+        "Service rate limit",
+        "Service returned HTTP 5",
+        "Service returned HTTP 408",
+        "Invalid service response",
+        "timed out after retries",
+    ]
+    .iter()
+    .any(|message| original_error.contains(message))
+    {
+        return Err(original_error);
+    }
+    let mut candidates = stream::iter(fallback_paths(&skill.slug).into_iter().map(|path| {
+        let skill = &skill;
+        async move {
+            let url = reqwest::Url::parse(&format!(
+                "https://raw.githubusercontent.com/{}/HEAD/{path}",
+                skill.repository
+            ))
+            .ok()?;
+            let content = String::from_utf8(read_bytes(client, url, MAX_MANIFEST).await.ok()?).ok()?;
+            manifest_preview(skill.clone(), &path, content).ok()
+        }
+    }))
+    .buffered(3);
+    while let Some(detail) = candidates.next().await {
+        if let Some(detail) = detail {
+            return Ok(detail);
+        }
+    }
+    Err(original_error)
 }
 
 // 只读取索引和 SKILL.md，不写文件、不下载资源包，也不执行 CLI。
@@ -787,9 +964,9 @@ fn well_known_manifest(
 }
 
 async fn well_known_detail(
-    client: &Client,
     mut skill: MarketSkill,
 ) -> Result<MarketDetail, String> {
+    let client = preview_client()?;
     let root = preview_url(
         reqwest::Url::parse(&format!("https://{}/", skill.repository))
             .map_err(|error| error.to_string())?,
@@ -800,7 +977,7 @@ async fn well_known_detail(
         ".well-known/skills/index.json",
     ] {
         let index_url = root.join(path).map_err(|error| error.to_string())?;
-        let bytes = match read_bytes(client, index_url.clone(), 2 * 1024 * 1024).await {
+        let bytes = match read_bytes(&client, index_url.clone(), 2 * 1024 * 1024).await {
             Ok(bytes) => bytes,
             Err(reason) => {
                 last_error = reason;
@@ -822,7 +999,7 @@ async fn well_known_detail(
             }
             Err(reason) => return Err(reason),
         };
-        let bytes = read_bytes(client, url.clone(), MAX_FILE).await?;
+        let bytes = read_bytes(&client, url.clone(), MAX_MANIFEST).await?;
         if digest.is_some_and(|expected| expected != format!("sha256:{:x}", Sha256::digest(&bytes)))
         {
             return Err("Skill preview failed integrity verification".into());
@@ -842,6 +1019,7 @@ async fn well_known_detail(
             files,
             total_bytes,
             source_url: url.to_string(),
+            preview_only: false,
         });
     }
     Err(last_error)
@@ -853,15 +1031,234 @@ pub async fn get_marketplace_skill_detail(
     refresh: Option<bool>,
     database: State<'_, Arc<Database>>,
 ) -> Result<MarketDetail, String> {
+    validate_listing_skill(&skill)?;
+    let key = format!("{}/{}", skill.repository, skill.slug);
     if refresh.unwrap_or(false) {
         invalidate_latest_snapshot(&skill.repository);
+        if let Ok(mut entries) = DETAILS.lock() {
+            entries.remove(&key);
+        }
+    } else if let Some(detail) = cached(&DETAILS, &key) {
+        return Ok(detail);
     }
-    detail_with_client(&client(&database)?, skill).await
+    let detail = detail_with_client(&client(&database)?, skill).await?;
+    remember(&DETAILS, key, detail.clone());
+    Ok(detail)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn matching_manifest(slug: &str, candidates: Vec<(TreeEntry, String)>) -> Result<(TreeEntry, String), String> {
+        tauri::async_runtime::block_on(super::matching_manifest(slug, stream::iter(candidates.into_iter().map(Ok))))
+    }
+
+    #[test]
+    fn manifest_metadata_limits_are_checked_before_downloading() {
+        let mut manifest = entry("skills/review/SKILL.md");
+        manifest.size = MAX_MANIFEST as u64 + 1;
+        assert!(validate_manifest_candidates(&[manifest]).is_err());
+        let mut manifest = entry("skills/review/SKILL.md");
+        manifest.size = MAX_MANIFEST as u64;
+        assert!(validate_manifest_candidates(&vec![manifest.clone(); 80]).is_ok());
+        assert!(validate_manifest_candidates(&vec![manifest; 81]).is_err());
+        assert!(validate_manifest_candidates(&vec![entry("SKILL.md"); 257]).is_err());
+    }
+
+    #[test]
+    fn manifest_stream_stops_at_actual_byte_budget_and_preserves_ambiguity_detection() {
+        tauri::async_runtime::block_on(async {
+            let mut consumed = 0;
+            let candidates = stream::iter((0..256).map(|index| {
+                consumed += 1;
+                let mut content = named_manifest("SKILL.md", "other").1;
+                content.push_str(&"x".repeat(MAX_MANIFEST - content.len()));
+                Ok((entry(&format!("{index}/SKILL.md")), content))
+            }));
+            let error = super::matching_manifest("review", candidates).await.err().expect("budget exhausted");
+            assert!(error.contains("download size limit"));
+            assert_eq!(consumed, 81);
+            let mut consumed = 0;
+            let candidates = stream::iter((0..256).map(|index| {
+                consumed += 1;
+                Ok(named_manifest(&format!("{index}/SKILL.md"), "review"))
+            }));
+            assert_eq!(super::matching_manifest("review", candidates).await.err().as_deref(), Some(SKILL_AMBIGUOUS));
+            assert_eq!(consumed, 2);
+        });
+    }
+
+    #[test]
+    fn fallback_preview_requires_exact_manifest_identity_and_does_not_invent_resource_lists() {
+        let skill = MarketSkill {
+            repository: "owner/skills".into(),
+            slug: "review".into(),
+            name: "review".into(),
+            description: String::new(),
+            installs: None,
+        };
+        let detail = manifest_preview(
+            skill.clone(),
+            "skills/review/SKILL.md",
+            "---\nname: review\ndescription: Review code\n---\nInstructions".into(),
+        )
+        .expect("preview");
+        assert!(detail.preview_only);
+        assert!(detail.files.is_empty());
+        assert_eq!(detail.file_count, 0);
+        assert_eq!(detail.skill.description, "Review code");
+        assert!(manifest_preview(
+            skill.clone(),
+            "skills/review/SKILL.md",
+            "---\nname: other\n---\nWrong skill".into()
+        )
+        .is_err());
+        assert!(manifest_preview(skill, "../SKILL.md", "---\nname: review\n---\n".into()).is_err());
+        assert!(fallback_paths("review")
+            .iter()
+            .all(|path| validate_path(path).is_ok() && path.ends_with("SKILL.md")));
+    }
+
+    #[test]
+    fn missing_ambiguous_and_integrity_failures_cannot_use_the_fallback() {
+        tauri::async_runtime::block_on(async {
+            for reason in [
+                SKILL_NOT_FOUND,
+                SKILL_AMBIGUOUS,
+                "Skill resource failed integrity verification",
+            ] {
+                let skill = MarketSkill {
+                    repository: "owner/skills".into(),
+                    slug: "review".into(),
+                    name: "review".into(),
+                    description: String::new(),
+                    installs: None,
+                };
+                assert_eq!(
+                    fallback_preview(&Client::new(), skill, reason.into())
+                        .await
+                        .err()
+                        .as_deref(),
+                    Some(reason)
+                );
+            }
+        });
+    }
+
+    fn response_server(
+        responses: Vec<&'static str>,
+    ) -> (reqwest::Url, std::thread::JoinHandle<usize>) {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("local server");
+        let url = reqwest::Url::parse(&format!(
+            "http://{}/skill",
+            listener.local_addr().expect("address")
+        ))
+        .expect("URL");
+        listener.set_nonblocking(true).expect("nonblocking");
+        let task = std::thread::spawn(move || {
+            let mut count = 0;
+            for response in responses {
+                let deadline = Instant::now() + Duration::from_secs(5);
+                let mut socket = loop {
+                    match listener.accept() {
+                        Ok((socket, _)) => break socket,
+                        Err(error)
+                            if error.kind() == std::io::ErrorKind::WouldBlock
+                                && Instant::now() < deadline =>
+                        {
+                            std::thread::sleep(Duration::from_millis(10))
+                        }
+                        _ => return count,
+                    }
+                };
+                socket
+                    .set_read_timeout(Some(Duration::from_secs(1)))
+                    .expect("read timeout");
+                // TCP 一次 read 不保证包含完整请求头；提前关闭带未读数据的连接在 Windows 会触发 RST。
+                let mut request = Vec::new();
+                while !request.ends_with(b"\r\n\r\n") {
+                    let mut chunk = [0; 1024];
+                    let count = socket.read(&mut chunk).expect("read request");
+                    assert!(count > 0 && request.len() + count <= 16 * 1024, "complete request headers");
+                    request.extend_from_slice(&chunk[..count]);
+                }
+                socket
+                    .write_all(response.as_bytes())
+                    .expect("write response");
+                count += 1;
+            }
+            count
+        });
+        (url, task)
+    }
+
+    #[test]
+    fn interrupted_response_is_retried_without_reusing_partial_bytes() {
+        tauri::async_runtime::block_on(async {
+            let (url, server) = response_server(vec![
+                "HTTP/1.1 200 OK\r\nContent-Length: 20\r\nConnection: close\r\n\r\npartial",
+                "HTTP/1.1 200 OK\r\nContent-Length: 8\r\nConnection: close\r\n\r\ncomplete",
+            ]);
+            let client = Client::builder().no_proxy().build().expect("client");
+            assert_eq!(
+                read_bytes(&client, url, 100).await.expect("retry succeeds"),
+                b"complete"
+            );
+            assert_eq!(server.join().expect("server"), 2);
+        });
+    }
+
+    #[test]
+    fn persistent_body_failure_has_bounded_retries_and_diagnostics() {
+        tauri::async_runtime::block_on(async {
+            let (url, server) = response_server(vec![
+                    "HTTP/1.1 200 OK\r\nContent-Length: 20\r\nConnection: close\r\n\r\npartial";
+                    3
+                ]);
+            let client = Client::builder().no_proxy().build().expect("client");
+            let error = read_bytes(&client, url, 100)
+                .await
+                .expect_err("truncated body");
+            assert!(error.contains("Response body read failed"), "{error}");
+            assert!(error.contains("host: 127.0.0.1, attempts: 3"), "{error}");
+            assert_eq!(server.join().expect("server"), 3);
+        });
+    }
+
+    #[test]
+    fn temporary_server_failure_is_retried() {
+        tauri::async_runtime::block_on(async {
+            let (url, server) = response_server(vec![
+                "HTTP/1.1 503 Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok",
+            ]);
+            let client = Client::builder().no_proxy().build().expect("client");
+            assert_eq!(
+                read_bytes(&client, url, 100).await.expect("retry succeeds"),
+                b"ok"
+            );
+            assert_eq!(server.join().expect("server"), 2);
+        });
+    }
+
+    #[test]
+    fn permanent_http_errors_rate_limits_and_size_limits_are_not_retried() {
+        tauri::async_runtime::block_on(async {
+            for response in [
+                "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                "HTTP/1.1 429 Too Many Requests\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                "HTTP/1.1 200 OK\r\nContent-Length: 20\r\nConnection: close\r\n\r\noversized content!!!",
+            ] {
+                let (url, server) = response_server(vec![response]);
+                let client = Client::builder().no_proxy().build().expect("client");
+                let error = read_bytes(&client, url, 10).await.expect_err("permanent failure");
+                assert!(error.contains("attempts: 1"), "{error}");
+                assert_eq!(server.join().expect("server"), 1);
+            }
+        });
+    }
 
     fn entry(path: &str) -> TreeEntry {
         TreeEntry {
@@ -1209,6 +1606,51 @@ mod tests {
                 .expect("domain skill preview");
             assert!(preview.content.contains("lark-doc"));
             assert!(preview.files.iter().any(|file| file == "SKILL.md"));
+        });
+    }
+
+    #[test]
+    #[ignore = "只读访问真实 GitHub，检查截图中的 hyperframes-cli 详情"]
+    fn live_hyperframes_preview() {
+        tauri::async_runtime::block_on(async {
+            let proxy = crate::network_proxy::resolve_network_proxy(
+                &crate::network_proxy::NetworkProxySettings::default(),
+            )
+            .expect("proxy");
+            let client = crate::network_proxy::apply_proxy_to_client_builder(
+                Client::builder()
+                    .no_proxy()
+                    .user_agent("Termflow marketplace integration check")
+                    .timeout(Duration::from_secs(30)),
+                &proxy,
+            )
+            .expect("builder")
+            .build()
+            .expect("client");
+            let detail = detail_with_client(
+                &client,
+                MarketSkill {
+                    repository: "heygen-com/hyperframes".into(),
+                    slug: "hyperframes-cli".into(),
+                    name: "hyperframes-cli".into(),
+                    description: String::new(),
+                    installs: None,
+                },
+            )
+            .await
+            .expect("hyperframes-cli preview");
+            assert!(!detail.content.is_empty());
+            assert_eq!(detail.skill.name, "hyperframes-cli");
+            if detail.preview_only {
+                assert!(detail.files.is_empty());
+            } else {
+                assert!(detail.file_count > 0);
+            }
+            eprintln!(
+                "Live preview succeeded: {} bytes, preview_only={}",
+                detail.content.len(),
+                detail.preview_only
+            );
         });
     }
 

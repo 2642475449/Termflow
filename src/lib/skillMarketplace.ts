@@ -2,6 +2,7 @@ import type { MarketplaceSkill } from "@/types";
 
 export const MARKETPLACE_CATEGORIES = ["all", "development", "design", "content", "productivity", "data", "other"] as const;
 export type MarketplaceCategory = typeof MARKETPLACE_CATEGORIES[number];
+export type MarketplaceViewMode = "featured" | "leaderboard";
 
 export function marketplaceCategory(skill: MarketplaceSkill): Exclude<MarketplaceCategory, "all"> {
   const text = `${skill.slug} ${skill.name}`.toLowerCase();
@@ -31,22 +32,23 @@ export function filterMarketplaceCategory(skills: MarketplaceSkill[], category: 
   return category === "all" ? skills : skills.filter((skill) => marketplaceCategory(skill) === category);
 }
 
-// 全部展示分类概览；进入单个分类后，才对该分类的完整列表分页。
-export function marketplaceBrowseView(skills: MarketplaceSkill[], category: MarketplaceCategory, requestedPage: number) {
+// 首页固定展示分类精选；榜单、分类和搜索列表每页展示 24 条。
+export function marketplaceBrowseView(skills: MarketplaceSkill[], category: MarketplaceCategory, requestedPage: number, mode: MarketplaceViewMode = "featured") {
   const counts = { all: skills.length, development: 0, design: 0, content: 0, productivity: 0, data: 0, other: 0 };
-  const sections = MARKETPLACE_CATEGORIES.filter((value) => value !== "all").map((value) => {
+  const groups = MARKETPLACE_CATEGORIES.filter((value) => value !== "all").map((value) => {
     const entries = filterMarketplaceCategory(skills, value);
     counts[value] = entries.length;
     return { category: value, total: entries.length, skills: entries };
   });
   const total = counts[category];
+  const overview = category === "all" && mode === "featured";
   const pageSize = 24;
-  const page = Math.max(1, Math.min(Math.floor(requestedPage) || 1, Math.ceil(total / pageSize)));
-  const overview = category === "all";
+  const page = overview ? 1 : Math.max(1, Math.min(Math.floor(requestedPage) || 1, Math.ceil(total / pageSize)));
+  const entries = filterMarketplaceCategory(skills, category);
   return {
-    counts, total, page, pageSize, overview,
-    sections: sections.filter((section) => section.total && (overview || section.category === category))
-      .map((section) => ({ ...section, skills: overview ? section.skills.slice(0, 6) : section.skills.slice((page - 1) * pageSize, page * pageSize) })),
+    counts, total, page, pageSize, overview, hasMore: !overview && page * pageSize < total,
+    sections: overview ? groups.filter((group) => group.total).map((group) => ({ ...group, skills: group.skills.slice(0, 6) }))
+      : total ? [{ category, total, skills: entries.slice((page - 1) * pageSize, page * pageSize) }] : [],
   };
 }
 

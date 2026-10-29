@@ -9,7 +9,7 @@ import {
   savePersistentSettings,
 } from "@/lib/api";
 import { applyUpdaterDownloadEvent, createUpdateProgress } from "@/lib/updateProgress";
-import { getPersistentSettingsSnapshot } from "@/store";
+import { persistentSettingsSync, getRuntimePersistentSettingsSnapshot } from "@/store/slices/persistentSettingsRuntime";
 import {
   useApplicationUpdateStore,
   type ApplicationUpdatePhase,
@@ -91,7 +91,7 @@ export async function checkForApplicationUpdate(
 
   checkPromise = (async () => {
     try {
-      const persistentSettings = getPersistentSettingsSnapshot();
+      const persistentSettings = getRuntimePersistentSettingsSnapshot();
       const resolvedProxy = await resolveNetworkProxySettings({
         mode: persistentSettings.networkProxyMode,
         customProxyUrl: persistentSettings.networkCustomProxyUrl,
@@ -224,7 +224,7 @@ export async function installPendingApplicationUpdate(): Promise<void> {
   });
 
   try {
-    await savePersistentSettings(getPersistentSettingsSnapshot());
+    await persistentSettingsSync.save(getRuntimePersistentSettingsSnapshot, savePersistentSettings);
     markPendingUpdateVersion(window.localStorage, update.version);
     await installApplicationUpdate(update);
   } catch (error) {

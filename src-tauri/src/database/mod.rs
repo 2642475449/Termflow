@@ -1036,6 +1036,24 @@ impl Database {
         self.save_persistent_settings_internal(settings, false, false, false)
     }
 
+    /// 调用方持有设置写锁；只合并本窗口修改的字段，保留其他窗口的新值。
+    pub fn save_general_persistent_settings_patch(
+        &self,
+        settings: &PersistentSettingsRecord,
+        changed_fields: &[String],
+    ) -> Result<PersistentSettingsRecord, String> {
+        let mut current = serde_json::to_value(self.load_persistent_settings()?).map_err(|error| error.to_string())?;
+        let requested = serde_json::to_value(settings).map_err(|error| error.to_string())?;
+        let target = current.as_object_mut().ok_or("Invalid persistent settings")?;
+        for field in changed_fields {
+            let value = requested.get(field).ok_or_else(|| format!("Unknown persistent settings field: {field}"))?;
+            target.insert(field.clone(), value.clone());
+        }
+        let merged = serde_json::from_value(current).map_err(|error| error.to_string())?;
+        self.save_general_persistent_settings(&merged)?;
+        Ok(merged)
+    }
+
     /// 快捷命令使用独立读写，避免其他窗口的通用设置快照覆盖项目迁移或编辑。
     pub fn load_stored_quick_commands(&self) -> Result<serde_json::Value, String> {
         let conn = self.conn.lock();
@@ -1696,6 +1714,38 @@ mod tests {
         let restored: PersistentSettingsRecord =
             serde_json::from_value(legacy).map_err(|error| error.to_string())?;
         assert_eq!(restored.auxiliary_dock_width, None);
+        Ok(())
+    }
+
+    #[test]
+    fn settings_patches_preserve_changes_from_other_windows() -> Result<(), String> {
+        let database = Database::open_in_memory();
+        let initial = PersistentSettingsRecord::default();
+        database.save_persistent_settings(&initial)?;
+        let mut first_window = initial.clone();
+        first_window.language = "en".into();
+        database.save_general_persistent_settings_patch(&first_window, &["language".into()])?;
+        let mut stale_window = initial;
+        stale_window.terminal_font_size = 22;
+        stale_window.voice_shortcut = "Ctrl+Alt+V".into();
+        let saved = database.save_general_persistent_settings_patch(&stale_window,
+            &["terminalFontSize".into(), "voiceShortcut".into()])?;
+        assert_eq!(saved.language, "en");
+        assert_eq!(saved.terminal_font_size, 22);
+        assert_eq!(database.load_persistent_settings()?.voice_shortcut, "Ctrl+Alt+V");
+        Ok(())
+    }
+
+    #[test]
+    fn invalid_settings_patch_does_not_write_partial_changes() -> Result<(), String> {
+        let database = Database::open_in_memory();
+        let initial = PersistentSettingsRecord::default();
+        database.save_persistent_settings(&initial)?;
+        let mut changed = initial.clone();
+        changed.language = "en".into();
+        assert!(database.save_general_persistent_settings_patch(&changed,
+            &["language".into(), "unknownField".into()]).is_err());
+        assert_eq!(database.load_persistent_settings()?.language, initial.language);
         Ok(())
     }
 

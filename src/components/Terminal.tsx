@@ -149,6 +149,14 @@ function shouldAttemptWebgl(renderer: TerminalRenderer): boolean {
 interface TerminalProps {
   sessionId: string;
   onExit?: () => void;
+  allowIndependentFocus?: boolean;
+  runnerOptions?: {
+    autoScroll: boolean;
+    wordWrap: boolean;
+    onAutoScrollChange: (enabled: boolean) => void;
+    onReady: (sessionId: string) => void;
+    onCommandComplete: (sessionId: string, code: number | null) => void;
+  };
   onClose?: () => void;
 }
 
@@ -209,12 +217,14 @@ export function normalizeDecscusrCursorStyle(param: number | undefined): {
   }
 }
 
-function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
+function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, runnerOptions }: TerminalProps) {
   const { t } = useTranslation();
   const runtimeId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<XTerm | null>(null);
   const onExitRef = useRef(onExit);
+  const runnerOptionsRef = useRef(runnerOptions);
+  runnerOptionsRef.current = runnerOptions;
   const onCloseRef = useRef(onClose);
   const lastPasteTriggerAtRef = useRef(0);
   const pasteGateRef = useRef<ReturnType<typeof createTerminalPasteGate> | null>(null);
@@ -270,6 +280,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
   );
   const currentSession = useAppStore((s) =>
     s.sessions.find((session) => session.id === sessionId)
+      ?? (runnerOptions ? Object.values(s.projectSessions).flat().find((session) => session.id === sessionId) : undefined)
   );
   const terminalBehavior = getAgentTerminalBehavior(currentSession?.agentId);
   const forceStableCursor = terminalBehavior.forceStableCursor === true;
@@ -927,6 +938,21 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       };
     }, (data) => term.input(data, true)));
     terminalRef.current = term;
+    const handleRunnerClear = (event: Event) => {
+      if ((event as CustomEvent<{ sessionId: string }>).detail?.sessionId !== sessionId) return;
+      outputFrameGateRef.current?.flush();
+      term.clear();
+    };
+    window.addEventListener("terminal:clear", handleRunnerClear);
+    const runnerScroll = term.onScroll(() => {
+      if (runnerOptionsRef.current?.autoScroll && term.buffer.active.viewportY < term.buffer.active.baseY) {
+        runnerOptionsRef.current.onAutoScrollChange(false);
+      }
+    });
+    const onRunnerWheel = (event: WheelEvent) => {
+      if (event.deltaY < 0) runnerOptionsRef.current?.onAutoScrollChange(false);
+    };
+    container.addEventListener("wheel", onRunnerWheel, { passive: true });
 
     const cursorStyleDisposable = forceStableCursor
       ? term.parser.registerCsiHandler({ intermediates: " ", final: "q" }, (params) => {
@@ -946,6 +972,14 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       }
 
       const completion = terminalCommandWatcherRef.current.consumeOsc133(data, performance.now());
+      if (runnerOptionsRef.current) {
+        if (marker === "D") {
+          const rawCode = data.split(";")[1];
+          const code = rawCode?.trim() && Number.isFinite(Number(rawCode)) ? Number(rawCode) : null;
+          runnerOptionsRef.current.onCommandComplete(sessionId, code);
+        }
+        return true;
+      }
       const projectPath = currentSessionPathRef.current;
       const lifecycleCapability = data.split(";").find((part) =>
         part.startsWith("command-lifecycle="),
@@ -1094,13 +1128,19 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       const refreshCursor = frameNeedsCursorRefresh;
       frameNeedsCursorRefresh = false;
       outputMonitor.write(data, (output, onParsed) => {
+        const runnerViewport = runnerOptionsRef.current && !runnerOptionsRef.current.autoScroll
+          ? term.buffer.active.viewportY : null;
         writeTerminalOutputWithCursorRefresh(
           term,
           output,
           refreshCursor
             ? () => !isTerminalDisposed && Boolean(containerRef.current?.getClientRects().length)
             : undefined,
-          onParsed,
+          () => {
+            onParsed();
+            if (runnerOptionsRef.current?.autoScroll) term.scrollToBottom();
+            else if (runnerViewport !== null) term.scrollToLine(runnerViewport);
+          },
         );
       });
     });
@@ -1302,16 +1342,24 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       ptyResize(sessionId, rows, cols).catch(console.error);
     });
 
+    const fitGrid = () => {
+      if (!runnerOptionsRef.current) { fitAddon.fit(); return; }
+      const size = fitAddon.proposeDimensions();
+      if (!size) return;
+      // xterm 没有 wordWrap 选项；宽网格提供横向滚动，避免 DEC 关闭换行后覆盖末列。
+      // 使用一次 resize，避免窄/宽网格反复重排日志。
+      term.resize(runnerOptionsRef.current.wordWrap ? size.cols : Math.max(1024, size.cols), size.rows);
+    };
     const syncSize = () => {
       if (document.hidden || !containerRef.current || containerRef.current.clientWidth === 0) return;
-      fitAddon.fit();
+      fitGrid();
       requestPtyResize(term.rows, term.cols);
     };
 
     // Full refresh: resize + force canvas redraw (for display:none → block transitions)
     const fullRefresh = () => {
       if (document.hidden || !containerRef.current || containerRef.current.clientWidth === 0) return;
-      fitAddon.fit();
+      fitGrid();
       requestPtyResize(term.rows, term.cols);
       // Force xterm.js to redraw the canvas after container becomes visible
       term.refresh(0, term.rows - 1);
@@ -1357,7 +1405,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
 
     const handleLayoutSync = (event: Event) => {
       const detail = (event as CustomEvent<{ sessionId?: string }>).detail;
-      if (detail?.sessionId !== sessionId) return;
+      if (detail?.sessionId != null && detail.sessionId !== sessionId) return;
       scheduleSync();
     };
     window.addEventListener(TERMINAL_LAYOUT_SYNC_EVENT, handleLayoutSync as EventListener);
@@ -1422,6 +1470,13 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
       }
     );
 
+    void Promise.all([outputPromise, exitPromise]).then(() => {
+      if (!isTerminalDisposed) {
+        syncSize();
+        runnerOptionsRef.current?.onReady(sessionId);
+      }
+    }).catch((error: unknown) => console.warn("Failed to initialize runner terminal listeners:", error));
+
     const currentWindow = getCurrentWindow();
     const dropPromise = currentWindow.onDragDropEvent((event) => {
       if (event.payload.type === "leave") {
@@ -1451,6 +1506,9 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
 
     return () => {
       isTerminalDisposed = true;
+      window.removeEventListener("terminal:clear", handleRunnerClear);
+      container.removeEventListener("wheel", onRunnerWheel);
+      runnerScroll.dispose();
       if (fallbackAnimationFrame !== null) {
         window.cancelAnimationFrame(fallbackAnimationFrame);
         fallbackAnimationFrame = null;
@@ -1496,7 +1554,7 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
   }, [
     sessionId,
     runtimeId,
-    termTheme,
+    runnerOptions ? null : termTheme,
     fontSize,
     cursorBlink,
     lineHeight,
@@ -1514,6 +1572,18 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
     pasteIntoTerminal,
     reportPasteError,
   ]);
+
+  useEffect(() => {
+    if (!runnerOptions || !terminalRef.current) return;
+    terminalRef.current.options.theme = termTheme.theme;
+    terminalRef.current.options.minimumContrastRatio = termTheme.minimumContrastRatio;
+  }, [termTheme]);
+
+  useEffect(() => {
+    if (!runnerOptions || !terminalRef.current) return;
+    window.dispatchEvent(new CustomEvent(TERMINAL_LAYOUT_SYNC_EVENT, { detail: { sessionId } }));
+    if (runnerOptions.autoScroll) terminalRef.current.scrollToBottom();
+  }, [runnerOptions?.wordWrap, runnerOptions?.autoScroll]);
 
   useEffect(() => {
     if (!terminalRef.current) return;
@@ -1557,11 +1627,11 @@ function Terminal({ sessionId, onExit, onClose }: TerminalProps) {
     }
 
     const textarea = container.querySelector("textarea");
-    if (textarea instanceof HTMLTextAreaElement && document.activeElement === textarea) {
+    if (!allowIndependentFocus && textarea instanceof HTMLTextAreaElement && document.activeElement === textarea) {
       suppressedFocusSequenceUntilRef.current = Date.now() + 300;
       textarea.blur();
     }
-  }, [currentSession?.active, currentSession?.status, sessionId, isFocusedWorkspaceSession]);
+  }, [currentSession?.active, currentSession?.status, sessionId, isFocusedWorkspaceSession, allowIndependentFocus]);
 
   return (
     <>

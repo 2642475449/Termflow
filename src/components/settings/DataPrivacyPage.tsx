@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  DatabaseOutlined,
   DeleteOutlined,
   ReloadOutlined,
-  SafetyCertificateOutlined,
 } from "@ant-design/icons";
 import { Button, Modal, Select, Spin, Tag, message } from "antd";
 import { useTranslation } from "react-i18next";
@@ -15,6 +13,7 @@ import {
 import type { AgentUsageHistoryScope, AgentUsageStorageStatus } from "@/types";
 import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
 import { ClipboardCacheSection } from "@/components/settings/ClipboardCacheSection";
+import { SettingsSection } from "./SettingsSection";
 
 type PendingOperation = "clear" | "rebuild" | null;
 
@@ -86,7 +85,7 @@ export function DataPrivacyPage() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="app-settings-page">
       <SettingsPageHeader
         title={t("settings.usageData.title")}
         actions={
@@ -98,24 +97,11 @@ export function DataPrivacyPage() {
 
       <ClipboardCacheSection />
 
-      <section
-        className="app-glass-card mb-4 rounded-xl p-5"
-        style={{ background: "var(--cs-bg-card)", border: "1px solid var(--cs-border-card)" }}
-      >
-        <div className="mb-4 flex items-center gap-3">
-          <DatabaseOutlined className="text-lg" style={{ color: "var(--cs-primary)" }} />
-          <div>
-            <div className="font-semibold" style={{ color: "var(--cs-text-primary)" }}>
-              {t("settings.usageData.storageTitle")}
-            </div>
-
-          </div>
-        </div>
-
+      <SettingsSection title={t("settings.usageData.storageTitle")}>
         {loading && !status ? (
           <div className="flex min-h-28 items-center justify-center"><Spin /></div>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="app-settings-stats">
             <StatusItem
               label={t("settings.usageData.retainedSessions")}
               value={String(status?.retainedSessions ?? 0)}
@@ -139,40 +125,16 @@ export function DataPrivacyPage() {
             {t("settings.usageData.lastError")}: {status.lastError}
           </div>
         ) : null}
-      </section>
+      </SettingsSection>
 
-      <section
-        className="app-glass-card mb-4 rounded-xl p-5"
-        style={{ background: "var(--cs-bg-card)", border: "1px solid var(--cs-border-card)" }}
-      >
-        <div className="flex items-start gap-3">
-          <SafetyCertificateOutlined className="mt-0.5 text-lg" style={{ color: "var(--cs-success)" }} />
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-semibold" style={{ color: "var(--cs-text-primary)" }}>
-                {t("settings.usageData.privacyTitle")}
-              </span>
-              <Tag color="success" className="m-0">{t("settings.usageData.localOnly")}</Tag>
-            </div>
-            <div className="mt-2 text-sm leading-6" style={{ color: "var(--cs-text-secondary)" }}>
-              {t("settings.usageData.included")}
-            </div>
-            <div className="text-sm leading-6" style={{ color: "var(--cs-text-tertiary)" }}>
-              {t("settings.usageData.excluded")}
-            </div>
-          </div>
-        </div>
-      </section>
+      <SettingsSection title={<>{t("settings.usageData.privacyTitle")} <Tag color="success" className="!m-0">{t("settings.usageData.localOnly")}</Tag></>}>
+        <p className="mb-1 text-xs leading-6 text-[var(--cs-text-secondary)]">{t("settings.usageData.included")}</p>
+        <p className="mb-0 text-xs leading-6 text-[var(--cs-text-secondary)]">{t("settings.usageData.excluded")}</p>
+      </SettingsSection>
 
-      <section
-        className="app-glass-card rounded-xl p-5"
-        style={{ background: "var(--cs-bg-card)", border: "1px solid var(--cs-border-card)" }}
-      >
+      <SettingsSection title={t("settings.usageData.scope")}>
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="min-w-[220px] flex-1">
-            <div className="mb-2 text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>
-              {t("settings.usageData.scope")}
-            </div>
             <Select<AgentUsageHistoryScope>
               value={scope}
               onChange={setScope}
@@ -180,7 +142,8 @@ export function DataPrivacyPage() {
                 { value: "codex", label: t("settings.usageData.scopeCodex") },
                 { value: "all", label: t("settings.usageData.scopeAll") },
               ]}
-              style={{ width: "min(100%, 320px)" }}
+              className="w-full max-w-80"
+              aria-label={t("settings.usageData.scope")}
             />
           </div>
           <div className="flex flex-wrap gap-2">
@@ -204,18 +167,16 @@ export function DataPrivacyPage() {
           </div>
         </div>
 
-      </section>
+      </SettingsSection>
     </div>
   );
 }
 
 function StatusItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg px-3 py-3" style={{ background: "var(--cs-bg-hover)" }}>
-      <div className="text-[11px]" style={{ color: "var(--cs-text-tertiary)" }}>{label}</div>
-      <div className="mt-1 break-words text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>
-        {value}
-      </div>
+    <div className="app-settings-stat">
+      <div className="app-settings-stat__label">{label}</div>
+      <div className="app-settings-stat__value">{value}</div>
     </div>
   );
 }

@@ -167,7 +167,7 @@ export interface Session {
   /** Runtime-only terminal tab; excluded from resumable session history. */
   ephemeral?: boolean;
   /** Preferred presentation surface. Runtime and Agent capabilities are unchanged. */
-  presentation?: "workspace" | "auxiliary";
+  presentation?: "workspace" | "auxiliary" | "bottom-runner";
   hasPromptHistory?: boolean;
   pinned?: boolean;
   archived?: boolean;
@@ -752,6 +752,7 @@ export interface MarketplaceSkillDetail {
   files: string[];
   totalBytes: number;
   sourceUrl: string;
+  previewOnly?: boolean;
 }
 
 export type SkillAgent = AiAgentId;

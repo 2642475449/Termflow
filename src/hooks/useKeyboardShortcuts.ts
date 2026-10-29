@@ -10,6 +10,8 @@ const SETTINGS_ID = "__settings__";
 interface ShortcutHandlers {
   onNewSession?: () => void;
   onToggleSidebar?: () => void;
+  onToggleBottomRunner?: () => void;
+  onRequestCloseRunnerTab?: () => void;
   onGlobalTextSearch?: () => void;
   onRequestCloseTab?: (tabId: string) => void;
   onSelectAllExplorer?: () => void;
@@ -39,7 +41,7 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       handlers.onVoiceShortcutRelease?.();
     }
 
-    const globalActions: ShortcutAction[] = ["newSession", "globalTextSearch", "closeTab", "nextTab", "openSettings", "toggleSidebar"];
+    const globalActions: ShortcutAction[] = ["newSession", "globalTextSearch", "closeTab", "nextTab", "openSettings", "toggleSidebar", "toggleBottomRunner"];
     const matches = (event: KeyboardEvent, action: ShortcutAction) => matchesShortcut(event, getAppShortcut(overrides, action));
 
     function handleKeyDown(e: KeyboardEvent) {
@@ -89,6 +91,10 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       if (matches(e, "closeTab")) {
         consumeShortcut(e);
         if (e.repeat) return;
+        if (e.target instanceof HTMLElement && e.target.closest(".app-bottom-runner-panel")) {
+          handlers.onRequestCloseRunnerTab?.();
+          return;
+        }
         if (activeSessionId) {
           handlers.onRequestCloseTab?.(activeSessionId);
         }
@@ -112,6 +118,12 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
         consumeShortcut(e);
         if (e.repeat) return;
         openTab(SETTINGS_ID);
+        return;
+      }
+
+      if (matches(e, "toggleBottomRunner")) {
+        consumeShortcut(e);
+        if (!e.repeat) handlers.onToggleBottomRunner?.();
         return;
       }
 

@@ -302,14 +302,7 @@ export function ArchivedSessionsPage() {
         </div>
       </SettingsPageHeader>
 
-      <div
-        className="app-glass-card overflow-hidden rounded-lg"
-        style={{
-          background: "var(--cs-bg-card)",
-          border: "1px solid var(--cs-border-card)",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
-        }}
-      >
+      <div className="app-settings-list app-archived-list">
         {allRows.length === 0 ? (
           <div className="py-16">
             <Empty
@@ -324,9 +317,9 @@ export function ArchivedSessionsPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <div className="min-w-[880px]">
+            <div className="app-archived-table">
               <div
-                className="grid h-11 grid-cols-[36px_minmax(280px,1.7fr)_minmax(160px,.7fr)_minmax(180px,.7fr)_92px] items-center gap-4 px-4 text-xs font-medium"
+                className="app-archived-grid h-11 items-center gap-4 px-4 text-xs font-medium"
                 style={{ borderBottom: "1px solid var(--cs-border-card)", color: "var(--cs-text-secondary)" }}
               >
                 <Checkbox
@@ -381,7 +374,7 @@ export function ArchivedSessionsPage() {
                       return (
                         <div
                           key={key}
-                          className="group grid min-h-[58px] grid-cols-[36px_minmax(280px,1.7fr)_minmax(160px,.7fr)_minmax(180px,.7fr)_92px] items-center gap-4 px-4 transition-colors hover:bg-[var(--cs-bg-hover)]"
+                          className="app-archived-grid group min-h-[58px] items-center gap-4 px-4 transition-colors hover:bg-[var(--cs-bg-hover)]"
                           style={{ borderBottom: "1px solid var(--cs-border-card)" }}
                         >
                           <Checkbox
@@ -407,6 +400,7 @@ export function ArchivedSessionsPage() {
                                 size="small"
                                 type="text"
                                 icon={<UndoOutlined />}
+                                aria-label={`${t("settings.archived.unarchive")} ${row.session.name}`}
                                 onClick={() => restoreSession(row)}
                               />
                             </Tooltip>

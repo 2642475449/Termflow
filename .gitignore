@@ -30,6 +30,7 @@ docs/*
 .idea/
 *.swp
 *.swo
+.agents/teamwork/
 
 # OS
 .DS_Store

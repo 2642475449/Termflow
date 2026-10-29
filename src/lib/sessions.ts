@@ -41,7 +41,7 @@ export function toPersistedSession(session: Session): Session {
 
 /** Auxiliary tasks live in the Dock and must not be duplicated in session history. */
 export function isSessionVisibleInHistory(session: Session): boolean {
-  return !isEphemeralTerminalSession(session) && session.presentation !== "auxiliary";
+  return !isEphemeralTerminalSession(session) && session.presentation !== "auxiliary" && session.presentation !== "bottom-runner";
 }
 
 export function withoutEphemeralTerminalSessions(

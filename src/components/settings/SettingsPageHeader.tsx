@@ -1,50 +1,38 @@
 interface SettingsPageHeaderProps {
   title: React.ReactNode;
+  description?: React.ReactNode;
+  decoration?: React.ReactNode;
   actions?: React.ReactNode;
   children?: React.ReactNode;
 }
 
 export function SettingsPageHeader({
   title,
+  description,
+  decoration,
   actions,
   children,
 }: SettingsPageHeaderProps) {
   return (
-    <div
-      className="app-glass-card mb-6 overflow-hidden rounded-xl"
-      style={{
-        background: "var(--cs-bg-card)",
-        border: "1px solid var(--cs-border-card)",
-        boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
-      }}
-    >
-      <div className="flex flex-wrap items-start justify-between gap-4 px-5 py-5">
+    <header className="app-settings-page-header">
+      <div className="app-settings-page-header__main">
         <div className="min-w-0 flex-1">
-          <div
-            className="text-xl font-semibold leading-tight"
-            style={{ color: "var(--cs-text-primary)" }}
-          >
-            {title}
-          </div>
+          <h1 className="app-settings-page-header__title">{title}</h1>
+          {description && <p className="app-settings-page-header__description">{description}</p>}
         </div>
         {actions ? (
-          <div className="flex shrink-0 flex-wrap items-start gap-2">
+          <div className="app-settings-page-header__actions">
             {actions}
           </div>
         ) : null}
+        {decoration && <div className="app-settings-page-header__decoration" aria-hidden="true">{decoration}</div>}
       </div>
 
       {children ? (
-        <div
-          className="px-5 py-4"
-          style={{
-            borderTop: "1px solid var(--cs-border-card)",
-            background: "color-mix(in srgb, var(--cs-bg-card) 88%, var(--cs-bg-hover) 12%)",
-          }}
-        >
+        <div className="app-settings-toolbar">
           {children}
         </div>
       ) : null}
-    </div>
+    </header>
   );
 }

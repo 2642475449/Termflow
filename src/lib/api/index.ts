@@ -539,8 +539,11 @@ export async function getPersistentSettings(): Promise<PersistentSettings> {
   return await invoke("get_persistent_settings");
 }
 
-export async function savePersistentSettings(settings: PersistentSettings): Promise<void> {
-  await invoke("save_persistent_settings", { settings });
+export async function savePersistentSettings(
+  settings: PersistentSettings,
+  changedFields?: (keyof PersistentSettings)[],
+): Promise<number> {
+  return await invoke("save_persistent_settings", { settings, changedFields: changedFields ?? null });
 }
 
 export async function setExplorerContextMenuEnabled(enabled: boolean): Promise<void> {

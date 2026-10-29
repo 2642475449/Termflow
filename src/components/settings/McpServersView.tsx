@@ -1,3 +1,4 @@
+import { SettingsPageHeader } from "./SettingsPageHeader";
 import { Button, Input, Spin, Tooltip } from "antd";
 import { ApiOutlined, CloudServerOutlined, CodeOutlined, DeleteOutlined, EditOutlined, FolderOpenOutlined, GlobalOutlined, InfoCircleOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
@@ -42,13 +43,9 @@ export function McpServersView(props: McpServersViewProps) {
 
   return (
     <section className="app-mcp" aria-label={text("title")}>
-      <header className="app-mcp-header">
-        <div className="app-mcp-heading">
-          <span className="app-mcp-heading-icon"><ApiOutlined /></span>
-          <div><h2>{text("title")}</h2></div>
-        </div>
+      <SettingsPageHeader title={text("title")} actions={
         <Button type="primary" icon={<PlusOutlined />} disabled={disabled} onClick={props.onAdd}>{text("addServer")}</Button>
-      </header>
+      } />
 
       <nav className="app-mcp-agents" aria-label={text("selectAgent")}>
         {props.agents.map((agent) => (

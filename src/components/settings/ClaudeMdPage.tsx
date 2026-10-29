@@ -727,12 +727,7 @@ export function ClaudeMdPage() {
         </div>
       ) : !isClaudeActive && !activeProjectTarget ? (
         <div
-          className="app-glass-card overflow-hidden rounded-lg"
-          style={{
-            background: "var(--cs-bg-card)",
-            border: "1px solid var(--cs-border-card)",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
-          }}
+          className="app-settings-editor"
         >
           <div
             className="flex items-center justify-between gap-3 px-4 py-3"
@@ -769,12 +764,7 @@ export function ClaudeMdPage() {
       ) : (
         <>
           <div
-            className="app-glass-card overflow-hidden rounded-lg"
-            style={{
-              background: "var(--cs-bg-card)",
-              border: "1px solid var(--cs-border-card)",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-            }}
+            className="app-settings-editor"
           >
             <div
               className="flex items-center justify-between gap-3 px-4 py-3"

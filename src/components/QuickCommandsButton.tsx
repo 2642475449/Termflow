@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, Popover, Tooltip, Input, message, Modal, type InputRef } from "antd";
 import {
   PlusOutlined,
@@ -12,6 +12,7 @@ import {
 } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "@/store";
+import { launchRunner } from "@/store/slices/bottomRunnerRuntime";
 import { useProjectQuickCommandsStore, persistQuickCommand, deletePersistedQuickCommand } from "@/store/slices/projectQuickCommands";
 import type { AgentCliInfo, AntigravitySessionLaunchOptions, ClaudeSessionLaunchOptions, QoderSessionLaunchOptions, TerminalQuickCommand } from "@/types";
 import {
@@ -52,6 +53,15 @@ export function QuickCommandsButton() {
 
   const searchInputRef = useRef<InputRef | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const lastRunTimestampRef = useRef(-Infinity);
+  const workspaceFocusRef = useRef<HTMLElement | null>(null);
+  const restoreRunnerFocusRef = useRef(false);
+  useEffect(() => {
+    if (!menuOpen && restoreRunnerFocusRef.current) {
+      restoreRunnerFocusRef.current = false;
+      if (workspaceFocusRef.current?.isConnected) workspaceFocusRef.current.focus({ preventScroll: true });
+    }
+  }, [menuOpen]);
 
   const repositoryId = currentProject?.path ?? null;
 
@@ -93,7 +103,19 @@ export function QuickCommandsButton() {
   // 运行命令
   const runCommand = useCallback(
     async (command: TerminalQuickCommand) => {
+      if (!currentProject || Date.now() - lastRunTimestampRef.current < 300) return;
+      lastRunTimestampRef.current = Date.now();
+      setMenuOpen(false);
       setPreferredCommandId(command.id);
+      if (command.action === "terminal-command") {
+        restoreRunnerFocusRef.current = menuOpen;
+        try {
+          await launchRunner(currentProject.path, { ...command, command: flattenQuickCommand(command.command) }, defaultTerminalShell);
+        } catch (error) {
+          message.error(t("bottomRunner.launchFailed", { error: String(error) }));
+        }
+        return;
+      }
       const isAgentPrompt = command.action === "agent-prompt";
       const commandText = isAgentPrompt
         ? command.command.trim()
@@ -199,7 +221,7 @@ export function QuickCommandsButton() {
 
       setMenuOpen(false);
     },
-    [currentProject, addSession, agentPermissionDefaults, defaultTerminalShell, openTab, t, updateSession],
+    [currentProject, addSession, agentPermissionDefaults, defaultTerminalShell, openTab, t, updateSession, menuOpen],
   );
 
   // 保存命令（新增或编辑）
@@ -541,6 +563,7 @@ export function QuickCommandsButton() {
           <button
             type="button"
             className="quick-command-trigger-part quick-command-trigger-main"
+            onMouseDown={(event) => event.preventDefault()}
             onClick={() => {
               if (preferredCommand) {
                 void runCommand(preferredCommand);
@@ -577,6 +600,10 @@ export function QuickCommandsButton() {
           <button
             type="button"
             className="quick-command-trigger-part quick-command-trigger-menu"
+            onMouseDown={(event) => {
+              if (document.activeElement instanceof HTMLElement) workspaceFocusRef.current = document.activeElement;
+              event.preventDefault();
+            }}
             data-open={menuOpen ? "true" : "false"}
             aria-label={t("settings.menu.quickCommands")}
             aria-expanded={menuOpen}

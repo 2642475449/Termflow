@@ -4,6 +4,7 @@ import { Alert, Button, Empty, Input, Modal, Pagination, Segmented, Select, Spin
 import { useTranslation } from "react-i18next";
 import { AgentIcon } from "@/components/AgentIcon";
 import { SkillContentEditor } from "./SkillContentEditor";
+import { SettingsPageHeader } from "./SettingsPageHeader";
 import { useAppStore } from "@/store";
 import { useSkillsStore } from "@/store/slices/skillsSlice";
 import { openSkillMarketplaceTab } from "@/store/slices/skillMarketplaceTabsSlice";
@@ -196,17 +197,13 @@ export function SkillsSettingsPage() {
 
   const changeFilter = () => setPage(1);
   return <div className="app-skills-library">
-    <div className="app-skills-toolbar">
-      <div>
-        <h2 className="app-skills-title">{t("settings.menu.skills")} <span className="app-skills-muted">{groups.length}</span></h2>
-        <p className="app-skills-muted text-xs mt-1">{t("settings.skills.libraryDescription")}</p>
-      </div>
-      <div className="flex gap-2">
+    <SettingsPageHeader title={<>{t("settings.menu.skills")} <span className="app-skills-muted text-sm font-normal">{groups.length}</span></>}
+      description={t("settings.skills.libraryDescription")}
+      actions={<div className="flex gap-2">
         <Button icon={<ShopOutlined />} onClick={openSkillMarketplaceTab}>{t("settings.skillMarket.title")}</Button>
         <Button icon={<ReloadOutlined spin={loading} />} onClick={() => void refresh()}>{t("common.refresh")}</Button>
         <Button type="primary" icon={<PlusOutlined />} disabled={!catalog} onClick={openAdd}>{t("settings.skills.addSkill")}</Button>
-      </div>
-    </div>
+      </div>} />
     <div className="app-skills-filters">
       <div className="flex flex-wrap items-center gap-3">
         <Segmented value={scope} onChange={(value) => { setScope(value as typeof scope); changeFilter(); }} options={[
@@ -214,7 +211,7 @@ export function SkillsSettingsPage() {
           { value: "workspace", label: `${scopeLabel("workspace")} (${groups.filter((group) => group.locations.some((item) => item.scope === "workspace")).length})`, disabled: !projectPath },
           { value: "user", label: `${scopeLabel("user")} (${groups.filter((group) => group.locations.some((item) => item.scope === "user")).length})` },
         ]} />
-        <Input className="app-skills-search" allowClear prefix={<SearchOutlined />} placeholder={t("settings.skills.searchPlaceholder")}
+        <Input className="app-skills-search" allowClear prefix={<SearchOutlined />} placeholder={t("settings.skills.searchPlaceholder")} aria-label={t("settings.skills.searchPlaceholder")}
           value={search} onChange={(event) => { setSearch(event.target.value); changeFilter(); }} />
       </div>
       <div className="flex flex-wrap items-center gap-3">
@@ -240,7 +237,6 @@ export function SkillsSettingsPage() {
         <div className="text-center mt-3"><Button onClick={openAdd} disabled={!catalog}>{t("settings.skills.addSkill")}</Button></div></div> :
         filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE).map((group) => {
           const skill = group.locations[0];
-          const available = [...new Set(group.locations.filter((item) => item.enabled).flatMap((item) => item.effectiveAgents))];
           const conflict = group.locations.find((item) => item.conflictStatus !== "none")?.conflictStatus;
           return <button key={group.id} type="button" className="app-skills-row" onClick={() => { setDetailTab("content"); setSelected(group.id); }}>
             <div className="app-skills-row-body">
@@ -251,12 +247,7 @@ export function SkillsSettingsPage() {
                 {group.locations.some(isSkillLinked) && <Tag>{t("settings.skills.connectionLinked")}</Tag>}
                 {conflict && <Tag color={conflict === "runtime-conflict" ? "error" : "default"}>{t(`settings.skills.${conflict === "identical-copy" ? "identicalCopy" : conflict === "runtime-conflict" ? "runtimeConflict" : "divergedCopy"}`)}</Tag>}
               </div>
-              <p className="app-skills-secondary text-xs mt-2 line-clamp-2">{skill.description || t("settings.shared.noDescription")}</p>
-              <div className="app-skills-muted text-xs mt-2 flex flex-wrap items-center gap-2">
-                <span>{t("settings.skills.availableTo")}</span>
-                {available.length ? available.map((id) => <span key={id} className="inline-flex items-center gap-1"><AgentIcon agentId={id} size={13} />{label(id)}</span>) : <span>{t("common.disabled")}</span>}
-              </div>
-              <p className="app-skills-path mt-2">{skill.resolvedFilePath}</p>
+              <p className="app-skills-secondary text-xs mt-1 mb-0 line-clamp-1">{skill.description || t("settings.shared.noDescription")}</p>
             </div>
             <span className="app-skills-secondary text-xs shrink-0">{t("settings.skills.manageSkill")}</span>
           </button>;

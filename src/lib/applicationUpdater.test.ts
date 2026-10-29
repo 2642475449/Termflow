@@ -1,4 +1,4 @@
-import { beforeEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 vi.mock("@/lib/api", () => ({
   checkApplicationUpdate: vi.fn(),
@@ -16,22 +16,30 @@ vi.mock("@/lib/api", () => ({
   })),
 }));
 
-vi.mock("@/store", () => ({
-  getPersistentSettingsSnapshot: vi.fn(() => ({})),
-}));
+vi.mock("@/store/slices/persistentSettingsRuntime", async () => {
+  const { PersistentSettingsSync } = await import("./persistentSettingsSync");
+  return {
+    persistentSettingsSync: new PersistentSettingsSync(),
+    getRuntimePersistentSettingsSnapshot: vi.fn(() => ({ voiceShortcut: "F6", keyboardShortcuts: {} })),
+  };
+});
 
 import {
   checkForApplicationUpdate,
   clearPendingUpdateVersion,
   consumeInstalledUpdateVersion,
   markPendingUpdateVersion,
+  installPendingApplicationUpdate,
   resetApplicationUpdaterForTests,
 } from "./applicationUpdater";
 import {
   checkApplicationUpdate,
   downloadApplicationUpdate,
+  installApplicationUpdate,
+  savePersistentSettings,
 } from "@/lib/api";
 import { useApplicationUpdateStore } from "@/store/slices/applicationUpdate";
+import { persistentSettingsSync, getRuntimePersistentSettingsSnapshot } from "@/store/slices/persistentSettingsRuntime";
 
 function createStorage(): Storage {
   const values = new Map<string, string>();
@@ -48,7 +56,10 @@ function createStorage(): Storage {
 beforeEach(() => {
   vi.clearAllMocks();
   resetApplicationUpdaterForTests();
+  persistentSettingsSync.initialize(getRuntimePersistentSettingsSnapshot());
 });
+
+afterEach(() => vi.unstubAllGlobals());
 
 test("reports a completed update once on the matching version", () => {
   const storage = createStorage();
@@ -100,4 +111,20 @@ test("keeps one update resource while downloading and exposes byte progress", as
     });
   });
   expect(downloadApplicationUpdate).toHaveBeenCalledTimes(1);
+});
+
+test("flushes only pending settings through the shared queue before installing", async () => {
+  const update = { currentVersion: "1.8.22", version: "1.8.23" };
+  vi.mocked(checkApplicationUpdate).mockResolvedValue(update as never);
+  vi.mocked(downloadApplicationUpdate).mockResolvedValue(undefined);
+  await checkForApplicationUpdate();
+  await vi.waitFor(() => expect(useApplicationUpdateStore.getState().phase).toBe("ready"));
+  const snapshot = { ...getRuntimePersistentSettingsSnapshot(), voiceShortcut: "F7" };
+  vi.mocked(getRuntimePersistentSettingsSnapshot).mockReturnValue(snapshot);
+  vi.mocked(savePersistentSettings).mockResolvedValue(1);
+  vi.stubGlobal("window", { localStorage: createStorage() });
+  await installPendingApplicationUpdate();
+  expect(savePersistentSettings).toHaveBeenCalledWith(snapshot, ["voiceShortcut"]);
+  expect(installApplicationUpdate).toHaveBeenCalledWith(update);
+  expect(persistentSettingsSync.changes(snapshot)).toEqual({});
 });

@@ -1,16 +1,23 @@
-import type { ReactNode } from "react";
+import { cloneElement, Fragment, isValidElement, useId, type ReactNode } from "react";
 
-export function SettingRow({ label, children }: {
-  label: string;
+export function SettingRow({ label, description, htmlFor, children }: {
+  label: ReactNode;
+  description?: ReactNode;
+  htmlFor?: string;
   children: ReactNode;
 }) {
+  const labelId = useId();
+  const control = isValidElement<{ "aria-label"?: string; "aria-labelledby"?: string }>(children) && children.type !== Fragment
+    ? cloneElement(children, { "aria-labelledby": children.props["aria-labelledby"] ?? (children.props["aria-label"] ? undefined : labelId) })
+    : children;
   return (
-    <div className="flex flex-col items-stretch gap-3 px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
-      <div className="min-w-0 flex-1 xl:mr-4">
-        <div className="text-sm text-[var(--cs-text-primary)]">{label}</div>
+    <div className="app-setting-row" role="group" aria-labelledby={labelId}>
+      <div className="app-setting-row__label">
+        {htmlFor ? <label id={labelId} htmlFor={htmlFor}>{label}</label> : <div id={labelId}>{label}</div>}
+        {description && <div className="app-setting-row__description">{description}</div>}
       </div>
-      <div className="min-w-0 xl:w-auto xl:max-w-[70%] xl:flex-shrink-0">
-        {children}
+      <div className="app-setting-row__control">
+        {control}
       </div>
     </div>
   );

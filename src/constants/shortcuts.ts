@@ -5,13 +5,14 @@ export interface ShortcutEntry {
 }
 
 export type ShortcutAction = "searchEverywhere" | "globalTextSearch" | "newSession" |
-  "toggleSidebar" | "closeTab" | "nextTab" | "openSettings" | "clearInput" | "voiceInput";
+  "toggleSidebar" | "toggleBottomRunner" | "closeTab" | "nextTab" | "openSettings" | "clearInput" | "voiceInput";
 export type ShortcutOverrides = Partial<Record<Exclude<ShortcutAction, "voiceInput">, string>>;
 
 export const SHORTCUTS: readonly ShortcutEntry[] = [
   { id: "searchEverywhere", keys: "Double Shift", i18nKey: "settings.shortcuts.searchEverywhere" },
   { id: "globalTextSearch", keys: "Ctrl + Shift + F", i18nKey: "settings.shortcuts.globalTextSearch" },
   { id: "newSession", keys: "Ctrl + N", i18nKey: "settings.shortcuts.newSession" },
+  { id: "toggleBottomRunner", keys: "Ctrl + J", i18nKey: "settings.shortcuts.toggleBottomRunner" },
   { id: "toggleSidebar", keys: "Ctrl + B", i18nKey: "settings.shortcuts.toggleSidebar" },
   { id: "closeTab", keys: "Ctrl + W", i18nKey: "settings.shortcuts.closeTab" },
   { id: "nextTab", keys: "Ctrl + Tab", i18nKey: "settings.shortcuts.nextTab" },

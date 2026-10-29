@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./i18n";
 import "./styles/global.css";
+import "./styles/settings.css";
 import { useAppStore, type ThemeCategory, type ThemeMode } from "./store";
 
 declare global {

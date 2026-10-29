@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  GlobalOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
 import { Button, Input, Radio } from "antd";
 import { useTranslation } from "react-i18next";
 
 import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
+import { SettingsField, SettingsSection } from "./SettingsSection";
 import { resolveNetworkProxySettings, testNetworkProxy } from "@/lib/api";
 import {
   NETWORK_PROXY_TEST_TARGETS,
@@ -103,65 +103,33 @@ export function NetworkSettingsPage() {
   const allRunning = NETWORK_PROXY_TEST_TARGETS.some((target) => runningTargets.has(target));
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div>
       <SettingsPageHeader
         title={t("settings.network.title")}
       />
 
-      <section className="app-glass-card rounded-xl border border-[var(--cs-border-card)] bg-[var(--cs-bg-card)] p-5">
-        <div className="flex items-start gap-3">
-          <GlobalOutlined className="mt-0.5 text-lg text-[var(--cs-primary)]" />
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium text-[var(--cs-text-primary)]">
-              {t("settings.network.proxyMode")}
-            </div>
-            <Radio.Group
-              className="mt-3 flex flex-col gap-3"
-              value={networkProxyMode}
-              onChange={(event) => setNetworkProxyMode(event.target.value)}
-            >
-              <Radio value="disabled">{t("settings.network.mode.disabled")}</Radio>
-              <Radio value="system">{t("settings.network.mode.system")}</Radio>
-              <Radio value="custom">{t("settings.network.mode.custom")}</Radio>
-            </Radio.Group>
-
-            {networkProxyMode === "custom" && (
-              <div className="mt-4 max-w-2xl">
-                <div className="mb-1.5 text-xs text-[var(--cs-text-secondary)]">
-                  {t("settings.network.customProxyUrl")}
-                </div>
-                <Input
-                  value={networkCustomProxyUrl}
-                  placeholder="http://127.0.0.1:7897"
-                  onChange={(event) => setNetworkCustomProxyUrl(event.target.value)}
-                />
-              </div>
-            )}
-
-            <div className="mt-4 max-w-2xl">
-              <div className="mb-1.5 text-xs text-[var(--cs-text-secondary)]">
-                {t("settings.network.noProxy")}
-              </div>
-              <Input
-                value={networkNoProxy}
-                placeholder="localhost,127.0.0.1,::1"
-                onChange={(event) => setNetworkNoProxy(event.target.value)}
-              />
-
-            </div>
-          </div>
+      <SettingsSection title={t("settings.network.proxyMode")}>
+        <Radio.Group className="flex flex-wrap gap-3" aria-label={t("settings.network.proxyMode")}
+          value={networkProxyMode} onChange={(event) => setNetworkProxyMode(event.target.value)}>
+          <Radio value="disabled">{t("settings.network.mode.disabled")}</Radio>
+          <Radio value="system">{t("settings.network.mode.system")}</Radio>
+          <Radio value="custom">{t("settings.network.mode.custom")}</Radio>
+        </Radio.Group>
+        {networkProxyMode === "custom" && <div className="mt-4 max-w-2xl">
+          <SettingsField htmlFor="network-proxy-url" label={t("settings.network.customProxyUrl")}>
+            <Input id="network-proxy-url" value={networkCustomProxyUrl} placeholder="http://127.0.0.1:7897"
+              onChange={(event) => setNetworkCustomProxyUrl(event.target.value)} />
+          </SettingsField>
+        </div>}
+        <div className="mt-4 max-w-2xl">
+          <SettingsField htmlFor="network-no-proxy" label={t("settings.network.noProxy")}>
+            <Input id="network-no-proxy" value={networkNoProxy} placeholder="localhost,127.0.0.1,::1"
+              onChange={(event) => setNetworkNoProxy(event.target.value)} />
+          </SettingsField>
         </div>
+      </SettingsSection>
 
-      </section>
-
-      <section className="app-glass-card mt-5 rounded-xl border border-[var(--cs-border-card)] bg-[var(--cs-bg-card)] p-5">
-        <div className="mb-4 flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <div className="text-sm font-medium text-[var(--cs-text-primary)]">
-              {t("settings.network.connectivityTitle")}
-            </div>
-
-          </div>
+      <SettingsSection title={t("settings.network.connectivityTitle")} actions={
           <Button
             className="shrink-0"
             icon={<ReloadOutlined />}
@@ -171,9 +139,9 @@ export function NetworkSettingsPage() {
           >
             {t("settings.network.testAll")}
           </Button>
-        </div>
+      }>
 
-        <div className="grid grid-cols-1 gap-3 min-[680px]:grid-cols-2 min-[1100px]:grid-cols-3">
+        <div className="app-settings-grid app-network-targets">
           {NETWORK_PROXY_TEST_TARGETS.map((target) => (
             <TestCard
               key={target}
@@ -184,7 +152,7 @@ export function NetworkSettingsPage() {
             />
           ))}
         </div>
-      </section>
+      </SettingsSection>
     </div>
   );
 }
@@ -202,7 +170,7 @@ function TestCard({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="group flex min-w-0 items-center gap-3 rounded-xl border border-[var(--cs-border-card)] bg-[var(--cs-bg-card)] p-3 shadow-sm transition-all hover:border-[var(--cs-primary)] hover:shadow-md">
+    <div className="app-network-target flex min-w-0 items-center gap-3 border-b border-[var(--cs-border-card)] py-3" aria-live="polite">
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <NetworkTargetLogo target={target} />
         <div className="min-w-0 flex-1">
@@ -250,7 +218,7 @@ function TestCard({
 }
 
 function NetworkTargetLogo({ target }: { target: NetworkProxyTestTarget }) {
-  const containerClassName = "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--cs-border-sidebar)] bg-[var(--cs-bg-hover)]";
+  const containerClassName = "flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[var(--cs-bg-hover)]";
 
   switch (target) {
     case "googleOAuth":

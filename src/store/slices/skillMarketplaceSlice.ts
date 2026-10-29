@@ -1,12 +1,14 @@
 import { create } from "zustand";
 import { getMarketplaceSkillDetail, getMarketplaceSkillSummaries, searchSkillMarketplace } from "@/lib/api";
-import { marketplaceSkillKey, type MarketplaceCategory } from "@/lib/skillMarketplace";
+import { marketplaceBrowseView, marketplaceSkillKey, type MarketplaceCategory, type MarketplaceViewMode } from "@/lib/skillMarketplace";
 import type { MarketplaceSkill, MarketplaceSkillDetail, SkillMarketSearch } from "@/types";
 
 interface SkillMarketplaceState {
   query: string;
   category: MarketplaceCategory;
   page: number;
+  viewMode: MarketplaceViewMode;
+  listScrollTop: number;
   browseResults: SkillMarketSearch | null;
   results: SkillMarketSearch | null;
   loading: boolean;
@@ -26,6 +28,9 @@ interface SkillMarketplaceState {
   setPage: (page: number) => void;
   search: (refresh?: boolean) => Promise<void>;
   loadMore: () => Promise<void>;
+  nextPage: () => Promise<void>;
+  setViewMode: (mode: MarketplaceViewMode) => void;
+  setListScrollTop: (top: number) => void;
   loadSummaries: (skills: MarketplaceSkill[]) => Promise<void>;
   selectSkill: (skill: MarketplaceSkill | null, refresh?: boolean) => Promise<void>;
 }
@@ -33,23 +38,26 @@ interface SkillMarketplaceState {
 // 在线结果不持久化；异步响应必须匹配发起请求时的序号。
 export const useSkillMarketplaceStore = create<SkillMarketplaceState>((set, get) => ({
   query: "", results: null, loading: false, loadingSlow: false, error: null, loadingMore: false, loadMoreError: null,
-  category: "all", page: 1, browseResults: null,
+  category: "all", page: 1, viewMode: "featured", listScrollTop: 0, browseResults: null,
   selected: null, detail: null, detailLoading: false, detailError: null,
   summaryLoadingKeys: [],
   searchId: 0, detailId: 0,
-  setQuery: (query) => set((state) => ({ query, page: 1, results: [...query.trim()].length < 2 ? state.browseResults : null, loading: false, loadingSlow: false, loadingMore: false, loadMoreError: null, error: null, searchId: state.searchId + 1 })),
-  setCategory: (category) => set({ category, page: 1 }),
-  setPage: (page) => set({ page }),
+  setQuery: (query) => set((state) => ({ query, category: "all", page: 1, listScrollTop: 0, results: [...query.trim()].length < 2 ? state.browseResults : null, loading: false, loadingSlow: false, loadingMore: false, loadMoreError: null, error: null, searchId: state.searchId + 1 })),
+  setCategory: (category) => set({ category, page: 1, listScrollTop: 0 }),
+  setPage: (page) => set({ page, listScrollTop: 0 }),
+  setViewMode: (viewMode) => set({ viewMode, category: "all", page: 1, listScrollTop: 0 }),
+  setListScrollTop: (listScrollTop) => set({ listScrollTop }),
   search: async (refresh = false) => {
     if (get().loading && !refresh) return;
     const input = get().query.trim();
     const query = [...input].length < 2 ? "" : input;
     const searchId = get().searchId + 1;
     if (!query && get().browseResults && !refresh) {
-      set({ searchId, results: get().browseResults, loading: false, loadingSlow: false, loadingMore: false, loadMoreError: null, error: null });
+      // 切回市场时只复用缓存，不能使正在进行的翻页请求失效。
+      set({ results: get().browseResults, loading: false, loadingSlow: false, error: null });
       return;
     }
-    set({ searchId, loading: true, loadingSlow: false, loadingMore: false, loadMoreError: null, error: null });
+    set({ searchId, loading: true, loadingSlow: false, loadingMore: false, loadMoreError: null, error: null, ...(refresh ? { page: 1, listScrollTop: 0 } : {}) });
     const slowTimer = setTimeout(() => {
       if (get().searchId === searchId && get().loading) set({ loadingSlow: true });
     }, 8000);
@@ -67,6 +75,26 @@ export const useSkillMarketplaceStore = create<SkillMarketplaceState>((set, get)
     } finally {
       clearTimeout(slowTimer);
       clearTimeout(timeoutTimer);
+    }
+  },
+  nextPage: async () => {
+    const state = get();
+    if (state.loading || state.loadingMore || state.error || state.selected) return;
+    const isSearch = [...state.query.trim()].length >= 2;
+    const mode = isSearch ? "leaderboard" : state.viewMode;
+    const view = marketplaceBrowseView(state.results?.skills ?? [], state.category, state.page, mode);
+    if (view.overview) return;
+    const unchanged = () => get().searchId === state.searchId && get().category === state.category
+      && get().viewMode === state.viewMode && get().page === state.page && !get().selected;
+    // 分类由客户端推断，可能需要跨批次寻找下一页，不能把首批 200 条当成全部。
+    while (unchanged()) {
+      const current = marketplaceBrowseView(get().results?.skills ?? [], state.category, view.page, mode);
+      if (view.total === 0 && current.total > 0) { set({ page: 1, listScrollTop: 0 }); return; }
+      if (current.hasMore) { set({ page: view.page + 1, listScrollTop: 0 }); return; }
+      const cursor = get().browseResults?.nextPage;
+      if (isSearch || cursor == null) return;
+      await get().loadMore();
+      if (get().loadMoreError || get().browseResults?.nextPage === cursor) return;
     }
   },
   loadMore: async () => {

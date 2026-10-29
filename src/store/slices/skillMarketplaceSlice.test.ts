@@ -275,3 +275,108 @@ it("loads domain source previews through the same read-only detail API", async (
   expect(getMarketplaceSkillDetail).toHaveBeenCalledWith(selected, false);
   expect(useSkillMarketplaceStore.getState()).toMatchObject({ selected, detailLoading: false, detailError: null });
 });
+
+it("fetches another leaderboard batch when the user advances past cached pages", async () => {
+  const first = { skills: Array.from({ length: 24 }, (_, index) => skill(`react-${index}`)), limited: true, nextPage: 1 };
+  useSkillMarketplaceStore.setState({ viewMode: "leaderboard", results: first, browseResults: first, listScrollTop: 300 });
+  const response = deferred<SkillMarketSearch>();
+  vi.mocked(searchSkillMarketplace).mockReturnValueOnce(response.promise);
+  const store = useSkillMarketplaceStore.getState();
+  const pending = store.nextPage();
+  await store.nextPage();
+  expect(searchSkillMarketplace).toHaveBeenCalledExactlyOnceWith("", 1);
+  expect(useSkillMarketplaceStore.getState()).toMatchObject({ page: 1, loadingMore: true });
+  response.resolve(results("react-new"));
+  await pending;
+  expect(useSkillMarketplaceStore.getState().results?.skills).toHaveLength(25);
+  expect(useSkillMarketplaceStore.getState()).toMatchObject({ page: 2, listScrollTop: 0 });
+});
+
+it("navigates cached category pages before fetching another batch", async () => {
+  const first = { skills: Array.from({ length: 30 }, (_, index) => skill(`react-${index}`)), limited: true, nextPage: 1 };
+  useSkillMarketplaceStore.setState({ category: "development", results: first, browseResults: first });
+  const store = useSkillMarketplaceStore.getState();
+  await store.nextPage();
+  expect(searchSkillMarketplace).not.toHaveBeenCalled();
+  expect(useSkillMarketplaceStore.getState().page).toBe(2);
+  vi.mocked(searchSkillMarketplace).mockResolvedValueOnce({ skills: Array.from({ length: 24 }, (_, index) => skill(`react-new-${index}`)), limited: false, nextPage: null });
+  await store.nextPage();
+  expect(searchSkillMarketplace).toHaveBeenCalledExactlyOnceWith("", 1);
+  expect(useSkillMarketplaceStore.getState().page).toBe(3);
+});
+
+it("keeps the current page after failure and retries navigation with the same cursor", async () => {
+  const first = { ...results("react"), limited: true, nextPage: 1 };
+  useSkillMarketplaceStore.setState({ viewMode: "leaderboard", results: first, browseResults: first });
+  vi.mocked(searchSkillMarketplace).mockRejectedValueOnce("offline").mockResolvedValueOnce({ skills: Array.from({ length: 24 }, (_, index) => skill(`react-new-${index}`)), limited: false, nextPage: null });
+  const store = useSkillMarketplaceStore.getState();
+  await store.nextPage();
+  expect(useSkillMarketplaceStore.getState().page).toBe(1);
+  expect(searchSkillMarketplace).toHaveBeenCalledTimes(1);
+  await store.nextPage();
+  expect(useSkillMarketplaceStore.getState().loadMoreError).toBeNull();
+  expect(searchSkillMarketplace).toHaveBeenCalledTimes(2);
+  expect(useSkillMarketplaceStore.getState().page).toBe(2);
+});
+
+it("does not let pending navigation change a newly selected category", async () => {
+  const first = { ...results("react"), limited: true, nextPage: 1 };
+  useSkillMarketplaceStore.setState({ viewMode: "leaderboard", results: first, browseResults: first });
+  const response = deferred<SkillMarketSearch>();
+  vi.mocked(searchSkillMarketplace).mockReturnValueOnce(response.promise);
+  const store = useSkillMarketplaceStore.getState();
+  const pending = store.nextPage();
+  store.setCategory("design");
+  response.resolve({ skills: Array.from({ length: 30 }, (_, index) => skill(`react-next-${index}`)), limited: false, nextPage: null });
+  await pending;
+  expect(useSkillMarketplaceStore.getState()).toMatchObject({ category: "design", page: 1 });
+});
+
+it("keeps search pagination remote-query scoped without fetching leaderboard batches", async () => {
+  useSkillMarketplaceStore.setState({ query: "react", results: { skills: Array.from({ length: 50 }, (_, index) => skill(`react-${index}`)), limited: true, nextPage: null } });
+  const store = useSkillMarketplaceStore.getState();
+  await store.nextPage();
+  expect(useSkillMarketplaceStore.getState().page).toBe(2);
+  await store.nextPage();
+  expect(useSkillMarketplaceStore.getState().page).toBe(3);
+  await store.nextPage();
+  expect(useSkillMarketplaceStore.getState().page).toBe(3);
+  expect(searchSkillMarketplace).not.toHaveBeenCalled();
+});
+
+it("preserves list position through previews and resets it when navigating", async () => {
+  vi.mocked(getMarketplaceSkillDetail).mockResolvedValueOnce(detail("react"));
+  const store = useSkillMarketplaceStore.getState();
+  store.setViewMode("leaderboard");
+  store.setPage(3);
+  store.setListScrollTop(800);
+  await store.selectSkill(skill("react"));
+  await store.selectSkill(null);
+  expect(useSkillMarketplaceStore.getState()).toMatchObject({ page: 3, viewMode: "leaderboard", listScrollTop: 800 });
+  store.setCategory("design");
+  expect(useSkillMarketplaceStore.getState()).toMatchObject({ page: 1, listScrollTop: 0 });
+});
+
+it("shows the first matching category page when the initial batch had no matches", async () => {
+  const first = { ...results("react"), limited: true, nextPage: 1 };
+  useSkillMarketplaceStore.setState({ category: "data", results: first, browseResults: first });
+  vi.mocked(searchSkillMarketplace).mockResolvedValueOnce(results("postgres-sql"));
+  await useSkillMarketplaceStore.getState().nextPage();
+  expect(useSkillMarketplaceStore.getState()).toMatchObject({ category: "data", page: 1 });
+  expect(useSkillMarketplaceStore.getState().results?.skills.map((entry) => entry.slug)).toContain("postgres-sql");
+});
+
+it("does not cancel pending pagination when reusing the browse cache", async () => {
+  const first = { skills: Array.from({ length: 24 }, (_, index) => skill(`react-${index}`)), limited: true, nextPage: 1 };
+  useSkillMarketplaceStore.setState({ viewMode: "leaderboard", results: first, browseResults: first });
+  const response = deferred<SkillMarketSearch>();
+  vi.mocked(searchSkillMarketplace).mockReturnValueOnce(response.promise);
+  const store = useSkillMarketplaceStore.getState();
+  const pending = store.nextPage();
+  await store.search();
+  expect(useSkillMarketplaceStore.getState().loadingMore).toBe(true);
+  expect(searchSkillMarketplace).toHaveBeenCalledTimes(1);
+  response.resolve(results("react-new"));
+  await pending;
+  expect(useSkillMarketplaceStore.getState().page).toBe(2);
+});

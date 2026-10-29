@@ -18,8 +18,6 @@ import {
   FolderOpenOutlined,
   PlusOutlined,
   SearchOutlined,
-  LeftOutlined,
-  RightOutlined,
   DeleteOutlined,
   InboxOutlined,
   FileMarkdownOutlined,
@@ -30,7 +28,7 @@ import {
   SafetyCertificateOutlined,
   DatabaseOutlined,
 } from "@ant-design/icons";
-import { Segmented, Tag, Select, Spin, Empty, Button, message, Switch, Input, Drawer, Modal, Tooltip, Popover } from "antd";
+import { Pagination, Segmented, Tag, Select, Spin, Empty, Button, message, Switch, Input, Drawer, Modal, Tooltip, Popover } from "antd";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useTranslation } from "react-i18next";
@@ -110,6 +108,7 @@ import { DataPrivacyPage } from "@/components/settings/DataPrivacyPage";
 import { SearchIndexPage } from "@/components/settings/SearchIndexPage";
 import { McpServersView } from "@/components/settings/McpServersView";
 import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
+import { SettingsSection as SettingSection } from "@/components/settings/SettingsSection";
 import { NotificationsPage } from "@/components/settings/NotificationsPage";
 import { NetworkSettingsPage } from "@/components/settings/NetworkSettingsPage";
 import {
@@ -187,9 +186,6 @@ const menuGroups: SettingsMenuGroup[] = [
 interface ThemeOption {
   key: ThemeMode;
   labelKey: string;
-  descKey: string;
-  accent: string;
-  flow: AboutFlowHexPalette;
   category: "light" | "dark";
 }
 
@@ -206,66 +202,26 @@ const themeOptions: ThemeOption[] = [
   {
     key: "dark-starry",
     labelKey: "settings.theme.dark-starry.label",
-    descKey: "settings.theme.dark-starry.desc",
-    accent: "#5c7ba3",
-    flow: {
-      base: "#101720",
-      pale: "#5c7ba3",
-      vivid: "#405b82",
-      cobalt: "#263f5d",
-      deep: "#090e14",
-      highlight: "#8da2ba",
-    },
     category: "dark",
   },
   {
     key: "dark-mocha",
     labelKey: "settings.theme.dark-mocha.label",
-    descKey: "settings.theme.dark-mocha.desc",
-    accent: "#f5bd69",
-    flow: {
-      base: "#24243a",
-      pale: "#9a7448",
-      vivid: "#66517d",
-      cobalt: "#3f405f",
-      deep: "#191929",
-      highlight: "#b48a57",
-    },
     category: "dark",
   },
   {
     key: "light-glass",
     labelKey: "settings.theme.light-glass.label",
-    descKey: "settings.theme.light-glass.desc",
-    accent: "#4f6cf7",
-    flow: {
-      base: "#fcfdff",
-      pale: "#a3c2ff",
-      vivid: "#6d7ff2",
-      cobalt: "#2b52db",
-      deep: "#14296f",
-      highlight: "#e3edff",
-    },
     category: "light",
   },
   {
     key: "light-warm",
     labelKey: "settings.theme.light-warm.label",
-    descKey: "settings.theme.light-warm.desc",
-    accent: "#c2713a",
-    flow: {
-      base: "#fffdf9",
-      pale: "#efc7a4",
-      vivid: "#c2713a",
-      cobalt: "#99532d",
-      deep: "#56301f",
-      highlight: "#ffe5cc",
-    },
     category: "light",
   },
 ];
 
-/* ────────────── Theme Card (大预览) ────────────── */
+/* ────────────── Theme Card ────────────── */
 function ThemeCard({ opt, isActive, onClick, tabIndex, onKeyDown }: {
   opt: ThemeOption;
   isActive: boolean;
@@ -274,103 +230,26 @@ function ThemeCard({ opt, isActive, onClick, tabIndex, onKeyDown }: {
   onKeyDown: React.KeyboardEventHandler<HTMLButtonElement>;
 }) {
   const { t } = useTranslation();
-  const isDark = opt.category === "dark";
-  const preview = {
-    app: opt.flow.base,
-    chrome: isDark ? opt.flow.deep : `${opt.flow.pale}52`,
-    sidebar: isDark ? `${opt.flow.deep}e8` : `${opt.flow.pale}36`,
-    surface: isDark ? `${opt.flow.pale}16` : "#ffffffc7",
-    terminal: isDark ? opt.flow.deep : `${opt.flow.highlight}cc`,
-    primaryText: isDark ? "#f4f7fb" : "#25324a",
-    secondaryText: isDark ? "#aebccd" : "#6d7890",
-    border: isDark ? `${opt.flow.pale}42` : `${opt.flow.vivid}2b`,
-  };
-
   return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={isActive}
-      tabIndex={tabIndex}
-      className="app-theme-card app-glass-card relative w-full cursor-pointer overflow-hidden rounded-2xl text-left"
-      style={{
-        border: isActive ? `1px solid ${opt.accent}` : "1px solid var(--cs-border-card)",
-        boxShadow: isActive
-          ? `0 0 0 3px ${opt.accent}22, 0 12px 30px ${opt.accent}18`
-          : "0 2px 10px rgba(15, 23, 42, 0.06)",
-      }}
-      onClick={onClick}
-      onKeyDown={onKeyDown}
-    >
-      <div className="relative h-44 overflow-hidden p-2.5" style={{ background: preview.app }}>
-        <div className="relative h-full overflow-hidden rounded-[11px] border" style={{ background: preview.surface, borderColor: preview.border }}>
-          <div className="flex h-7 items-center gap-1.5 border-b px-2.5" style={{ background: preview.chrome, borderColor: preview.border }}>
-            <span className="h-1.5 w-1.5 rounded-full" style={{ background: opt.accent }} />
-            <span className="h-1.5 w-1.5 rounded-full opacity-45" style={{ background: opt.accent }} />
-            <span className="h-1.5 w-1.5 rounded-full opacity-25" style={{ background: opt.accent }} />
-            <span className="ml-1.5 h-1.5 w-12 rounded-full opacity-50" style={{ background: preview.secondaryText }} />
-          </div>
-          <div className="flex h-[calc(100%-1.75rem)]">
-            <div className="w-9 shrink-0 border-r px-2 py-2.5" style={{ background: preview.sidebar, borderColor: preview.border }}>
-              <div className="h-1.5 w-4 rounded-full" style={{ background: opt.accent }} />
-              <div className="mt-2.5 h-1.5 w-5 rounded-full opacity-35" style={{ background: preview.secondaryText }} />
-              <div className="mt-2 h-1.5 w-3 rounded-full opacity-25" style={{ background: preview.secondaryText }} />
-            </div>
-            <div className="min-w-0 flex-1 p-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="h-2 w-16 rounded-full" style={{ background: preview.primaryText }} />
-                  <div className="mt-1.5 h-1.5 w-24 rounded-full opacity-35" style={{ background: preview.secondaryText }} />
-                </div>
-                <div className="h-4 w-10 rounded-md" style={{ background: `${opt.accent}24` }} />
-              </div>
-              <div className="mt-3 rounded-md border p-2.5 font-mono text-[7px] leading-3" style={{ background: preview.terminal, borderColor: preview.border, color: preview.secondaryText }}>
-                <div><span style={{ color: opt.accent }}>&gt;</span> termflow start</div>
-                <div className="opacity-65">Ready in 320 ms</div>
-                <div className="mt-1 h-1 w-12 rounded-full opacity-45" style={{ background: opt.accent }} />
-              </div>
+    <button type="button" role="radio" aria-checked={isActive} tabIndex={tabIndex}
+      className="app-settings-theme" onClick={onClick} onKeyDown={onKeyDown}>
+      <div className="app-settings-theme__preview" data-theme={opt.key} aria-hidden="true">
+        <div className="app-settings-theme__window">
+          <div className="app-settings-theme__chrome"><span /><span /><span /><div /></div>
+          <div className="app-settings-theme__body">
+            <div className="app-settings-theme__sidebar"><span /><span /><span /></div>
+            <div className="app-settings-theme__editor">
+              <div className="app-settings-theme__line" /><div className="app-settings-theme__line app-settings-theme__line--short" />
+              <div className="app-settings-theme__terminal"><span>&gt;</span> termflow<span className="app-settings-theme__cursor" /></div>
             </div>
           </div>
         </div>
-        {isActive && (
-          <div className="absolute right-4 top-4 flex h-6 w-6 items-center justify-center rounded-full shadow-sm" style={{ background: opt.accent }}>
-            <CheckOutlined style={{ fontSize: 11, color: "#fff" }} />
-          </div>
-        )}
       </div>
-      <div className="app-theme-card-footer relative px-4 pb-4 pt-3.5" style={{ background: "var(--cs-bg-card)" }}>
-        <div className="flex items-center gap-2.5">
-          <div className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: opt.accent }} />
-          <span className="text-sm font-semibold" style={{ color: "var(--cs-text-primary)" }}>{t(opt.labelKey)}</span>
-        </div>
-
-      </div>
+      <span className="app-settings-theme__footer">
+        <span>{t(opt.labelKey)}</span>
+        {isActive && <CheckOutlined aria-hidden="true" className="text-[var(--cs-primary)]" />}
+      </span>
     </button>
-  );
-}
-/* ────────────── Setting Section ────────────── */
-function SettingSection({ title, children }: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="mb-8">
-      <div
-        className="text-[11px] font-semibold uppercase tracking-widest mb-2 px-1"
-        style={{ color: "var(--cs-text-tertiary)" }}
-      >
-        {title}
-      </div>
-      <div
-        className="app-glass-card rounded-xl overflow-hidden"
-        style={{
-          background: "var(--cs-bg-card)",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
-        }}
-      >
-        {children}
-      </div>
-    </div>
   );
 }
 
@@ -476,8 +355,8 @@ function GeneralPage() {
         title={t("settings.menu.general")}
       />
       <SettingSection title={t("settings.general.appearance.title")}>
-        <div className="p-5">
-          <div className="flex flex-col gap-4 border-b pb-5 min-[760px]:flex-row min-[760px]:items-start min-[760px]:justify-between">
+        <div>
+          <div className="app-settings-control-line justify-between">
             <div className="min-w-0">
               <div className="text-sm font-semibold" style={{ color: "var(--cs-text-primary)" }}>
                 {t("settings.general.appearance.mode.label")}
@@ -492,7 +371,7 @@ function GeneralPage() {
             />
           </div>
           <div
-            className="mt-5 grid grid-cols-1 gap-4 min-[760px]:grid-cols-2"
+            className="app-settings-grid mt-4"
             role="radiogroup"
             aria-label={t("settings.general.appearance.title")}
           >
@@ -1031,11 +910,10 @@ export function VoiceRecognitionPage() {
   }, [restoreGlobalVoiceShortcut]);
 
   return (
-    <div className="app-voice-settings mx-auto max-w-[920px] space-y-5 pb-6">
-      <header className="flex flex-wrap items-center justify-between gap-3 pb-1">
-        <h1 className="m-0 text-xl font-semibold text-[var(--cs-text-primary)]">{t("settings.menu.voiceRecognition")}</h1>
-        <span className="text-xs text-[var(--cs-text-secondary)]">{t("settings.voiceRecognition.layout.autoSave")}</span>
-      </header>
+    <div className="app-voice-settings">
+      <SettingsPageHeader title={t("settings.menu.voiceRecognition")}
+        description={t("settings.voiceRecognition.layout.description")}
+        decoration={<span className="app-settings-signal"><span /><span /><span /><span /><span /><span /><span /></span>} />
 
       <VoiceSettingsSection title={t("settings.voiceRecognition.layout.recognition")} actions={
         <Tooltip title={t("settings.voiceRecognition.testConnectionDesc")}>
@@ -1049,17 +927,17 @@ export function VoiceRecognitionPage() {
             <Select id="voice-asr-provider" className="w-full" value={asrProvider}
               options={providerOptions} onChange={handleProviderChange} showSearch={false} />
           </VoiceSettingsField>
-          <VoiceSettingsField htmlFor="voice-asr-model" label={t("settings.voiceRecognition.model")}>
-            <Select id="voice-asr-model" className="w-full" value={asrModel} onChange={setAsrModel}
-              options={currentModelOptions} optionRender={renderAsrModelOption}
-              popupClassName="app-asr-model-select-dropdown"
-              placeholder={t("settings.voiceRecognition.modelPlaceholder")} />
-          </VoiceSettingsField>
           <VoiceSettingsField htmlFor="voice-asr-api-key" label={t("settings.voiceRecognition.apiKey")}>
             <Input.Password id="voice-asr-api-key" name="voice-asr-api-key" className="w-full" value={asrApiKey}
               onChange={(event) => setAsrApiKey(event.target.value)} placeholder={apiKeyPlaceholder}
               autoComplete="off" spellCheck={false} title={apiKeyDesc}
               visibilityToggle={{ visible: showApiKey, onVisibleChange: setShowApiKey }} />
+          </VoiceSettingsField>
+          <VoiceSettingsField htmlFor="voice-asr-model" label={t("settings.voiceRecognition.model")}>
+            <Select id="voice-asr-model" className="w-full" value={asrModel} onChange={setAsrModel}
+              options={currentModelOptions} optionRender={renderAsrModelOption}
+              popupClassName="app-asr-model-select-dropdown"
+              placeholder={t("settings.voiceRecognition.modelPlaceholder")} />
           </VoiceSettingsField>
           {isDashScopeProvider ? (
             <VoiceSettingsField htmlFor="voice-asr-region" label={t("settings.voiceRecognition.region")}>
@@ -1087,7 +965,6 @@ export function VoiceRecognitionPage() {
         {voicePolishEnabled ? (
           <div className="space-y-4">
             <div className="app-voice-settings-grid items-start">
-              <VoicePolishModePicker value={voicePolishStyle} onChange={setVoicePolishStyle} />
               <VoiceSettingsField htmlFor="voice-polish-provider" label={t("settings.voiceRecognition.serviceProvider")}>
                 <Select id="voice-polish-provider" className="w-full" value={voicePolishProvider} onChange={setVoicePolishProvider} options={[
                   { value: "deepseek", label: <VoiceProviderLabel provider="deepseek" label="DeepSeek" /> },
@@ -1095,6 +972,7 @@ export function VoiceRecognitionPage() {
                   { value: "mimo", label: <VoiceProviderLabel provider="mimo" label="MiMo" /> },
                 ]} />
               </VoiceSettingsField>
+              <VoicePolishModePicker value={voicePolishStyle} onChange={setVoicePolishStyle} />
               <VoiceSettingsField htmlFor="voice-polish-api-key" label={t("settings.voiceRecognition.apiKey")}>
                 <div className="flex min-w-0 gap-2">
                 <Input.Password id="voice-polish-api-key" name="voice-polish-api-key" className="min-w-0 flex-1" value={voicePolishApiKey}
@@ -1127,7 +1005,7 @@ export function VoiceRecognitionPage() {
               </VoiceSettingsField>
             </div>
             {!voicePolishApiKey.trim() && <p role="status" className="m-0 text-xs text-[var(--cs-text-secondary)]">{t("settings.voiceRecognition.polishingKeyMissing")}</p>}
-            <div className="space-y-2 border-t border-[var(--cs-border-card)] pt-3">
+            <div className="space-y-2">
               <VoiceSettingsDisclosure title={t("settings.voiceRecognition.polishingInstructionsLabel")}>
                 <Input.TextArea id="voice-polish-instructions" name="voice-polish-instructions" value={voicePolishInstructions}
                   aria-label={t("settings.voiceRecognition.polishingInstructionsLabel")}
@@ -1144,12 +1022,7 @@ export function VoiceRecognitionPage() {
         ) : <p className="m-0 text-xs leading-5 text-[var(--cs-text-secondary)]">{t("settings.voiceRecognition.layout.polishOff")}</p>}
       </VoiceSettingsSection>
 
-      <VoiceSettingsSection title={t("settings.voiceRecognition.layout.input")} actions={
-        <div className="flex items-center gap-3">
-          <label htmlFor="voice-trigger-visible" className="text-xs text-[var(--cs-text-secondary)]">{t("settings.voiceRecognition.triggerButton")}</label>
-          <Switch id="voice-trigger-visible" checked={voiceTriggerVisible} onChange={setVoiceTriggerVisible} />
-        </div>
-      }>
+      <VoiceSettingsSection title={t("settings.voiceRecognition.layout.input")}>
         <div className="space-y-4">
           <VoiceSettingsField htmlFor="voice-shortcut" label={t("settings.voiceRecognition.shortcutLabel")}>
             <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -1161,7 +1034,7 @@ export function VoiceRecognitionPage() {
                     void startShortcutRecording();
                   }
                 }}
-                className="w-full cursor-pointer min-[700px]:w-[200px]" />
+                className="min-w-0 flex-1 cursor-pointer" />
               <Button type={isRecordingShortcut ? "primary" : "default"} loading={isPreparingShortcutRecording}
                 onClick={() => { if (isRecordingShortcut) { cancelShortcutRecording(); return; } void startShortcutRecording(); }}>
                 {t(isRecordingShortcut ? "settings.voiceRecognition.shortcutRecording" : "settings.voiceRecognition.shortcutRecord")}
@@ -1175,6 +1048,9 @@ export function VoiceRecognitionPage() {
               </Tooltip>
             </div>
           </VoiceSettingsField>
+          <SettingRow label={t("settings.voiceRecognition.triggerButton")} htmlFor="voice-trigger-visible">
+            <Switch id="voice-trigger-visible" checked={voiceTriggerVisible} onChange={setVoiceTriggerVisible} />
+          </SettingRow>
         </div>
       </VoiceSettingsSection>
     </div>
@@ -1185,19 +1061,6 @@ export function VoiceRecognitionPage() {
 /* ────────────── Shared resource lists ────────────── */
 type ResourceScope = "workspace" | "user";
 const SETTINGS_LIST_PAGE_SIZE = 5;
-function buildPaginationItems(current: number, totalPages: number) {
-  if (totalPages <= 7) {
-    return Array.from({ length: totalPages }, (_, index) => index + 1);
-  }
-  if (current <= 4) {
-    return [1, 2, 3, 4, 5, "ellipsis-right", totalPages];
-  }
-  if (current >= totalPages - 3) {
-    return [1, "ellipsis-left", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
-  }
-  return [1, "ellipsis-left", current - 1, current, current + 1, "ellipsis-right", totalPages];
-}
-
 function ScopeTabs({
   value,
   workspaceCount,
@@ -1218,50 +1081,11 @@ function ScopeTabs({
   ];
 
   return (
-    <div
-      className="mt-5 flex items-end gap-1 border-b"
-      style={{ borderColor: "var(--cs-border-card)" }}
-    >
-      {options.map((option) => {
-        const active = option.value === value;
-        return (
-          <button
-            key={option.value}
-            type="button"
-            disabled={option.disabled}
-            onClick={() => !option.disabled && onChange(option.value)}
-            className="relative px-4 py-3 text-sm font-medium transition-all"
-            style={{
-              color: option.disabled
-                ? "var(--cs-text-tertiary)"
-                : active
-                  ? "var(--cs-text-primary)"
-                  : "var(--cs-text-secondary)",
-              opacity: option.disabled ? 0.45 : 1,
-            }}
-          >
-            <span className="flex items-center gap-2">
-              <span>{option.label}</span>
-              <span
-                className="px-2 py-0.5 rounded-full text-[11px]"
-                style={{
-                  background: active ? "color-mix(in srgb, var(--cs-primary) 14%, transparent)" : "var(--cs-bg-hover)",
-                  color: active ? "var(--cs-primary)" : "var(--cs-text-tertiary)",
-                }}
-              >
-                {option.count}
-              </span>
-            </span>
-            <span
-              className="absolute left-3 right-3 bottom-0 h-[2px] rounded-full transition-all"
-              style={{
-                background: active ? "var(--cs-primary)" : "transparent",
-                boxShadow: active ? "0 0 12px color-mix(in srgb, var(--cs-primary) 35%, transparent)" : "none",
-              }}
-            />
-          </button>
-        );
-      })}
+    <div className="app-settings-scope-tabs">
+      {options.map(option => <button key={option.value} type="button" disabled={option.disabled}
+        aria-pressed={option.value === value} onClick={() => onChange(option.value)}>
+        {option.label}<span>{option.count}</span>
+      </button>)}
     </div>
   );
 }
@@ -1277,75 +1101,10 @@ function ListPagination({
   pageSize: number;
   onChange: (page: number) => void;
 }) {
-  const totalPages = Math.ceil(total / pageSize);
-  if (totalPages <= 1) return null;
-
-  const items = buildPaginationItems(current, totalPages);
-
-  return (
-    <div
-      className="px-5 py-4 flex items-center justify-end"
-      style={{ borderTop: "1px solid var(--cs-border-card)" }}
-    >
-      <div
-        className="inline-flex items-center gap-2 rounded-2xl px-3 py-2"
-        style={{
-          background: "color-mix(in srgb, var(--cs-bg-hover) 80%, transparent)",
-          border: "1px solid color-mix(in srgb, var(--cs-border-card) 85%, transparent)",
-        }}
-      >
-        <button
-          type="button"
-          onClick={() => onChange(current - 1)}
-          disabled={current === 1}
-          className="w-8 h-8 rounded-xl flex items-center justify-center transition-all"
-          style={{
-            color: current === 1 ? "var(--cs-text-tertiary)" : "var(--cs-text-secondary)",
-            opacity: current === 1 ? 0.4 : 1,
-          }}
-        >
-          <LeftOutlined />
-        </button>
-        {items.map((item, index) =>
-          typeof item === "number" ? (
-            <button
-              key={`${item}-${index}`}
-              type="button"
-              onClick={() => onChange(item)}
-              className="min-w-8 h-8 px-2 rounded-xl text-sm font-medium transition-all"
-              style={{
-                background: item === current ? "var(--cs-primary)" : "transparent",
-                color: item === current ? "#fff" : "var(--cs-text-secondary)",
-                boxShadow: item === current ? "0 10px 22px -14px color-mix(in srgb, var(--cs-primary) 80%, transparent)" : "none",
-              }}
-            >
-              {item}
-            </button>
-          ) : (
-            <span
-              key={`${item}-${index}`}
-              className="w-8 h-8 flex items-center justify-center text-sm"
-              style={{ color: "var(--cs-text-tertiary)" }}
-            >
-              ...
-            </span>
-          )
-        )}
-        <button
-          type="button"
-          onClick={() => onChange(current + 1)}
-          disabled={current === totalPages}
-          className="w-8 h-8 rounded-xl flex items-center justify-center transition-all"
-          style={{
-            color: current === totalPages ? "var(--cs-text-tertiary)" : "var(--cs-text-secondary)",
-            opacity: current === totalPages ? 0.4 : 1,
-          }}
-        >
-          <RightOutlined />
-        </button>
-      </div>
-    </div>
-  );
+  if (total <= pageSize) return null;
+  return <div className="flex flex-wrap justify-end border-t border-[var(--cs-border-card)] py-4">
+    <Pagination current={current} total={total} pageSize={pageSize} onChange={onChange} size="small" showSizeChanger={false} />
+  </div>;
 }
 
 const commandShellOptions: Array<{ label: string; value: CommandShell }> = [
@@ -1457,19 +1216,9 @@ function CommandRow({
 }) {
   const { t } = useTranslation();
   return (
-    <div
-      className="flex items-center gap-4 px-4 py-3 transition-colors cursor-pointer"
-      style={{ borderBottom: "1px solid var(--cs-border-card)" }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.background = "var(--cs-bg-hover)";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = "transparent";
-      }}
-      onClick={onOpen}
-    >
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
+    <div className="app-settings-resource-row">
+      <button type="button" className="app-settings-resource-row__open" onClick={onOpen}>
+        <div className="app-settings-resource-row__name">
           <CodeOutlined style={{ color: "var(--cs-primary)", fontSize: 14 }} />
           <span className="text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>
             {command.name}
@@ -1483,20 +1232,10 @@ function CommandRow({
             </Tag>
           )}
         </div>
-        <div className="text-[11px] mt-1 line-clamp-2" style={{ color: "var(--cs-text-tertiary)" }}>
+        <div className="app-settings-resource-row__summary">
           {command.description || command.commandPreview || t("settings.shared.noDescription")}
         </div>
-        <div className="text-[10px] mt-1 flex items-center gap-3 flex-wrap" style={{ color: "var(--cs-text-tertiary)" }}>
-          {command.supportsTestRun && <span>{formatCommandCwdLabel(command.cwdMode, t)}</span>}
-          {command.allowedTools.slice(0, 2).map((tool) => (
-            <span key={tool}>@{tool}</span>
-          ))}
-          {command.tags.slice(0, 3).map((tag) => (
-            <span key={tag}>#{tag}</span>
-          ))}
-          <span>{t("settings.shared.updatedAt", { value: formatCommandUpdatedAt(command.updatedAt) ?? t("common.unknown") })}</span>
-        </div>
-      </div>
+      </button>
       <Button
         danger
         size="small"
@@ -2339,19 +2078,9 @@ function HookRow({
 }) {
   const { t } = useTranslation();
   return (
-    <div
-      className="flex items-center gap-4 px-4 py-3 transition-colors cursor-pointer"
-      style={{ borderBottom: "1px solid var(--cs-border-card)" }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.background = "var(--cs-bg-hover)";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = "transparent";
-      }}
-      onClick={onOpen}
-    >
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
+    <div className="app-settings-resource-row">
+      <button type="button" className="app-settings-resource-row__open" onClick={onOpen}>
+        <div className="app-settings-resource-row__name">
           <ApiOutlined style={{ color: "var(--cs-primary)", fontSize: 14 }} />
           <span className="text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>
             {hook.name}
@@ -2365,15 +2094,8 @@ function HookRow({
             </Tag>
           )}
         </div>
-        <div className="text-[11px] mt-1 line-clamp-2" style={{ color: "var(--cs-text-tertiary)" }}>
-          {hook.commandPreview}
-        </div>
-        <div className="text-[10px] mt-1 flex items-center gap-3 flex-wrap" style={{ color: "var(--cs-text-tertiary)" }}>
-          <span>{formatHookMatcher(hook.matcher, t)}</span>
-          <span>{hook.configPath}</span>
-          <span>{t("settings.shared.updatedAt", { value: formatHookUpdatedAt(hook.updatedAt) ?? t("common.unknown") })}</span>
-        </div>
-      </div>
+        <div className="app-settings-resource-row__summary">{hook.commandPreview}</div>
+      </button>
       {canDelete && (
         <Button
           danger
@@ -2446,6 +2168,9 @@ function HookDetailPanel({
               {t("settings.hooks.defaultHookNotice")}
             </div>
           )}
+          <p className="m-0 text-xs text-[var(--cs-text-secondary)]">
+            {t("settings.shared.updatedAt", { value: formatHookUpdatedAt(detail.hook.updatedAt) ?? t("common.unknown") })}
+          </p>
           <div className="space-y-1">
             <div className="text-xs" style={{ color: "var(--cs-text-tertiary)" }}>{t("settings.hooks.matcher")}</div>
             <div className="text-xs break-all" style={{ color: "var(--cs-text-secondary)" }}>
@@ -2512,7 +2237,9 @@ function HookDetailPanel({
 const HOOK_AGENTS: readonly HookAgent[] = getAgentIdsWithCapability("statusEvents");
 
 function hookAgentLabel(agent: HookAgent, t: (key: string) => string) {
-  return t(`settings.hooks.agents.${agent}`);
+  const key = `settings.hooks.agents.${agent}`;
+  const label = t(key);
+  return label === key ? AGENT_DEFINITIONS[agent].displayName : label;
 }
 
 function HooksPage() {
@@ -2855,24 +2582,17 @@ function HooksPage() {
             allowClear
             prefix={<SearchOutlined style={{ color: "var(--cs-text-tertiary)" }} />}
             placeholder={t("settings.hooks.searchPlaceholder")}
+            aria-label={t("settings.hooks.searchPlaceholder")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
           <div className="flex items-center gap-3 flex-wrap xl:justify-end">
-            <Segmented
-              size="middle"
-              value={activeAgent}
-              options={HOOK_AGENTS.map((agent) => ({
-                value: agent,
-                label: (
-                  <span className="inline-flex items-center gap-1.5">
-                    <AgentIcon agentId={agent} size={14} />
-                    {hookAgentLabel(agent, t)}
-                  </span>
-                ),
-              }))}
-              onChange={(value) => setActiveAgent(value as HookAgent)}
-            />
+            <div className="app-settings-choices" role="group" aria-label={t("settings.mcpServers.selectAgent")}>
+              {HOOK_AGENTS.map(agent => <button key={agent} type="button"
+                aria-pressed={agent === activeAgent} onClick={() => setActiveAgent(agent)}>
+                <AgentIcon agentId={agent} size={14} />{hookAgentLabel(agent, t)}
+              </button>)}
+            </div>
             <Select
               size="middle"
               value={eventFilter}
@@ -3995,7 +3715,7 @@ function AboutPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="app-about-settings">
       <div className="app-about-hero app-flow-surface app-glass-card relative overflow-hidden rounded-2xl">
         <AboutFlowBackdrop />
         <div className="app-about-hero-glow-primary pointer-events-none absolute -right-16 -top-28 h-64 w-64 rounded-full blur-3xl" />
@@ -4059,70 +3779,24 @@ function AboutPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
-        <section
-          className="app-glass-card overflow-hidden rounded-2xl p-6"
-          style={{ background: "var(--cs-bg-card)", border: "1px solid var(--cs-border-card)" }}
-        >
-          <div className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--cs-text-tertiary)" }}>
-            {t("settings.menu.about")}
-          </div>
-          <p className="mb-0 mt-4 text-sm leading-7" style={{ color: "var(--cs-text-secondary)" }}>
-            {t("settings.about.description")}
-          </p>
-
-          <div className="mt-6 text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--cs-text-tertiary)" }}>
-            {t("settings.about.capabilities")}
-          </div>
-          <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-3">
-            {productHighlights.map((item) => (
-              <div
-                key={item.key}
-                className="rounded-xl p-4"
-                style={{ background: "var(--cs-bg-hover)", border: "1px solid var(--cs-border-card)" }}
-              >
-                <div
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-sm"
-                  style={{ color: "var(--cs-primary)", background: "color-mix(in srgb, var(--cs-primary) 12%, transparent)" }}
-                >
-                  {item.icon}
-                </div>
-                <div className="mt-3 text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>{item.title}</div>
-                <div className="mt-1.5 text-xs leading-5" style={{ color: "var(--cs-text-tertiary)" }}>{item.desc}</div>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-5 flex items-center gap-2 text-xs font-medium" style={{ color: "var(--cs-primary)" }}>
-            <SafetyCertificateOutlined />
-            {t("settings.about.localFirst")}
-          </div>
-        </section>
-
-        <section
-          className="app-glass-card overflow-hidden rounded-2xl"
-          style={{ background: "var(--cs-bg-card)", border: "1px solid var(--cs-border-card)" }}
-        >
-          <div className="px-5 pb-3 pt-5">
-            <div className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--cs-text-tertiary)" }}>
-              {t("settings.about.techStack")}
-            </div>
-          </div>
-          <div className="px-2 pb-2">
-            {techStack.map((item) => (
-              <div key={item.label} className="flex items-center justify-between gap-4 rounded-xl px-3 py-3 hover:bg-[var(--cs-bg-hover)]">
-                <span className="text-sm" style={{ color: "var(--cs-text-secondary)" }}>{item.label}</span>
-                <span
-                  className={item.mono ? "text-xs font-mono" : "text-sm font-medium"}
-                  style={{ color: item.mono ? "var(--cs-text-tertiary)" : "var(--cs-text-primary)" }}
-                >
-                  {item.value}
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
+      <SettingSection title={t("settings.menu.about")}>
+        <p className="m-0 text-sm leading-7 text-[var(--cs-text-secondary)]">{t("settings.about.description")}</p>
+      </SettingSection>
+      <SettingSection title={t("settings.about.capabilities")}>
+        <div className="app-about-highlights">
+          {productHighlights.map((item) => <div key={item.key} className="min-w-0">
+            <h3 className="m-0 flex items-center gap-2 text-sm font-medium text-[var(--cs-text-primary)]">
+              <span className="text-[var(--cs-primary)]" aria-hidden="true">{item.icon}</span>{item.title}
+            </h3>
+            <p className="mb-0 mt-2 text-xs leading-6 text-[var(--cs-text-secondary)]">{item.desc}</p>
+          </div>)}
+        </div>
+      </SettingSection>
+      <SettingSection title={t("settings.about.techStack")}>
+        {techStack.map((item) => <SettingRow key={item.label} label={item.label}>
+          <span className={item.mono ? "break-all font-mono text-xs text-[var(--cs-text-secondary)]" : "text-sm text-[var(--cs-text-primary)]"}>{item.value}</span>
+        </SettingRow>)}
+      </SettingSection>
     </div>
   );
 }
@@ -4155,6 +3829,11 @@ function SettingsPanel() {
   const [menuSearch, setMenuSearch] = useState("");
   const contentScrollRef = useRef<HTMLDivElement>(null);
   const PageComponent = pageComponents[activePage];
+  const contentLayout = activePage === "about"
+    ? "app-settings-content--about"
+    : ["agents", "skills", "hooks", "mcpServers", "commands", "quickCommands", "claudeMd", "archived"].includes(activePage)
+      ? "app-settings-content--wide"
+      : "";
   const normalizedMenuSearch = menuSearch.trim().toLocaleLowerCase();
   const visibleMenuGroups = useMemo(
     () => menuGroups
@@ -4175,29 +3854,21 @@ function SettingsPanel() {
   };
 
   return (
-    <div
-      className="h-full flex min-h-0"
-      style={{ background: "var(--cs-bg-card-solid, var(--cs-bg-card))" }}
-    >
+    <div className="app-settings">
       {/* Left nav */}
-      <div
-        className="app-settings-nav w-16 min-[960px]:w-[var(--cs-workspace-tab-width)] shrink-0 py-5 px-2 min-[960px]:px-3 overflow-y-auto"
-        style={{
-          borderRight: "1px solid var(--cs-border-sidebar)",
-          background: "var(--cs-bg-card-solid, var(--cs-bg-card))",
-        }}
-      >
-        <div className="hidden min-[960px]:block mb-4">
+      <nav className="app-settings-nav" aria-label={t("common.settings")}>
+        <div className="app-settings-nav__search app-settings-nav__search--wide">
           <Input
             allowClear
             size="small"
             prefix={<SearchOutlined />}
             value={menuSearch}
             placeholder={t("settings.menu.searchPlaceholder")}
+            aria-label={t("settings.menu.searchPlaceholder")}
             onChange={(event) => setMenuSearch(event.target.value)}
           />
         </div>
-        <div className="min-[960px]:hidden mb-4 flex justify-center">
+        <div className="app-settings-nav__search app-settings-nav__search--compact">
           <Popover
             trigger="click"
             placement="rightTop"
@@ -4209,14 +3880,14 @@ function SettingsPanel() {
                 value={menuSearch}
                 placeholder={t("settings.menu.searchPlaceholder")}
                 onChange={(event) => setMenuSearch(event.target.value)}
-                style={{ width: 240 }}
+                aria-label={t("settings.menu.searchPlaceholder")}
+                className="app-settings-nav__search-input"
               />
             }
           >
             <button
               type="button"
-              className="flex h-9 w-9 items-center justify-center rounded-lg"
-              style={{ color: "var(--cs-text-secondary)" }}
+              className="app-settings-nav__search-button"
               aria-label={t("settings.menu.searchPlaceholder")}
             >
               <SearchOutlined />
@@ -4231,12 +3902,9 @@ function SettingsPanel() {
           >
             {t("common.noResults")}
           </div>
-        ) : visibleMenuGroups.map((group, groupIndex) => (
-          <div key={group.key} className={groupIndex > 0 ? "mt-5" : undefined}>
-            <div
-              className="hidden min-[960px]:block mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider"
-              style={{ color: "var(--cs-text-tertiary)" }}
-            >
+        ) : visibleMenuGroups.map((group) => (
+          <div key={group.key} className="app-settings-nav__group">
+            <div className="app-settings-nav__group-title">
               {t(group.labelKey)}
             </div>
             {group.items.map((item) => {
@@ -4246,22 +3914,13 @@ function SettingsPanel() {
                 <Tooltip key={item.key} title={label} placement="right" mouseEnterDelay={0.6}>
                   <button
                     type="button"
-                    className="mb-1 flex w-full items-center justify-center gap-3 rounded-lg px-2 py-2 transition-all min-[960px]:justify-start min-[960px]:px-3"
-                    style={{
-                      background: isActive ? "var(--cs-bg-active)" : "transparent",
-                      color: isActive ? "var(--cs-primary)" : "var(--cs-text-secondary)",
-                      fontWeight: isActive ? 500 : 400,
-                    }}
-                    onMouseEnter={(event) => {
-                      if (!isActive) event.currentTarget.style.background = "var(--cs-bg-hover)";
-                    }}
-                    onMouseLeave={(event) => {
-                      if (!isActive) event.currentTarget.style.background = "transparent";
-                    }}
+                    className="app-settings-nav__item"
+                    aria-label={label}
+                    aria-current={isActive ? "page" : undefined}
                     onClick={() => selectPage(item.key)}
                   >
-                    <span className="text-sm opacity-80">{item.icon}</span>
-                    <span className="hidden min-[960px]:inline min-w-0 truncate text-sm">
+                    <span className="text-sm opacity-80" aria-hidden="true">{item.icon}</span>
+                    <span className="app-settings-nav__label">
                       {label}
                     </span>
                   </button>
@@ -4270,14 +3929,14 @@ function SettingsPanel() {
             })}
           </div>
         ))}
-      </div>
+      </nav>
 
       {/* Right content */}
       <div
         ref={contentScrollRef}
-        className="flex-1 overflow-y-auto min-w-0 flex justify-center"
+        className="app-settings-scroll"
       >
-        <div className="w-full max-w-[1280px] py-6 px-8 xl:px-10">
+        <div className={`app-settings-content ${contentLayout}`} data-settings-page={activePage}>
           <PageComponent />
         </div>
       </div>

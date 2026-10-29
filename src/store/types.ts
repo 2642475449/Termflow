@@ -428,3 +428,44 @@ export interface AppState
   setVoiceInputTarget: (target: VoiceInputTarget) => void;
   setVoiceTriggerVisible: (visible: boolean) => void;
 }
+
+// 底部脚本运行器使用独立 store，不扩充主 AppState。
+export type BottomRunnerTabStatus = "starting" | "running" | "success" | "error" | "stopped" | "completed";
+export interface BottomRunnerTab {
+  id: string;
+  sessionId: string;
+  commandId: string;
+  commandLabel: string;
+  commandText: string;
+  projectPath: string;
+  shell: TerminalShell;
+  status: BottomRunnerTabStatus;
+  exitCode: number | null;
+  startTime: number;
+  endTime: number | null;
+}
+export interface BottomRunnerState {
+  open: boolean;
+  height: number;
+  maximized: boolean;
+  autoScroll: boolean;
+  wordWrap: boolean;
+  tabsByProject: Record<string, BottomRunnerTab[]>;
+  activeTabIdByProject: Record<string, string | null>;
+  setOpen: (open: boolean) => void;
+  toggleOpen: () => void;
+  setHeight: (height: number, viewportHeight?: number) => void;
+  setMaximized: (maximized: boolean) => void;
+  toggleMaximized: () => void;
+  setAutoScroll: (autoScroll: boolean) => void;
+  toggleAutoScroll: () => void;
+  setWordWrap: (wordWrap: boolean) => void;
+  toggleWordWrap: () => void;
+  activateTab: (projectPath: string, tabId: string) => void;
+  addRunTab: (projectPath: string, tab: BottomRunnerTab) => BottomRunnerTab | null;
+  updateTabStatus: (projectPath: string, tabId: string, status: BottomRunnerTabStatus, exitCode?: number | null) => void;
+  closeTab: (projectPath: string, tabId: string) => void;
+  clearFinishedTabs: (projectPath: string) => void;
+  handleProjectChange: (projectPath: string) => void;
+  reset: () => void;
+}

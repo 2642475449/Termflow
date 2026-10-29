@@ -1,3 +1,4 @@
+import { BottomRunnerRailButton } from "@/components/bottomRunner/BottomRunnerStatus";
 import { SettingOutlined } from "@ant-design/icons";
 import { message, Popover, Tooltip } from "antd";
 import { useCallback, useState } from "react";
@@ -416,6 +417,7 @@ function PrimarySidebarRail() {
         </div>
       </div>
       <div className="flex flex-col items-center gap-1.5">
+        <BottomRunnerRailButton />
         <Popover
           trigger="click"
           placement="rightBottom"

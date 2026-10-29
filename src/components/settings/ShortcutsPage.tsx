@@ -85,13 +85,13 @@ export function ShortcutsPage() {
         }}>{t("settings.shortcuts.resetAll")}</Button>
       } />
       <p className="mb-4 text-sm text-[var(--cs-text-secondary)]">{t("settings.shortcuts.description")}</p>
-      <div className="app-shortcuts-list app-glass-card overflow-hidden rounded-xl border border-[var(--cs-border-card)] bg-[var(--cs-bg-card)]">
+      <div className="app-shortcuts-list app-settings-list">
         {SHORTCUTS.map((item) => {
           const recording = recordingAction === item.id;
           const keys = getAppShortcut(overrides, item.id, voiceShortcut);
           const defaultKeys = item.id === "voiceInput" ? DEFAULT_VOICE_SHORTCUT : item.keys;
           return (
-            <div key={item.id} className="app-shortcuts-row flex flex-wrap items-center justify-between gap-3 border-b border-[var(--cs-border-card)] px-4 py-3 last:border-b-0">
+            <div key={item.id} className="app-shortcuts-row flex flex-wrap items-center justify-between gap-3 border-b border-[var(--cs-border-card)] px-0 py-3 last:border-b-0">
               <span className="text-sm text-[var(--cs-text-primary)]">{t(item.i18nKey)}</span>
               <div className="flex flex-wrap items-center gap-2">
                 <Button type={recording ? "primary" : "default"}

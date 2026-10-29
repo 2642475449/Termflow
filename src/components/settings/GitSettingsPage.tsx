@@ -21,6 +21,8 @@ import {
   type GitCommitMessagePresetTemplate,
 } from "@/lib/gitCommitMessageProfiles";
 import { useAppStore } from "@/store";
+import { SettingsPageHeader } from "./SettingsPageHeader";
+import { SettingsSection } from "./SettingsSection";
 
 /** Manages the reusable AI commit-message profiles used by the Git workspace. */
 export function GitSettingsPage() {
@@ -180,9 +182,8 @@ export function GitSettingsPage() {
   ]);
 
   return (
-    <div className="app-git-settings mx-auto max-w-[920px] space-y-5 pb-6">
-      <header className="flex flex-wrap items-center justify-between gap-3 pb-1">
-        <h1 className="m-0 text-xl font-semibold text-[var(--cs-text-primary)]">{t("settings.menu.git")}</h1>
+    <div className="app-git-settings">
+      <SettingsPageHeader title={t("settings.menu.git")} actions={
         <div className="flex flex-wrap items-center gap-2">
           {hasBuiltInChanges && (
             <Button size="small" icon={<ReloadOutlined aria-hidden="true" />} onClick={handleResetBuiltInProfiles}>
@@ -193,13 +194,9 @@ export function GitSettingsPage() {
             {t("settings.agents.gitProfiles.add")}
           </Button>
         </div>
-      </header>
-
-      <section className="overflow-hidden rounded-xl border border-[var(--cs-border-card)] bg-[var(--cs-bg-card)]">
-        <header className="space-y-1 border-b border-[var(--cs-border-card)] px-4 py-3">
-          <h2 className="m-0 text-sm font-semibold text-[var(--cs-text-primary)]">{t("settings.agents.gitProfiles.layout.title")}</h2>
-          <p className="m-0 text-xs leading-5 text-[var(--cs-text-secondary)]">{t("settings.agents.gitProfiles.layout.description")}</p>
-        </header>
+      } />
+      <SettingsSection title={t("settings.agents.gitProfiles.layout.title")}
+        description={t("settings.agents.gitProfiles.layout.description")}>
 
         <fieldset className="m-0 min-w-0 border-0 p-0">
           <legend className="sr-only">{t("settings.agents.gitProfiles.title")}</legend>
@@ -213,7 +210,7 @@ export function GitSettingsPage() {
             return (
               <article key={profile.id} aria-label={profile.name}
                 className={`app-git-profile-row ${isDefault ? "app-git-profile-row--default" : ""}`}>
-                <div className="flex items-start gap-3 p-4">
+                <div className="flex items-start gap-3 px-2 py-3.5">
                   <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
                     <input type="radio" name="git-commit-message-default" value={profile.id}
                       checked={isDefault} onChange={() => setDefaultProfile(profile.id)} aria-label={profile.name}
@@ -251,7 +248,7 @@ export function GitSettingsPage() {
             );
           })}
         </fieldset>
-      </section>
+      </SettingsSection>
 
       <Modal
         open={profileEditorOpen}

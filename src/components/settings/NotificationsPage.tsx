@@ -21,6 +21,8 @@ import {
   type NotificationSoundType,
 } from "@/store";
 import { SettingsPageHeader } from "./SettingsPageHeader";
+import { SettingsSection as NotificationSection } from "./SettingsSection";
+import { SettingRow } from "./SettingRow";
 import feishuIcon from "@/assets/remote-notification-icons/feishu.svg";
 import dingtalkIcon from "@/assets/remote-notification-icons/dingtalk.svg";
 import wechatIcon from "@/assets/remote-notification-icons/wechat.svg";
@@ -53,28 +55,6 @@ function RemoteNotificationProviderIcon({
   );
 }
 
-function NotificationSection({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <div className="mb-6">
-      <div
-        className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-widest"
-        style={{ color: "var(--cs-text-tertiary)" }}
-      >
-        {title}
-      </div>
-      <div
-        className="app-glass-card overflow-hidden rounded-xl"
-        style={{
-          background: "var(--cs-bg-card)",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
-        }}
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
-
 function NotificationRow({
   label,
   status,
@@ -84,19 +64,7 @@ function NotificationRow({
   status?: string;
   children: ReactNode;
 }) {
-  return (
-    <div className="flex flex-col items-stretch gap-3 px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
-      <div className="min-w-0 flex-1 xl:mr-4">
-        <div className="text-sm" style={{ color: "var(--cs-text-primary)" }}>{label}</div>
-        {status && (
-          <div className="mt-0.5 text-[11px]" style={{ color: "var(--cs-text-tertiary)" }}>
-            {status}
-          </div>
-        )}
-      </div>
-      <div className="flex shrink-0 justify-end">{children}</div>
-    </div>
-  );
+  return <SettingRow label={label} description={status}>{children}</SettingRow>;
 }
 
 export function NotificationsPage() {
@@ -405,7 +373,7 @@ export function NotificationsPage() {
 
       {selectedChannel.enabled && (
         <NotificationSection title={t("settings.notifications.remote.configuration")}>
-          <div className="space-y-4 px-4 py-4">
+          <div className="space-y-4">
           <div>
             <div className="mb-1.5 text-xs" style={{ color: "var(--cs-text-secondary)" }}>
               {t("settings.notifications.remote.provider")}
@@ -475,7 +443,7 @@ export function NotificationsPage() {
             />
           </div>
           {!credentialStatus?.secureStorageAvailable && !credentialLoading && (
-            <div className="text-xs" style={{ color: "#d99b2b" }}>
+            <div className="app-settings-warning px-3 py-2 text-xs">
               {t("settings.notifications.feishu.secureStorageUnavailable")}
             </div>
           )}

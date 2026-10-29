@@ -1,3 +1,6 @@
+import { BottomRunnerPanel } from "@/components/bottomRunner/BottomRunnerPanel";
+import { useBottomRunnerStore } from "@/store/slices/bottomRunner";
+import { closeRunnerTab, findRunnerTab } from "@/store/slices/bottomRunnerRuntime";
 import { useShortcutStore } from "@/store/slices/shortcutSlice";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Layout, message, Spin } from "antd";
@@ -1104,6 +1107,15 @@ function AppLayout() {
   useKeyboardShortcuts({
     onNewSession: handleNewSession,
     onToggleSidebar: handleToggleSidebar,
+    onRequestCloseRunnerTab: () => {
+      if (!currentProject) return;
+      const runner = useBottomRunnerStore.getState();
+      const tab = runner.tabsByProject[currentProject.path]?.find((item) => item.id === runner.activeTabIdByProject[currentProject.path]);
+      if (tab) void closeRunnerTab(tab).catch(console.error);
+    },
+    onToggleBottomRunner: () => {
+      if (windowMode === "project" && currentProject) useBottomRunnerStore.getState().toggleOpen();
+    },
     onGlobalTextSearch: handleOpenGlobalTextSearch,
     onRequestCloseTab: (tabId) => {
       void handleRequestCloseTab(tabId);
@@ -1406,6 +1418,11 @@ function AppLayout() {
         .getState()
         .projectSessions[projectPath]
         ?.find((session) => session.id === sessionId);
+      if (targetSession?.presentation === "bottom-runner") {
+        const tab = findRunnerTab(sessionId);
+        if (tab) useBottomRunnerStore.getState().activateTab(projectPath, tab.id);
+        return;
+      }
       if (targetSession?.presentation === "auxiliary") {
         openAuxiliarySession({
           sessionId: targetSession.id,
@@ -1469,7 +1486,10 @@ function AppLayout() {
         read: false,
         observedAtDelivery: false,
       };
+      // Runner 的结果只更新专属标签和状态胶囊，不进入主工作区注意力/通知管道。
       const storeState = useAppStore.getState();
+      if (findRunnerTab(normalized.sessionId) || storeState.projectSessions[normalized.projectPath]
+        ?.some((item) => item.id === normalized.sessionId && item.presentation === "bottom-runner")) return;
       const belongsToWindow =
         storeState.currentProject?.path === normalized.projectPath ||
         storeState.sessions.some((session) => session.id === normalized.sessionId);
@@ -1909,6 +1929,7 @@ function AppLayout() {
               phase={displayVoiceState.phase}
             />
           </div>
+          {windowMode === "project" && currentProject ? <BottomRunnerPanel /> : null}
         </Content>
       </Layout>
       <StatusBar />

@@ -69,3 +69,19 @@ it("keeps tab navigation and settings actions working with custom function keys"
   press("F7", { ctrlKey: false });
   expect(mocks.app.openTab).toHaveBeenLastCalledWith("__settings__");
 });
+
+it("toggles the bottom runner using the default binding without repeating", () => {
+  const onToggleBottomRunner = vi.fn();
+  useKeyboardShortcuts({ onToggleBottomRunner });
+  expect(press("j").defaultPrevented).toBe(true);
+  press("j", { repeat: true });
+  expect(onToggleBottomRunner).toHaveBeenCalledTimes(1);
+});
+it("uses a customized bottom runner binding", () => {
+  mocks.shortcuts.overrides = { toggleBottomRunner: "Alt+F12" };
+  const onToggleBottomRunner = vi.fn();
+  useKeyboardShortcuts({ onToggleBottomRunner });
+  press("j");
+  press("F12", { ctrlKey: false, altKey: true });
+  expect(onToggleBottomRunner).toHaveBeenCalledTimes(1);
+});

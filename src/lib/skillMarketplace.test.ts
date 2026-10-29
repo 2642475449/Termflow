@@ -27,19 +27,34 @@ it("groups discovery cards by their purpose and keeps all results available", ()
   expect(filterMarketplaceCategory(skills, "design")).toEqual([skills[1]]);
 });
 
-it("builds category previews from the entire catalog rather than the first mixed page", () => {
+it("keeps featured groups fixed and paginates categories and the full leaderboard", () => {
   const skill = (slug: string) => ({ repository: "owner/skills", slug, name: slug, description: "", installs: null });
   const skills = [skill("agent-browser"), ...Array.from({ length: 30 }, (_, i) => skill(`find-skills-${i}`)),
     ...Array.from({ length: 30 }, (_, i) => skill(`react-${i}`))];
+  const first = marketplaceBrowseView(skills, "all", 1);
+  const development = skills.filter((entry) => marketplaceCategory(entry) === "development");
+  const productivity = skills.filter((entry) => marketplaceCategory(entry) === "productivity");
+  expect(first.overview).toBe(true);
+  expect(first.sections.map((section) => section.category)).toEqual(["development", "productivity"]);
+  expect(first.sections[0].skills).toEqual(development.slice(0, 6));
+  expect(first.sections[1].skills).toEqual(productivity.slice(0, 6));
+  expect(first.hasMore).toBe(false);
+  const second = marketplaceBrowseView(skills, "all", 2);
+  expect(second.sections).toEqual(first.sections);
   const view = marketplaceBrowseView(skills, "all", 8);
-  expect(view.overview).toBe(true);
   expect(view.counts).toMatchObject({ all: 61, development: 31, productivity: 30 });
-  expect(view.sections.find((section) => section.category === "development")).toMatchObject({ total: 31, skills: skills.filter((entry) => marketplaceCategory(entry) === "development").slice(0, 6) });
-  expect(view.sections.every((section) => section.skills.length === 6)).toBe(true);
+  expect(view.sections[0].skills).toEqual(development.slice(0, 6));
+  expect(view.sections[1].skills).toEqual(productivity.slice(0, 6));
+  expect(view.page).toBe(1);
+  expect(view.hasMore).toBe(false);
   const category = marketplaceBrowseView(skills, "development", 2);
-  expect(category).toMatchObject({ overview: false, total: 31, page: 2, pageSize: 24 });
+  expect(category).toMatchObject({ total: 31, page: 2, pageSize: 24, hasMore: false });
   expect(category.sections).toHaveLength(1);
-  expect(category.sections[0].skills).toEqual(skills.filter((entry) => marketplaceCategory(entry) === "development").slice(24));
+  expect(category.sections[0].skills).toEqual(development.slice(24));
+  const leaderboard = marketplaceBrowseView(skills, "all", 2, "leaderboard");
+  expect(leaderboard.overview).toBe(false);
+  expect(leaderboard.sections[0].skills).toEqual(skills.slice(24, 48));
+  expect(leaderboard.hasMore).toBe(true);
   expect(marketplaceBrowseView(skills, "development", 8).page).toBe(2);
   expect(marketplaceBrowseView(skills, "data", 2)).toMatchObject({ total: 0, page: 1, sections: [] });
 });

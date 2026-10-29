@@ -207,6 +207,7 @@ export function QuickCommandsPage() {
           <Input
             prefix={<SearchOutlined style={{ color: "var(--cs-text-tertiary)", fontSize: 12 }} />}
             placeholder={t("quickCommands.searchPlaceholder")}
+            aria-label={t("quickCommands.searchPlaceholder")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             size="small"
@@ -249,15 +250,11 @@ export function QuickCommandsPage() {
             style={{ marginTop: 48 }}
           />
         ) : (
-          <div className="flex flex-col gap-1">
+          <div className="app-settings-list">
             {filteredCommands.map((cmd) => (
               <div
                 key={JSON.stringify([cmd.scope, cmd.id])}
-                className="flex items-center gap-3 px-3 py-2 rounded transition-colors"
-                style={{
-                  background: "var(--cs-bg-card)",
-                  border: "1px solid var(--cs-border-secondary)",
-                }}
+                className="app-settings-resource-row"
               >
                 {cmd.action === "agent-prompt" ? (
                   cmd.agentId ? (
@@ -329,6 +326,7 @@ export function QuickCommandsPage() {
                     type="text"
                     size="small"
                     icon={<EditOutlined />}
+                    aria-label={`${t("common.edit")} ${cmd.label}`}
                     onClick={() => openEditDialog(cmd)}
                   />
                   <Button
@@ -336,6 +334,7 @@ export function QuickCommandsPage() {
                     size="small"
                     danger
                     icon={<DeleteOutlined />}
+                    aria-label={`${t("common.delete")} ${cmd.label}`}
                     onClick={() => deleteCommand(cmd)}
                   />
                 </div>

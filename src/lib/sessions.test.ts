@@ -107,3 +107,9 @@ describe("persisted session history", () => {
     });
   });
 });
+
+it("excludes bottom-runner presentations from both history and persisted project snapshots", () => {
+  const runner = session({ id: "runner", presentation: "bottom-runner" });
+  expect(isSessionVisibleInHistory(runner)).toBe(false);
+  expect(toPersistedProjectSessions({ A: [runner] })).toEqual({ A: [] });
+});

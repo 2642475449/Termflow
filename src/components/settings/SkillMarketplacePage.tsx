@@ -1,12 +1,13 @@
 import { lazy, Suspense, useEffect, useRef } from "react";
 import { ArrowLeftOutlined, CopyOutlined, EyeOutlined, GithubOutlined, GlobalOutlined, LinkOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
-import { Alert, Avatar, Button, Empty, Input, Pagination, Spin, message } from "antd";
+import { Alert, Avatar, Button, Empty, Input, Spin, message } from "antd";
 import { useTranslation } from "react-i18next";
 import { openExternalUrl } from "@/lib/api";
 import { MARKETPLACE_CATEGORIES, marketplaceBrowseView, marketplaceInstallCommand, marketplaceDetailErrorKind, marketplaceRepositoryUrl, marketplaceSkillKey, marketplaceSkillUrl, marketplaceIsGitHubSource } from "@/lib/skillMarketplace";
 import { skillMarkdownBody } from "@/lib/skills";
 import { useSkillMarketplaceStore } from "@/store/slices/skillMarketplaceSlice";
 import { SkillMarketplaceSkeleton } from "./SkillMarketplaceSkeleton";
+import { SettingsPageHeader } from "./SettingsPageHeader";
 
 const MarkdownPreview = lazy(() => import("@/components/markdown/MarkdownPreview"));
 
@@ -25,14 +26,16 @@ export default function SkillMarketplacePage({ isActive }: Props) {
   const summaryLoadingKeys = new Set(market.summaryLoadingKeys);
   const detailErrorKind = marketplaceDetailErrorKind(market.detailError);
   const installCommand = market.selected ? marketplaceInstallCommand(market.selected) : null;
-  const view = marketplaceBrowseView(market.results?.skills ?? [], market.category, market.page);
+  const view = marketplaceBrowseView(market.results?.skills ?? [], market.category, market.page, isSearch ? "leaderboard" : market.viewMode);
+  const canGoNext = view.hasMore || (!isSearch && market.results?.nextPage != null);
+  const navigationBusy = market.loading || market.loadingMore;
   const visible = view.sections.flatMap((section) => section.skills);
   const visibleKey = visible.map(marketplaceSkillKey).join("\n");
   const formatInstalls = (count: number) => new Intl.NumberFormat(i18n.language, { notation: "compact", maximumFractionDigits: 1 }).format(count);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: 0 });
-  }, [market.category, market.page]);
+    scrollRef.current?.scrollTo({ top: market.selected ? 0 : useSkillMarketplaceStore.getState().listScrollTop });
+  }, [market.category, market.query, market.page, market.viewMode, market.selected]);
 
   useEffect(() => {
     if (!isActive) return;
@@ -55,13 +58,26 @@ export default function SkillMarketplacePage({ isActive }: Props) {
     catch (reason) { message.error(t("settings.skills.operationFailed", { reason: String(reason) })); }
   }
 
+  function previewSkill(skill: (typeof visible)[number]) {
+    market.setListScrollTop(scrollRef.current?.scrollTop ?? 0);
+    void market.selectSkill(skill);
+  }
+
+  const pagination = <nav className="app-skill-market-pagination" aria-label={t("settings.skillMarket.pagination")}>
+    <span className="app-skills-muted">{t("settings.skillMarket.pageLabel", { page: view.page })}</span>
+    <div className="flex items-center gap-2">
+      <Button disabled={view.page <= 1 || navigationBusy} onClick={() => market.setPage(view.page - 1)}>{t("settings.skillMarket.previousPage")}</Button>
+      <Button loading={market.loadingMore} disabled={!canGoNext || market.loading || !!market.error}
+        onClick={() => void market.nextPage()}>{t("settings.skillMarket.nextPage")}</Button>
+    </div>
+  </nav>;
+
   return <div ref={scrollRef} className="app-skill-market-page app-skills-library h-full overflow-auto">
     <div className="app-skill-market-page-inner">
-      <div className="app-skills-toolbar">
-        <div><h2 className="app-skills-title">{t("settings.skillMarket.title")}</h2>
-          <p className="app-skills-secondary text-xs mt-1">{t("settings.skillMarket.description")}</p></div>
-        {!market.selected && <Button icon={<ReloadOutlined spin={market.loading} />} disabled={market.loading && !market.loadingSlow} onClick={() => void market.search(true)}>{t("common.refresh")}</Button>}
-      </div>
+      <SettingsPageHeader title={t("settings.skillMarket.title")} description={t("settings.skillMarket.description")}
+        actions={!market.selected && <div className="flex items-center gap-2">
+          <Button icon={<ReloadOutlined spin={market.loading} />} disabled={market.loading && !market.loadingSlow} onClick={() => void market.search(true)}>{t("common.refresh")}</Button>
+        </div>} />
     {market.selected ? <div>
       <Button type="text" className="mb-4" icon={<ArrowLeftOutlined />} onClick={() => void market.selectSkill(null)}>{t("settings.skillMarket.back")}</Button>
       <h3 className="font-semibold text-lg">{detail?.skill.name ?? market.selected.name}</h3>
@@ -91,23 +107,28 @@ export default function SkillMarketplacePage({ isActive }: Props) {
           <Button type="link" className="!px-0" icon={<LinkOutlined />} onClick={() => market.selected && void openSource(marketplaceSkillUrl(market.selected))}>{t("settings.skillMarket.viewListing")}</Button>
           {detail ? <>
             <Button type="link" className="!px-0" icon={<LinkOutlined />} onClick={() => void openSource(detail.sourceUrl)}>{t("settings.skillMarket.viewSource")}</Button>
-            <details className="mt-3">
+            {!detail.previewOnly && <details className="mt-3">
               <summary className="app-skills-secondary text-xs cursor-pointer">{t("settings.skillMarket.resourceFiles")} ({detail.fileCount})</summary>
               <ul className="max-h-40 overflow-y-auto mt-2">{detail.files.map((path) => <li className="app-skills-path" key={path}>{path}</li>)}</ul>
-            </details>
+            </details>}
           </> : marketplaceIsGitHubSource(market.selected) && <Button type="link" className="!px-0" icon={<LinkOutlined />} onClick={() => market.selected && void openSource(marketplaceRepositoryUrl(market.selected))}>{t("settings.skillMarket.viewRepository")}</Button>}
         </aside>
       </div>
     </div> : <div>
       <div className="app-skill-market-controls">
-        <nav className="app-skill-market-categories" aria-label={t("settings.skillMarket.categoryFilter")}>
-          {MARKETPLACE_CATEGORIES.map((category) => <button key={category} type="button" className="app-skill-market-category"
-            aria-pressed={market.category === category} title={t("settings.skillMarket.loadedCount", { count: view.counts[category] })} onClick={() => market.setCategory(category)}>{t(`settings.skillMarket.categories.${category}`)}{market.results && <span className="ml-1">{view.counts[category]}</span>}</button>)}
-        </nav>
+        {!isSearch && <nav className="app-skill-market-categories" aria-label={t("settings.skillMarket.categoryFilter")}>
+          <button type="button" className="app-skill-market-category" aria-pressed={market.category === "all" && market.viewMode === "featured"}
+            onClick={() => market.setViewMode("featured")}>{t("settings.skillMarket.featured")}</button>
+          <button type="button" className="app-skill-market-category" aria-pressed={market.category === "all" && market.viewMode === "leaderboard"}
+            onClick={() => market.setViewMode("leaderboard")}>{t("settings.skillMarket.leaderboard")}</button>
+          {MARKETPLACE_CATEGORIES.filter((category) => category !== "all").map((category) => <button key={category} type="button" className="app-skill-market-category"
+            aria-pressed={market.category === category} onClick={() => market.setCategory(category)}>{t(`settings.skillMarket.categories.${category}`)}</button>)}
+        </nav>}
         <Input className="app-skills-search" allowClear prefix={<SearchOutlined />} placeholder={t("settings.skillMarket.searchPlaceholder")}
           maxLength={200} value={market.query} onChange={(event) => market.setQuery(event.target.value)} />
       </div>
-      {market.results && <p className="app-skills-secondary text-xs mb-4">{t("settings.skillMarket.loadedCount", { count: market.results.skills.length })} · {t("settings.skillMarket.categoryHint")}</p>}
+      {isSearch && <p className="app-skills-secondary text-xs mb-4">{t("settings.skillMarket.remoteSearchHint")}</p>}
+      {!view.overview && <div className="app-skill-market-pagination-sticky">{pagination}</div>}
       {listLoading && market.loadingSlow && <div className="app-skill-market-loading-status" role="status" aria-live="polite">
         <div className="app-skill-market-loading-slow">
           <span>{t("settings.skillMarket.loadingSlow")}</span>
@@ -117,22 +138,23 @@ export default function SkillMarketplacePage({ isActive }: Props) {
       {market.error && <Alert type="error" showIcon className="mb-3" message={t("settings.skillMarket.loadFailed")}
         description={market.error === "marketplace_request_timeout" ? t("settings.skillMarket.requestTimedOut") : market.error}
         action={<Button onClick={() => void market.search(true)}>{t("settings.skillMarket.retry")}</Button>} />}
-      <div className="app-skill-market-results" aria-busy={listLoading}>
-        {initialLoading ? <SkillMarketplaceSkeleton grouped={market.category === "all"} /> : market.results && !view.total ?
+      {market.loadMoreError && <Alert type="error" showIcon className="mb-3" message={t("settings.skillMarket.loadMoreFailed")} description={market.loadMoreError}
+        action={<Button loading={market.loadingMore} onClick={() => void market.nextPage()}>{t("settings.skillMarket.retry")}</Button>} />}
+      <div className="app-skill-market-results" aria-busy={listLoading || market.loadingMore}>
+        {initialLoading ? <SkillMarketplaceSkeleton grouped={view.overview} /> : market.results && !view.total ?
           <div className="py-12"><Empty description={t("settings.skillMarket.empty")} /></div> :
           market.results && <div>
-            <div className="app-skill-market-result-heading">{t(`settings.skillMarket.${isSearch ? "searchResults" : "popular"}`)}
-              <span className="app-skills-muted ml-2">{t("settings.skillMarket.loadedCount", { count: view.total })}</span></div>
             {view.sections.map((group) => <section className="app-skill-market-section" key={group.category}>
               <div className="flex items-center justify-between gap-3">
-                <h3 className="app-skill-market-section-title">{t(`settings.skillMarket.categories.${group.category}`)}<span className="app-skills-muted ml-2">{t("settings.skillMarket.loadedCount", { count: group.total })}</span></h3>
-                {view.overview && group.total > group.skills.length && <Button type="link" onClick={() => market.setCategory(group.category)}>{t("settings.skillMarket.viewCategory")}</Button>}
+                <h3 className="app-skill-market-section-title">{isSearch ? t("settings.skillMarket.searchResults") : group.category === "all" ? t("settings.skillMarket.leaderboard")
+                  : view.overview ? t(`settings.skillMarket.categories.${group.category}`) : t("settings.skillMarket.popularCategory", { category: t(`settings.skillMarket.categories.${group.category}`) })}</h3>
+                {view.overview && <Button type="link" onClick={() => market.setCategory(group.category)}>{t("settings.skillMarket.viewCategory")}</Button>}
               </div>
               <div className="app-skill-market-grid">{group.skills.map((skill) => <article key={marketplaceSkillKey(skill)} className="app-skill-market-card">
                 <Avatar className="app-skill-market-avatar" shape="square" size={48}
                   src={marketplaceIsGitHubSource(skill) ? `https://github.com/${encodeURIComponent(skill.repository.split("/")[0])}.png?size=96` : undefined} icon={marketplaceIsGitHubSource(skill) ? <GithubOutlined /> : <GlobalOutlined />} />
                 <button type="button" className="app-skill-market-card-main" aria-label={t("settings.skillMarket.previewSkill", { name: skill.name })}
-                  onClick={() => void market.selectSkill(skill)}>
+                  onClick={() => previewSkill(skill)}>
                   <span className="app-skill-market-card-title" title={skill.name}>{skill.name}</span>
                   {!skill.description && summaryLoadingKeys.has(marketplaceSkillKey(skill)) ? <span className="app-skill-market-description-placeholder" aria-label={t("settings.skillMarket.loadingDescription")}>
                     <span className="app-skill-market-skeleton-block app-skill-market-skeleton-line" />
@@ -141,17 +163,13 @@ export default function SkillMarketplacePage({ isActive }: Props) {
                   <span className="app-skill-market-card-meta" title={skill.repository}>{skill.repository}
                     {skill.installs !== null && <> · {t("settings.skillMarket.installCount", { value: formatInstalls(skill.installs) })}</>}</span>
                 </button>
-                <Button size="small" className="app-skill-market-card-action" icon={<EyeOutlined />} onClick={() => void market.selectSkill(skill)}>{t("settings.skillMarket.preview")}</Button>
+                <Button size="small" className="app-skill-market-card-action" icon={<EyeOutlined />} onClick={() => previewSkill(skill)}>{t("settings.skillMarket.preview")}</Button>
               </article>)}</div>
             </section>)}
-            {!view.overview && view.total > view.pageSize && <div className="flex justify-end mt-6"><Pagination current={view.page} total={view.total} pageSize={view.pageSize}
-              showSizeChanger={false} onChange={market.setPage} /></div>}
           </div>}
       </div>
-      {market.loadMoreError && <Alert type="error" showIcon className="mt-4" message={t("settings.skillMarket.loadMoreFailed")} description={market.loadMoreError}
-        action={<Button loading={market.loadingMore} onClick={() => void market.loadMore()}>{t("settings.skillMarket.retry")}</Button>} />}
-      {!isSearch && market.results?.nextPage != null && <div className="flex justify-center mt-6"><Button loading={market.loadingMore} disabled={market.loading} onClick={() => void market.loadMore()}>{t("settings.skillMarket.loadMore")}</Button></div>}
-      {market.results?.limited && <p className="app-skills-muted text-xs mt-3">{t(`settings.skillMarket.${isSearch ? "limited" : "browseLimited"}`)}</p>}
+      {!view.overview && pagination}
+      {isSearch && market.results?.limited && <p className="app-skills-muted text-xs mt-3">{t("settings.skillMarket.limited")}</p>}
     </div>}
     </div>
   </div>;

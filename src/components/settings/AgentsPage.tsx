@@ -134,13 +134,13 @@ export function AgentsPage() {
   }, [t]);
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="app-settings-page">
       <SettingsPageHeader
         title={t("settings.agents.title")}
         actions={<Button icon={<ReloadOutlined />} loading={loading || quotaLoading || versionLoading} onClick={() => void refresh(true)}>{t("settings.agents.refresh")}</Button>}
       />
 
-      <div className="app-glass-card mb-4 rounded-xl px-4 py-3" style={{ background: "var(--cs-bg-card)", border: "1px solid var(--cs-border-card)" }}>
+      <div className="app-settings-summary">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>{t("settings.agents.defaultTitle")}</div>
           {checkedAt ? <span className="text-xs" style={{ color: "var(--cs-text-tertiary)" }}>{t("settings.agents.checkedAt", { time: new Intl.DateTimeFormat(i18n.resolvedLanguage, { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(checkedAt) })}</span> : null}
@@ -154,7 +154,7 @@ export function AgentsPage() {
       </div>
 
       {loading && agents.length === 0 ? <div className="flex min-h-64 items-center justify-center"><Spin /></div> : (
-        <div className="app-glass-card overflow-x-auto rounded-xl" style={{ background: "var(--cs-bg-card)", border: "1px solid var(--cs-border-card)", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+        <div className="app-settings-list app-agent-list">
           {agents.map((agent, index) => (
             <AgentRow
               key={agent.id}
@@ -190,37 +190,25 @@ function AgentRow({ agent, quota, quotaLoading, isDefault, isLast, onOpen, onSet
   const definition = AGENT_DEFINITIONS[agent.id];
   const version = formatAgentVersion(agent.version, definition.displayName);
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      className="grid min-h-[78px] min-w-[820px] cursor-pointer items-center gap-3 px-4 py-3 transition-colors hover:bg-[var(--cs-bg-hover)]"
-      style={{ gridTemplateColumns: "minmax(230px,1.2fr) 108px minmax(220px,1fr) 156px", borderBottom: isLast ? "none" : "1px solid var(--cs-border-card)" }}
-      onClick={onOpen}
-      onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(); } }}
-    >
-      <div className="flex min-w-0 items-center gap-3">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl" style={{ background: `${definition.brandColor}16`, border: `1px solid ${definition.brandColor}32` }}><AgentIcon agentId={agent.id} size={25} /></div>
-        <div className="min-w-0">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="truncate text-base font-semibold" style={{ color: "var(--cs-text-primary)" }}>{definition.displayName}</span>
-            <button
-              type="button"
-              className="shrink-0 border-0 bg-transparent p-0 text-xs text-[var(--cs-primary)] hover:underline"
-              onClick={(event) => { event.stopPropagation(); onOpen(); }}
-              onKeyDown={(event) => event.stopPropagation()}
-            >
-              {t("settings.agents.viewDetails")}
-            </button>
-          </div>
-          <div className="flex min-w-0 items-center gap-1.5 text-xs" style={{ color: "var(--cs-text-tertiary)" }}>
-            <code className="truncate">{definition.command}</code>{version ? <><span>·</span><span className="truncate">{version}</span></> : null}
-          </div>
-          <div className="mt-1"><AgentVersionStatus agent={agent} /></div>
-        </div>
+    <div className={`app-agent-row ${isLast ? "app-agent-row--last" : ""}`}>
+      <div className="min-w-0">
+        <button type="button" className="app-agent-identity" onClick={onOpen} aria-haspopup="dialog"
+          aria-label={`${definition.displayName} ${t("settings.agents.viewDetails")}`}>
+          <AgentIcon agentId={agent.id} size={25} />
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-semibold">{definition.displayName}</span>
+            <span className="block truncate text-xs text-[var(--cs-text-secondary)]">
+              <code>{definition.command}</code>{version ? ` · ${version}` : ""}
+            </span>
+          </span>
+        </button>
+        <div className="app-agent-version"><AgentVersionStatus agent={agent} /></div>
       </div>
       <Tag icon={agent.installed ? <CheckCircleFilled /> : <CloseCircleFilled />} color={agent.installed ? "success" : "default"} className="m-0 w-fit shrink-0">{t(agent.installed ? "settings.agents.installed" : "settings.agents.notInstalled")}</Tag>
-      <AgentQuota agent={agent} quota={quota} loading={quotaLoading} />
-      <div className="justify-self-end" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+      <div className="app-agent-quota">
+        <AgentQuota agent={agent} quota={quota} loading={quotaLoading} />
+      </div>
+      <div className="app-agent-actions justify-self-end">
         {!agent.installed ? (
           definition.installCommands.length > 1 ? (
             <Dropdown trigger={["click"]} menu={{ items: definition.installCommands.map(({ shell }) => ({ key: shell, label: shell })), onClick: ({ key }) => { const selected = definition.installCommands.find(({ shell }) => shell === key); if (selected) onCopyInstall(selected.command, selected.shell); } }}>
