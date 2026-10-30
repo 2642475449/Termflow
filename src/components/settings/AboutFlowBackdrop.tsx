@@ -13,7 +13,6 @@ const ABOUT_FLOW_FRAGMENT_SHADER = `
 
   uniform vec2 uResolution;
   uniform float uTime;
-  uniform float uEnergy;
   uniform vec3 uBaseColor;
   uniform vec3 uPaleColor;
   uniform vec3 uVividColor;
@@ -53,43 +52,65 @@ const ABOUT_FLOW_FRAGMENT_SHADER = `
     return value;
   }
 
+  vec2 vortex(vec2 point, vec2 centre, float radius, float spin) {
+    vec2 offset = point - centre;
+    float angle = exp(-dot(offset, offset) / (radius * radius)) * spin;
+    float sine = sin(angle);
+    float cosine = cos(angle);
+    return centre + mat2(cosine, -sine, sine, cosine) * offset;
+  }
+
   void main() {
     vec2 uv = gl_FragCoord.xy / uResolution;
-    vec2 point = uv * vec2(uResolution.x / uResolution.y, 1.0) * 1.62;
-    float time = uTime;
+    float aspect = uResolution.x / uResolution.y;
+    float time = uTime * 0.48;
+    vec2 point = uv * vec2(aspect, 1.0) * 1.62;
+
+    // 不同尺度的旋涡叠在缓慢的底流上，让纹理卷曲、分叉，而非周期性排列。
+    point = vortex(point, vec2(aspect * 0.67, 0.58) * 1.62,
+      1.38, 1.05 + 0.38 * sin(time * 0.31));
+    point = vortex(point, vec2(aspect * 0.88, 0.22) * 1.62,
+      0.72, -1.4 + 0.32 * cos(time * 0.24));
 
     vec2 flow = vec2(
-      fbm(point + time * vec2(0.58, 0.18)),
-      fbm(point + time * vec2(-0.38, 0.48) + 5.2)
+      fbm(point + time * vec2(0.24, 0.08)),
+      fbm(point + time * vec2(-0.16, 0.2) + 5.2)
     );
     vec2 eddy = vec2(
-      fbm(point + 2.25 * flow + time * vec2(0.31, -0.42) + 1.7),
-      fbm(point + 2.25 * flow + time * vec2(-0.22, 0.34) + 8.3)
+      fbm(point + 2.45 * flow + time * vec2(0.13, -0.18) + 1.7),
+      fbm(point + 2.45 * flow + time * vec2(-0.1, 0.15) + 8.3)
     );
-    float cloud = fbm(point + 2.55 * eddy);
+    float cloud = fbm(point + 3.1 * eddy);
+    float ink = cloud + 0.42 * eddy.x + 0.18 * flow.y;
+    float darkSurface = 1.0 - smoothstep(0.16, 0.4,
+      dot(uBaseColor, vec3(0.2126, 0.7152, 0.0722)));
+    vec3 radiance = min(vec3(1.0), uHighlightColor * (1.0 + darkSurface * 0.28));
 
-    vec3 fluid = mix(uPaleColor, uCobaltColor, smoothstep(0.18, 0.64, cloud));
-    fluid = mix(fluid, uVividColor, smoothstep(0.48, 0.9, flow.x));
-    fluid = mix(fluid, uDeepColor, smoothstep(0.58, 0.94, eddy.y));
+    vec3 fluid = mix(uPaleColor, uCobaltColor, smoothstep(0.2, 0.68, cloud));
+    fluid = mix(fluid, uVividColor, smoothstep(0.45, 0.88, flow.x) * 0.72);
+    fluid = mix(fluid, uDeepColor, smoothstep(0.46, 0.89, eddy.y) * 0.84);
 
-    float folded = abs((cloud + 0.44 * eddy.x + 0.18 * flow.y) - 0.73);
-    float vein = 1.0 - smoothstep(0.055, 0.2, folded);
-    fluid = mix(fluid, uHighlightColor, vein * 0.62);
-    fluid += 0.14 * eddy.x * uPaleColor;
-    fluid = mix(fluid, fluid * fluid * 1.32 + fluid * 0.1, uEnergy * 0.48);
+    // 大片乳白雾气、柔亮的卷边与细密光脉分开着色，保留流体内部的深度。
+    float pearl = 1.0 - smoothstep(0.035, 0.17, abs(ink - 0.76));
+    fluid = mix(fluid, radiance, pearl * 0.78);
+    float veinDistance = abs(sin(ink * 11.5 + flow.x * 0.9));
+    float veinMask = smoothstep(0.27, 0.72, eddy.x) * smoothstep(0.26, 0.64, cloud);
+    float filament = (1.0 - smoothstep(0.04, 0.24, veinDistance)) * veinMask;
+    float aura = (1.0 - smoothstep(0.1, 0.58, veinDistance)) * veinMask;
+    fluid = mix(fluid, uPaleColor, aura * 0.2);
+    fluid = mix(fluid, radiance, filament * 0.44);
 
-    // Preserve a clean reading area on the left while avoiding a straight transition boundary.
-    float transitionWarp = uv.x + 0.22 * (flow.y - 0.5) + 0.12 * (eddy.x - 0.5);
-    float colourZone = smoothstep(0.18, 0.92, transitionWarp);
-    float density = smoothstep(0.22, 0.82, cloud + 0.28 * eddy.x);
-    float pigment = clamp(colourZone * (0.28 + 0.88 * density), 0.0, 1.0);
-    float rightDepth = smoothstep(0.58, 1.0, uv.x + 0.1 * eddy.y);
-    fluid = mix(fluid, uDeepColor, rightDepth * 0.34);
+    float reveal = uv.x + 0.2 * (flow.y - 0.5) + 0.14 * (eddy.x - 0.5);
+    float compact = 1.0 - smoothstep(1.7, 3.0, aspect);
+    float colourZone = smoothstep(mix(0.16, 0.5, compact), mix(0.9, 1.03, compact), reveal);
+    float density = smoothstep(0.2, 0.82, cloud + 0.3 * eddy.x);
+    float pigment = clamp(colourZone * (0.3 + 0.94 * density), 0.0, 1.0);
+    float rightDepth = smoothstep(0.6, 1.0, uv.x + 0.12 * eddy.y);
+    fluid = mix(fluid, uDeepColor, rightDepth * 0.3 * (1.0 - pearl * 0.5));
 
     vec3 colour = mix(uBaseColor, fluid, pigment);
-    float topGlass = smoothstep(0.56, 1.0, uv.y) * (1.0 - pigment * 0.7);
-    colour = mix(colour, uBaseColor, topGlass * 0.34);
-
+    // 微弱的静态颗粒只用于消除平滑色阶，不随时间闪烁。
+    colour += (hash(gl_FragCoord.xy) - 0.5) * 0.003 * pigment;
     gl_FragColor = vec4(colour, 1.0);
   }
 `;
@@ -154,7 +175,7 @@ const parseAboutFlowPalette = (palette: AboutFlowHexPalette): AboutFlowPalette |
 export function AboutFlowBackdrop({
   palette,
   animate = true,
-  preserveDrawingBuffer = true,
+  preserveDrawingBuffer = false,
 }: {
   palette?: AboutFlowHexPalette;
   animate?: boolean;
@@ -233,7 +254,6 @@ export function AboutFlowBackdrop({
     const position = gl.getAttribLocation(program, "aPosition");
     const resolution = gl.getUniformLocation(program, "uResolution");
     const time = gl.getUniformLocation(program, "uTime");
-    const energy = gl.getUniformLocation(program, "uEnergy");
     const paletteUniforms = {
       base: gl.getUniformLocation(program, "uBaseColor"),
       pale: gl.getUniformLocation(program, "uPaleColor"),
@@ -249,10 +269,8 @@ export function AboutFlowBackdrop({
     const targetFrameInterval = 1000 / 30;
     let animationFrame = 0;
     let flowTime = 8.4;
-    let stirEnergy = 0;
     let previousFrame = performance.now();
     let previousDraw = 0;
-    let previousPointer: { x: number; y: number } | null = null;
     let isVisible = true;
 
     const applyPalette = (palette: AboutFlowPalette) => {
@@ -265,7 +283,7 @@ export function AboutFlowBackdrop({
 
     const resize = () => {
       const bounds = canvas.getBoundingClientRect();
-      const dpr = Math.min(window.devicePixelRatio || 1, 1);
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
       const width = Math.max(1, Math.round(bounds.width * dpr));
       const height = Math.max(1, Math.round(bounds.height * dpr));
       if (canvas.width !== width || canvas.height !== height) {
@@ -294,14 +312,12 @@ export function AboutFlowBackdrop({
       previousFrame = now;
 
       if (shouldAnimate) {
-        stirEnergy *= Math.exp(-delta * 1.55);
-        flowTime += delta * (0.25 + stirEnergy * 0.82);
+        flowTime += delta * 0.42;
       }
 
       gl.useProgram(program);
       gl.uniform2f(resolution, canvas.width, canvas.height);
       gl.uniform1f(time, flowTime);
-      gl.uniform1f(energy, stirEnergy);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       canvas.style.visibility = "visible";
 
@@ -313,6 +329,7 @@ export function AboutFlowBackdrop({
     const restart = () => {
       window.cancelAnimationFrame(animationFrame);
       previousFrame = performance.now();
+      previousDraw = 0;
       if (isVisible) draw(previousFrame);
     };
 
@@ -324,19 +341,6 @@ export function AboutFlowBackdrop({
       restart();
     };
 
-    const handlePointerMove = (event: PointerEvent) => {
-      if (!animate || motionQuery.matches) return;
-      if (previousPointer) {
-        const distance = Math.hypot(event.clientX - previousPointer.x, event.clientY - previousPointer.y);
-        stirEnergy = Math.min(1, stirEnergy + distance * 0.012);
-      }
-      previousPointer = { x: event.clientX, y: event.clientY };
-    };
-
-    const clearPointer = () => {
-      previousPointer = null;
-    };
-
     const handleDocumentVisibilityChange = () => {
       if (document.hidden) {
         window.cancelAnimationFrame(animationFrame);
@@ -345,7 +349,8 @@ export function AboutFlowBackdrop({
       }
     };
 
-    const resizeObserver = new ResizeObserver(resize);
+    // 静态模式也要在调整大小后重绘，否则 WebGL 缓冲区清空后会留下黑色背景。
+    const resizeObserver = new ResizeObserver(restart);
     const visibilityObserver = new IntersectionObserver(([entry]) => {
       const nextVisible = entry?.isIntersecting ?? true;
       if (nextVisible === isVisible) return;
@@ -366,10 +371,6 @@ export function AboutFlowBackdrop({
     });
     motionQuery.addEventListener("change", restart);
     document.addEventListener("visibilitychange", handleDocumentVisibilityChange);
-    if (animate) {
-      card.addEventListener("pointermove", handlePointerMove);
-      card.addEventListener("pointerleave", clearPointer);
-    }
     applyPalette(initialPalette);
     restart();
 
@@ -380,30 +381,17 @@ export function AboutFlowBackdrop({
       themeObserver?.disconnect();
       motionQuery.removeEventListener("change", restart);
       document.removeEventListener("visibilitychange", handleDocumentVisibilityChange);
-      card.removeEventListener("pointermove", handlePointerMove);
-      card.removeEventListener("pointerleave", clearPointer);
       gl.deleteBuffer(buffer);
       gl.deleteProgram(program);
     };
   }, [animate, palette, preserveDrawingBuffer]);
 
-  const fallbackBackground = palette
-    ? `linear-gradient(104deg, ${palette.base} 0%, ${palette.pale} 48%, ${palette.vivid} 72%, ${palette.deep} 100%)`
-    : undefined;
-
   return (
     <div
       aria-hidden="true"
-      className="about-flow-backdrop pointer-events-none absolute inset-0 overflow-hidden"
-      style={{ background: fallbackBackground }}
+      className="app-about-flow-backdrop pointer-events-none absolute inset-0 overflow-hidden"
     >
-      <canvas ref={canvasRef} className="about-flow-canvas absolute inset-0 h-full w-full" />
-      <div
-        className="about-flow-gloss"
-        style={palette ? {
-          background: `linear-gradient(180deg, ${palette.base}3d, transparent 38%), radial-gradient(ellipse 78% 150% at 0% 50%, ${palette.base}52, ${palette.vivid}14 48%, transparent 100%)`,
-        } : undefined}
-      />
+      <canvas ref={canvasRef} className="app-about-flow-canvas absolute inset-0 h-full w-full" />
     </div>
   );
 }

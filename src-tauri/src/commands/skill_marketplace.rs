@@ -1173,6 +1173,8 @@ mod tests {
                         _ => return count,
                     }
                 };
+                // Windows accept 会继承监听套接字的非阻塞属性；请求头读取使用下方超时。
+                socket.set_nonblocking(false).expect("blocking request socket");
                 socket
                     .set_read_timeout(Some(Duration::from_secs(1)))
                     .expect("read timeout");

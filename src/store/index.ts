@@ -92,6 +92,8 @@ import {
   createNetworkProxySlice,
 } from "./slices/networkProxy";
 import { createVoicePolishSlice } from "./slices/voicePolish";
+import { createAsrLanguageSlice } from "./slices/asrLanguage";
+import { normalizeAsrLanguage } from "@/lib/asrLanguage";
 import { normalizeVoicePolishProvider, normalizeVoicePolishStyle, resolveVoicePolishModel } from "@/lib/voicePolish";
 import {
   createTerminalCompletionNotificationSlice,
@@ -270,6 +272,7 @@ export function getPersistentSettingsSnapshot(): PersistentSettings {
     asrAuthMode: state.asrAuthMode,
     asrModel: state.asrModel,
     asrRegion: state.asrRegion,
+    asrLanguage: state.asrLanguage,
     voicePolishEnabled: state.voicePolishEnabled,
     voicePolishModel: state.voicePolishModel,
     voicePolishProvider: state.voicePolishProvider,
@@ -339,6 +342,7 @@ export function applyPersistentSettingsToStore(settings: PersistentSettings) {
     asrAuthMode: normalizeMimoAuthMode(settings.asrAuthMode, settings.asrApiKey),
     asrModel: normalizeAsrModel(settings.asrModel),
     asrRegion: normalizeDashScopeRegion(settings.asrRegion),
+    asrLanguage: normalizeAsrLanguage(settings.asrLanguage),
     voicePolishEnabled: settings.voicePolishEnabled ?? true,
     voicePolishProvider: normalizeVoicePolishProvider(settings.voicePolishProvider),
     voicePolishApiKey: settings.voicePolishApiKey ?? "",
@@ -699,6 +703,7 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
   return {
       ...createNetworkProxySlice((partial) => set(partial)),
       ...createVoicePolishSlice((partial) => set(partial)),
+      ...createAsrLanguageSlice((partial) => set(partial)),
       ...createTerminalCompletionNotificationSlice((partial) => set(partial)),
       ...createTerminalCompletionRuntimeSlice((partial) => set(partial), () => get()),
       windowContextReady: false,
@@ -1944,6 +1949,7 @@ function createPersistOptions(storage?: StateStorage) {
         sidebarGitChangesCollapsed: state.sidebarGitChangesCollapsed,
         sidebarGitGraphCollapsed: state.sidebarGitGraphCollapsed,
         voicePolishEnabled: state.voicePolishEnabled,
+        asrLanguage: state.asrLanguage,
         voicePolishProvider: state.voicePolishProvider,
         voicePolishModel: state.voicePolishModel,
         voicePolishApiKey: state.voicePolishApiKey,
@@ -1955,6 +1961,7 @@ function createPersistOptions(storage?: StateStorage) {
     },
     onRehydrateStorage: () => (state?: AppState) => {
       if (state) {
+        state.asrLanguage = normalizeAsrLanguage(state.asrLanguage);
         state.language = normalizeLanguageValue(state.language);
         state.windowContextReady = false;
         state.windowMode = "launcher";

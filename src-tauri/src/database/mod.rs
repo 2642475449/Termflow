@@ -165,6 +165,10 @@ fn default_asr_region() -> String {
     "beijing".into()
 }
 
+fn default_asr_language() -> String {
+    "auto".into()
+}
+
 fn default_polish_auth_mode() -> String {
     "api".into()
 }
@@ -248,6 +252,8 @@ pub struct PersistentSettingsRecord {
     pub asr_model: String,
     #[serde(default = "default_asr_region")]
     pub asr_region: String,
+    #[serde(default = "default_asr_language")]
+    pub asr_language: String,
     #[serde(default = "default_voice_polish_enabled")]
     pub voice_polish_enabled: bool,
     #[serde(default)]
@@ -316,6 +322,7 @@ impl Default for PersistentSettingsRecord {
             asr_auth_mode: default_asr_auth_mode(),
             asr_model: "mimo-v2.5-asr".into(),
             asr_region: default_asr_region(),
+            asr_language: default_asr_language(),
             voice_polish_enabled: default_voice_polish_enabled(),
             voice_polish_model: String::new(),
             voice_polish_provider: default_voice_polish_provider(),
@@ -981,6 +988,7 @@ impl Database {
             .unwrap_or_else(|| infer_asr_auth_mode(&settings.asr_api_key));
         settings.asr_model = read_setting(&conn, "voice.model")?.unwrap_or(settings.asr_model);
         settings.asr_region = read_setting(&conn, "voice.region")?.unwrap_or(settings.asr_region);
+        settings.asr_language = read_setting(&conn, "voice.language")?.unwrap_or(settings.asr_language);
         settings.voice_polish_enabled =
             read_setting(&conn, "voice.polishEnabled")?.unwrap_or(settings.voice_polish_enabled);
         settings.voice_polish_model =
@@ -1230,6 +1238,7 @@ impl Database {
         write_setting(&conn, "voice.authMode", &settings.asr_auth_mode)?;
         write_setting(&conn, "voice.model", &settings.asr_model)?;
         write_setting(&conn, "voice.region", &settings.asr_region)?;
+        write_setting(&conn, "voice.language", &settings.asr_language)?;
         write_setting(&conn, "voice.polishEnabled", &settings.voice_polish_enabled)?;
         write_setting(&conn, "voice.polishModel", &settings.voice_polish_model)?;
         write_setting(
@@ -1690,6 +1699,29 @@ mod tests {
     #[test]
     fn persistent_settings_default_to_beijing_asr_region() {
         assert_eq!(PersistentSettingsRecord::default().asr_region, "beijing");
+    }
+
+    #[test]
+    fn asr_language_round_trips_and_defaults_for_older_settings() -> Result<(), String> {
+        let database = Database::open_in_memory();
+        assert_eq!(database.load_persistent_settings()?.asr_language, "auto");
+        for language in ["zh", "en", "ja", "auto"] {
+            let settings = PersistentSettingsRecord {
+                asr_language: language.into(),
+                ..PersistentSettingsRecord::default()
+            };
+            database.save_general_persistent_settings_patch(&settings, &["asrLanguage".into()])?;
+            assert_eq!(database.load_persistent_settings()?.asr_language, language);
+        }
+        let mut legacy = serde_json::to_value(PersistentSettingsRecord::default())
+            .map_err(|error| error.to_string())?;
+        if let Some(object) = legacy.as_object_mut() {
+            object.remove("asrLanguage");
+        }
+        let restored: PersistentSettingsRecord = serde_json::from_value(legacy)
+            .map_err(|error| error.to_string())?;
+        assert_eq!(restored.asr_language, "auto");
+        Ok(())
     }
 
     #[test]

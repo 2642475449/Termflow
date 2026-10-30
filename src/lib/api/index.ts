@@ -1,4 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
+export { resolveTerminalLink } from "./terminalLinks";
+export type { TerminalLinkResolution, TerminalLinkTarget } from "./terminalLinks";
+import { getAsrLanguageContext, type AsrLanguage } from "@/lib/asrLanguage";
+import type { MimoAuthMode } from "@/lib/mimoAsr";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow, type CloseRequestedEvent } from "@tauri-apps/api/window";
 import type { UnlistenFn } from "@tauri-apps/api/event";
@@ -1334,13 +1338,27 @@ export async function isVoiceGlobalShortcutRegistered(): Promise<boolean> {
   return await invoke("is_voice_global_shortcut_registered");
 }
 
+export async function transcribeAudio(options: {
+  audioBase64: string;
+  mimeType: string;
+  model: string;
+  apiKey: string;
+  authMode: MimoAuthMode;
+}): Promise<string> {
+  return invoke<string>("transcribe_audio", options);
+}
+
 export async function startLiveAsr(
   sessionId: string,
   apiKey: string,
   model: string,
   region: string,
+  language: AsrLanguage = "auto",
 ): Promise<void> {
-  await invoke("start_live_asr", { sessionId, apiKey, model, region });
+  await invoke("start_live_asr", {
+    sessionId, apiKey, model, region,
+    languageContext: getAsrLanguageContext(language) ?? null,
+  });
 }
 
 export async function sendLiveAsrAudio(sessionId: string, audio: Uint8Array): Promise<void> {

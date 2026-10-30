@@ -9,6 +9,7 @@ import type {
   NotificationDeliveryDiagnostic,
 } from "@/lib/attentionDiagnostics";
 import type { MimoAuthMode } from "@/lib/mimoAsr";
+import type { AsrLanguage } from "@/lib/asrLanguage";
 import type { RemoteNotificationProvider } from "@/lib/remoteNotifications";
 import type { NetworkProxySlice } from "./slices/networkProxy";
 import type { TerminalCompletionNotificationSlice } from "./slices/terminalCompletionNotification";
@@ -19,6 +20,11 @@ import type { ShortcutAction, ShortcutOverrides } from "@/constants/shortcuts";
 
 export type { ProjectInfo, RecentProjectEntry } from "./utils/recentProjects";
 export type { RemoteNotificationProvider } from "@/lib/remoteNotifications";
+
+export interface AsrLanguageSlice {
+  asrLanguage: AsrLanguage;
+  setAsrLanguage: (language: AsrLanguage) => void;
+}
 
 export interface ShortcutSettingsState {
   overrides: ShortcutOverrides;
@@ -230,7 +236,8 @@ export interface AppState
   extends NetworkProxySlice,
     TerminalCompletionNotificationSlice,
     TerminalCompletionRuntimeSlice,
-    VoicePolishSlice {
+    VoicePolishSlice,
+    AsrLanguageSlice {
   windowContextReady: boolean;
   windowMode: WindowMode;
   windowLabel: string;

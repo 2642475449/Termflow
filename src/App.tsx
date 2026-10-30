@@ -128,6 +128,7 @@ function App() {
   const asrAuthMode = useAppStore((s) => s.asrAuthMode);
   const asrModel = useAppStore((s) => s.asrModel);
   const asrRegion = useAppStore((s) => s.asrRegion);
+  const asrLanguage = useAppStore((s) => s.asrLanguage);
   const voicePolishEnabled = useAppStore((s) => s.voicePolishEnabled);
   const voicePolishModel = useAppStore((s) => s.voicePolishModel);
   const voicePolishProvider = useAppStore((s) => s.voicePolishProvider);
@@ -200,6 +201,7 @@ function App() {
       asrAuthMode,
       asrModel,
       asrRegion,
+      asrLanguage,
       voicePolishEnabled,
       voicePolishModel,
       voicePolishProvider,
@@ -221,6 +223,7 @@ function App() {
       asrAuthMode,
       asrModel,
       asrRegion,
+      asrLanguage,
       voicePolishEnabled,
       voicePolishModel,
       voicePolishProvider,

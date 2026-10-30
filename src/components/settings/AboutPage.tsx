@@ -181,10 +181,8 @@ export const AboutPage: FC<AboutPageProps> = ({ onNavigate }) => {
   return (
     <div className="app-about-settings">
       {/* Hero Header */}
-      <div className="app-about-hero app-flow-surface app-glass-card relative overflow-hidden rounded-2xl">
+      <div className="app-about-hero app-flow-surface relative overflow-hidden rounded-2xl">
         <AboutFlowBackdrop />
-        <div className="app-about-hero-glow-primary pointer-events-none absolute -right-16 -top-28 h-64 w-64 rounded-full blur-3xl" />
-        <div className="app-about-hero-glow-secondary pointer-events-none absolute -bottom-24 left-1/3 h-48 w-48 rounded-full blur-3xl" />
 
         <div className="app-about-hero-content relative flex flex-col gap-6 px-6 py-7 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-center gap-4">
@@ -205,7 +203,7 @@ export const AboutPage: FC<AboutPageProps> = ({ onNavigate }) => {
             </div>
           </div>
 
-          <div className="flex shrink-0 flex-wrap gap-2">
+          <div className="app-about-hero-actions flex shrink-0 flex-wrap gap-2">
             <Button
               icon={<GlobalOutlined />}
               disabled={!ABOUT_LINKS.website}

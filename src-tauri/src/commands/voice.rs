@@ -14,7 +14,7 @@ use tokio_tungstenite::{
 const MIMO_API_CHAT_COMPLETIONS_ENDPOINT: &str = "https://api.xiaomimimo.com/v1/chat/completions";
 const MIMO_TOKEN_PLAN_CHAT_COMPLETIONS_ENDPOINT: &str =
     "https://token-plan-cn.xiaomimimo.com/v1/chat/completions";
-const DEFAULT_ASR_LANGUAGE: &str = "zh";
+const DEFAULT_ASR_LANGUAGE: &str = "auto";
 const LIVE_ASR_START_TIMEOUT: Duration = Duration::from_secs(15);
 const LIVE_ASR_MODEL: &str = "qwen-audio-3.0-asr-flash-streaming";
 
@@ -45,6 +45,7 @@ pub async fn start_live_asr(
     api_key: String,
     model: String,
     region: String,
+    language_context: Option<String>,
 ) -> Result<(), String> {
     if session_id.trim().is_empty() {
         return Err("实时语音会话 ID 不能为空".into());
@@ -92,15 +93,7 @@ pub async fn start_live_asr(
             .map_err(|error| format!("连接实时语音服务失败: {error}"))?;
         let (mut writer, mut reader) = socket.split();
         let task_id = new_live_asr_task_id();
-        let start = json!({
-            "header": { "action": "run-task", "task_id": task_id, "streaming": "duplex" },
-            "payload": {
-                "task_group": "audio", "task": "asr", "function": "recognition",
-                "model": LIVE_ASR_MODEL,
-                "parameters": { "format": "pcm", "sample_rate": 16000, "max_sentence_silence": 600 },
-                "input": {}
-            }
-        });
+        let start = build_live_asr_start(&task_id, language_context.as_deref());
         writer
             .send(Message::Text(start.to_string().into()))
             .await
@@ -171,6 +164,26 @@ pub async fn start_live_asr(
         let _ = writer.close().await;
     });
     Ok(())
+}
+
+fn build_live_asr_start(task_id: &str, language_context: Option<&str>) -> Value {
+    let mut input = json!({});
+    if let Some(context) = language_context.map(str::trim).filter(|text| !text.is_empty()) {
+        // 只传背景上下文，保留自动语种检测，避免 language_hints 限制混合语音。
+        input["context"] = json!([{
+            "role": "user",
+            "content": [{ "type": "input_text", "text": context }]
+        }]);
+    }
+    json!({
+        "header": { "action": "run-task", "task_id": task_id, "streaming": "duplex" },
+        "payload": {
+            "task_group": "audio", "task": "asr", "function": "recognition",
+            "model": LIVE_ASR_MODEL,
+            "parameters": { "format": "pcm", "sample_rate": 16000, "max_sentence_silence": 600 },
+            "input": input
+        }
+    })
 }
 
 // 取消或超时会丢弃启动 Future，释放其持有的 socket，不留后台握手任务。
@@ -346,29 +359,7 @@ pub async fn transcribe_audio(
         return Err("请先在设置中配置语音识别模型".into());
     }
 
-    let payload = json!({
-        "model": model.trim(),
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "input_audio",
-                        "input_audio": {
-                            "data": format!(
-                                "data:{};base64,{}",
-                                normalize_mime_type(&mime_type),
-                                audio_base64.trim()
-                            ),
-                        }
-                    }
-                ]
-            }
-        ],
-        "asr_options": {
-            "language": DEFAULT_ASR_LANGUAGE,
-        }
-    });
+    let payload = build_mimo_asr_request(&audio_base64, &mime_type, &model);
 
     let auth_mode = normalize_auth_mode(auth_mode.as_deref());
     let proxy = super::network_proxy::load_resolved_proxy(&database)?;
@@ -417,6 +408,32 @@ pub async fn transcribe_audio(
         .await
         .map(|text| sanitize_asr_text(text.trim()))
         .map_err(|e| format!("读取语音转写结果失败: {e}"))
+}
+
+fn build_mimo_asr_request(audio_base64: &str, mime_type: &str, model: &str) -> Value {
+    json!({
+        "model": model.trim(),
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_audio",
+                        "input_audio": {
+                            "data": format!(
+                                "data:{};base64,{}",
+                                normalize_mime_type(mime_type),
+                                audio_base64.trim()
+                            ),
+                        }
+                    }
+                ]
+            }
+        ],
+        "asr_options": {
+            "language": DEFAULT_ASR_LANGUAGE,
+        }
+    })
 }
 
 fn normalize_auth_mode(auth_mode: Option<&str>) -> &str {
@@ -550,6 +567,33 @@ fn sanitize_asr_text(text: &str) -> String {
 #[cfg(test)]
 mod live_start_tests {
     use super::*;
+
+    #[test]
+    fn preferred_language_is_context_without_a_single_language_restriction() {
+        let context = "主要为简体中文，夹杂英文单词和日文。";
+        let start = build_live_asr_start("test-task", Some(context));
+        assert_eq!(start["header"]["task_id"], "test-task");
+        assert_eq!(start["payload"]["parameters"]["sample_rate"], 16000);
+        assert!(start["payload"]["parameters"].get("language").is_none());
+        assert!(start["payload"]["parameters"].get("language_hints").is_none());
+        assert_eq!(start["payload"]["input"]["context"], json!([{
+            "role": "user", "content": [{ "type": "input_text", "text": context }]
+        }]));
+    }
+
+    #[test]
+    fn automatic_detection_does_not_add_context() {
+        for context in [None, Some(""), Some(" \n\t")] {
+            assert_eq!(build_live_asr_start("task", context)["payload"]["input"], json!({}));
+        }
+    }
+
+    #[test]
+    fn mimo_uses_auto_detection_for_mixed_chinese_and_english() {
+        let request = build_mimo_asr_request("dGVzdA==", "audio/wav", "mimo-v2.5-asr");
+        assert_eq!(request["asr_options"]["language"], "auto");
+        assert_eq!(request["messages"][0]["content"][0]["input_audio"]["data"], "data:audio/wav;base64,dGVzdA==");
+    }
 
     #[test]
     fn cancellation_drops_pending_startup() {

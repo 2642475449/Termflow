@@ -22,6 +22,7 @@ vi.mock("@/lib/api", () => ({
   finishLiveAsr: vi.fn().mockResolvedValue(undefined),
   sendLiveAsrAudio: vi.fn().mockResolvedValue(undefined),
   polishVoiceText: vi.fn(),
+  transcribeAudio: vi.fn(),
 }));
 
 function deferred<T>() {
@@ -134,6 +135,16 @@ it("正常录音松开仍然停止录音，不走初始化取消", async () => {
   await voice.stop();
   expect(recorderStop).toHaveBeenCalledOnce();
   expect(cancelLiveAsr).not.toHaveBeenCalled();
+  voice.cancel();
+});
+
+it.each(["auto", "zh", "en", "ja"] as const)("实时录音传递首选语言 %s", async (language) => {
+  getUserMedia.mockResolvedValueOnce(microphone().stream);
+  const voice = useVoiceRecognition({
+    apiKey: "test-key", model: LIVE_DASHSCOPE_ASR_MODEL, language, onResult: vi.fn(),
+  });
+  await voice.start();
+  expect(startLiveAsr).toHaveBeenCalledWith(expect.any(String), "test-key", LIVE_DASHSCOPE_ASR_MODEL, "beijing", language);
   voice.cancel();
 });
 

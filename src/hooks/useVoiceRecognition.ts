@@ -1,6 +1,5 @@
 import { resolveVoicePolishModel, type VoicePolishConfig } from "@/lib/voicePolish";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import i18n from "@/i18n";
 import {
@@ -9,7 +8,9 @@ import {
   polishVoiceText,
   sendLiveAsrAudio,
   startLiveAsr,
+  transcribeAudio,
 } from "@/lib/api";
+import type { AsrLanguage } from "@/lib/asrLanguage";
 import { type MimoAuthMode } from "@/lib/mimoAsr";
 import {
   getAsrTransport,
@@ -82,6 +83,7 @@ export interface UseVoiceRecognitionOptions {
   authMode?: MimoAuthMode;
   model: string;
   region?: DashScopeRegion;
+  language?: AsrLanguage;
   polishEnabled?: boolean;
   polishConfig?: VoicePolishConfig;
   onResult: (text: string) => void;
@@ -309,7 +311,7 @@ async function transcribeWithRustProxy(
   apiKey: string,
   authMode: MimoAuthMode,
 ): Promise<string> {
-  const result = await invoke<string>("transcribe_audio", {
+  const result = await transcribeAudio({
     audioBase64,
     mimeType,
     model,
@@ -327,6 +329,7 @@ async function transcribeWithDashScope(
   model: DashScopeAsrModel,
   apiKey: string,
   region: DashScopeRegion = "beijing",
+  preferredLanguage: AsrLanguage = "auto",
   workspaceId?: string,
 ): Promise<string> {
   const endpoint = getDashScopeEndpoint(region, workspaceId);
@@ -339,7 +342,7 @@ async function transcribeWithDashScope(
         "Content-Type": "application/json",
       },
       body: JSON.stringify(
-        buildDashScopeAsrRequest(audioDataUrl, { model, region }),
+        buildDashScopeAsrRequest(audioDataUrl, { model, region, preferredLanguage }),
       ),
     },
     TRANSCRIBE_TIMEOUT_MS,
@@ -370,6 +373,7 @@ async function transcribeWithOpenAICompatible(
   model: DashScopeAsrModel,
   apiKey: string,
   region: DashScopeRegion = "beijing",
+  preferredLanguage: AsrLanguage = "auto",
   workspaceId?: string,
 ): Promise<string> {
   const endpoint = getOpenAICompatibleEndpoint(region, workspaceId);
@@ -382,7 +386,7 @@ async function transcribeWithOpenAICompatible(
         "Content-Type": "application/json",
       },
       body: JSON.stringify(
-        buildOpenAICompatibleAsrRequest(audioDataUrl, { model, region }),
+        buildOpenAICompatibleAsrRequest(audioDataUrl, { model, region, preferredLanguage }),
       ),
     },
     TRANSCRIBE_TIMEOUT_MS,
@@ -408,7 +412,7 @@ async function transcribeWithOpenAICompatible(
 export function useVoiceRecognition(
   options: UseVoiceRecognitionOptions,
 ): UseVoiceRecognitionReturn {
-  const { apiKey, authMode = "token-plan", model, region = "beijing", polishEnabled = true, polishConfig, onResult, onError, maxDurationMs = MAX_AUTO_DURATION_MS } =
+  const { apiKey, authMode = "token-plan", model, region = "beijing", language = "auto", polishEnabled = true, polishConfig, onResult, onError, maxDurationMs = MAX_AUTO_DURATION_MS } =
     options;
 
   const [phase, setPhase] = useState<AsrPhase>("idle");
@@ -428,6 +432,7 @@ export function useVoiceRecognition(
   const apiKeyRef = useRef(apiKey);
   const authModeRef = useRef(authMode);
   const regionRef = useRef(region);
+  const languageRef = useRef(language);
   const modelRef = useRef(model);
   const polishEnabledRef = useRef(polishEnabled);
   const polishConfigRef = useRef(polishConfig);
@@ -485,6 +490,10 @@ export function useVoiceRecognition(
   useEffect(() => {
     regionRef.current = region;
   }, [region]);
+
+  useEffect(() => {
+    languageRef.current = language;
+  }, [language]);
 
   useEffect(() => {
     onResultRef.current = onResult;
@@ -676,6 +685,7 @@ export function useVoiceRecognition(
       const currentModel = modelRef.current;
       const currentAuthMode = authModeRef.current;
       const currentRegion = regionRef.current;
+      const currentLanguage = languageRef.current;
       const transport = getAsrTransport(currentModel);
 
       try {
@@ -691,6 +701,7 @@ export function useVoiceRecognition(
               currentModel as DashScopeAsrModel,
               apiKeyRef.current,
               currentRegion,
+              currentLanguage,
             );
           } catch (dashScopeErr) {
             // 如果 OpenAI 兼容接口失败，尝试使用原生接口
@@ -700,6 +711,7 @@ export function useVoiceRecognition(
                 currentModel as DashScopeAsrModel,
                 apiKeyRef.current,
                 currentRegion,
+                currentLanguage,
               );
             } else {
               throw dashScopeErr;
@@ -808,6 +820,7 @@ export function useVoiceRecognition(
           apiKeyRef.current,
           modelRef.current,
           regionRef.current,
+          languageRef.current,
         );
         if (!isCurrent()) {
           void cancelLiveAsr(sessionId).catch(() => undefined);

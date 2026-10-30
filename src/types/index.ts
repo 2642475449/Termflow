@@ -109,6 +109,7 @@ export interface PersistentSettings {
   asrAuthMode: string;
   asrModel: string;
   asrRegion: string;
+  asrLanguage?: string;
   voicePolishEnabled: boolean;
   voicePolishModel: string;
   voicePolishProvider: VoicePolishConfig["provider"];
@@ -411,6 +412,9 @@ export interface AgentUsageProviderSummary {
   activeDays: number;
   favoriteModel: string | null;
   lastError: string | null;
+  estimatedTokens?: number;
+  undatedTokens?: number;
+  tokenDataIncomplete?: boolean;
 }
 
 export interface AgentUsageHeatmapDay {
@@ -451,6 +455,9 @@ export interface AgentUsageOverviewSummary {
   totalDays: number;
   favoriteModel: string | null;
   peakHour: number | null;
+  estimatedTokens?: number;
+  undatedTokens?: number;
+  tokenDataIncomplete?: boolean;
 }
 
 export interface AgentUsageOverview {

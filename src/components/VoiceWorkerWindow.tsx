@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { emit, listen } from "@tauri-apps/api/event";
 import { useVoiceRecognition, type AsrPhase } from "@/hooks/useVoiceRecognition";
 import type { MimoAuthMode } from "@/lib/mimoAsr";
+import type { AsrLanguage } from "@/lib/asrLanguage";
 import {
   ensureVoiceOverlayWindow,
   hideVoiceOverlayWindow,
@@ -21,6 +22,7 @@ interface VoiceWorkerConfigPayload {
   authMode: MimoAuthMode;
   model: string;
   region?: "beijing" | "singapore" | "us";
+  language: AsrLanguage;
   polishEnabled: boolean;
   polishModel: string;
   polishProvider: VoicePolishConfig["provider"];
@@ -63,6 +65,7 @@ function VoiceWorkerWindow() {
   const asrAuthMode = useAppStore((s) => s.asrAuthMode);
   const asrModel = useAppStore((s) => s.asrModel);
   const asrRegion = useAppStore((s) => s.asrRegion);
+  const asrLanguage = useAppStore((s) => s.asrLanguage);
   const voicePolishEnabled = useAppStore((s) => s.voicePolishEnabled);
   const voicePolishModel = useAppStore((s) => s.voicePolishModel);
   const voicePolishProvider = useAppStore((s) => s.voicePolishProvider);
@@ -78,6 +81,7 @@ function VoiceWorkerWindow() {
     authMode: asrAuthMode,
     model: asrModel,
     region: asrRegion,
+    language: asrLanguage,
     polishEnabled: voicePolishEnabled,
     polishModel: voicePolishModel,
     polishProvider: voicePolishProvider,
@@ -96,6 +100,7 @@ function VoiceWorkerWindow() {
     authMode: config.authMode,
     model: config.model,
     region: config.region,
+    language: config.language,
     polishEnabled: config.polishEnabled,
     polishConfig: {
       provider: config.polishProvider,
@@ -169,6 +174,7 @@ function VoiceWorkerWindow() {
       authMode: asrAuthMode,
       model: asrModel,
       region: asrRegion,
+      language: asrLanguage,
       polishEnabled: voicePolishEnabled,
       polishModel: voicePolishModel,
       polishProvider: voicePolishProvider,
@@ -181,7 +187,7 @@ function VoiceWorkerWindow() {
       inputTarget: voiceInputTarget,
     };
     setConfig(nextConfig);
-  }, [asrApiKey, asrAuthMode, asrModel, asrRegion, voiceInputTarget, voicePolishEnabled, voicePolishModel, voicePolishProvider, voicePolishApiKey, voicePolishAuthMode, voicePolishRegion, voicePolishStyle, voicePolishInstructions, voiceShortcut]);
+  }, [asrApiKey, asrAuthMode, asrModel, asrRegion, asrLanguage, voiceInputTarget, voicePolishEnabled, voicePolishModel, voicePolishProvider, voicePolishApiKey, voicePolishAuthMode, voicePolishRegion, voicePolishStyle, voicePolishInstructions, voiceShortcut]);
 
   useEffect(() => {
     let disposed = false;

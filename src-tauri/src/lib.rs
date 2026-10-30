@@ -256,6 +256,7 @@ pub fn run() {
             commands::session::open_in_associated_application,
             commands::file_tree::list_project_directory,
             commands::file_tree::resolve_project_link,
+            commands::terminal_links::resolve_terminal_link,
             commands::file_tree::search_project_entries,
             commands::file_tree::rename_project_entry,
             commands::file_tree::delete_project_entry,

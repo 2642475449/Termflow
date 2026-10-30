@@ -41,6 +41,42 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+it("persists the preferred recognition language through the real store action", () => {
+  const values = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => { values.set(key, value); },
+    removeItem: (key: string) => { values.delete(key); },
+  };
+  const first = createAppStore(storage);
+  expect(first.getState().asrLanguage).toBe("auto");
+  for (const language of ["zh", "en", "ja", "auto"] as const) {
+    first.getState().setAsrLanguage(language);
+    expect(createAppStore(storage).getState().asrLanguage).toBe(language);
+  }
+  for (const state of [{}, { asrLanguage: "invalid" }]) {
+    values.set("termflow-settings", JSON.stringify({ version: 5, state }));
+    expect(createAppStore(storage).getState().asrLanguage).toBe("auto");
+  }
+});
+
+it("includes recognition language in SQLite snapshots and normalizes older records", () => {
+  const previous = getPersistentSettingsSnapshot();
+  try {
+    useAppStore.getState().setAsrLanguage("ja");
+    const snapshot = getPersistentSettingsSnapshot();
+    expect(snapshot.asrLanguage).toBe("ja");
+    applyPersistentSettingsToStore({ ...snapshot, asrLanguage: "zh" });
+    expect(useAppStore.getState().asrLanguage).toBe("zh");
+    applyPersistentSettingsToStore({ ...snapshot, asrLanguage: undefined });
+    expect(useAppStore.getState().asrLanguage).toBe("auto");
+    applyPersistentSettingsToStore({ ...snapshot, asrLanguage: "ms" });
+    expect(useAppStore.getState().asrLanguage).toBe("auto");
+  } finally {
+    applyPersistentSettingsToStore(previous);
+  }
+});
+
 it("persists manual renames through the real store action and keeps every title snapshot in sync", () => {
   const store = createAppStore();
   const projectPath = "D:/workspace/demo";

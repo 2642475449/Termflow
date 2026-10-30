@@ -2683,39 +2683,24 @@ html, body, #root {
 .app-global-search-splitter:focus-visible {
   outline: 1px solid var(--cs-primary);
 }
-/* About page WebGL flow: calm copy area on the left, dense pigment on the right. */
+/* 关于页有机流体：左侧保留阅读区，右侧用多尺度旋涡、云雾和光脉表现深度。 */
 .app-about-hero {
   background: var(--cs-bg-card);
   border: 1px solid var(--cs-border-card);
-  box-shadow: 0 8px 28px color-mix(in srgb, var(--cs-primary) 8%, transparent);
+  isolation: isolate;
 }
 
-.about-flow-backdrop {
+.app-about-flow-backdrop {
   z-index: 0;
-  background: var(--cs-about-flow-fallback);
+  background: var(--cs-about-flow-base);
 }
 
-.about-flow-canvas {
+.app-about-flow-canvas {
   display: block;
   width: 100%;
   height: 100%;
   transform: translateZ(0);
   backface-visibility: hidden;
-}
-
-.about-flow-gloss {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: var(--cs-about-flow-gloss);
-}
-
-.app-about-hero-glow-primary {
-  background: color-mix(in srgb, var(--cs-primary) 14%, transparent);
-}
-
-.app-about-hero-glow-secondary {
-  background: color-mix(in srgb, var(--cs-primary) 7%, transparent);
 }
 
 .app-about-hero-content,
@@ -2725,6 +2710,19 @@ html, body, #root {
 
 .app-about-hero-title {
   color: var(--cs-text-primary);
+}
+
+.app-about-hero-actions {
+  width: fit-content;
+  max-width: 100%;
+  padding: 6px;
+  border-radius: 10px;
+  color: var(--cs-text-primary);
+  background: var(--cs-bg-card-solid);
+}
+
+.app-about-hero-actions .ant-btn {
+  box-shadow: none;
 }
 
 .app-about-hero-subtitle {
@@ -2737,8 +2735,8 @@ html, body, #root {
 }
 
 .app-about-hero-version {
-  color: var(--cs-primary);
-  background: color-mix(in srgb, var(--cs-primary) 12%, transparent);
+  color: var(--cs-text-secondary);
+  background: var(--cs-bg-card-solid);
   border-color: color-mix(in srgb, var(--cs-primary) 42%, transparent);
 }
 

@@ -10,7 +10,7 @@ export const MIMO_TOKEN_PLAN_ASR_CHAT_COMPLETIONS_ENDPOINT =
 
 export const MIMO_ASR_CHAT_COMPLETIONS_ENDPOINT = MIMO_API_ASR_CHAT_COMPLETIONS_ENDPOINT;
 
-export const MIMO_ASR_LANGUAGE = "zh";
+export const MIMO_ASR_LANGUAGE = "auto";
 
 export function isMimoTokenPlanKey(apiKey: string | null | undefined): boolean {
   return /^(sk-cp-|tp-)/i.test(apiKey?.trim() ?? "");

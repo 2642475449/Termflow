@@ -1,7 +1,10 @@
+mod claude_transcript_stats;
+mod local_provider_stats;
+
 use crate::hook_ingest::HookIngestConfig;
 use crate::path_utils::{display_path, normalize_input_path};
 use crate::qoder_config::{qoder_user_config_root, qoder_workspace_config_root};
-use chrono::{DateTime, Duration, Local, NaiveDate, TimeZone, Timelike, Utc};
+use chrono::{DateTime, Local, NaiveDate, TimeZone, Timelike, Utc};
 use regex::Regex;
 use rusqlite::{Connection, OpenFlags};
 use serde::{Deserialize, Serialize};
@@ -91,6 +94,9 @@ pub struct AgentUsageProviderSummary {
     pub active_days: u32,
     pub favorite_model: Option<String>,
     pub last_error: Option<String>,
+    pub estimated_tokens: u64,
+    pub undated_tokens: u64,
+    pub token_data_incomplete: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -107,6 +113,9 @@ pub struct AgentUsageOverviewSummary {
     pub total_days: u32,
     pub favorite_model: Option<String>,
     pub peak_hour: Option<u8>,
+    pub estimated_tokens: u64,
+    pub undated_tokens: u64,
+    pub token_data_incomplete: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, Deserialize, Serialize)]
@@ -141,10 +150,14 @@ impl AgentUsageTokenBreakdown {
 
     fn add_codex_usage(&mut self, usage: RawTokenUsage, total_tokens: u64) {
         let cache_read_tokens = usage.cached_input_tokens.min(usage.input_tokens);
+        let cache_creation_tokens = usage
+            .cache_write_input_tokens
+            .min(usage.input_tokens - cache_read_tokens);
         let reasoning_output_tokens = usage.reasoning_output_tokens.min(usage.output_tokens);
-        self.input_tokens += usage.input_tokens - cache_read_tokens;
+        self.input_tokens += usage.input_tokens - cache_read_tokens - cache_creation_tokens;
         self.output_tokens += usage.output_tokens - reasoning_output_tokens;
         self.cache_read_tokens += cache_read_tokens;
+        self.cache_creation_tokens += cache_creation_tokens;
         self.reasoning_output_tokens += reasoning_output_tokens;
 
         // Codex reports cached input and reasoning output as detail subsets of
@@ -161,6 +174,7 @@ impl AgentUsageTokenBreakdown {
         self.input_tokens += usage.input_tokens;
         self.output_tokens += usage.output_tokens;
         self.cache_read_tokens += usage.cached_input_tokens;
+        self.cache_creation_tokens += usage.cache_write_input_tokens;
         self.reasoning_output_tokens += usage.reasoning_output_tokens;
 
         // OpenCode persists cache reads and reasoning as separate usage
@@ -168,6 +182,7 @@ impl AgentUsageTokenBreakdown {
         let known_total = usage.input_tokens
             + usage.output_tokens
             + usage.cached_input_tokens
+            + usage.cache_write_input_tokens
             + usage.reasoning_output_tokens;
         if total_tokens > known_total {
             self.other_tokens += total_tokens - known_total;
@@ -453,6 +468,14 @@ pub(crate) struct AggregatedTranscriptStats {
     first_session_date: Option<String>,
     last_session_date: Option<String>,
     hour_counts: BTreeMap<String, u64>,
+    #[serde(default)]
+    estimated_tokens: u64,
+    #[serde(default)]
+    undated_tokens: u64,
+    #[serde(default)]
+    pub(crate) token_data_incomplete: bool,
+    #[serde(default)]
+    historical_active_dates: BTreeSet<String>,
 }
 
 impl AggregatedTranscriptStats {
@@ -680,11 +703,6 @@ fn today_local_date_string() -> String {
     Local::now().format("%Y-%m-%d").to_string()
 }
 
-fn next_date_string(value: &str) -> Option<String> {
-    let date = NaiveDate::parse_from_str(value, "%Y-%m-%d").ok()?;
-    Some((date + Duration::days(1)).format("%Y-%m-%d").to_string())
-}
-
 fn update_min_string(target: &mut Option<String>, candidate: String) {
     match target {
         Some(current) if *current <= candidate => {}
@@ -739,6 +757,12 @@ pub(crate) fn merge_aggregated_stats(
 
     merge_model_usage(&mut destination.model_usage, source.model_usage);
     destination.token_breakdown.merge(source.token_breakdown);
+    destination.estimated_tokens += source.estimated_tokens;
+    destination.undated_tokens += source.undated_tokens;
+    destination.token_data_incomplete |= source.token_data_incomplete;
+    destination
+        .historical_active_dates
+        .extend(source.historical_active_dates);
 
     destination.total_sessions += source.total_sessions;
     destination.total_messages += source.total_messages;
@@ -763,7 +787,10 @@ fn active_day_count(stats: &AggregatedTranscriptStats) -> u32 {
         .daily_activity
         .values()
         .filter(|entry| entry.message_count > 0 || entry.session_count > 0)
-        .count() as u32
+        .map(|entry| entry.date.clone())
+        .chain(stats.historical_active_dates.iter().cloned())
+        .collect::<BTreeSet<_>>()
+        .len() as u32
 }
 
 fn build_provider_summary(
@@ -777,7 +804,15 @@ fn build_provider_summary(
     AgentUsageProviderSummary {
         agent: agent.to_string(),
         label: label.to_string(),
-        capability: capability.to_string(),
+        capability: if capability == "full"
+            && (stats.token_data_incomplete
+                || stats.undated_tokens > 0
+                || stats.estimated_tokens > 0)
+        {
+            "partial".to_string()
+        } else {
+            capability.to_string()
+        },
         source: source.to_string(),
         total_tokens: compute_total_tokens(&stats.model_usage),
         total_sessions: stats.total_sessions,
@@ -785,6 +820,9 @@ fn build_provider_summary(
         active_days: active_day_count(stats),
         favorite_model: compute_favorite_model(&stats.model_usage),
         last_error,
+        estimated_tokens: stats.estimated_tokens,
+        undated_tokens: stats.undated_tokens,
+        token_data_incomplete: stats.token_data_incomplete,
     }
 }
 
@@ -810,10 +848,6 @@ fn record_generic_usage_event(
     sessions: &mut BTreeMap<String, UsageSessionSpan>,
     event: ParsedAgentUsageEvent,
 ) {
-    if event.total_tokens == 0 {
-        return;
-    }
-
     let date_key = local_date_string(&event.timestamp);
     let activity =
         aggregate
@@ -826,18 +860,22 @@ fn record_generic_usage_event(
             });
     activity.message_count += 1;
     aggregate.total_messages += 1;
+    let hour_key = local_hour_string(&event.timestamp);
+    *aggregate.hour_counts.entry(hour_key).or_insert(0) += 1;
 
     // Codex and OpenCode expose provider-normalized totals; keep them in the
     // aggregate total bucket so cached-input subsets are not double-counted.
-    aggregate
-        .model_usage
-        .entry(event.model.clone())
-        .or_default()
-        .input_tokens += event.total_tokens;
-    aggregate.token_breakdown.merge(event.token_breakdown);
+    if event.total_tokens > 0 {
+        aggregate
+            .model_usage
+            .entry(event.model.clone())
+            .or_default()
+            .input_tokens += event.total_tokens;
+        aggregate.token_breakdown.merge(event.token_breakdown);
 
-    let day_tokens = aggregate.daily_model_tokens.entry(date_key).or_default();
-    *day_tokens.entry(event.model).or_insert(0) += event.total_tokens;
+        let day_tokens = aggregate.daily_model_tokens.entry(date_key).or_default();
+        *day_tokens.entry(event.model).or_insert(0) += event.total_tokens;
+    }
 
     sessions
         .entry(event.session_id)
@@ -872,8 +910,6 @@ fn finalize_generic_sessions(
             &mut aggregate.last_session_date,
             local_date_string(&span.last_timestamp),
         );
-        let hour_key = local_hour_string(&span.first_timestamp);
-        *aggregate.hour_counts.entry(hour_key).or_insert(0) += 1;
     }
 }
 
@@ -970,177 +1006,16 @@ fn get_message_usage(entry: &Value) -> Option<(String, ClaudeStatsModelUsage)> {
 }
 
 fn get_message_dedupe_key(entry: &Value) -> Option<String> {
-    let message_id = entry
-        .get("message")?
-        .get("id")?
-        .as_str()
-        .filter(|value| !value.is_empty())?;
-    let request_id = entry
-        .get("requestId")
-        .or_else(|| entry.get("request_id"))?
-        .as_str()
-        .filter(|value| !value.is_empty())?;
-
-    Some(format!("{message_id}:{request_id}"))
-}
-
-fn process_session_files(
-    files: &[PathBuf],
-    from_date: Option<&str>,
-    to_date: Option<&str>,
-) -> AggregatedTranscriptStats {
-    let mut aggregate = AggregatedTranscriptStats::default();
-
-    for path in files {
-        let Ok(file) = fs::File::open(path) else {
-            continue;
-        };
-        let reader = BufReader::new(file);
-        let mut messages = Vec::new();
-
-        for line in reader.lines() {
-            let Ok(line) = line else {
-                continue;
-            };
-            let Ok(entry) = serde_json::from_str::<Value>(&line) else {
-                continue;
-            };
-            if is_transcript_message(&entry) {
-                messages.push(entry);
-            }
-        }
-
-        if messages.is_empty() {
-            continue;
-        }
-
-        let is_subagent_file = is_subagent_session_file(path);
-        let main_messages = messages
-            .iter()
-            .filter(|entry| {
-                is_subagent_file
-                    || !entry
-                        .get("isSidechain")
-                        .and_then(Value::as_bool)
-                        .unwrap_or(false)
-            })
-            .collect::<Vec<_>>();
-
-        if main_messages.is_empty() {
-            continue;
-        }
-
-        let Some(first_timestamp_raw) = main_messages
-            .first()
-            .and_then(|entry| entry.get("timestamp"))
-            .and_then(Value::as_str)
-        else {
-            continue;
-        };
-        let Some(last_timestamp_raw) = main_messages
-            .last()
-            .and_then(|entry| entry.get("timestamp"))
-            .and_then(Value::as_str)
-        else {
-            continue;
-        };
-        let Some(first_timestamp) = parse_timestamp_utc(first_timestamp_raw) else {
-            continue;
-        };
-        let Some(last_timestamp) = parse_timestamp_utc(last_timestamp_raw) else {
-            continue;
-        };
-
-        let date_key = local_date_string(&first_timestamp);
-        if from_date.is_some_and(|value| date_key.as_str() < value) {
-            continue;
-        }
-        if to_date.is_some_and(|value| date_key.as_str() > value) {
-            continue;
-        }
-
-        if !is_subagent_file {
-            let duration_ms = (last_timestamp.timestamp_millis()
-                - first_timestamp.timestamp_millis())
-            .max(0) as u64;
-            let message_count = main_messages.len() as u64;
-
-            let activity = aggregate.daily_activity.entry(date_key.clone()).or_insert(
-                AgentUsageDailyActivity {
-                    date: date_key.clone(),
-                    message_count: 0,
-                    session_count: 0,
-                },
-            );
-            activity.message_count += message_count;
-            activity.session_count += 1;
-
-            aggregate.total_sessions += 1;
-            aggregate.total_messages += message_count;
-            aggregate.longest_session_ms = aggregate.longest_session_ms.max(duration_ms);
-            update_min_string(&mut aggregate.first_session_date, date_key.clone());
-            update_max_string(
-                &mut aggregate.last_session_date,
-                local_date_string(&last_timestamp),
-            );
-
-            let hour_key = local_hour_string(&first_timestamp);
-            *aggregate.hour_counts.entry(hour_key).or_insert(0) += 1;
-        }
-
-        let mut assistant_usages: Vec<(String, ClaudeStatsModelUsage)> = Vec::new();
-        let mut dedupe_index_by_key = BTreeMap::<String, usize>::new();
-
-        for message in main_messages {
-            if message.get("type").and_then(Value::as_str) != Some("assistant") {
-                continue;
-            }
-            let Some((model, usage)) = get_message_usage(message) else {
-                continue;
-            };
-
-            if usage.total_tokens() == 0 {
-                continue;
-            }
-
-            if let Some(dedupe_key) = get_message_dedupe_key(message) {
-                if let Some(existing_index) = dedupe_index_by_key.get(&dedupe_key).copied() {
-                    assistant_usages[existing_index].1.merge_max(&usage);
-                    continue;
-                }
-                dedupe_index_by_key.insert(dedupe_key, assistant_usages.len());
-            }
-
-            assistant_usages.push((model, usage));
-        }
-
-        for (model, usage) in assistant_usages {
-            let tokens_for_display = usage.total_tokens();
-
-            let model_totals = aggregate.model_usage.entry(model.clone()).or_default();
-            model_totals.input_tokens += usage.input_tokens;
-            model_totals.output_tokens += usage.output_tokens;
-            model_totals.cache_read_input_tokens += usage.cache_read_input_tokens;
-            model_totals.cache_creation_input_tokens += usage.cache_creation_input_tokens;
-            aggregate.token_breakdown.add_model_usage(&usage);
-
-            if tokens_for_display > 0 {
-                let day_tokens = aggregate
-                    .daily_model_tokens
-                    .entry(date_key.clone())
-                    .or_default();
-                *day_tokens.entry(model).or_insert(0) += tokens_for_display;
-            }
-        }
-    }
-
-    aggregate
+    // 同一响应的流式分块与分叉副本保留 message.id；requestId 在部分记录中缺失。
+    let message_id = entry.get("message")?.get("id")?.as_str()?.trim();
+    (!message_id.is_empty()).then(|| format!("message:{message_id}"))
 }
 
 #[derive(Debug, Clone, Copy, Default)]
 struct RawTokenUsage {
     input_tokens: u64,
     cached_input_tokens: u64,
+    cache_write_input_tokens: u64,
     output_tokens: u64,
     reasoning_output_tokens: u64,
     total_tokens: u64,
@@ -1157,14 +1032,32 @@ enum TokenDeltaResolution {
     },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 struct CodexUsageParseContext {
     session_id: String,
+    session_id_locked: bool,
+    fork_timestamp: Option<DateTime<Utc>>,
     session_cwd: Option<String>,
     current_cwd: Option<String>,
     current_model: Option<String>,
     previous_totals: Option<RawTokenUsage>,
     total_only_baseline_pending: bool,
+    seen_response_ids: BTreeSet<String>,
+    last_event_is_request_record: bool,
+    last_legacy_is_cumulative_only: bool,
+    previous_legacy_timestamp: Option<DateTime<Utc>>,
+    last_legacy_window_start: Option<DateTime<Utc>>,
+    last_compaction_timestamp: Option<DateTime<Utc>>,
+    last_event_provider_totals: Option<RawTokenUsage>,
+}
+
+struct CodexUsageCandidate {
+    event: ParsedAgentUsageEvent,
+    authoritative: bool,
+    compaction: bool,
+    cumulative_only: bool,
+    window_start: Option<DateTime<Utc>>,
+    provider_totals: Option<RawTokenUsage>,
 }
 
 fn json_u64(value: Option<&Value>) -> u64 {
@@ -1213,6 +1106,8 @@ fn normalize_raw_token_usage(value: Option<&Value>) -> Option<RawTokenUsage> {
             .or_else(|| record.get("cache_read_input_tokens")),
     )
     .min(input_tokens);
+    let cache_write_input_tokens =
+        json_u64(record.get("cache_write_input_tokens")).min(input_tokens - cached_input_tokens);
     let output_tokens = json_u64(record.get("output_tokens"));
     let reasoning_output_tokens = json_u64(record.get("reasoning_output_tokens"));
     let total_tokens = json_u64(record.get("total_tokens"));
@@ -1220,6 +1115,7 @@ fn normalize_raw_token_usage(value: Option<&Value>) -> Option<RawTokenUsage> {
     Some(RawTokenUsage {
         input_tokens,
         cached_input_tokens,
+        cache_write_input_tokens,
         output_tokens,
         reasoning_output_tokens,
         // Cached input and reasoning output are detail fields for input/output,
@@ -1243,6 +1139,11 @@ fn subtract_raw_token_usage(
         cached_input_tokens: current
             .cached_input_tokens
             .saturating_sub(previous.map(|value| value.cached_input_tokens).unwrap_or(0)),
+        cache_write_input_tokens: current.cache_write_input_tokens.saturating_sub(
+            previous
+                .map(|value| value.cache_write_input_tokens)
+                .unwrap_or(0),
+        ),
         output_tokens: current
             .output_tokens
             .saturating_sub(previous.map(|value| value.output_tokens).unwrap_or(0)),
@@ -1261,6 +1162,7 @@ fn add_raw_token_usage(left: RawTokenUsage, right: RawTokenUsage) -> RawTokenUsa
     RawTokenUsage {
         input_tokens: left.input_tokens + right.input_tokens,
         cached_input_tokens: left.cached_input_tokens + right.cached_input_tokens,
+        cache_write_input_tokens: left.cache_write_input_tokens + right.cache_write_input_tokens,
         output_tokens: left.output_tokens + right.output_tokens,
         reasoning_output_tokens: left.reasoning_output_tokens + right.reasoning_output_tokens,
         total_tokens: left.total_tokens + right.total_tokens,
@@ -1270,6 +1172,7 @@ fn add_raw_token_usage(left: RawTokenUsage, right: RawTokenUsage) -> RawTokenUsa
 fn raw_token_usage_equals(left: RawTokenUsage, right: RawTokenUsage) -> bool {
     left.input_tokens == right.input_tokens
         && left.cached_input_tokens == right.cached_input_tokens
+        && left.cache_write_input_tokens == right.cache_write_input_tokens
         && left.output_tokens == right.output_tokens
         && left.reasoning_output_tokens == right.reasoning_output_tokens
 }
@@ -1277,6 +1180,7 @@ fn raw_token_usage_equals(left: RawTokenUsage, right: RawTokenUsage) -> bool {
 fn raw_token_usage_is_monotonic(current: RawTokenUsage, previous: RawTokenUsage) -> bool {
     current.input_tokens >= previous.input_tokens
         && current.cached_input_tokens >= previous.cached_input_tokens
+        && current.cache_write_input_tokens >= previous.cache_write_input_tokens
         && current.output_tokens >= previous.output_tokens
         && current.reasoning_output_tokens >= previous.reasoning_output_tokens
 }
@@ -1284,6 +1188,7 @@ fn raw_token_usage_is_monotonic(current: RawTokenUsage, previous: RawTokenUsage)
 fn raw_token_usage_magnitude(usage: RawTokenUsage) -> u64 {
     usage.input_tokens
         + usage.cached_input_tokens
+        + usage.cache_write_input_tokens
         + usage.output_tokens
         + usage.reasoning_output_tokens
 }
@@ -1388,16 +1293,72 @@ fn parse_codex_usage_record(
     let parsed = serde_json::from_str::<Value>(line).ok()?;
     let record_type = parsed.get("type").and_then(Value::as_str)?;
     let payload = parsed.get("payload")?;
+    context.last_compaction_timestamp = None;
+
+    if record_type == "compacted" {
+        context.last_compaction_timestamp = parsed
+            .get("timestamp")
+            .and_then(Value::as_str)
+            .and_then(parse_timestamp_utc);
+        return None;
+    }
 
     if record_type == "session_meta" {
+        // 子代理日志可携带父线程的历史 meta；文件首个线程身份才是当前线程。
+        if context.session_id_locked {
+            return None;
+        }
         if let Some(session_id) = extract_json_string(payload.get("id")) {
             context.session_id = session_id;
+            context.session_id_locked = true;
+        }
+        if extract_json_string(payload.get("forked_from_id")).is_some() {
+            context.fork_timestamp = parsed
+                .get("timestamp")
+                .and_then(Value::as_str)
+                .and_then(parse_timestamp_utc);
+            context.total_only_baseline_pending = true;
         }
         context.session_cwd = extract_json_string(payload.get("cwd"));
         if context.current_cwd.is_none() {
             context.current_cwd = context.session_cwd.clone();
         }
         return None;
+    }
+
+    if record_type == "token_usage_record" {
+        let timestamp = parsed
+            .get("timestamp")
+            .and_then(Value::as_str)
+            .and_then(parse_timestamp_utc)?;
+        if context
+            .fork_timestamp
+            .is_some_and(|start| timestamp < start)
+            || extract_json_string(payload.get("thread_id")).is_some_and(|thread_id| {
+                context.session_id_locked && thread_id != context.session_id
+            })
+        {
+            return None;
+        }
+        let usage = normalize_raw_token_usage(payload.get("usage"))?;
+        let response_id = extract_json_string(payload.get("response_id"))?;
+        if usage.total_tokens == 0 || !context.seen_response_ids.insert(response_id) {
+            return None;
+        }
+        let mut token_breakdown = AgentUsageTokenBreakdown::default();
+        token_breakdown.add_codex_usage(usage, usage.total_tokens);
+        context.last_event_is_request_record = true;
+        context.last_event_provider_totals =
+            normalize_raw_token_usage(payload.get("thread_token_usage"));
+        return Some(ParsedAgentUsageEvent {
+            session_id: context.session_id.clone(),
+            timestamp,
+            model: extract_codex_model(Some(payload))
+                .or_else(|| context.current_model.clone())
+                .unwrap_or_else(|| "unknown".to_string()),
+            total_tokens: usage.total_tokens,
+            token_breakdown,
+        });
     }
 
     if record_type == "turn_context" {
@@ -1416,6 +1377,7 @@ fn parse_codex_usage_record(
     }
 
     let timestamp_raw = parsed.get("timestamp").and_then(Value::as_str)?;
+    let timestamp = parse_timestamp_utc(timestamp_raw)?;
     let info = payload.get("info")?;
     if !info.is_object() {
         return None;
@@ -1423,6 +1385,15 @@ fn parse_codex_usage_record(
 
     let total_usage = normalize_raw_token_usage(info.get("total_token_usage"));
     let last_usage = normalize_raw_token_usage(info.get("last_token_usage"));
+    // 压缩后该旧事件的 last.total_tokens 可能只是新上下文大小，不是一次请求用量。
+    if last_usage.is_some_and(|usage| {
+        usage.input_tokens == 0 && usage.output_tokens == 0 && usage.total_tokens > 0
+    }) {
+        if total_usage.is_some() {
+            context.previous_totals = total_usage;
+        }
+        return None;
+    }
     if context.total_only_baseline_pending {
         context.total_only_baseline_pending = false;
         if total_usage.is_some() && last_usage.is_none() && context.previous_totals.is_none() {
@@ -1452,12 +1423,22 @@ fn parse_codex_usage_record(
     };
 
     let total_tokens = delta.total_tokens;
-    let timestamp = parse_timestamp_utc(timestamp_raw)?;
+    context.last_legacy_is_cumulative_only = last_usage.is_none();
+    context.last_legacy_window_start = context.previous_legacy_timestamp;
+    context.previous_legacy_timestamp = Some(timestamp);
+    if context
+        .fork_timestamp
+        .is_some_and(|start| timestamp < start)
+    {
+        return None;
+    }
     let model = extract_codex_model(Some(payload))
         .or_else(|| context.current_model.clone())
         .unwrap_or_else(|| "unknown".to_string());
     let mut token_breakdown = AgentUsageTokenBreakdown::default();
     token_breakdown.add_codex_usage(delta, total_tokens);
+    context.last_event_is_request_record = false;
+    context.last_event_provider_totals = total_usage;
 
     Some(ParsedAgentUsageEvent {
         session_id: context.session_id.clone(),
@@ -1483,25 +1464,446 @@ pub(crate) fn build_codex_usage_session_stats(
         .to_string();
     let mut context = CodexUsageParseContext {
         session_id,
-        session_cwd: None,
-        current_cwd: None,
-        current_model: None,
-        previous_totals: None,
-        total_only_baseline_pending: false,
+        ..CodexUsageParseContext::default()
     };
 
-    for line in BufReader::new(file).lines() {
+    let mut candidates = Vec::<CodexUsageCandidate>::new();
+    let mut last_request_line = None;
+    for (line_index, line) in BufReader::new(file).lines().enumerate() {
         let line = line.map_err(|error| format!("读取 Codex 用量日志失败: {error}"))?;
         if let Some(event) = parse_codex_usage_record(&line, &mut context) {
-            if cleared_at_ms.is_some_and(|cutoff| event.timestamp.timestamp_millis() <= cutoff) {
-                continue;
+            if context.last_event_is_request_record {
+                last_request_line = Some(line_index);
             }
-            record_generic_usage_event(&mut aggregate, &mut sessions, event);
+            candidates.push(CodexUsageCandidate {
+                event,
+                authoritative: context.last_event_is_request_record,
+                compaction: false,
+                cumulative_only: context.last_legacy_is_cumulative_only,
+                window_start: context.last_legacy_window_start,
+                provider_totals: context.last_event_provider_totals,
+            });
+        } else if context.last_compaction_timestamp.is_some() {
+            if let Some(candidate) = candidates.last_mut().filter(|candidate| {
+                candidate.authoritative && line_index.checked_sub(1) == last_request_line
+            }) {
+                candidate.compaction = true;
+            }
         }
     }
 
+    // 新旧记录描述同一请求时只计一次。现代线程累计包含压缩，旧累计不包含压缩；
+    // 先剔除该差异再匹配请求累计状态，工具耗时不会导致同一请求被重复计数。
+    let mut compaction_totals = RawTokenUsage::default();
+    for candidate in &mut candidates {
+        if !candidate.authoritative {
+            continue;
+        }
+        if candidate.compaction {
+            compaction_totals = add_raw_token_usage(
+                compaction_totals,
+                codex_raw_usage_from_event(&candidate.event),
+            );
+            candidate.provider_totals = None;
+        } else if let Some(totals) = candidate.provider_totals {
+            candidate.provider_totals =
+                Some(subtract_raw_token_usage(totals, Some(compaction_totals)));
+        }
+    }
+    // 缺累计元数据时仅覆盖同用量、完成时间相邻的一条旧记录，
+    // 保留升级前的历史及混合日志中没有现代记录的请求；不能按文件一刀切。
+    let mut request_records = BTreeMap::<[u64; 5], Vec<usize>>::new();
+    for (index, candidate) in candidates.iter().enumerate() {
+        if candidate.authoritative {
+            request_records
+                .entry(codex_usage_match_key(&candidate.event))
+                .or_default()
+                .push(index);
+        }
+    }
+    let first_request_timestamp = candidates
+        .iter()
+        .filter(|candidate| candidate.authoritative)
+        .map(|candidate| candidate.event.timestamp)
+        .min();
+    let mut covered_legacy = BTreeSet::new();
+    let mut matched_requests = BTreeSet::new();
+    for (index, candidate) in candidates.iter().enumerate() {
+        if candidate.authoritative {
+            continue;
+        }
+        let event = &candidate.event;
+        let Some(matches) = request_records.get(&codex_usage_match_key(event)) else {
+            continue;
+        };
+        let matched = matches
+            .iter()
+            .copied()
+            .filter(|request_index| {
+                !matched_requests.contains(request_index)
+                    && !candidates[*request_index].compaction
+                    && match (
+                        candidates[*request_index].provider_totals,
+                        candidate.provider_totals,
+                    ) {
+                        (Some(request_total), Some(legacy_total)) => {
+                            codex_provider_totals_equal(request_total, legacy_total)
+                        }
+                        _ => {
+                            (candidates[*request_index].event.timestamp - event.timestamp)
+                                .num_milliseconds()
+                                .unsigned_abs()
+                                <= 1_000
+                        }
+                    }
+            })
+            .min_by_key(|request_index| {
+                (
+                    (candidates[*request_index].event.timestamp - event.timestamp)
+                        .num_milliseconds()
+                        .unsigned_abs(),
+                    request_index.abs_diff(index),
+                )
+            });
+        if let Some(request_index) = matched {
+            if (candidate.provider_totals.is_none()
+                || candidates[request_index].provider_totals.is_none())
+                && !cleared_at_ms.is_some_and(|cutoff| {
+                    candidates[request_index].event.timestamp.timestamp_millis() <= cutoff
+                })
+            {
+                aggregate.token_data_incomplete = true;
+            }
+            matched_requests.insert(request_index);
+            covered_legacy.insert(index);
+        }
+    }
+    // 只有累计值的旧事件可能跨过多条现代请求；从该区间差分中扣除已知现代请求，
+    // 压缩请求不属于旧累计值，必须保留为独立用量。
+    let mut cumulative_remainders = BTreeMap::new();
+    for (index, candidate) in candidates.iter().enumerate() {
+        if candidate.authoritative || !candidate.cumulative_only || covered_legacy.contains(&index)
+        {
+            continue;
+        }
+        let mut covered = RawTokenUsage::default();
+        for (request_index, request) in candidates.iter().enumerate() {
+            if !request.authoritative
+                || request.compaction
+                || matched_requests.contains(&request_index)
+                || request.event.timestamp > candidate.event.timestamp
+                || candidate
+                    .window_start
+                    .is_some_and(|start| request.event.timestamp <= start)
+            {
+                continue;
+            }
+            covered = add_raw_token_usage(covered, codex_raw_usage_from_event(&request.event));
+            matched_requests.insert(request_index);
+        }
+        if covered.total_tokens > 0 {
+            cumulative_remainders.insert(
+                index,
+                subtract_raw_token_usage(
+                    codex_raw_usage_from_event(&candidate.event),
+                    Some(covered),
+                ),
+            );
+        }
+    }
+    for (index, candidate) in candidates.into_iter().enumerate() {
+        let mut event = candidate.event;
+        if covered_legacy.contains(&index)
+            || cleared_at_ms.is_some_and(|cutoff| event.timestamp.timestamp_millis() <= cutoff)
+        {
+            continue;
+        }
+        // 旧 schema 没有 response_id，现代记录出现后的未匹配回退无法证明完整性。
+        if !candidate.authoritative
+            && first_request_timestamp.is_some_and(|start| event.timestamp >= start)
+        {
+            aggregate.token_data_incomplete = true;
+        }
+        if let Some(usage) = cumulative_remainders.remove(&index) {
+            event.total_tokens = usage.total_tokens;
+            event.token_breakdown = AgentUsageTokenBreakdown::default();
+            event
+                .token_breakdown
+                .add_codex_usage(usage, usage.total_tokens);
+        }
+        record_generic_usage_event(&mut aggregate, &mut sessions, event);
+    }
     finalize_generic_sessions(&mut aggregate, sessions);
     Ok(aggregate)
+}
+
+fn codex_raw_usage_from_event(event: &ParsedAgentUsageEvent) -> RawTokenUsage {
+    let usage = event.token_breakdown;
+    RawTokenUsage {
+        input_tokens: usage.input_tokens + usage.cache_read_tokens + usage.cache_creation_tokens,
+        cached_input_tokens: usage.cache_read_tokens,
+        cache_write_input_tokens: usage.cache_creation_tokens,
+        output_tokens: usage.output_tokens + usage.reasoning_output_tokens,
+        reasoning_output_tokens: usage.reasoning_output_tokens,
+        total_tokens: event.total_tokens,
+    }
+}
+
+fn codex_usage_match_key(event: &ParsedAgentUsageEvent) -> [u64; 5] {
+    let usage = codex_raw_usage_from_event(event);
+    // 旧版可能没有 cache_write 细分，但输入总量相同；以现代记录保留完整分类。
+    [
+        usage.input_tokens,
+        usage.output_tokens,
+        usage.cached_input_tokens,
+        usage.reasoning_output_tokens,
+        usage.total_tokens,
+    ]
+}
+
+fn codex_provider_totals_equal(left: RawTokenUsage, right: RawTokenUsage) -> bool {
+    left.input_tokens == right.input_tokens
+        && left.output_tokens == right.output_tokens
+        && left.cached_input_tokens == right.cached_input_tokens
+        && left.reasoning_output_tokens == right.reasoning_output_tokens
+        && left.total_tokens == right.total_tokens
+}
+
+#[cfg(test)]
+mod codex_usage_v2_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn usage(input: u64, output: u64) -> Value {
+        json!({"input_tokens": input, "output_tokens": output,
+            "cached_input_tokens": 0, "reasoning_output_tokens": 0,
+            "total_tokens": input + output})
+    }
+
+    fn legacy(timestamp: &str, total: Value, last: Option<Value>) -> Value {
+        let mut info = json!({"total_token_usage": total});
+        if let Some(last) = last {
+            info["last_token_usage"] = last;
+        }
+        json!({"timestamp": timestamp, "type": "event_msg",
+            "payload": {"type": "token_count", "info": info}})
+    }
+
+    fn request(timestamp: &str, id: &str, usage: Value) -> Value {
+        json!({"timestamp": timestamp, "type": "token_usage_record",
+            "payload": {"response_id": id, "thread_id": "thread", "model": "codex-test",
+                "usage": usage}})
+    }
+
+    fn stats(records: Vec<Value>, cutoff: Option<i64>) -> AggregatedTranscriptStats {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        let content = records
+            .into_iter()
+            .map(|record| record.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+        fs::write(file.path(), content).unwrap();
+        build_codex_usage_session_stats(file.path(), cutoff).unwrap()
+    }
+
+    #[test]
+    fn codex_v2_keeps_legacy_prefix_gaps_and_compaction_without_double_counting() {
+        let result = stats(
+            vec![
+                legacy("2026-10-29T00:00:00Z", usage(100, 0), Some(usage(100, 0))),
+                request("2026-10-29T00:00:10Z", "response-normal", usage(200, 0)),
+                legacy(
+                    "2026-10-29T00:00:10.100Z",
+                    usage(300, 0),
+                    Some(usage(200, 0)),
+                ),
+                request("2026-10-29T00:00:20Z", "response-compact", usage(40, 10)),
+                legacy(
+                    "2026-10-29T00:00:20.100Z",
+                    usage(300, 0),
+                    Some(json!({"input_tokens": 0, "output_tokens": 0, "total_tokens": 50_000})),
+                ),
+                legacy("2026-10-29T00:00:30Z", usage(325, 0), Some(usage(25, 0))),
+            ],
+            None,
+        );
+        assert_eq!(result.total_tokens(), 375);
+        assert_eq!(result.total_messages(), 4);
+        assert_eq!(result.token_breakdown.total_tokens, 375);
+        assert_eq!(result.token_breakdown.other_tokens, 0);
+    }
+
+    #[test]
+    fn codex_v2_deduplicates_response_ids_but_keeps_equal_distinct_requests() {
+        let result = stats(
+            vec![
+                request("2026-10-29T00:00:00Z", "same-id", usage(100, 20)),
+                request("2026-10-29T00:00:10Z", "same-id", usage(100, 20)),
+                request("2026-10-29T00:00:20Z", "different-id", usage(100, 20)),
+            ],
+            None,
+        );
+        assert_eq!(result.total_tokens(), 240);
+        assert_eq!(result.total_messages(), 2);
+    }
+
+    #[test]
+    fn codex_v2_matches_legacy_before_request_and_keeps_unrelated_equal_usage() {
+        let result = stats(
+            vec![
+                legacy("2026-10-29T00:00:00Z", usage(100, 20), Some(usage(100, 20))),
+                request("2026-10-29T00:00:00.100Z", "response", usage(100, 20)),
+                legacy("2026-10-29T00:00:10Z", usage(200, 40), Some(usage(100, 20))),
+            ],
+            None,
+        );
+        assert_eq!(result.total_tokens(), 240);
+        assert_eq!(result.total_messages(), 2);
+    }
+
+    #[test]
+    fn codex_v2_cumulative_evidence_matches_delayed_tool_completion_after_compaction() {
+        let mut first = request("2026-10-29T00:00:10Z", "slow-tool", usage(200, 0));
+        first["payload"]["thread_token_usage"] = usage(300, 0);
+        let mut compact = request("2026-10-29T00:04:00Z", "compact", usage(50, 0));
+        compact["payload"]["thread_token_usage"] = usage(350, 0);
+        let mut later = request("2026-10-29T00:05:00Z", "later", usage(25, 0));
+        later["payload"]["thread_token_usage"] = usage(375, 0);
+        let result = stats(
+            vec![
+                legacy("2026-10-29T00:00:00Z", usage(100, 0), Some(usage(100, 0))),
+                first,
+                legacy("2026-10-29T00:03:00Z", usage(300, 0), Some(usage(200, 0))),
+                compact,
+                json!({"type": "compacted", "timestamp": "2026-10-29T00:04:00.100Z", "payload": {}}),
+                later,
+                legacy("2026-10-29T00:06:00Z", usage(325, 0), Some(usage(25, 0))),
+            ],
+            None,
+        );
+        assert_eq!(result.total_tokens(), 375);
+        assert_eq!(result.total_messages(), 4);
+        assert!(!result.token_data_incomplete);
+    }
+
+    #[test]
+    fn codex_v2_cutoff_uses_request_time_even_when_legacy_copy_crosses_cutoff() {
+        let cutoff = parse_timestamp_utc("2026-10-29T00:00:10.050Z")
+            .unwrap()
+            .timestamp_millis();
+        let result = stats(
+            vec![
+                request("2026-10-29T00:00:10Z", "before-clear", usage(100, 0)),
+                legacy(
+                    "2026-10-29T00:00:10.100Z",
+                    usage(100, 0),
+                    Some(usage(100, 0)),
+                ),
+                request("2026-10-29T00:00:20Z", "after-clear", usage(50, 0)),
+                legacy(
+                    "2026-10-29T00:00:20.100Z",
+                    usage(150, 0),
+                    Some(usage(50, 0)),
+                ),
+            ],
+            Some(cutoff),
+        );
+        assert_eq!(result.total_tokens(), 50);
+        assert_eq!(result.total_messages(), 1);
+    }
+
+    #[test]
+    fn codex_v2_cache_writes_are_an_input_subset_and_modern_details_replace_legacy() {
+        let modern_usage = json!({"input_tokens": 100, "cached_input_tokens": 60,
+            "cache_write_input_tokens": 25, "output_tokens": 20,
+            "reasoning_output_tokens": 5, "total_tokens": 120});
+        let mut old_usage = modern_usage.clone();
+        old_usage
+            .as_object_mut()
+            .unwrap()
+            .remove("cache_write_input_tokens");
+        let result = stats(
+            vec![
+                request("2026-10-29T00:00:00Z", "with-writes", modern_usage),
+                legacy(
+                    "2026-10-29T00:00:00.100Z",
+                    old_usage.clone(),
+                    Some(old_usage),
+                ),
+            ],
+            None,
+        );
+        assert_eq!(result.total_tokens(), 120);
+        assert_eq!(result.token_breakdown.input_tokens, 15);
+        assert_eq!(result.token_breakdown.output_tokens, 15);
+        assert_eq!(result.token_breakdown.cache_read_tokens, 60);
+        assert_eq!(result.token_breakdown.cache_creation_tokens, 25);
+        assert_eq!(result.token_breakdown.reasoning_output_tokens, 5);
+        assert_eq!(result.token_breakdown.total_tokens, 120);
+    }
+
+    #[test]
+    fn codex_v2_cumulative_only_legacy_subtracts_modern_requests_but_not_compaction() {
+        let result = stats(
+            vec![
+                legacy("2026-10-29T00:00:00Z", usage(100, 0), None),
+                request("2026-10-29T00:00:10Z", "normal", usage(200, 0)),
+                request("2026-10-29T00:00:20Z", "compact", usage(50, 0)),
+                json!({"type": "compacted", "timestamp": "2026-10-29T00:00:20.100Z", "payload": {}}),
+                legacy("2026-10-29T00:00:30Z", usage(350, 0), None),
+                legacy("2026-10-29T00:00:40Z", usage(350, 0), None),
+            ],
+            None,
+        );
+        assert_eq!(result.total_tokens(), 400);
+        assert_eq!(result.total_messages(), 4);
+        assert_eq!(result.token_breakdown.total_tokens, 400);
+    }
+
+    #[test]
+    fn codex_v2_fork_identity_and_history_do_not_leak_from_parent_meta() {
+        let result = stats(
+            vec![
+                json!({"type": "session_meta", "timestamp": "2026-10-29T00:00:10Z",
+                "payload": {"id": "thread", "forked_from_id": "parent"}}),
+                json!({"type": "session_meta", "timestamp": "2026-10-29T00:00:10Z",
+                "payload": {"id": "parent"}}),
+                legacy("2026-10-29T00:00:00Z", usage(100, 0), Some(usage(100, 0))),
+                json!({"type": "token_usage_record", "timestamp": "2026-10-29T00:00:11Z",
+                "payload": {"thread_id": "parent", "response_id": "parent-response", "usage": usage(100, 0)}}),
+                request("2026-10-29T00:00:12Z", "child-response", usage(25, 0)),
+                legacy(
+                    "2026-10-29T00:00:12.100Z",
+                    usage(125, 0),
+                    Some(usage(25, 0)),
+                ),
+            ],
+            None,
+        );
+        assert_eq!(result.total_tokens(), 25);
+        assert_eq!(result.total_messages(), 1);
+        assert_eq!(result.total_sessions, 1);
+        let mut context = CodexUsageParseContext::default();
+        for id in ["child", "parent"] {
+            parse_codex_usage_record(
+                &json!({"type": "session_meta", "payload": {"id": id}}).to_string(),
+                &mut context,
+            );
+        }
+        assert_eq!(context.session_id, "child");
+    }
+
+    #[test]
+    #[ignore = "requires an explicit local rollout path; reads usage metadata only"]
+    fn codex_v2_real_rollout_reconciles_compaction_usage() {
+        let path = std::env::var("TERMFLOW_USAGE_TEST_ROLLOUT").expect("explicit rollout path");
+        let result = build_codex_usage_session_stats(Path::new(&path), None).unwrap();
+        assert_eq!(result.total_tokens(), 63_636_343);
+        assert_eq!(result.total_messages(), 272);
+        assert_eq!(result.token_breakdown.total_tokens, result.total_tokens());
+        assert_eq!(result.token_breakdown.other_tokens, 0);
+        assert!(!result.token_data_incomplete);
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1512,26 +1914,22 @@ struct OpenCodeUsageRow {
     time_updated: Option<i64>,
     session_model: Option<String>,
     data: String,
+    is_session_total: bool,
+}
+
+fn resolve_opencode_data_home(xdg_data_home: Option<PathBuf>, home: Option<PathBuf>) -> PathBuf {
+    // OpenCode 在 Windows 也遵循 XDG 默认目录，不使用 LocalAppData。
+    xdg_data_home
+        .filter(|path| !path.as_os_str().is_empty())
+        .or_else(|| home.map(|home| home.join(".local").join("share")))
+        .unwrap_or_else(|| PathBuf::from("."))
 }
 
 fn opencode_data_home() -> PathBuf {
-    if let Some(value) = env::var_os("XDG_DATA_HOME").filter(|value| !value.is_empty()) {
-        return PathBuf::from(value);
-    }
-    if cfg!(windows) {
-        if let Some(value) = env::var_os("LOCALAPPDATA").filter(|value| !value.is_empty()) {
-            return PathBuf::from(value);
-        }
-        if let Some(value) = env::var_os("APPDATA").filter(|value| !value.is_empty()) {
-            return PathBuf::from(value);
-        }
-        if let Some(home_dir) = dirs_next::home_dir() {
-            return home_dir.join("AppData").join("Local");
-        }
-    }
-    dirs_next::home_dir()
-        .map(|home_dir| home_dir.join(".local").join("share"))
-        .unwrap_or_else(|| PathBuf::from("."))
+    resolve_opencode_data_home(
+        env::var_os("XDG_DATA_HOME").map(PathBuf::from),
+        dirs_next::home_dir(),
+    )
 }
 
 fn opencode_data_dir() -> PathBuf {
@@ -1539,20 +1937,29 @@ fn opencode_data_dir() -> PathBuf {
 }
 
 fn collect_opencode_database_paths() -> Vec<PathBuf> {
-    if let Some(raw_path) = env::var_os("OPENCODE_DB").filter(|value| !value.is_empty()) {
-        if raw_path == ":memory:" {
+    collect_opencode_database_paths_at(
+        &opencode_data_dir(),
+        env::var_os("OPENCODE_DB").map(PathBuf::from),
+    )
+}
+
+fn collect_opencode_database_paths_at(
+    data_dir: &Path,
+    database_override: Option<PathBuf>,
+) -> Vec<PathBuf> {
+    if let Some(path) = database_override.filter(|path| !path.as_os_str().is_empty()) {
+        if path == Path::new(":memory:") {
             return Vec::new();
         }
-        let path = PathBuf::from(raw_path);
         let resolved = if path.is_absolute() {
             path
         } else {
-            opencode_data_dir().join(path)
+            data_dir.join(path)
         };
         return resolved.exists().then_some(resolved).into_iter().collect();
     }
 
-    let Ok(entries) = fs::read_dir(opencode_data_dir()) else {
+    let Ok(entries) = fs::read_dir(data_dir) else {
         return Vec::new();
     };
     let mut paths = entries
@@ -1606,18 +2013,8 @@ fn sqlite_select_column(connection: &Connection, table: &str, alias: &str, colum
     }
 }
 
-fn opencode_project_join(connection: &Connection) -> &'static str {
-    if sqlite_table_exists(connection, "project")
-        && sqlite_column_exists(connection, "session", "project_id")
-    {
-        "LEFT JOIN project p ON p.id = s.project_id"
-    } else {
-        "LEFT JOIN (SELECT NULL AS worktree) p ON 1 = 0"
-    }
-}
-
-fn opencode_session_model_select(connection: &Connection) -> &'static str {
-    if sqlite_column_exists(connection, "session", "model") {
+fn opencode_session_model_select(connection: &Connection, session_table: &str) -> &'static str {
+    if sqlite_column_exists(connection, session_table, "model") {
         "s.model AS session_model"
     } else {
         "NULL AS session_model"
@@ -1641,14 +2038,6 @@ fn row_u64(row: &rusqlite::Row<'_>, column: &str) -> u64 {
         .unwrap_or(0)
 }
 
-fn row_f64(row: &rusqlite::Row<'_>, column: &str) -> f64 {
-    row.get::<_, Option<f64>>(column)
-        .ok()
-        .flatten()
-        .filter(|value| value.is_finite() && *value > 0.0)
-        .unwrap_or(0.0)
-}
-
 fn map_opencode_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<OpenCodeUsageRow> {
     Ok(OpenCodeUsageRow {
         id: row_optional_string(row, "id").unwrap_or_else(|| "unknown".to_string()),
@@ -1657,59 +2046,30 @@ fn map_opencode_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<OpenCodeUsageRo
         time_updated: row_optional_i64(row, "time_updated"),
         session_model: row_optional_string(row, "session_model"),
         data: row_optional_string(row, "data").unwrap_or_else(|| "{}".to_string()),
+        is_session_total: false,
     })
-}
-
-fn can_read_opencode_session_usage_rows(connection: &Connection) -> bool {
-    sqlite_table_exists(connection, "session")
-        && [
-            "cost",
-            "tokens_input",
-            "tokens_output",
-            "tokens_reasoning",
-            "tokens_cache_read",
-        ]
-        .iter()
-        .all(|column| sqlite_column_exists(connection, "session", column))
-}
-
-fn opencode_session_usage_row_count(connection: &Connection) -> u64 {
-    if !can_read_opencode_session_usage_rows(connection) {
-        return 0;
-    }
-    connection
-        .query_row(
-            "SELECT COUNT(*) FROM session
-             WHERE COALESCE(tokens_input, 0) + COALESCE(tokens_output, 0)
-                   + COALESCE(tokens_reasoning, 0) + COALESCE(tokens_cache_read, 0) > 0",
-            [],
-            |row| row.get::<_, u64>(0),
-        )
-        .unwrap_or(0)
 }
 
 fn select_opencode_session_usage_rows(
     connection: &Connection,
+    session_table: &str,
 ) -> Result<Vec<OpenCodeUsageRow>, String> {
-    let project_join = opencode_project_join(connection);
-    let session_model_select = opencode_session_model_select(connection);
-    let time_created_select = sqlite_select_column(connection, "session", "s", "time_created");
-    let time_updated_select = sqlite_select_column(connection, "session", "s", "time_updated");
-    let directory_select = sqlite_select_column(connection, "session", "s", "directory");
-    let order_by = if sqlite_column_exists(connection, "session", "time_created") {
-        "s.time_created"
-    } else {
-        "s.id"
-    };
+    let session_model_select = opencode_session_model_select(connection, session_table);
+    let time_created_select = sqlite_select_column(connection, session_table, "s", "time_created");
+    let time_updated_select = sqlite_select_column(connection, session_table, "s", "time_updated");
+    let token_select = [
+        "tokens_input",
+        "tokens_output",
+        "tokens_reasoning",
+        "tokens_cache_read",
+        "tokens_cache_write",
+    ]
+    .map(|column| sqlite_select_column(connection, session_table, "s", column))
+    .join(", ");
     let sql = format!(
         "SELECT s.id AS id, s.id AS session_id, {time_created_select}, {time_updated_select},
-                {directory_select}, p.worktree AS worktree, {session_model_select},
-                s.cost, s.tokens_input, s.tokens_output, s.tokens_reasoning, s.tokens_cache_read
-         FROM session s
-         {project_join}
-         WHERE COALESCE(s.tokens_input, 0) + COALESCE(s.tokens_output, 0)
-               + COALESCE(s.tokens_reasoning, 0) + COALESCE(s.tokens_cache_read, 0) > 0
-         ORDER BY {order_by}, s.id"
+                {session_model_select}, {token_select}
+         FROM {session_table} s ORDER BY s.id"
     );
     let mut statement = connection
         .prepare(&sql)
@@ -1720,6 +2080,7 @@ fn select_opencode_session_usage_rows(
             let output_tokens = row_u64(row, "tokens_output");
             let reasoning_tokens = row_u64(row, "tokens_reasoning");
             let cache_read_tokens = row_u64(row, "tokens_cache_read");
+            let cache_write_tokens = row_u64(row, "tokens_cache_write");
             Ok(OpenCodeUsageRow {
                 id: row_optional_string(row, "id").unwrap_or_else(|| "unknown".to_string()),
                 session_id: row_optional_string(row, "session_id")
@@ -1728,50 +2089,47 @@ fn select_opencode_session_usage_rows(
                 time_updated: row_optional_i64(row, "time_updated"),
                 session_model: row_optional_string(row, "session_model"),
                 data: json!({
-                    "cost": row_f64(row, "cost"),
                     "tokens": {
                         "input": input_tokens,
                         "output": output_tokens,
                         "reasoning": reasoning_tokens,
-                        "total": input_tokens + output_tokens + reasoning_tokens,
+                        "total": input_tokens + output_tokens + reasoning_tokens + cache_read_tokens + cache_write_tokens,
                         "cache": {
                             "read": cache_read_tokens,
-                            "write": 0
+                            "write": cache_write_tokens
                         }
                     }
                 })
                 .to_string(),
+                is_session_total: true,
             })
         })
         .map_err(|error| format!("读取 OpenCode session 统计失败: {error}"))?;
     Ok(rows.filter_map(Result::ok).collect())
 }
 
-fn opencode_table_has_rows(connection: &Connection, table: &str) -> bool {
-    if !sqlite_table_exists(connection, table) {
-        return false;
-    }
-    let sql = format!("SELECT COUNT(*) FROM {table} WHERE data IS NOT NULL");
-    connection
-        .query_row(&sql, [], |row| row.get::<_, u64>(0))
-        .unwrap_or(0)
-        > 0
-}
-
 fn select_opencode_message_rows(
     connection: &Connection,
+    session_table: &str,
     table: &str,
     alias: &str,
 ) -> Result<Vec<OpenCodeUsageRow>, String> {
-    let project_join = opencode_project_join(connection);
-    let session_model_select = opencode_session_model_select(connection);
+    let session_model_select = opencode_session_model_select(connection, session_table);
     let time_created_select = sqlite_select_column(connection, table, alias, "time_created");
     let time_updated_select = sqlite_select_column(connection, table, alias, "time_updated");
-    let directory_select = sqlite_select_column(connection, "session", "s", "directory");
     let assistant_predicate = if sqlite_column_exists(connection, table, "type") {
         format!("{alias}.type = 'assistant'")
     } else {
-        format!("{alias}.data IS NOT NULL")
+        format!("json_valid({alias}.data) AND json_extract({alias}.data, '$.role') = 'assistant'")
+    };
+    let fork_predicate = if sqlite_column_exists(connection, session_table, "fork_session_id")
+        && sqlite_column_exists(connection, session_table, "time_created")
+        && sqlite_column_exists(connection, table, "time_created")
+    {
+        // v2 fork 复制历史时保留原消息时间，不能再次记成新模型调用。
+        format!("(s.fork_session_id IS NULL OR {alias}.time_created >= s.time_created)")
+    } else {
+        "1 = 1".to_string()
     };
     let order_by = if sqlite_column_exists(connection, table, "time_created") {
         format!("{alias}.time_created")
@@ -1780,12 +2138,10 @@ fn select_opencode_message_rows(
     };
     let sql = format!(
         "SELECT {alias}.id AS id, {alias}.session_id AS session_id,
-                {time_created_select}, {time_updated_select}, {alias}.data AS data,
-                {directory_select}, p.worktree AS worktree, {session_model_select}
+                {time_created_select}, {time_updated_select}, {alias}.data AS data, {session_model_select}
          FROM {table} {alias}
-         JOIN session s ON s.id = {alias}.session_id
-         {project_join}
-         WHERE {assistant_predicate}
+         JOIN {session_table} s ON s.id = {alias}.session_id
+         WHERE {assistant_predicate} AND {fork_predicate}
          ORDER BY {order_by}, {alias}.id"
     );
     let mut statement = connection
@@ -1798,19 +2154,51 @@ fn select_opencode_message_rows(
 }
 
 fn select_opencode_usage_rows(connection: &Connection) -> Result<Vec<OpenCodeUsageRow>, String> {
-    if !sqlite_table_exists(connection, "session") {
-        return Ok(Vec::new());
+    let mut rows = Vec::new();
+    let mut claimed_sessions = BTreeSet::new();
+    let has_v2 = sqlite_table_exists(connection, "session_v2");
+    for session_table in ["session_v2", "session"] {
+        if !sqlite_table_exists(connection, session_table) {
+            continue;
+        }
+        let session_rows = select_opencode_session_usage_rows(connection, session_table)?;
+        let current_sessions = session_rows
+            .iter()
+            .map(|row| row.session_id.clone())
+            .collect::<BTreeSet<_>>();
+        let message_tables: &[&str] = if session_table == "session_v2" {
+            &["session_message"]
+        } else if has_v2 {
+            &["message"]
+        } else {
+            &["session_message", "message"]
+        };
+        let mut claimed_message_sessions = BTreeSet::new();
+        for message_table in message_tables {
+            if !sqlite_table_exists(connection, message_table) {
+                continue;
+            }
+            let messages =
+                select_opencode_message_rows(connection, session_table, message_table, "m")?
+                    .into_iter()
+                    .filter(|row| {
+                        !claimed_sessions.contains(&row.session_id)
+                            && !claimed_message_sessions.contains(&row.session_id)
+                            && parse_opencode_usage_row(row.clone()).is_some()
+                    })
+                    .collect::<Vec<_>>();
+            claimed_message_sessions.extend(messages.iter().map(|row| row.session_id.clone()));
+            rows.extend(messages);
+        }
+        // 迁移后新旧表可能并存，同一 session 只接受新投影。
+        rows.extend(
+            session_rows
+                .into_iter()
+                .filter(|row| !claimed_sessions.contains(&row.session_id)),
+        );
+        claimed_sessions.extend(current_sessions);
     }
-    if opencode_session_usage_row_count(connection) > 0 {
-        return select_opencode_session_usage_rows(connection);
-    }
-    if opencode_table_has_rows(connection, "session_message") {
-        return select_opencode_message_rows(connection, "session_message", "sm");
-    }
-    if opencode_table_has_rows(connection, "message") {
-        return select_opencode_message_rows(connection, "message", "m");
-    }
-    Ok(Vec::new())
+    Ok(rows)
 }
 
 fn parse_json_object(value: Option<&Value>) -> Option<&serde_json::Map<String, Value>> {
@@ -1889,18 +2277,29 @@ fn parse_opencode_usage_row(row: OpenCodeUsageRow) -> Option<ParsedAgentUsageEve
     let output_tokens = json_u64(tokens.get("output"));
     let reasoning_tokens = json_u64(tokens.get("reasoning"));
     let cached_input_tokens = json_u64(cache.and_then(|cache| cache.get("read")));
+    let cache_write_input_tokens = json_u64(cache.and_then(|cache| cache.get("write")));
     let explicit_total = json_u64(tokens.get("total"));
-    let categorized_total = input_tokens + output_tokens + reasoning_tokens + cached_input_tokens;
+    let categorized_total = input_tokens
+        + output_tokens
+        + reasoning_tokens
+        + cached_input_tokens
+        + cache_write_input_tokens;
     let total_tokens = explicit_total.max(categorized_total);
 
-    if input_tokens + output_tokens + reasoning_tokens + cached_input_tokens + total_tokens == 0 {
+    if row.is_session_total && total_tokens == 0 {
         return None;
     }
 
-    let timestamp = extract_opencode_timestamp(&data, &row)?;
+    // 累计记录缺日期时仍保留总量，epoch 仅作内部占位，不写入每日统计。
+    let timestamp = extract_opencode_timestamp(&data, &row).or_else(|| {
+        row.is_session_total
+            .then(|| Utc.timestamp_millis_opt(0).single())
+            .flatten()
+    })?;
     let raw_usage = RawTokenUsage {
         input_tokens,
         cached_input_tokens,
+        cache_write_input_tokens,
         output_tokens,
         reasoning_output_tokens: reasoning_tokens,
         total_tokens,
@@ -1922,11 +2321,14 @@ fn parse_opencode_usage_row(row: OpenCodeUsageRow) -> Option<ParsedAgentUsageEve
     })
 }
 
-fn build_opencode_usage_stats() -> Result<AggregatedTranscriptStats, String> {
+fn build_opencode_usage_stats_from_paths(
+    paths: Vec<PathBuf>,
+) -> Result<AggregatedTranscriptStats, String> {
     let mut aggregate = AggregatedTranscriptStats::default();
     let mut sessions = BTreeMap::<String, UsageSessionSpan>::new();
+    let mut unique_rows = BTreeMap::<(bool, String, String), OpenCodeUsageRow>::new();
 
-    for db_path in collect_opencode_database_paths() {
+    for db_path in paths {
         let connection = Connection::open_with_flags(&db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
             .map_err(|error| {
                 format!(
@@ -1935,14 +2337,87 @@ fn build_opencode_usage_stats() -> Result<AggregatedTranscriptStats, String> {
                 )
             })?;
         for row in select_opencode_usage_rows(&connection)? {
-            if let Some(event) = parse_opencode_usage_row(row) {
-                record_generic_usage_event(&mut aggregate, &mut sessions, event);
+            let Some(event) = parse_opencode_usage_row(row.clone()) else {
+                continue;
+            };
+            let key = (row.is_session_total, row.session_id.clone(), row.id.clone());
+            let replace = unique_rows.get(&key).is_none_or(|previous| {
+                let previous_total = parse_opencode_usage_row(previous.clone())
+                    .map(|event| event.total_tokens)
+                    .unwrap_or(0);
+                (row.time_updated.unwrap_or(0), event.total_tokens)
+                    > (previous.time_updated.unwrap_or(0), previous_total)
+            });
+            if replace {
+                unique_rows.insert(key, row);
             }
         }
     }
 
+    let mut observed = BTreeMap::<String, AgentUsageTokenBreakdown>::new();
+    for row in unique_rows.values().filter(|row| !row.is_session_total) {
+        if let Some(event) = parse_opencode_usage_row(row.clone()) {
+            observed
+                .entry(event.session_id.clone())
+                .or_default()
+                .merge(event.token_breakdown.clone());
+            record_generic_usage_event(&mut aggregate, &mut sessions, event);
+        }
+    }
+    for row in unique_rows.into_values().filter(|row| row.is_session_total) {
+        let Some(event) = parse_opencode_usage_row(row.clone()) else {
+            continue;
+        };
+        let recorded = observed.get(&event.session_id).cloned().unwrap_or_default();
+        let total = event.token_breakdown;
+        let mut remainder = AgentUsageTokenBreakdown {
+            input_tokens: total.input_tokens.saturating_sub(recorded.input_tokens),
+            output_tokens: total.output_tokens.saturating_sub(recorded.output_tokens),
+            cache_read_tokens: total
+                .cache_read_tokens
+                .saturating_sub(recorded.cache_read_tokens),
+            cache_creation_tokens: total
+                .cache_creation_tokens
+                .saturating_sub(recorded.cache_creation_tokens),
+            reasoning_output_tokens: total
+                .reasoning_output_tokens
+                .saturating_sub(recorded.reasoning_output_tokens),
+            other_tokens: total.other_tokens.saturating_sub(recorded.other_tokens),
+            total_tokens: 0,
+        };
+        remainder.recalculate_total();
+        if remainder.total_tokens > 0 {
+            // 累计剩余没有逐请求日期，不能冒充最后更新日的交互或用量。
+            aggregate.undated_tokens += remainder.total_tokens;
+            aggregate.token_data_incomplete = true;
+            // session.model 只是当前选择，不能代表整段缺失历史实际使用的模型。
+            aggregate
+                .model_usage
+                .entry("unknown".to_string())
+                .or_default()
+                .input_tokens += remainder.total_tokens;
+            aggregate.token_breakdown.merge(remainder);
+        }
+        let first = normalize_millis(row.time_created)
+            .and_then(|value| Utc.timestamp_millis_opt(value).single());
+        let last = normalize_millis(row.time_updated)
+            .and_then(|value| Utc.timestamp_millis_opt(value).single());
+        if let Some(first) = first.or(last) {
+            let span = sessions
+                .entry(event.session_id)
+                .or_insert_with(|| UsageSessionSpan::new(first));
+            span.update(first);
+            if let Some(last) = last {
+                span.update(last);
+            }
+        }
+    }
     finalize_generic_sessions(&mut aggregate, sessions);
     Ok(aggregate)
+}
+
+fn build_opencode_usage_stats() -> Result<AggregatedTranscriptStats, String> {
+    build_opencode_usage_stats_from_paths(collect_opencode_database_paths())
 }
 
 fn antigravity_gemini_home() -> Option<PathBuf> {
@@ -2143,18 +2618,10 @@ fn build_antigravity_usage_stats_from_files(
                         estimate_antigravity_value_tokens(record.get("thinking"));
                     let total_tokens = input_tokens + output_tokens + reasoning_output_tokens;
                     if total_tokens > 0 {
-                        let raw_usage = RawTokenUsage {
-                            input_tokens,
-                            cached_input_tokens: 0,
-                            output_tokens,
-                            reasoning_output_tokens,
-                            total_tokens,
-                        };
-                        let mut token_breakdown = AgentUsageTokenBreakdown::default();
-                        // Antigravity's transcript reports answer content and thinking separately.
-                        // OpenCode's normalization keeps those two output categories independent,
-                        // while Codex's treats reasoning as a subset of output.
-                        token_breakdown.add_opencode_usage(raw_usage, total_tokens);
+                        // 旧 transcript 的字符估算不能恢复请求上下文和缓存用量。
+                        // 保留独立估算值和真实活动，不把估算并入精确 Token 总量。
+                        aggregate.estimated_tokens += total_tokens;
+                        aggregate.token_data_incomplete = true;
                         record_generic_usage_event(
                             &mut aggregate,
                             &mut sessions,
@@ -2164,8 +2631,8 @@ fn build_antigravity_usage_stats_from_files(
                                 model: current_model
                                     .clone()
                                     .unwrap_or_else(|| "antigravity-unknown".to_string()),
-                                total_tokens,
-                                token_breakdown,
+                                total_tokens: 0,
+                                token_breakdown: AgentUsageTokenBreakdown::default(),
                             },
                         );
                     }
@@ -2240,12 +2707,13 @@ fn build_antigravity_usage_stats_at(
         }
         match build_antigravity_usage_stats_from_files(vec![transcript]) {
             Ok(stats) => {
-                estimated |= stats.total_tokens() > 0;
+                estimated |= stats.estimated_tokens > 0;
                 merge_aggregated_stats(&mut aggregate, stats);
             }
             Err(_) => incomplete = true,
         }
     }
+    aggregate.token_data_incomplete |= incomplete;
     Ok((aggregate, estimated, incomplete))
 }
 
@@ -2256,6 +2724,7 @@ struct QoderUsageRow {
     token_info: String,
     model_info: Option<String>,
     created_at: Option<i64>,
+    has_content: bool,
 }
 
 fn qoder_database_path(env_prefix: &str, app_directory: &str) -> Option<PathBuf> {
@@ -2334,12 +2803,11 @@ fn select_qoder_usage_rows(connection: &Connection) -> Result<Vec<QoderUsageRow>
     }
 
     let model_info_select = sqlite_select_column(connection, "chat_message", "cm", "model_info");
+    let content_select = sqlite_select_column(connection, "chat_message", "cm", "content");
     let sql = format!(
-        "SELECT cm.id, cm.session_id, cm.token_info, {model_info_select}, cm.gmt_create
+        "SELECT cm.id, cm.session_id, cm.token_info, {model_info_select}, cm.gmt_create, {content_select}
          FROM chat_message cm
          WHERE cm.role = 'assistant'
-           AND cm.token_info IS NOT NULL
-           AND trim(cm.token_info) NOT IN ('', '{{}}')
          ORDER BY cm.gmt_create, cm.rowid"
     );
     let mut statement = connection
@@ -2354,6 +2822,12 @@ fn select_qoder_usage_rows(connection: &Connection) -> Result<Vec<QoderUsageRow>
                 token_info: row_optional_string(row, "token_info").unwrap_or_default(),
                 model_info: row_optional_string(row, "model_info"),
                 created_at: row_optional_i64(row, "gmt_create"),
+                has_content: row_optional_string(row, "content").is_some_and(|value| {
+                    match serde_json::from_str::<Value>(&value) {
+                        Ok(content) => local_provider_stats::has_content(Some(&content)),
+                        Err(_) => !value.trim().is_empty(),
+                    }
+                }),
             })
         })
         .map_err(|error| format!("读取 Qoder 用量记录失败: {error}"))?;
@@ -2373,12 +2847,12 @@ fn qoder_model_label(model_info: Option<&str>) -> String {
 }
 
 fn parse_qoder_usage_row(row: QoderUsageRow) -> Option<ParsedAgentUsageEvent> {
-    let token_info = serde_json::from_str::<Value>(&row.token_info).ok()?;
+    let token_info = serde_json::from_str::<Value>(&row.token_info).unwrap_or(Value::Null);
     let prompt_tokens = json_u64(token_info.get("prompt_tokens"));
     let cached_input_tokens = json_u64(token_info.get("cached_tokens")).min(prompt_tokens);
     let output_tokens = json_u64(token_info.get("completion_tokens"));
     let total_tokens = prompt_tokens + output_tokens;
-    if total_tokens == 0 {
+    if total_tokens == 0 && !row.has_content {
         return None;
     }
 
@@ -2391,6 +2865,7 @@ fn parse_qoder_usage_row(row: QoderUsageRow) -> Option<ParsedAgentUsageEvent> {
         output_tokens,
         reasoning_output_tokens: 0,
         total_tokens,
+        ..Default::default()
     };
     let mut token_breakdown = AgentUsageTokenBreakdown::default();
     // Qoder's cached_tokens is a subset of prompt_tokens. Reuse the Codex
@@ -2412,33 +2887,18 @@ fn parse_qoder_usage_row(row: QoderUsageRow) -> Option<ParsedAgentUsageEvent> {
     })
 }
 
+#[cfg(test)]
 fn build_qoder_usage_stats_from_paths(
     database_paths: Vec<PathBuf>,
 ) -> Result<AggregatedTranscriptStats, String> {
-    let mut aggregate = AggregatedTranscriptStats::default();
-    let mut sessions = BTreeMap::<String, UsageSessionSpan>::new();
-
-    for db_path in database_paths {
-        let connection = Connection::open_with_flags(&db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .map_err(|error| {
-                format!(
-                    "打开 Qoder 本地数据库失败 {}: {error}",
-                    display_path(&db_path)
-                )
-            })?;
-        for row in select_qoder_usage_rows(&connection)? {
-            if let Some(event) = parse_qoder_usage_row(row) {
-                record_generic_usage_event(&mut aggregate, &mut sessions, event);
-            }
-        }
-    }
-
-    finalize_generic_sessions(&mut aggregate, sessions);
-    Ok(aggregate)
+    local_provider_stats::build_qoder_stats(database_paths, Vec::new())
 }
 
 fn build_qoder_usage_stats() -> Result<AggregatedTranscriptStats, String> {
-    build_qoder_usage_stats_from_paths(collect_qoder_database_paths())
+    local_provider_stats::build_qoder_stats(
+        collect_qoder_database_paths(),
+        local_provider_stats::qoder_cli_files()?,
+    )
 }
 
 fn collect_pi_session_files(root: &Path) -> Result<Vec<PathBuf>, String> {
@@ -2473,87 +2933,10 @@ fn collect_pi_session_files(root: &Path) -> Result<Vec<PathBuf>, String> {
     Ok(files)
 }
 
-fn parse_pi_usage_event(record: &Value, session_id: &str) -> Option<ParsedAgentUsageEvent> {
-    if record.get("type")?.as_str()? != "message" {
-        return None;
-    }
-    let message = record.get("message")?;
-    if message.get("role")?.as_str()? != "assistant" {
-        return None;
-    }
-    let usage = message.get("usage")?;
-    let model = message.get("model")?.as_str()?.trim();
-    if model.is_empty() {
-        return None;
-    }
-    let timestamp = record
-        .get("timestamp")
-        .and_then(Value::as_str)
-        .and_then(parse_timestamp_utc)?;
-    let input = json_u64(usage.get("input"));
-    let output = json_u64(usage.get("output"));
-    let cache_read = json_u64(usage.get("cacheRead"));
-    let cache_write = json_u64(usage.get("cacheWrite"));
-    let reasoning = json_u64(usage.get("reasoning")).min(output);
-    let categorized_total = input
-        .saturating_add(output)
-        .saturating_add(cache_read)
-        .saturating_add(cache_write);
-    let total_tokens = json_u64(usage.get("totalTokens")).max(categorized_total);
-    if total_tokens == 0 {
-        return None;
-    }
-    // Pi reports reasoning as a subset of output, while cache reads and writes
-    // are separate from input. Keep display buckets mutually exclusive.
-    let mut token_breakdown = AgentUsageTokenBreakdown {
-        input_tokens: input,
-        output_tokens: output - reasoning,
-        cache_read_tokens: cache_read,
-        cache_creation_tokens: cache_write,
-        reasoning_output_tokens: reasoning,
-        other_tokens: total_tokens - categorized_total,
-        total_tokens: 0,
-    };
-    token_breakdown.recalculate_total();
-    Some(ParsedAgentUsageEvent {
-        session_id: session_id.to_string(),
-        timestamp,
-        model: model.to_string(),
-        total_tokens,
-        token_breakdown,
-    })
-}
-
 fn build_pi_usage_stats_from_files(
     session_files: Vec<PathBuf>,
 ) -> Result<AggregatedTranscriptStats, String> {
-    let mut aggregate = AggregatedTranscriptStats::default();
-    let mut sessions = BTreeMap::<String, UsageSessionSpan>::new();
-    for path in session_files {
-        let file = fs::File::open(&path)
-            .map_err(|error| format!("读取 Pi 会话 {} 失败: {error}", display_path(&path)))?;
-        let mut session_id = path.to_string_lossy().to_string();
-        for line in BufReader::new(file).lines() {
-            let line = line.map_err(|error| format!("读取 Pi 会话记录失败: {error}"))?;
-            let Ok(record) = serde_json::from_str::<Value>(&line) else {
-                continue;
-            };
-            if record.get("type").and_then(Value::as_str) == Some("session") {
-                if let Some(id) = record
-                    .get("id")
-                    .and_then(Value::as_str)
-                    .filter(|id| !id.is_empty())
-                {
-                    session_id = id.to_string();
-                }
-            }
-            if let Some(event) = parse_pi_usage_event(&record, &session_id) {
-                record_generic_usage_event(&mut aggregate, &mut sessions, event);
-            }
-        }
-    }
-    finalize_generic_sessions(&mut aggregate, sessions);
-    Ok(aggregate)
+    local_provider_stats::build_pi_stats(session_files)
 }
 
 fn build_pi_usage_stats() -> Result<AggregatedTranscriptStats, String> {
@@ -2677,19 +3060,9 @@ fn compute_peak_hour(hour_counts: &BTreeMap<String, u64>) -> Option<u8> {
 }
 
 fn build_claude_usage_stats() -> Result<AggregatedTranscriptStats, String> {
-    let cached_stats = load_claude_stats_cache()?;
-    let incremental_from_date = cached_stats
-        .as_ref()
-        .and_then(|cache| cache.last_computed_date.as_deref())
-        .and_then(next_date_string);
-    let session_files = collect_claude_session_files()?;
-    let incremental_stats =
-        process_session_files(&session_files, incremental_from_date.as_deref(), None);
-
-    let mut merged_stats = cached_stats.map(cache_to_aggregate).unwrap_or_default();
-    merge_aggregated_stats(&mut merged_stats, incremental_stats);
-
-    Ok(merged_stats)
+    let cache = load_claude_stats_cache()?;
+    let files = collect_claude_session_files()?;
+    Ok(claude_transcript_stats::reconcile_cache(cache, &files))
 }
 
 fn build_usage_overview_from_aggregate(
@@ -2707,6 +3080,14 @@ fn build_usage_overview_from_aggregate(
         .values()
         .filter(|entry| entry.message_count > 0 || entry.session_count > 0)
         .map(|entry| entry.date.clone())
+        .chain(merged_stats.historical_active_dates.iter().cloned())
+        .chain(
+            merged_stats
+                .daily_model_tokens
+                .iter()
+                .filter(|(_, models)| models.values().any(|tokens| *tokens > 0))
+                .map(|(date, _)| date.clone()),
+        )
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect::<Vec<_>>();
@@ -2732,6 +3113,12 @@ fn build_usage_overview_from_aggregate(
         ),
         favorite_model: compute_favorite_model(&merged_stats.model_usage),
         peak_hour: compute_peak_hour(&merged_stats.hour_counts),
+        estimated_tokens: merged_stats.estimated_tokens,
+        undated_tokens: merged_stats.undated_tokens,
+        token_data_incomplete: merged_stats.token_data_incomplete
+            || providers
+                .iter()
+                .any(|provider| provider.last_error.is_some()),
     };
 
     let daily_activity = merged_stats
@@ -2755,11 +3142,11 @@ fn build_usage_overview_from_aggregate(
         })
         .collect();
 
-    let heatmap = daily_activity
+    let heatmap = activity_dates
         .iter()
-        .map(|entry| AgentUsageHeatmapDay {
-            date: entry.date.clone(),
-            token_count: daily_token_totals.get(&entry.date).copied().unwrap_or(0),
+        .map(|date| AgentUsageHeatmapDay {
+            date: date.clone(),
+            token_count: daily_token_totals.get(date).copied().unwrap_or(0),
         })
         .collect::<Vec<_>>();
 
@@ -2861,13 +3248,10 @@ pub(crate) fn build_agent_usage_overview(
             providers.push(build_provider_summary(
                 "antigravity",
                 "Antigravity CLI",
-                if estimated || incomplete {
-                    "partial"
-                } else {
-                    "full"
-                },
+                // 本地数据库仍依赖非公开格式，不能因成功解码就宣称完整覆盖。
+                "partial",
                 if estimated {
-                    "~/.gemini/antigravity*/conversations/*.db + transcript (local estimate)"
+                    "~/.gemini/antigravity*/conversations/*.db + transcript activity (estimates excluded from exact totals)"
                 } else {
                     "~/.gemini/antigravity*/conversations/*.db (generation token records)"
                 },
@@ -2890,7 +3274,7 @@ pub(crate) fn build_agent_usage_overview(
                 "qoder",
                 "Qoder CLI",
                 "partial",
-                "Qoder/QoderCN SharedClientCache/cache/db/local.db (assistant token_info only)",
+                "Qoder/QoderCN local.db + ~/.qoder{,-cn}/projects/**/*.jsonl (Token availability varies)",
                 &stats,
                 None,
             ));
@@ -2900,7 +3284,7 @@ pub(crate) fn build_agent_usage_overview(
             "qoder",
             "Qoder CLI",
             "partial",
-            "Qoder/QoderCN SharedClientCache/cache/db/local.db (assistant token_info only)",
+            "Qoder/QoderCN local.db + ~/.qoder{,-cn}/projects/**/*.jsonl (Token availability varies)",
             Some(error),
         )),
     }
@@ -2911,7 +3295,7 @@ pub(crate) fn build_agent_usage_overview(
                 "pi",
                 "Pi",
                 "partial",
-                "~/.pi/agent/sessions/*/*.jsonl (assistant message usage)",
+                "~/.pi/agent/sessions/*/*.jsonl (deduplicated assistant, summary and usage entries)",
                 &stats,
                 None,
             ));
@@ -2921,7 +3305,7 @@ pub(crate) fn build_agent_usage_overview(
             "pi",
             "Pi",
             "partial",
-            "~/.pi/agent/sessions/*/*.jsonl (assistant message usage)",
+            "~/.pi/agent/sessions/*/*.jsonl (deduplicated assistant, summary and usage entries)",
             Some(error),
         )),
     }
@@ -4656,6 +5040,7 @@ mod tests {
             current_model: None,
             previous_totals: None,
             total_only_baseline_pending: false,
+            ..CodexUsageParseContext::default()
         };
 
         let event = parse_codex_usage_record(&record, &mut context).unwrap();
@@ -4667,6 +5052,236 @@ mod tests {
         assert_eq!(event.token_breakdown.cache_read_tokens, 80);
         assert_eq!(event.token_breakdown.reasoning_output_tokens, 15);
         assert_eq!(event.token_breakdown.total_tokens, event.total_tokens);
+    }
+
+    #[test]
+    fn opencode_data_directory_uses_xdg_or_home_on_every_platform() {
+        let home = PathBuf::from("user-home");
+        assert_eq!(
+            resolve_opencode_data_home(None, Some(home.clone())),
+            home.join(".local").join("share")
+        );
+        assert_eq!(
+            resolve_opencode_data_home(Some(PathBuf::from("custom-data")), Some(home.clone())),
+            PathBuf::from("custom-data")
+        );
+        assert_eq!(
+            resolve_opencode_data_home(Some(PathBuf::new()), Some(home.clone())),
+            home.join(".local").join("share")
+        );
+    }
+
+    #[test]
+    fn opencode_database_discovery_respects_absolute_relative_and_memory_overrides() {
+        let directory = tempfile::tempdir().unwrap();
+        let default = directory.path().join("opencode.db");
+        let custom = directory.path().join("custom.db");
+        fs::write(&default, []).unwrap();
+        fs::write(&custom, []).unwrap();
+        assert_eq!(
+            collect_opencode_database_paths_at(directory.path(), None),
+            vec![default]
+        );
+        assert_eq!(
+            collect_opencode_database_paths_at(directory.path(), Some(PathBuf::from("custom.db"))),
+            vec![custom.clone()]
+        );
+        assert_eq!(
+            collect_opencode_database_paths_at(directory.path(), Some(custom.clone())),
+            vec![custom]
+        );
+        assert!(collect_opencode_database_paths_at(
+            directory.path(),
+            Some(PathBuf::from(":memory:"))
+        )
+        .is_empty());
+    }
+
+    fn create_opencode_usage_fixture(path: &Path, include_second_message: bool) {
+        let connection = Connection::open(path).unwrap();
+        connection.execute_batch(
+            "CREATE TABLE session (id TEXT PRIMARY KEY, model TEXT, time_created INTEGER, time_updated INTEGER,
+                tokens_input INTEGER, tokens_output INTEGER, tokens_reasoning INTEGER, tokens_cache_read INTEGER, tokens_cache_write INTEGER);
+             CREATE TABLE message (id TEXT PRIMARY KEY, session_id TEXT, time_created INTEGER, data TEXT);
+             INSERT INTO session VALUES ('session-a', 'provider/model-a', 1788264000000, 1788436800000, 30, 3, 0, 50, 7);"
+        ).unwrap();
+        for (id, timestamp, input, output, cache_read, cache_write) in [
+            ("m1", 1_788_264_000_000_i64, 10, 1, 20, 2),
+            ("m2", 1_788_350_400_000_i64, 20, 2, 30, 5),
+        ] {
+            if id == "m2" && !include_second_message {
+                continue;
+            }
+            let data = json!({"role":"assistant", "modelID":"model-a", "providerID":"provider",
+                "time":{"created":timestamp}, "tokens":{"input":input,"output":output,"reasoning":0,"cache":{"read":cache_read,"write":cache_write}}});
+            connection
+                .execute(
+                    "INSERT INTO message VALUES (?1, 'session-a', ?2, ?3)",
+                    rusqlite::params![id, timestamp, data.to_string()],
+                )
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn opencode_requests_keep_actual_dates_and_do_not_add_session_totals_twice() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("opencode.db");
+        create_opencode_usage_fixture(&path, true);
+        let stats = build_opencode_usage_stats_from_paths(vec![path]).unwrap();
+        assert_eq!(stats.total_tokens(), 90);
+        assert_eq!(stats.total_messages, 2);
+        assert_eq!(stats.total_sessions, 1);
+        assert_eq!(stats.daily_model_tokens.len(), 2);
+        assert_eq!(
+            stats
+                .daily_model_tokens
+                .values()
+                .map(|models| models.values().sum::<u64>())
+                .collect::<Vec<_>>(),
+            vec![33, 57]
+        );
+        assert_eq!(stats.token_breakdown.cache_creation_tokens, 7);
+        assert_eq!(stats.undated_tokens, 0);
+    }
+
+    #[test]
+    fn opencode_partial_request_history_preserves_only_the_undated_remainder() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("opencode.db");
+        create_opencode_usage_fixture(&path, false);
+        let stats = build_opencode_usage_stats_from_paths(vec![path]).unwrap();
+        assert_eq!(stats.total_tokens(), 90);
+        assert_eq!(stats.total_messages, 1);
+        assert_eq!(stats.undated_tokens, 57);
+        assert!(stats.token_data_incomplete);
+        assert_eq!(
+            stats
+                .model_usage
+                .get("unknown")
+                .map(ClaudeStatsModelUsage::total_tokens),
+            Some(57)
+        );
+        assert_eq!(
+            stats
+                .daily_model_tokens
+                .values()
+                .flat_map(|models| models.values())
+                .sum::<u64>(),
+            33
+        );
+    }
+
+    #[test]
+    fn opencode_duplicate_databases_do_not_repeat_requests_or_session_remainders() {
+        let directory = tempfile::tempdir().unwrap();
+        let first = directory.path().join("first.db");
+        let second = directory.path().join("second.db");
+        create_opencode_usage_fixture(&first, false);
+        fs::copy(&first, &second).unwrap();
+        let stats = build_opencode_usage_stats_from_paths(vec![first, second]).unwrap();
+        assert_eq!(stats.total_tokens(), 90);
+        assert_eq!(stats.total_messages, 1);
+        assert_eq!(stats.total_sessions, 1);
+        assert_eq!(stats.undated_tokens, 57);
+    }
+
+    #[test]
+    fn opencode_session_only_cache_writes_are_preserved_without_fabricated_daily_events() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("opencode.db");
+        let connection = Connection::open(&path).unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE session (id TEXT, time_created INTEGER, tokens_cache_write INTEGER);
+            INSERT INTO session VALUES ('write-only', 1788264000000, 12);",
+            )
+            .unwrap();
+        drop(connection);
+        let stats = build_opencode_usage_stats_from_paths(vec![path]).unwrap();
+        assert_eq!(stats.total_tokens(), 12);
+        assert_eq!(stats.token_breakdown.cache_creation_tokens, 12);
+        assert_eq!(stats.total_messages, 0);
+        assert_eq!(stats.total_sessions, 1);
+        assert_eq!(stats.undated_tokens, 12);
+        assert!(stats.daily_model_tokens.is_empty());
+        assert!(stats.hour_counts.is_empty());
+    }
+
+    #[test]
+    fn opencode_session_v2_and_legacy_tables_prefer_the_new_projection_per_session() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("opencode.db");
+        let connection = Connection::open(&path).unwrap();
+        connection.execute_batch(r#"CREATE TABLE session_v2 (id TEXT PRIMARY KEY, time_created INTEGER, tokens_input INTEGER);
+            CREATE TABLE session (id TEXT PRIMARY KEY, time_created INTEGER, tokens_input INTEGER);
+            CREATE TABLE session_message (id TEXT, session_id TEXT, type TEXT, time_created INTEGER, data TEXT);
+            CREATE TABLE message (id TEXT, session_id TEXT, time_created INTEGER, data TEXT);
+            INSERT INTO session_v2 VALUES ('migrated', 1788264000000, 10);
+            INSERT INTO session VALUES ('migrated', 1788264000000, 999);
+            INSERT INTO session VALUES ('legacy-only', 1788264000000, 20);
+            INSERT INTO session_message VALUES ('new-message', 'migrated', 'assistant', 1788264000000, '{"tokens":{"input":10}}');
+            INSERT INTO message VALUES ('old-message', 'migrated', 1788264000000, '{"role":"assistant","tokens":{"input":999}}');
+            INSERT INTO message VALUES ('legacy-message', 'legacy-only', 1788264000000, '{"role":"assistant","tokens":{"input":20}}');"#).unwrap();
+        drop(connection);
+        let stats = build_opencode_usage_stats_from_paths(vec![path]).unwrap();
+        assert_eq!(stats.total_tokens(), 30);
+        assert_eq!(stats.total_messages, 2);
+        assert_eq!(stats.total_sessions, 2);
+        assert_eq!(stats.undated_tokens, 0);
+    }
+
+    #[test]
+    fn opencode_v2_forks_do_not_recount_copied_history() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("opencode.db");
+        let connection = Connection::open(&path).unwrap();
+        connection.execute_batch(r#"CREATE TABLE session_v2 (id TEXT PRIMARY KEY, fork_session_id TEXT, time_created INTEGER, tokens_input INTEGER);
+            CREATE TABLE session_message (id TEXT, session_id TEXT, type TEXT, time_created INTEGER, data TEXT);
+            INSERT INTO session_v2 VALUES ('original', NULL, 1788264000000, 10);
+            INSERT INTO session_v2 VALUES ('fork', 'original', 1788350400000, 5);
+            INSERT INTO session_message VALUES ('original-message', 'original', 'assistant', 1788264000000, '{"tokens":{"input":10}}');
+            INSERT INTO session_message VALUES ('copied-message', 'fork', 'assistant', 1788264000000, '{"tokens":{"input":10}}');
+            INSERT INTO session_message VALUES ('fresh-message', 'fork', 'assistant', 1788350400000, '{"tokens":{"input":5}}');"#).unwrap();
+        drop(connection);
+        let stats = build_opencode_usage_stats_from_paths(vec![path]).unwrap();
+        assert_eq!(stats.total_tokens(), 15);
+        assert_eq!(stats.total_messages, 2);
+        assert_eq!(stats.undated_tokens, 0);
+    }
+
+    #[test]
+    fn opencode_zero_token_requests_still_count_as_recorded_activity() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("opencode.db");
+        let connection = Connection::open(&path).unwrap();
+        connection.execute_batch(r#"CREATE TABLE session (id TEXT PRIMARY KEY);
+            CREATE TABLE session_message (id TEXT, session_id TEXT, type TEXT, time_created INTEGER, data TEXT);
+            CREATE TABLE message (id TEXT, session_id TEXT, time_created INTEGER, data TEXT);
+            INSERT INTO session VALUES ('zero');
+            INSERT INTO session_message VALUES ('zero-message', 'zero', 'assistant', 1788264000000, '{"tokens":{"input":0,"cache":{"write":0}}}');"#).unwrap();
+        drop(connection);
+        let stats = build_opencode_usage_stats_from_paths(vec![path]).unwrap();
+        assert_eq!(stats.total_tokens(), 0);
+        assert_eq!(stats.total_messages, 1);
+        assert_eq!(stats.total_sessions, 1);
+    }
+
+    #[test]
+    fn parse_opencode_cache_write_only_usage_is_not_lost_or_classified_as_other() {
+        let row = OpenCodeUsageRow {
+            id: "write-only".to_string(),
+            session_id: "session".to_string(),
+            time_created: Some(1_788_264_000_000),
+            time_updated: None,
+            session_model: None,
+            data: json!({"tokens":{"cache":{"write":3}}}).to_string(),
+            is_session_total: false,
+        };
+        let event = parse_opencode_usage_row(row).unwrap();
+        assert_eq!(event.total_tokens, 3);
+        assert_eq!(event.token_breakdown.cache_creation_tokens, 3);
+        assert_eq!(event.token_breakdown.other_tokens, 0);
     }
 
     #[test]
@@ -4687,6 +5302,7 @@ mod tests {
                 "time": { "created": 1_752_109_300_000_i64 }
             })
             .to_string(),
+            is_session_total: false,
         };
 
         let event = parse_opencode_usage_row(row).unwrap();
@@ -4792,19 +5408,19 @@ mod tests {
 
         assert_eq!(estimate_antigravity_tokens("abcde"), 2);
         assert_eq!(estimate_antigravity_tokens("中文"), 2);
-        assert_eq!(stats.total_tokens(), 4);
+        assert_eq!(stats.total_tokens(), 0);
+        assert_eq!(stats.estimated_tokens, 4);
+        assert!(stats.token_data_incomplete);
         assert_eq!(stats.total_messages(), 1);
         assert_eq!(stats.total_sessions, 1);
-        assert_eq!(stats.token_breakdown.input_tokens, 2);
-        assert_eq!(stats.token_breakdown.output_tokens, 1);
-        assert_eq!(stats.token_breakdown.reasoning_output_tokens, 1);
+        assert_eq!(stats.token_breakdown.total_tokens, 0);
         assert_eq!(
             stats
                 .daily_model_tokens
                 .values()
                 .next()
                 .and_then(|models| models.get("gemini-2.5-pro")),
-            Some(&4)
+            None
         );
     }
     #[test]
@@ -4837,7 +5453,9 @@ mod tests {
         assert!(!estimated);
         transcript("legacy");
         let (stats, estimated, _) = build_antigravity_usage_stats_at(home.path()).expect("stats");
-        assert_eq!(stats.total_tokens(), 1133);
+        assert_eq!(stats.total_tokens(), 1130);
+        assert_eq!(stats.estimated_tokens, 3);
+        assert!(stats.token_data_incomplete);
         assert_eq!(stats.total_sessions, 2);
         assert!(estimated);
         assert_eq!(
@@ -4846,7 +5464,7 @@ mod tests {
                 .values()
                 .flat_map(|models| models.values())
                 .sum::<u64>(),
-            1133
+            1130
         );
     }
 

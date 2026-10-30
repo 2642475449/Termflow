@@ -928,6 +928,7 @@ function AppLayout() {
   const asrAuthMode = useAppStore((s) => s.asrAuthMode);
   const asrModel = useAppStore((s) => s.asrModel);
   const asrRegion = useAppStore((s) => s.asrRegion);
+  const asrLanguage = useAppStore((s) => s.asrLanguage);
   const voicePolishEnabled = useAppStore((s) => s.voicePolishEnabled);
   const voicePolishModel = useAppStore((s) => s.voicePolishModel);
   const voicePolishProvider = useAppStore((s) => s.voicePolishProvider);
@@ -975,6 +976,7 @@ function AppLayout() {
       authMode: asrAuthMode,
       model: asrModel,
       region: asrRegion,
+      language: asrLanguage,
       polishEnabled: voicePolishEnabled,
       polishModel: voicePolishModel,
       polishProvider: voicePolishProvider,
@@ -987,7 +989,7 @@ function AppLayout() {
       inputTarget: voiceInputTarget,
     };
     void emit("voice-worker-config", payload).catch(() => undefined);
-  }, [asrApiKey, asrAuthMode, asrModel, asrRegion, voiceInputTarget, voicePolishEnabled, voicePolishModel, voicePolishProvider, voicePolishApiKey, voicePolishAuthMode, voicePolishRegion, voicePolishStyle, voicePolishInstructions, voiceShortcut]);
+  }, [asrApiKey, asrAuthMode, asrModel, asrRegion, asrLanguage, voiceInputTarget, voicePolishEnabled, voicePolishModel, voicePolishProvider, voicePolishApiKey, voicePolishAuthMode, voicePolishRegion, voicePolishStyle, voicePolishInstructions, voiceShortcut]);
   useEffect(() => {
     const unlistenPromise = listen<{ text: string }>("voice-worker-result", (event) => {
       const text = event.payload?.text;

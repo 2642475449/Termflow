@@ -15,10 +15,19 @@ import type {
 } from "@/types";
 import { useAppStore } from "@/store";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { createGreetingSelection, getGreetingPeriod } from "./greeting";
+import {
+  addDays,
+  buildOverviewMetrics,
+  formatDateKey,
+  getFilteredDailyTokens,
+  getHeatmapGridStart,
+  parseDate,
+  type RangeKey,
+} from "./usageMetrics";
 
 type HomeTab = "overview" | "models";
-type RangeKey = "all" | "30d" | "7d";
 
 const OVERVIEW_AUTO_REFRESH_MS = 5 * 60 * 1000;
 const OVERVIEW_REFRESH_CHECK_MS = 30 * 1000;
@@ -43,27 +52,6 @@ interface HeatmapTooltip {
   cell: HeatmapCell;
   x: number;
   y: number;
-}
-
-interface OverviewMetrics {
-  sessions: number;
-  messages: number;
-  totalTokens: number;
-  averageDailySessions: number;
-  averageDailyMessages: number;
-  averageDailyTokens: number;
-  averageWeeklySessions: number;
-  averageWeeklyMessages: number;
-  averageWeeklyTokens: number;
-  peakDailyTokens: number;
-  peakWeeklyTokens: number;
-  longestSessionMs: number;
-  activeDays: number;
-  activeWeeks: number;
-  currentStreak: number;
-  longestStreak: number;
-  peakHour: number | null;
-  favoriteModel: string;
 }
 
 interface ModelsChartData {
@@ -102,54 +90,38 @@ function homeCopy(language: string, zh: string, en: string, ja: string): string 
   return en;
 }
 
-function formatUsageScope(overview: AgentUsageOverview, language: string): string {
-  const readableProviders = overview.providers
-    .filter((provider) => provider.capability !== "unsupported")
-    .map((provider) => provider.label);
-  const unsupportedProviders = overview.providers
-    .filter((provider) => provider.capability === "unsupported")
-    .map((provider) => provider.label);
-  const readable = readableProviders.join("、") || homeCopy(language, "暂无", "none", "なし");
-
-  if (unsupportedProviders.length === 0) {
-    return homeCopy(
-      language,
-      `统计范围：本机 ${readable} 的可读取使用记录，不按当前项目筛选。`,
-      `Scope: readable local usage records from ${readable}; not limited to the current project.`,
-      `集計範囲：ローカルの ${readable} から読み取れる使用記録です。現在のプロジェクトには限定されません。`
-    );
-  }
-
-  const unsupported = unsupportedProviders.join("、");
-  return homeCopy(
-    language,
-    `统计范围：本机 ${readable} 的可读取使用记录，不按当前项目筛选；${unsupported} 暂无稳定的本地用量来源，未计入。`,
-    `Scope: readable local usage records from ${readable}; not limited to the current project. ${unsupported} are excluded because no stable local usage source is available.`,
-    `集計範囲：ローカルの ${readable} から読み取れる使用記録で、現在のプロジェクトには限定されません。${unsupported} は安定したローカル使用量ソースがないため含まれません。`
+function formatUsageScope(overview: AgentUsageOverview, translate: TFunction): string {
+  const available = overview.providers.filter((provider) =>
+    provider.capability !== "unsupported" && (!provider.lastError || provider.totalTokens > 0 || provider.totalSessions > 0)
   );
-}
-
-function parseDate(input: string): Date {
-  const [year, month, day] = input.split("-").map(Number);
-  return new Date(year, (month || 1) - 1, day || 1);
-}
-
-function formatDateKey(date: Date): string {
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, "0");
-  const day = `${date.getDate()}`.padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  const unavailable = overview.providers.filter((provider) =>
+    provider.capability === "unsupported" || (provider.lastError && provider.totalTokens === 0 && provider.totalSessions === 0)
+  );
+  const partial = available.filter((provider) =>
+    provider.capability === "partial" || provider.tokenDataIncomplete || provider.lastError
+  );
+  const parts = [
+    translate("home.overview.usageScope", {
+      providers: available.map((provider) => provider.label).join("、") || translate("home.overview.scopeNone"),
+    }),
+    translate("home.overview.recordCountDefinition"),
+  ];
+  if (partial.length > 0) {
+    parts.push(translate("home.overview.partialSources", {
+      providers: partial.map((provider) => provider.label).join("、"),
+    }));
+  }
+  if (unavailable.length > 0) {
+    parts.push(translate("home.overview.unavailableSources", {
+      providers: unavailable.map((provider) => provider.label).join("、"),
+    }));
+  }
+  return parts.join(" ");
 }
 
 function formatRefreshTime(date: Date): string {
   const pad = (value: number) => `${value}`.padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
-}
-
-function addDays(date: Date, offset: number): Date {
-  const next = new Date(date);
-  next.setDate(next.getDate() + offset);
-  return next;
 }
 
 const zhMonthLabels = [
@@ -174,27 +146,6 @@ function formatMonthLabel(date: Date, language: string): string {
   return new Intl.DateTimeFormat(language === "ja-JP" ? "ja-JP" : "en-US", {
     month: "short",
   }).format(date);
-}
-
-function getRangeStart(lastComputedDate: string | null, range: RangeKey): Date | null {
-  if (!lastComputedDate || range === "all") {
-    return null;
-  }
-  const end = parseDate(lastComputedDate);
-  return addDays(end, range === "7d" ? -6 : -29);
-}
-
-function isDateInRange(dateKey: string, lastComputedDate: string | null, range: RangeKey): boolean {
-  if (!lastComputedDate || range === "all") {
-    return true;
-  }
-  const date = parseDate(dateKey);
-  const start = getRangeStart(lastComputedDate, range);
-  const end = parseDate(lastComputedDate);
-  if (!start) {
-    return true;
-  }
-  return date >= start && date <= end;
 }
 
 function formatTokenCount(value: number): string {
@@ -280,140 +231,6 @@ function formatModelChartDateLabel(date: string, language: string): string {
   }).format(parsed);
 }
 
-function getFilteredDailyTokens(
-  entries: AgentUsageDailyModelTokens[],
-  lastComputedDate: string | null,
-  range: RangeKey
-): AgentUsageDailyModelTokens[] {
-  return entries.filter((entry) => isDateInRange(entry.date, lastComputedDate, range));
-}
-
-function buildOverviewMetrics(overview: AgentUsageOverview, range: RangeKey): OverviewMetrics {
-  const filteredActivity = overview.dailyActivity.filter((entry) =>
-    isDateInRange(entry.date, overview.lastComputedDate, range)
-  );
-  const filteredTokens = getFilteredDailyTokens(
-    overview.dailyModelTokens,
-    overview.lastComputedDate,
-    range
-  );
-
-  const activeDates = filteredActivity
-    .filter((entry) => entry.messageCount > 0 || entry.sessionCount > 0)
-    .map((entry) => entry.date);
-
-  const modelTotals = new Map<string, number>();
-  let computedTotalTokens = 0;
-  const dailyTotals = filteredTokens.map((entry) =>
-    Object.values(entry.tokensByModel).reduce((sum, count) => sum + count, 0)
-  );
-
-  // 统一分母：使用两个数据源的日期并集
-  const allDates = new Set([
-    ...filteredActivity.map((e) => e.date),
-    ...filteredTokens.map((e) => e.date),
-  ]);
-  const unifiedDayCount = allDates.size || 1;
-
-  const weeklyTotals = new Map<string, number>();
-  const weeklySessions = new Map<string, number>();
-  const weeklyMessages = new Map<string, number>();
-  for (const entry of filteredTokens) {
-    const currentDate = parseDate(entry.date);
-    const weekStart = addDays(currentDate, -currentDate.getDay());
-    const weekKey = formatDateKey(weekStart);
-    const dayTotal = Object.values(entry.tokensByModel).reduce((sum, count) => sum + count, 0);
-    weeklyTotals.set(weekKey, (weeklyTotals.get(weekKey) ?? 0) + dayTotal);
-  }
-  for (const entry of filteredActivity) {
-    const currentDate = parseDate(entry.date);
-    const weekStart = addDays(currentDate, -currentDate.getDay());
-    const weekKey = formatDateKey(weekStart);
-    weeklySessions.set(weekKey, (weeklySessions.get(weekKey) ?? 0) + entry.sessionCount);
-    weeklyMessages.set(weekKey, (weeklyMessages.get(weekKey) ?? 0) + entry.messageCount);
-  }
-
-  for (const entry of filteredTokens) {
-    for (const [model, count] of Object.entries(entry.tokensByModel)) {
-      modelTotals.set(model, (modelTotals.get(model) ?? 0) + count);
-      computedTotalTokens += count;
-    }
-  }
-
-  const computedFavoriteModel =
-    [...modelTotals.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ??
-    overview.summary.favoriteModel ??
-    "N/A";
-  const totalTokens = range === "all" ? overview.summary.totalTokens : computedTotalTokens;
-  const sessions =
-    range === "all"
-      ? overview.summary.totalSessions
-      : filteredActivity.reduce((sum, entry) => sum + entry.sessionCount, 0);
-  const messages =
-    range === "all"
-      ? overview.summary.totalMessages
-      : filteredActivity.reduce((sum, entry) => sum + entry.messageCount, 0);
-  const activeDays = range === "all" ? overview.summary.activeDays : activeDates.length;
-  const favoriteModel =
-    range === "all"
-      ? overview.summary.favoriteModel ?? computedFavoriteModel
-      : computedFavoriteModel;
-
-  return {
-    sessions,
-    messages,
-    totalTokens,
-    averageDailySessions:
-      unifiedDayCount > 0
-        ? Math.round(
-            filteredActivity.reduce((sum, entry) => sum + entry.sessionCount, 0) /
-              unifiedDayCount
-          )
-        : 0,
-    averageDailyMessages:
-      unifiedDayCount > 0
-        ? Math.round(
-            filteredActivity.reduce((sum, entry) => sum + entry.messageCount, 0) /
-              unifiedDayCount
-          )
-        : 0,
-    averageDailyTokens:
-      unifiedDayCount > 0
-        ? Math.round(totalTokens / unifiedDayCount)
-        : 0,
-    averageWeeklySessions:
-      weeklySessions.size > 0
-        ? Math.round(
-            [...weeklySessions.values()].reduce((sum, value) => sum + value, 0) /
-              weeklySessions.size
-          )
-        : 0,
-    averageWeeklyMessages:
-      weeklyMessages.size > 0
-        ? Math.round(
-            [...weeklyMessages.values()].reduce((sum, value) => sum + value, 0) /
-              weeklyMessages.size
-          )
-        : 0,
-    averageWeeklyTokens:
-      weeklyTotals.size > 0
-        ? Math.round(totalTokens / weeklyTotals.size)
-        : 0,
-    peakDailyTokens: Math.max(
-      0,
-      ...dailyTotals
-    ),
-    peakWeeklyTokens: Math.max(0, ...weeklyTotals.values()),
-    longestSessionMs: overview.summary.longestSessionMs,
-    activeDays,
-    activeWeeks: weeklyMessages.size,
-    currentStreak: overview.summary.currentStreakDays,
-    longestStreak: overview.summary.longestStreakDays,
-    peakHour: overview.summary.peakHour,
-    favoriteModel,
-  };
-}
-
 // 热力图显示的周数（26 周 ≈ 182 天 ≈ 180 天，保持周对齐的视觉节奏）
 const HEATMAP_WEEK_COUNT = 26;
 
@@ -442,9 +259,7 @@ function buildHeatmapColumns(
     dailyModelMap.set(entry.date, values);
   }
 
-  const endDate = lastComputedDate ? parseDate(lastComputedDate) : new Date();
-  const gridEnd = addDays(endDate, 6 - endDate.getDay());
-  const gridStart = addDays(gridEnd, -(HEATMAP_WEEK_COUNT * 7 - 1));
+  const gridStart = getHeatmapGridStart(lastComputedDate, HEATMAP_WEEK_COUNT);
   const today = formatDateKey(new Date());
   const dataCutoff = lastComputedDate ?? today;
 
@@ -453,7 +268,7 @@ function buildHeatmapColumns(
 
   for (let columnIndex = 0; columnIndex < HEATMAP_WEEK_COUNT; columnIndex++) {
     // 每列从周一开始：cells[0] = 周一, ..., cells[6] = 周日
-    const columnStart = addDays(gridStart, 1 + columnIndex * 7);
+    const columnStart = addDays(gridStart, columnIndex * 7);
 
     // 计算一周中哪个月份的天数最多（解决跨月标签问题）
     const monthCounts = new Map<string, number>();
@@ -519,7 +334,8 @@ function getHeatLevel(value: number): number {
   return 5;
 }
 
-function getHeatLevelLabel(value: number, language: string): string {
+function getHeatLevelLabel(value: number, language: string, translate: TFunction): string {
+  if (value <= 0) return translate("home.overview.noTokenRecord");
   const labels = language === "zh-CN"
     ? ["无活动", "很少", "较少", "一般", "较多", "多"]
     : language === "ja-JP"
@@ -762,8 +578,8 @@ function HomePage() {
     [overview]
   );
   const usageScope = useMemo(
-    () => (overview ? formatUsageScope(overview, i18n.language) : null),
-    [overview, i18n.language]
+    () => (overview ? formatUsageScope(overview, t) : null),
+    [overview, t]
   );
 
   const heatmapColumns = useMemo(
@@ -929,7 +745,7 @@ function HomePage() {
   const knownTokenTotal =
     tokenBreakdown?.totalTokens ??
     inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens + reasoningTokens;
-  const todayDateKey = overview?.lastComputedDate ?? formatDateKey(new Date());
+  const todayDateKey = formatDateKey(new Date());
   const todayActivity = overview?.dailyActivity.find((entry) => entry.date === todayDateKey);
   const todayModelTokens = overview?.dailyModelTokens.find(
     (entry) => entry.date === todayDateKey
@@ -1028,9 +844,6 @@ function HomePage() {
               >
                 {greeting}
               </h1>
-              {overview?.providers.some((provider) => provider.agent === "antigravity" && provider.source.includes("local estimate")) && (
-                <p className="mt-2 text-xs text-[var(--cs-text-secondary)]">{t("home.antigravityEstimatedUsage")}</p>
-              )}
               <div
                 className="mt-2 flex items-center gap-2 text-[13px]"
                 style={{ color: "var(--cs-text-secondary)" }}
@@ -1235,9 +1048,9 @@ function HomePage() {
                   </div>
                   <div className="grid grid-cols-3 divide-x" style={{ borderColor: "var(--cs-border-card)" }}>
                     {[
-                      [metrics.sessions.toLocaleString(locale), homeCopy(i18n.language, "任务 / 会话", "Tasks / sessions", "タスク / セッション"), homeCopy(i18n.language, `日均 ${metrics.averageDailySessions.toLocaleString(locale)}`, `${metrics.averageDailySessions.toLocaleString(locale)} daily avg`, `1 日平均 ${metrics.averageDailySessions.toLocaleString(locale)}`)],
-                      [metrics.messages.toLocaleString(locale), homeCopy(i18n.language, "交互事件", "Interactions", "インタラクション"), homeCopy(i18n.language, `日均 ${metrics.averageDailyMessages.toLocaleString(locale)}`, `${metrics.averageDailyMessages.toLocaleString(locale)} daily avg`, `1 日平均 ${metrics.averageDailyMessages.toLocaleString(locale)}`)],
-                      [formatCompactTokenCount(metrics.totalTokens, i18n.language), homeCopy(i18n.language, "总 Token", "Total tokens", "合計トークン"), ""],
+                      [metrics.sessions.toLocaleString(locale), t("home.overview.sessionThreads"), t("home.overview.activeDayAverage", { count: metrics.averageDailySessions.toLocaleString(locale) })],
+                      [metrics.messages.toLocaleString(locale), t("home.overview.messages"), t("home.overview.activeDayAverage", { count: metrics.averageDailyMessages.toLocaleString(locale) })],
+                      [formatCompactTokenCount(metrics.totalTokens, i18n.language), t("home.overview.measuredTotalTokens"), ""],
                     ].map(([value, label, caption]) => (
                       <div key={label} className="min-w-0 px-3 first:pl-0 last:pr-0">
                         <div className="truncate text-[20px] font-semibold" style={{ color: "var(--cs-text-primary)" }}>{value}</div>
@@ -1371,12 +1184,7 @@ function HomePage() {
                         className="mt-1 text-[12px]"
                         style={{ color: "var(--cs-text-tertiary)" }}
                       >
-                        {homeCopy(
-                          i18n.language,
-                          `近 ${HEATMAP_WEEK_COUNT * 7} 天 · ${HEATMAP_WEEK_COUNT} 周`,
-                          `Last ${HEATMAP_WEEK_COUNT * 7} days · ${HEATMAP_WEEK_COUNT} weeks`,
-                          `過去 ${HEATMAP_WEEK_COUNT * 7} 日 · ${HEATMAP_WEEK_COUNT} 週間`
-                        )}
+                        {t("home.overview.heatmapRange", { count: HEATMAP_WEEK_COUNT })}
                       </div>
                     </div>
 
@@ -1449,7 +1257,7 @@ function HomePage() {
                             ? t("home.overview.futureDate")
                             : cell.isPendingData
                               ? t("home.overview.pendingDataDate")
-                              : getHeatLevelLabel(cell.value, i18n.language)}`}
+                              : getHeatLevelLabel(cell.value, i18n.language, t)}`}
                           onMouseEnter={(event) => updateHeatmapTooltip(event, cell)}
                           onMouseLeave={() => setHeatmapTooltip(null)}
                           className="aspect-square w-full rounded-[5px] transition-all duration-150 hover:scale-110 hover:z-10"
@@ -1578,7 +1386,7 @@ function HomePage() {
                               className="h-2.5 w-2.5 rounded-[3px]"
                               style={{ background: getHeatColor(heatmapTooltip.cell.value, isDark) }}
                             />
-                            {getHeatLevelLabel(heatmapTooltip.cell.value, i18n.language)}
+                            {getHeatLevelLabel(heatmapTooltip.cell.value, i18n.language, t)}
                           </span>
                         </div>
                       )}
@@ -1629,12 +1437,10 @@ function HomePage() {
 
               {metrics.totalTokens > 0 && (
                 <div className="mt-4 text-[13px] font-medium" style={{ color: "var(--cs-text-secondary)" }}>
-                  {homeCopy(
-                    i18n.language,
-                    `截至目前，项目已累计处理 ${metrics.totalTokens.toLocaleString(locale)} Token；上方热力图展示最近 ${HEATMAP_WEEK_COUNT * 7} 天的活动分布。`,
-                    `The project has processed ${metrics.totalTokens.toLocaleString(locale)} tokens; the heatmap above shows activity from the last ${HEATMAP_WEEK_COUNT * 7} days.`,
-                    `プロジェクトはこれまでに ${metrics.totalTokens.toLocaleString(locale)} トークンを処理しました。上のヒートマップは過去 ${HEATMAP_WEEK_COUNT * 7} 日間のアクティビティを示しています。`
-                  )}
+                  {t("home.overview.localUsageFooter", {
+                    tokens: metrics.totalTokens.toLocaleString(locale),
+                    weeks: HEATMAP_WEEK_COUNT,
+                  })}
                 </div>
               )}
             </div>

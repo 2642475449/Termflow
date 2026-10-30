@@ -1,5 +1,6 @@
 // 阿里百炼 DashScope ASR 集成
 // 支持 Fun-ASR-Flash 和 Qwen3-ASR-Flash 模型
+import { getAsrLanguageContext, type AsrLanguage } from "./asrLanguage";
 
 export const DASHSCOPE_DEFAULT_MODEL = "qwen3-asr-flash";
 
@@ -34,7 +35,7 @@ export type DashScopeAsrModel =
 export interface DashScopeAsrOptions {
   model?: DashScopeAsrModel;
   region?: DashScopeRegion;
-  language?: string;
+  preferredLanguage?: AsrLanguage;
   enableItn?: boolean; // 逆文本正则化
   enableWords?: boolean; // 字级时间戳
   workspaceId?: string; // 业务空间 ID
@@ -50,17 +51,19 @@ export function buildDashScopeAsrRequest(
 ) {
   const {
     model = DASHSCOPE_DEFAULT_MODEL,
-    language,
+    preferredLanguage = "auto",
     enableItn = false,
   } = options;
 
   // Fun-ASR-Flash 需要 format 和 sample_rate 参数
   const isFunAsrFlash = model.startsWith("fun-asr-flash");
+  const context = isFunAsrFlash ? undefined : getAsrLanguageContext(preferredLanguage);
 
   return {
     model,
     input: {
       messages: [
+        ...(context ? [{ role: "system", content: [{ text: context }] }] : []),
         {
           role: "user",
           content: [
@@ -74,7 +77,6 @@ export function buildDashScopeAsrRequest(
     parameters: {
       ...(isFunAsrFlash ? { format: "wav", sample_rate: "16000" } : {}),
       asr_options: {
-        ...(language ? { language } : {}),
         enable_itn: enableItn,
       },
     },
@@ -90,16 +92,18 @@ export function buildOpenAICompatibleAsrRequest(
 ) {
   const {
     model = DASHSCOPE_DEFAULT_MODEL,
-    language,
+    preferredLanguage = "auto",
     enableItn = false,
   } = options;
 
   // Fun-ASR-Flash 需要 format 和 sample_rate 参数
   const isFunAsrFlash = model.startsWith("fun-asr-flash");
+  const context = isFunAsrFlash ? undefined : getAsrLanguageContext(preferredLanguage);
 
   return {
     model,
     messages: [
+      ...(context ? [{ role: "system", content: context }] : []),
       {
         role: "user",
         content: [
@@ -115,7 +119,6 @@ export function buildOpenAICompatibleAsrRequest(
     stream: false,
     ...(isFunAsrFlash ? { format: "wav", sample_rate: "16000" } : {}),
     asr_options: {
-      ...(language ? { language } : {}),
       enable_itn: enableItn,
     },
   };

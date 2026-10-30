@@ -11,7 +11,7 @@ use std::time::UNIX_EPOCH;
 use tauri::State;
 
 const CODEX_AGENT_ID: &str = "codex";
-const CODEX_USAGE_PARSER_VERSION: i64 = 1;
+const CODEX_USAGE_PARSER_VERSION: i64 = 2;
 static CODEX_USAGE_SYNC_LOCK: Mutex<()> = Mutex::new(());
 
 #[tauri::command]
@@ -133,8 +133,15 @@ fn load_persisted_codex_stats(
     let mut warnings = Vec::new();
     for stored in database.load_agent_usage_sessions(CODEX_AGENT_ID)? {
         match serde_json::from_str::<AggregatedTranscriptStats>(&stored.snapshot_json) {
-            Ok(stats) => claude_config::merge_aggregated_stats(&mut aggregate, stats),
-            Err(error) => warnings.push(format!("忽略一条损坏的 Codex 匿名用量快照: {error}")),
+            Ok(mut stats) => {
+                // 没有源文件的匿名历史继续保留，但旧解析器可能漏掉压缩请求用量。
+                stats.token_data_incomplete |= stored.parser_version < CODEX_USAGE_PARSER_VERSION;
+                claude_config::merge_aggregated_stats(&mut aggregate, stats);
+            }
+            Err(error) => {
+                aggregate.token_data_incomplete = true;
+                warnings.push(format!("忽略一条损坏的 Codex 匿名用量快照: {error}"));
+            }
         }
     }
     Ok((aggregate, warnings))
@@ -259,8 +266,9 @@ fn sync_codex_usage_files_unlocked(
             "Codex 用量日志出现回退，已保留上次成功快照（共 {regression_count} 个会话）"
         ));
     }
-    let (aggregate, stored_warnings) = load_persisted_codex_stats(database)?;
+    let (mut aggregate, stored_warnings) = load_persisted_codex_stats(database)?;
     warnings.extend(stored_warnings);
+    aggregate.token_data_incomplete |= !warnings.is_empty();
     let collapsed = collapse_duplicate_warnings(warnings);
     let warning = if collapsed.is_empty() {
         None
@@ -269,6 +277,130 @@ fn sync_codex_usage_files_unlocked(
     };
     database.mark_agent_usage_sync(CODEX_AGENT_ID, now_ms, warning.as_deref())?;
     Ok(aggregate)
+}
+
+#[cfg(test)]
+mod codex_usage_v2_migration_tests {
+    use super::*;
+
+    fn legacy_record() -> String {
+        serde_json::json!({
+            "type": "event_msg", "timestamp": "2026-10-29T00:00:00Z",
+            "payload": {"type": "token_count", "info": {
+                "total_token_usage": {"input_tokens": 100, "total_tokens": 100},
+                "last_token_usage": {"input_tokens": 100, "total_tokens": 100}
+            }}
+        })
+        .to_string()
+    }
+
+    fn seed_old_snapshot(database: &Database, path: &Path) {
+        let old_source = tempfile::NamedTempFile::new().unwrap();
+        fs::write(old_source.path(), legacy_record()).unwrap();
+        let old_stats =
+            claude_config::build_codex_usage_session_stats(old_source.path(), None).unwrap();
+        let salt = database.get_or_create_usage_salt().unwrap();
+        let key = anonymized_session_key(&salt, &codex_session_file_key(path));
+        database
+            .upsert_agent_usage_session(
+                CODEX_AGENT_ID,
+                &key,
+                &source_fingerprint(path).unwrap(),
+                1,
+                &serde_json::to_string(&old_stats).unwrap(),
+                100,
+                1,
+                0,
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn codex_v2_migration_reparses_available_sources_even_with_the_same_fingerprint() {
+        let source = tempfile::NamedTempFile::new().unwrap();
+        let compact_request = serde_json::json!({
+            "type": "token_usage_record", "timestamp": "2026-10-29T00:00:10Z",
+            "payload": {"response_id": "compaction-response", "usage": {
+                "input_tokens": 40, "output_tokens": 10, "total_tokens": 50
+            }}
+        });
+        fs::write(
+            source.path(),
+            format!("{}\n{compact_request}\n", legacy_record()),
+        )
+        .unwrap();
+        let database = Database::open_in_memory();
+        seed_old_snapshot(&database, source.path());
+
+        let refreshed =
+            sync_codex_usage_files(&database, vec![source.path().to_path_buf()]).unwrap();
+        assert_eq!(refreshed.total_tokens(), 150);
+        assert!(!refreshed.token_data_incomplete);
+        let stored = database.load_agent_usage_sessions(CODEX_AGENT_ID).unwrap();
+        assert_eq!(stored.len(), 1);
+        assert_eq!(stored[0].parser_version, CODEX_USAGE_PARSER_VERSION);
+        assert_eq!(stored[0].total_tokens, 150);
+    }
+
+    #[test]
+    fn codex_v2_migration_keeps_missing_source_history_and_marks_it_incomplete() {
+        let source = tempfile::NamedTempFile::new().unwrap();
+        fs::write(source.path(), legacy_record()).unwrap();
+        let database = Database::open_in_memory();
+        seed_old_snapshot(&database, source.path());
+        drop(source);
+
+        let retained = sync_codex_usage_files(&database, Vec::new()).unwrap();
+        assert_eq!(retained.total_tokens(), 100);
+        assert!(retained.token_data_incomplete);
+        let stored = database.load_agent_usage_sessions(CODEX_AGENT_ID).unwrap();
+        assert_eq!(stored.len(), 1);
+        assert_eq!(stored[0].parser_version, 1);
+    }
+
+    #[test]
+    fn codex_v2_corrupt_snapshot_marks_aggregate_incomplete_and_retains_warning() {
+        let database = Database::open_in_memory();
+        database
+            .upsert_agent_usage_session(
+                CODEX_AGENT_ID,
+                "corrupt-snapshot",
+                "fingerprint",
+                CODEX_USAGE_PARSER_VERSION,
+                "{invalid-json",
+                100,
+                1,
+                0,
+            )
+            .unwrap();
+
+        let result = sync_codex_usage_files(&database, Vec::new()).unwrap();
+        assert!(result.token_data_incomplete);
+        assert_eq!(result.total_tokens(), 0);
+        let status = database
+            .get_agent_usage_storage_status(CODEX_AGENT_ID)
+            .unwrap();
+        assert!(status
+            .last_error
+            .as_deref()
+            .is_some_and(|warning| warning.contains("损坏")));
+    }
+
+    #[test]
+    fn codex_v2_unreadable_source_marks_aggregate_incomplete() {
+        let source = tempfile::NamedTempFile::new().unwrap();
+        fs::write(source.path(), [0xff, b'\n']).unwrap();
+        let database = Database::open_in_memory();
+
+        let result = sync_codex_usage_files(&database, vec![source.path().to_path_buf()]).unwrap();
+        assert!(result.token_data_incomplete);
+        assert_eq!(result.total_tokens(), 0);
+        assert!(database
+            .get_agent_usage_storage_status(CODEX_AGENT_ID)
+            .unwrap()
+            .last_error
+            .is_some());
+    }
 }
 
 fn collapse_duplicate_warnings(warnings: Vec<String>) -> Vec<String> {
@@ -696,6 +828,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(retained.total_tokens(), 100);
+        assert!(retained.token_data_incomplete);
         assert_eq!(
             warned.last_error.as_deref(),
             Some("Codex 用量日志出现回退，已保留上次成功快照（共 1 个会话）")

@@ -24,17 +24,28 @@ import {
   ptyResize,
   submitAgentTurnInput,
   inspectProjectFile,
-  resolveProjectLink,
+  resolveTerminalLink,
+  openInAssociatedApplication,
   inspectAgentClis,
   readImagePreview,
   saveTerminalClipboardImage,
   retainClipboardImage,
   openExternalUrl,
 } from "@/lib/api";
+import type { TerminalLinkResolution } from "@/lib/api";
+import {
+  createTerminalFileLinkResolver,
+  createTerminalLinkActivationGate,
+  getUnambiguousTerminalTarget,
+  openTerminalFileTarget,
+  assertTerminalLinkProject,
+  TERMINAL_LINK_CONTEXT_CHANGED,
+  type TerminalLinkContext,
+} from "@/lib/terminalFileLinks";
+import { requestFileNavigation } from "@/lib/fileNavigation";
 import { createTerminalWebLinkHandler, TERMINAL_WEB_URL_PATTERN } from "@/lib/terminalWebLinks";
 import {
   FilePathLinkProvider,
-  resolveTerminalFilePath,
   type ParsedPath,
 } from "@/components/terminal/FilePathLinkProvider";
 import {
@@ -42,7 +53,6 @@ import {
 } from "@/components/terminalTitle";
 import { useAppStore, type TerminalRenderer } from "@/store";
 import { setSessionTitlePrompt } from "@/store/slices/sessionTitleSlice";
-import { revealExplorerPath } from "@/lib/explorer";
 import { openAuxiliaryFile, openAuxiliaryQuestion } from "@/lib/auxiliaryDock";
 import {
   buildSideQuestionPrompt,
@@ -56,6 +66,7 @@ import {
 } from "@/lib/terminalSubmission";
 import { AgentIcon } from "@/components/AgentIcon";
 import { SideQuestionComposer } from "@/components/SideQuestionComposer";
+import { TerminalLinkDialog } from "@/components/terminal/TerminalLinkDialog";
 import { getAgentDisplayName, getAgentTerminalBehavior, isAiAgentId } from "@/lib/agents";
 import { isSessionTurnRunning } from "@/lib/sessions";
 import { getTerminalTheme } from "@/lib/terminalTheme";
@@ -181,7 +192,13 @@ interface SideQuestionDraft {
 
 type PendingTerminalLink =
   | { kind: "external"; href: string }
-  | { kind: "project"; path: ParsedPath };
+  | {
+      kind: "file";
+      path: ParsedPath;
+      context: TerminalLinkContext;
+      resolution?: TerminalLinkResolution;
+      selectedPath?: string;
+    };
 
 interface TerminalImagePreview {
   src: string;
@@ -253,6 +270,8 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
   const currentSessionPathRef = useRef("");
   const currentSessionAgentIdRef = useRef<string | undefined>(undefined);
   const currentTerminalDirectoryRef = useRef("");
+  const resolveLinkedFileRef = useRef(createTerminalFileLinkResolver(resolveTerminalLink));
+  const linkActivationGateRef = useRef(createTerminalLinkActivationGate(() => terminalRef.current?.hasSelection() ?? false));
   const currentSessionNameRef = useRef("");
   const isNativePowerShellTerminalRef = useRef(false);
   const terminalIntegrationReportedRef = useRef(false);
@@ -270,8 +289,6 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
   const setResourceDragState = useAppStore((s) => s.setResourceDragState);
   const updateSession = useAppStore((s) => s.updateSession);
   const openFileTab = useAppStore((s) => s.openFileTab);
-  const setSidebarCollapsed = useAppStore((s) => s.setSidebarCollapsed);
-  const setActiveSidebarSection = useAppStore((s) => s.setActiveSidebarSection);
   const isFocusedWorkspaceSession = useAppStore((s) =>
     s.activeSessionId === sessionId
   );
@@ -590,53 +607,86 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     try {
       if (link.kind === "external") {
         await openExternalUrl(link.href);
-        return;
+        return true;
       }
 
-      const projectPath = currentSessionPathRef.current;
-      if (!projectPath) return;
-
-      const resolvedPath = resolveTerminalFilePath(link.path.filePath, currentTerminalDirectoryRef.current);
-      const target = await resolveProjectLink(projectPath, resolvedPath);
-      if (!target) return;
-
-      if (target.kind === "directory") {
-        setSidebarCollapsed(false);
-        setActiveSidebarSection("project");
-        window.requestAnimationFrame(() => {
-          window.requestAnimationFrame(() => revealExplorerPath(target.path, "directory"));
-        });
-        return;
+      const resolution = await resolveLinkedFileRef.current(
+        link.context,
+        link.selectedPath ?? link.path.filePath,
+        true,
+      );
+      if (resolution.targets.length === 0 && !resolution.truncated) {
+        message.error(t("terminal.linkedFileMissing", { path: link.path.filePath }));
+        return false;
+      }
+      const target = getUnambiguousTerminalTarget(resolution);
+      if (!target) {
+        setPendingTerminalLink({ ...link, resolution, selectedPath: undefined });
+        return false;
       }
 
-      const file = await inspectProjectFile(projectPath, target.path);
-      if (/\.(md|markdown|pdf)$/i.test(file.path)) {
-        openAuxiliaryFile({
-          projectPath,
-          path: file.path,
-          preview: true,
-        });
-        return;
-      }
-      openFileTab(file.path, { preview: false });
-    } catch {
-      const path = link.kind === "project" ? link.path.filePath : link.href;
+      await openTerminalFileTarget(target, link.context, link.path, {
+        inspect: inspectProjectFile,
+        openSystem: openInAssociatedApplication,
+        openPreview: (path) => {
+          assertTerminalLinkProject(link.context, useAppStore.getState().currentProject?.path);
+          openAuxiliaryFile({ projectPath: link.context.projectPath, path, preview: true });
+        },
+        openEditor: (path, location) => {
+          assertTerminalLinkProject(link.context, useAppStore.getState().currentProject?.path);
+          openFileTab(path, { preview: false });
+          if (location) {
+            requestFileNavigation({
+              path,
+              lineNumber: location.line,
+              startColumn: location.column,
+              endColumn: location.column,
+              requestId: crypto.randomUUID(),
+            });
+          }
+        },
+      });
+      return true;
+    } catch (error) {
+      const path = link.kind === "file" ? link.path.filePath : link.href;
+      console.error("Terminal link opening failed", error);
       message.error(
-        link.kind === "project"
+        error instanceof Error && error.message === TERMINAL_LINK_CONTEXT_CHANGED
+          ? t(TERMINAL_LINK_CONTEXT_CHANGED)
+          : link.kind === "file"
           ? t("terminal.openLinkedFileFailed", { path })
           : t("terminal.openLinkFailed", { path }),
       );
+      return false;
     } finally {
       openingTerminalLinkRef.current = false;
       setOpeningTerminalLink(false);
     }
-  }, [openFileTab, setActiveSidebarSection, setSidebarCollapsed, t]);
+  }, [openFileTab, t]);
+
+  const activateTerminalFileLink = useCallback((path: ParsedPath, openDirectly: boolean) => {
+    // xterm 会把同一链接范围内的拖选也当成 activate，必须优先保留文字选择。
+    if (terminalRef.current?.hasSelection()) return;
+    const link: PendingTerminalLink = {
+      kind: "file",
+      path,
+      context: {
+        projectPath: currentSessionPathRef.current,
+        workingDirectory: currentTerminalDirectoryRef.current,
+      },
+    };
+    return linkActivationGateRef.current.activate(
+      () => openDirectly ? openTerminalLink(link) : setPendingTerminalLink(link),
+      openDirectly,
+    );
+  }, [openTerminalLink]);
+
+  useEffect(() => () => linkActivationGateRef.current.dispose(), [sessionId]);
 
   const handleConfirmTerminalLinkOpen = useCallback(async () => {
     if (!pendingTerminalLink || openingTerminalLink) return;
 
-    await openTerminalLink(pendingTerminalLink);
-    setPendingTerminalLink(null);
+    if (await openTerminalLink(pendingTerminalLink)) setPendingTerminalLink(null);
   }, [openTerminalLink, openingTerminalLink, pendingTerminalLink]);
 
   const isDropPositionInsideTerminal = useCallback((position: { x: number; y: number }) => {
@@ -818,7 +868,15 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     cancelImagePreviewDismissal();
     const requestId = imagePreviewRequestRef.current + 1;
     imagePreviewRequestRef.current = requestId;
-    void readImagePreview(resolveTerminalFilePath(path.filePath, currentTerminalDirectoryRef.current))
+    void resolveLinkedFileRef.current({
+      projectPath: currentSessionPathRef.current,
+      workingDirectory: currentTerminalDirectoryRef.current,
+    }, path.filePath)
+      .then((resolution) => {
+        const target = getUnambiguousTerminalTarget(resolution);
+        if (!target) throw new Error("Ambiguous or missing image path");
+        return readImagePreview(target.path);
+      })
       .then(({ dataUrl }) => {
         if (imagePreviewRequestRef.current === requestId) {
           setImagePreview({ src: dataUrl, alt: path.filePath, ...position });
@@ -844,9 +902,15 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     if (!containerRef.current) return;
     const container = containerRef.current;
     const webLinkHandler = createTerminalWebLinkHandler(
-      (uri) => setPendingTerminalLink({ kind: "external", href: uri }),
+      (uri) => {
+        linkActivationGateRef.current.activate(() => setPendingTerminalLink({ kind: "external", href: uri }));
+      },
       showExternalImagePreview,
       scheduleImagePreviewDismissal,
+      {
+        activate: (path, event) => activateTerminalFileLink({ filePath: path }, Boolean(event.ctrlKey || event.metaKey)),
+        hover: (path, event) => showLocalImagePreview({ filePath: path }, event),
+      },
     );
 
     const term = new XTerm({
@@ -878,47 +942,17 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       }),
     );
 
-    // 文件和目录路径会先在项目根目录内做存在性校验，确认后才显示为链接。
-    const LINK_TARGET_CACHE_TTL_MS = 5_000;
-    const MAX_LINK_TARGET_CACHE_SIZE = 256;
-    const linkTargetCache = new Map<string, {
-      expiresAt: number;
-      result: Promise<{ path: string; kind: "file" | "directory" } | null>;
-    }>();
-    const getLinkedTarget = (parsed: { filePath: string }) => {
-      const projectPath = currentSessionPathRef.current;
-      if (!projectPath) return Promise.resolve(null);
-
-      const resolvedPath = resolveTerminalFilePath(parsed.filePath, currentTerminalDirectoryRef.current);
-      const cacheKey = `${projectPath}\u0000${resolvedPath}`;
-      const cached = linkTargetCache.get(cacheKey);
-      if (cached && cached.expiresAt > Date.now()) {
-        linkTargetCache.delete(cacheKey);
-        linkTargetCache.set(cacheKey, cached);
-        return cached.result;
-      }
-
-      if (linkTargetCache.size >= MAX_LINK_TARGET_CACHE_SIZE) {
-        const oldestCacheKey = linkTargetCache.keys().next().value;
-        if (oldestCacheKey) linkTargetCache.delete(oldestCacheKey);
-      }
-
-      const result = resolveProjectLink(projectPath, resolvedPath).catch(() => null);
-      linkTargetCache.set(cacheKey, {
-        expiresAt: Date.now() + LINK_TARGET_CACHE_TTL_MS,
-        result,
-      });
-      return result;
-    };
+    // 悬浮可复用验证缓存，实际打开重新检查；项目外路径仅交给系统程序。
     const filePathProvider = new FilePathLinkProvider(
       term,
-      (parsed, openDirectly) => {
-        const link = { kind: "project" as const, path: parsed };
-        return openDirectly
-          ? openTerminalLink(link)
-          : setPendingTerminalLink(link);
+      activateTerminalFileLink,
+      async (parsed) => {
+        const resolution = await resolveLinkedFileRef.current({
+          projectPath: currentSessionPathRef.current,
+          workingDirectory: currentTerminalDirectoryRef.current,
+        }, parsed.filePath);
+        return resolution.targets.length > 0 || resolution.truncated;
       },
-      async (parsed) => isImageReference(parsed.filePath) || (await getLinkedTarget(parsed)) !== null,
       showLocalImagePreview,
       scheduleImagePreviewDismissal,
     );
@@ -1562,10 +1596,9 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     terminalRenderer,
     forceStableCursor,
     openTerminalLink,
+    activateTerminalFileLink,
     t,
     openFileTab,
-    setActiveSidebarSection,
-    setSidebarCollapsed,
     showExternalImagePreview,
     showLocalImagePreview,
     scheduleImagePreviewDismissal,
@@ -1711,22 +1744,17 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
         onCancel={closeSideQuestionComposer}
         onSubmit={handleSideQuestionSubmit}
       />
-      <Modal
+      <TerminalLinkDialog
         open={Boolean(pendingTerminalLink)}
-        title={t("terminal.openLinkConfirmTitle")}
-        okText={t("terminal.openLinkConfirmOk")}
-        cancelText={t("common.cancel")}
-        confirmLoading={openingTerminalLink}
-        onOk={() => void handleConfirmTerminalLinkOpen()}
+        kind={pendingTerminalLink?.kind ?? "file"}
+        value={pendingTerminalLink?.kind === "file" ? pendingTerminalLink.path.filePath : pendingTerminalLink?.href ?? ""}
+        resolution={pendingTerminalLink?.kind === "file" ? pendingTerminalLink.resolution : undefined}
+        selectedPath={pendingTerminalLink?.kind === "file" ? pendingTerminalLink.selectedPath : undefined}
+        opening={openingTerminalLink}
+        onSelectPath={(path) => setPendingTerminalLink((link) => link?.kind === "file" ? { ...link, selectedPath: path } : link)}
+        onConfirm={() => void handleConfirmTerminalLinkOpen()}
         onCancel={() => !openingTerminalLink && setPendingTerminalLink(null)}
-      >
-        <p>{t("terminal.openLinkConfirmContent")}</p>
-        <p className="break-all text-sm" style={{ color: "var(--cs-text-secondary)" }}>
-          {pendingTerminalLink?.kind === "project"
-            ? pendingTerminalLink.path.filePath
-            : pendingTerminalLink?.href}
-        </p>
-      </Modal>
+      />
     </>
   );
 }

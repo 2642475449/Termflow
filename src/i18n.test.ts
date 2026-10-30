@@ -39,6 +39,6 @@ describe("Japanese translations", () => {
     await i18n.changeLanguage("ja-JP");
 
     expect(i18n.t("home.overview.heroTitle")).toBe("プロジェクト概要");
-    expect(i18n.t("home.overview.title")).toBe("アクティビティヒートマップ");
+    expect(i18n.t("home.overview.title")).toBe("トークン使用量ヒートマップ");
   });
 });

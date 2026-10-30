@@ -30,7 +30,6 @@ import {
   DatabaseOutlined,
 } from "@ant-design/icons";
 import { Pagination, Segmented, Tag, Select, Spin, Empty, Button, message, Switch, Input, Drawer, Modal, Tooltip, Popover } from "antd";
-import { invoke } from "@tauri-apps/api/core";
 
 import { useTranslation } from "react-i18next";
 import {
@@ -69,10 +68,13 @@ import {
   configureVoiceGlobalShortcut,
   startLiveAsr,
   finishLiveAsr,
+  transcribeAudio,
   polishVoiceText,
 } from "@/lib/api";
 import { VoicePolishModePicker } from "@/components/settings/VoicePolishModePicker";
 import { VoiceSettingsDisclosure, VoiceSettingsField, VoiceSettingsSection } from "@/components/settings/VoiceSettingsLayout";
+import { VoiceLanguagePicker } from "@/components/settings/VoiceLanguagePicker";
+import type { DashScopeAsrModel } from "@/lib/dashscopeAsr";
 import "@/styles/voiceSettings.css";
 import { availableVoicePolishModels, resolveVoicePolishModel } from "@/lib/voicePolish";
 import { VoiceProviderLabel } from "@/components/settings/VoiceProviderLabel";
@@ -597,6 +599,7 @@ export function VoiceRecognitionPage() {
   const asrAuthMode = useAppStore((s) => s.asrAuthMode);
   const asrModel = useAppStore((s) => s.asrModel);
   const asrRegion = useAppStore((s) => s.asrRegion);
+  const asrLanguage = useAppStore((s) => s.asrLanguage);
   const voicePolishEnabled = useAppStore((s) => s.voicePolishEnabled);
   const voicePolishModel = useAppStore((s) => s.voicePolishModel);
   const voicePolishProvider = useAppStore((s) => s.voicePolishProvider);
@@ -793,7 +796,7 @@ export function VoiceRecognitionPage() {
         const sessionId = typeof crypto !== "undefined" && crypto.randomUUID
           ? crypto.randomUUID()
           : `settings-test-${Date.now()}`;
-        await startLiveAsr(sessionId, asrApiKey.trim(), asrModel.trim(), asrRegion);
+        await startLiveAsr(sessionId, asrApiKey.trim(), asrModel.trim(), asrRegion, asrLanguage);
         await finishLiveAsr(sessionId);
       } else {
       const probeDataUrl = await createSilentWavDataUrl();
@@ -808,8 +811,9 @@ export function VoiceRecognitionPage() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify(buildDashScopeAsrRequest(probeDataUrl, {
-            model: asrModel.trim() as any,
+            model: asrModel.trim() as DashScopeAsrModel,
             region: asrRegion,
+            preferredLanguage: asrLanguage,
           })),
         });
 
@@ -825,7 +829,7 @@ export function VoiceRecognitionPage() {
         const separatorIndex = probeDataUrl.indexOf(",");
         const audioBase64 = separatorIndex >= 0 ? probeDataUrl.slice(separatorIndex + 1) : "";
 
-        await invoke<string>("transcribe_audio", {
+        await transcribeAudio({
           audioBase64,
           mimeType: "audio/wav",
           model: asrModel.trim(),
@@ -942,6 +946,7 @@ export function VoiceRecognitionPage() {
                 onChange={(value) => setAsrAuthMode(value as MimoAuthMode)} />
             </VoiceSettingsField>
           )}
+          <VoiceLanguagePicker />
         </div>
       </VoiceSettingsSection>
 

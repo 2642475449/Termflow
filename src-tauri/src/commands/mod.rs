@@ -27,6 +27,7 @@ pub mod skills;
 pub mod skill_marketplace;
 pub mod skill_editor;
 pub mod system_input;
+pub mod terminal_links;
 pub mod voice;
 pub mod voice_polish;
 pub mod voice_shortcut;
