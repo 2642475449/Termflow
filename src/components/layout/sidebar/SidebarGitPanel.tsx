@@ -30,6 +30,7 @@ import { useGitStatus } from "@/hooks/useGitStatus";
 import { useGitCommit } from "@/hooks/useGitCommit";
 import type { GitFileStatus } from "@/types";
 import { getGitOperationLabelKey, isGitOperationInProgress } from "@/lib/gitOperationState";
+import { parseGitCommitGenerationError } from "@/lib/gitCommitGenerationError";
 import { useTranslation } from "react-i18next";
 import { GitCommitComposer } from "./GitCommitComposer";
 import { GitFileList } from "./GitFileList";
@@ -645,9 +646,16 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
       }));
       return generatedMessage;
     } catch (error) {
-      const detail = `${t("sidebar.gitGenerateCommitMessageFailed")}: ${
-        error instanceof Error ? error.message : String(error)
-      }`;
+      const failure = parseGitCommitGenerationError(error);
+      const reason = t(`sidebar.gitGenerationErrors.${failure.code}`, { attempts: failure.attempts });
+      const diagnostic = ["processFailed", "invalidInput", "unavailable"].includes(failure.code) ? failure.detail : "";
+      const exitCode = failure.code === "processFailed" && failure.exitCode !== null
+        ? t("sidebar.gitGenerationExitCode", { code: failure.exitCode }) : "";
+      const detail = [
+        `${t("sidebar.gitGenerateCommitMessageFailed")}: ${reason}`,
+        exitCode,
+        diagnostic,
+      ].filter(Boolean).join(" ");
       message.error(detail);
       throw new Error(detail);
     } finally {

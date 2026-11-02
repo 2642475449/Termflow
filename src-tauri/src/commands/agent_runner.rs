@@ -1,10 +1,18 @@
-use std::io::Write;
-use std::process::{Child, Command, Output, Stdio};
+use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use super::agents::{agent_definition, find_agent_executable};
+mod output;
+mod process;
+use output::decode_agent_output;
+pub(crate) use output::{AgentTextErrorCode, AgentTextRunError};
+use process::run_command_with_timeout;
+
+#[cfg(test)]
+use super::agents::agent_definition;
+use super::agents::find_agent_executable;
 
 const DEFAULT_CLAUDE_MAX_TURNS: u8 = 1;
+const RETRY_DELAYS: [Duration; 2] = [Duration::from_secs(1), Duration::from_secs(2)];
 
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct AgentTextRunOptions {
@@ -18,32 +26,62 @@ pub(crate) fn run_agent_text(
     timeout: Duration,
     options: AgentTextRunOptions,
     proxy: &crate::network_proxy::ResolvedNetworkProxy,
-) -> Result<String, String> {
-    let executable_path = find_agent_executable(agent_id)?;
-    let (mut command, stdin_input) =
-        build_agent_command(agent_id, &executable_path, prompt, &options)?;
-    command.current_dir(working_directory);
-    crate::network_proxy::apply_proxy_to_command(&mut command, proxy);
+) -> Result<String, AgentTextRunError> {
+    let started_at = Instant::now();
+    let executable_path = find_agent_executable(agent_id)
+        .map_err(|error| AgentTextRunError::new(AgentTextErrorCode::Unavailable, Some(error)))?;
+    run_with_retry(
+        timeout.saturating_sub(started_at.elapsed()),
+        &RETRY_DELAYS,
+        |remaining| {
+            // 每次重建相同命令，模型、推理强度和认证继续由用户的 CLI 配置决定。
+            let (mut command, stdin_input) =
+                build_agent_command(agent_id, &executable_path, prompt, &options)?;
+            command.current_dir(working_directory);
+            crate::network_proxy::apply_proxy_to_command(&mut command, proxy);
+            decode_agent_output(
+                agent_id,
+                run_command_with_timeout(command, stdin_input, remaining)?,
+            )
+        },
+    )
+}
 
-    let output = run_command_with_timeout(command, stdin_input, timeout, agent_id)?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        return Err(if !stderr.is_empty() {
-            stderr
-        } else if !stdout.is_empty() {
-            stdout
-        } else {
-            format!("{} 调用失败", agent_name(agent_id))
-        });
+fn run_with_retry(
+    timeout: Duration,
+    delays: &[Duration],
+    mut run: impl FnMut(Duration) -> Result<String, AgentTextRunError>,
+) -> Result<String, AgentTextRunError> {
+    let started_at = Instant::now();
+    for attempt in 0..=delays.len() {
+        let remaining = timeout.saturating_sub(started_at.elapsed());
+        if remaining.is_zero() {
+            let mut error = AgentTextRunError::new(AgentTextErrorCode::Timeout, None);
+            error.attempts = attempt;
+            return Err(error);
+        }
+        let mut error = match run(remaining) {
+            Ok(text) => return Ok(text),
+            Err(error) => error,
+        };
+        error.attempts = attempt + 1;
+        let Some(delay) = delays.get(attempt) else {
+            return Err(error);
+        };
+        if !error.retryable() || timeout.saturating_sub(started_at.elapsed()) <= *delay {
+            return Err(error);
+        }
+        log::warn!(
+            "AI text generation attempt {} failed ({:?}); retrying the same CLI configuration",
+            error.attempts,
+            error.code
+        );
+        std::thread::sleep(*delay);
     }
-
-    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if stdout.is_empty() {
-        Err(format!("{} 未返回有效内容", agent_name(agent_id)))
-    } else {
-        Ok(stdout)
-    }
+    Err(AgentTextRunError::new(
+        AgentTextErrorCode::ProcessFailed,
+        None,
+    ))
 }
 
 fn build_agent_command<'a>(
@@ -78,6 +116,7 @@ fn build_agent_command<'a>(
                 "--ephemeral",
                 "--color",
                 "never",
+                "--json",
                 "-",
             ]);
             Some(prompt)
@@ -163,112 +202,7 @@ pub(crate) fn executable_command(executable_path: &str) -> Command {
     }
 }
 
-fn run_command_with_timeout(
-    mut command: Command,
-    stdin_input: Option<&str>,
-    timeout: Duration,
-    agent_id: &str,
-) -> Result<Output, String> {
-    let mut child = command
-        .spawn()
-        .map_err(|error| format!("启动 {} 失败: {error}", agent_name(agent_id)))?;
-
-    if let Some(input) = stdin_input {
-        if let Some(mut stdin) = child.stdin.take() {
-            if let Err(error) = stdin.write_all(input.as_bytes()) {
-                terminate_process_tree(&mut child);
-                let _ = child.wait();
-                return Err(format!("写入 {} 提示词失败: {error}", agent_name(agent_id)));
-            }
-        }
-    }
-
-    let started_at = Instant::now();
-    loop {
-        match child.try_wait() {
-            Ok(Some(_)) => {
-                return child
-                    .wait_with_output()
-                    .map_err(|error| format!("读取 {} 输出失败: {error}", agent_name(agent_id)));
-            }
-            Ok(None) if started_at.elapsed() >= timeout => {
-                terminate_process_tree(&mut child);
-                let output = child.wait_with_output().ok();
-                return Err(format_timeout_error(agent_id, timeout, output.as_ref()));
-            }
-            Ok(None) => std::thread::sleep(Duration::from_millis(120)),
-            Err(error) => {
-                terminate_process_tree(&mut child);
-                let _ = child.wait();
-                return Err(format!("等待 {} 进程失败: {error}", agent_name(agent_id)));
-            }
-        }
-    }
-}
-
-fn format_timeout_error(agent_id: &str, timeout: Duration, output: Option<&Output>) -> String {
-    let diagnostic = output.and_then(process_diagnostic);
-    let base = format!(
-        "{} 调用超过 {} 秒，已终止后台进程。请检查该 CLI 的网络、代理或登录状态",
-        agent_name(agent_id),
-        timeout.as_secs()
-    );
-    match diagnostic {
-        Some(detail) => format!("{base}\n{detail}"),
-        None => base,
-    }
-}
-
-fn process_diagnostic(output: &Output) -> Option<String> {
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    let source = if !stderr.is_empty() { stderr } else { stdout };
-    if source.is_empty() {
-        return None;
-    }
-
-    let recent_lines = source
-        .lines()
-        .rev()
-        .filter(|line| !line.trim().is_empty())
-        .take(3)
-        .collect::<Vec<_>>()
-        .into_iter()
-        .rev()
-        .collect::<Vec<_>>()
-        .join("\n");
-    let tail = recent_lines
-        .chars()
-        .rev()
-        .take(600)
-        .collect::<String>()
-        .chars()
-        .rev()
-        .collect::<String>();
-    Some(tail)
-}
-
-#[cfg(target_os = "windows")]
-fn terminate_process_tree(child: &mut Child) {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x08000000;
-
-    let mut taskkill = Command::new("taskkill.exe");
-    taskkill
-        .args(["/PID", &child.id().to_string(), "/T", "/F"])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .creation_flags(CREATE_NO_WINDOW);
-    if !taskkill.status().is_ok_and(|status| status.success()) {
-        let _ = child.kill();
-    }
-}
-
-#[cfg(not(target_os = "windows"))]
-fn terminate_process_tree(child: &mut Child) {
-    let _ = child.kill();
-}
-
+#[cfg(test)]
 fn agent_name(agent_id: &str) -> &str {
     agent_definition(agent_id)
         .map(|definition| definition.name)
@@ -277,10 +211,8 @@ fn agent_name(agent_id: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        agent_name, build_agent_command, executable_command, process_diagnostic,
-        AgentTextRunOptions,
-    };
+    use super::output::process_diagnostic;
+    use super::{agent_name, build_agent_command, executable_command, AgentTextRunOptions};
     use std::process::Command;
 
     fn command_args(command: &Command) -> Vec<String> {
@@ -435,5 +367,131 @@ mod tests {
         assert!(
             diagnostic.contains("Unrecognized option") || diagnostic.contains("unknown option")
         );
+    }
+
+    #[test]
+    fn codex_text_command_uses_json_and_inherits_the_cli_model_configuration() {
+        let (command, input) =
+            build_agent_command("codex", "codex", "prompt", &AgentTextRunOptions::default())
+                .unwrap();
+        assert_eq!(input, Some("prompt"));
+        assert_eq!(
+            command_args(&command),
+            vec![
+                "exec",
+                "--disable",
+                "apps",
+                "--disable",
+                "plugins",
+                "--disable",
+                "hooks",
+                "--sandbox",
+                "read-only",
+                "--ephemeral",
+                "--color",
+                "never",
+                "--json",
+                "-",
+            ]
+        );
+    }
+
+    #[test]
+    fn transient_failures_retry_without_changing_the_generation_request() {
+        use super::output::{AgentTextErrorCode, AgentTextRunError};
+        let mut attempts = 0;
+        let result = super::run_with_retry(
+            std::time::Duration::from_secs(5),
+            &[std::time::Duration::ZERO; 2],
+            |_| {
+                attempts += 1;
+                if attempts < 3 {
+                    Err(AgentTextRunError::new(AgentTextErrorCode::Capacity, None))
+                } else {
+                    Ok("fix: generated".into())
+                }
+            },
+        );
+        assert_eq!(result.unwrap(), "fix: generated");
+        assert_eq!(attempts, 3);
+    }
+
+    #[test]
+    fn generation_stops_after_two_retries_and_reports_the_actual_attempt_count() {
+        use super::output::{AgentTextErrorCode, AgentTextRunError};
+        let mut attempts = 0;
+        let error = super::run_with_retry(
+            std::time::Duration::from_secs(5),
+            &[std::time::Duration::ZERO; 2],
+            |_| {
+                attempts += 1;
+                Err(AgentTextRunError::new(
+                    AgentTextErrorCode::RateLimited,
+                    None,
+                ))
+            },
+        )
+        .unwrap_err();
+        assert_eq!(attempts, 3);
+        assert_eq!(error.attempts, 3);
+        assert_eq!(super::RETRY_DELAYS.len(), 2);
+    }
+
+    #[test]
+    fn permanent_failures_and_insufficient_retry_budget_are_not_retried() {
+        use super::output::{AgentTextErrorCode, AgentTextRunError};
+        for code in [
+            AgentTextErrorCode::Quota,
+            AgentTextErrorCode::Authentication,
+            AgentTextErrorCode::Timeout,
+            AgentTextErrorCode::EmptyOutput,
+        ] {
+            let mut attempts = 0;
+            let error = super::run_with_retry(
+                std::time::Duration::from_secs(5),
+                &[std::time::Duration::ZERO; 2],
+                |_| {
+                    attempts += 1;
+                    Err(AgentTextRunError::new(code, None))
+                },
+            )
+            .unwrap_err();
+            assert_eq!(attempts, 1);
+            assert_eq!(error.attempts, 1);
+        }
+        let error = super::run_with_retry(
+            std::time::Duration::from_millis(1),
+            &[std::time::Duration::from_secs(1)],
+            |_| Err(AgentTextRunError::new(AgentTextErrorCode::Capacity, None)),
+        )
+        .unwrap_err();
+        assert_eq!(error.code, AgentTextErrorCode::Capacity);
+        assert_eq!(error.attempts, 1);
+    }
+
+    #[test]
+    fn retries_share_one_deadline_and_do_not_run_after_it_expires() {
+        use super::output::{AgentTextErrorCode, AgentTextRunError};
+        let mut budgets = Vec::new();
+        let result = super::run_with_retry(
+            std::time::Duration::from_secs(5),
+            &[std::time::Duration::from_millis(1)],
+            |remaining| {
+                budgets.push(remaining);
+                if budgets.len() == 1 {
+                    Err(AgentTextRunError::new(AgentTextErrorCode::Network, None))
+                } else {
+                    Ok("done".into())
+                }
+            },
+        );
+        assert_eq!(result.unwrap(), "done");
+        assert!(budgets[1] < budgets[0]);
+        let error = super::run_with_retry(std::time::Duration::ZERO, &[], |_| {
+            panic!("expired request must not start")
+        })
+        .unwrap_err();
+        assert_eq!(error.code, AgentTextErrorCode::Timeout);
+        assert_eq!(error.attempts, 0);
     }
 }

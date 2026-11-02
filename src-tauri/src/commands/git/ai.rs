@@ -1,4 +1,6 @@
-use crate::commands::agent_runner::{run_agent_text, AgentTextRunOptions};
+use crate::commands::agent_runner::{
+    run_agent_text, AgentTextErrorCode, AgentTextRunError, AgentTextRunOptions,
+};
 use crate::path_utils::normalize_input_path;
 use std::time::Duration;
 
@@ -158,7 +160,7 @@ fn git_generate_commit_message_sync(
     agent_id: String,
     profile_instructions: String,
     proxy: crate::network_proxy::ResolvedNetworkProxy,
-) -> Result<String, String> {
+) -> Result<String, AgentTextRunError> {
     let repo = open_repo(&project_path)?;
     let prompt = build_commit_prompt(&project_path, &repo, &profile_instructions)?;
     let normalized_path = normalize_input_path(&project_path);
@@ -173,7 +175,7 @@ fn git_generate_commit_message_sync(
         &proxy,
     )?;
     sanitize_generated_commit_message(&stdout)
-        .ok_or_else(|| "智能体未返回有效的提交信息".to_string())
+        .ok_or_else(|| AgentTextRunError::new(AgentTextErrorCode::EmptyOutput, None))
 }
 
 /// Generate commit message using the explicitly selected agent (async).
@@ -183,13 +185,13 @@ pub async fn git_generate_commit_message(
     agent_id: String,
     profile_instructions: String,
     database: tauri::State<'_, std::sync::Arc<crate::database::Database>>,
-) -> Result<String, String> {
+) -> Result<String, AgentTextRunError> {
     let proxy = super::super::network_proxy::load_resolved_proxy(&database)?;
     tauri::async_runtime::spawn_blocking(move || {
         git_generate_commit_message_sync(project_path, agent_id, profile_instructions, proxy)
     })
     .await
-    .map_err(|e| format!("AI 提交信息后台任务失败: {}", e))?
+    .map_err(|e| AgentTextRunError::new(AgentTextErrorCode::ProcessFailed, Some(e.to_string())))?
 }
 
 #[cfg(test)]
