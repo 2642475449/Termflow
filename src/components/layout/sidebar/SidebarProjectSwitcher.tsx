@@ -26,11 +26,11 @@ function SidebarProjectSwitcher({
       }}
       trigger={["click"]}
       placement="bottomLeft"
-      overlayStyle={{
+      styles={{ root: {
         minWidth: "260px",
         maxHeight,
         overflow: "hidden",
-      }}
+      } }}
       getPopupContainer={() => document.body}
     >
       <button

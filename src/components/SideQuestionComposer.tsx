@@ -188,7 +188,7 @@ export function SideQuestionComposer({
           <Alert
             type="info"
             showIcon
-            message={t("sidebar.sideQuestionDirectoryTitle")}
+            title={t("sidebar.sideQuestionDirectoryTitle")}
             description={t("sidebar.sideQuestionDirectoryHint")}
           />
         ) : null}
@@ -197,7 +197,7 @@ export function SideQuestionComposer({
           <Alert
             type="warning"
             showIcon
-            message={t("terminal.sensitiveSideQuestionTitle")}
+            title={t("terminal.sensitiveSideQuestionTitle")}
             description={t("terminal.sensitiveSideQuestionDraftHint")}
           />
         ) : null}

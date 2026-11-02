@@ -229,6 +229,8 @@ pub fn run() {
             commands::background::complete_workspace_close,
             commands::background::exit_background_application,
             commands::quick_commands::load_quick_commands,
+            commands::quick_commands::load_quick_command_usage,
+            commands::quick_commands::record_quick_command_use,
             commands::quick_commands::load_quick_command_catalog,
             commands::quick_commands::save_quick_command,
             commands::quick_commands::remove_quick_command,

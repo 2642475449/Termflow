@@ -343,7 +343,7 @@ export function NewSessionDialog({
             <Alert
               type="warning"
               showIcon
-              message={t(detectionFailed ? "newSession.detectionFailed" : "newSession.noAgents")}
+              title={t(detectionFailed ? "newSession.detectionFailed" : "newSession.noAgents")}
             />
           )}
         </div>
@@ -474,7 +474,7 @@ export function NewSessionDialog({
               <Alert
                 type="warning"
                 showIcon
-                message={t("newSession.antigravitySkipPermissionsWarning")}
+                title={t("newSession.antigravitySkipPermissionsWarning")}
               />
             ) : null}
 
@@ -538,7 +538,7 @@ export function NewSessionDialog({
               <Alert
                 type="warning"
                 showIcon
-                message={t("newSession.qoderPermissionModeBypassWarning")}
+                title={t("newSession.qoderPermissionModeBypassWarning")}
               />
             ) : null}
           </div>

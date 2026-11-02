@@ -111,6 +111,7 @@ import { DataPrivacyPage } from "@/components/settings/DataPrivacyPage";
 import { SearchIndexPage } from "@/components/settings/SearchIndexPage";
 import { McpServersView } from "@/components/settings/McpServersView";
 import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
+import { SettingsConfigAction } from "@/components/settings/SettingsConfigAction";
 import { SettingsSection as SettingSection } from "@/components/settings/SettingsSection";
 import { NotificationsPage } from "@/components/settings/NotificationsPage";
 import { AboutPage } from "@/components/settings/AboutPage";
@@ -222,23 +223,30 @@ function ThemeCard({ opt, isActive, onClick, tabIndex, onKeyDown }: {
 }) {
   const { t } = useTranslation();
   return (
-    <button type="button" role="radio" aria-checked={isActive} tabIndex={tabIndex}
+    <button type="button" role="radio" aria-checked={isActive} tabIndex={tabIndex} data-theme={opt.key}
       className="app-settings-theme" onClick={onClick} onKeyDown={onKeyDown}>
-      <div className="app-settings-theme__preview" data-theme={opt.key} aria-hidden="true">
+      <div className="app-settings-theme__preview" aria-hidden="true" data-ui>
         <div className="app-settings-theme__window">
-          <div className="app-settings-theme__chrome"><span /><span /><span /><div /></div>
+          <div className="app-settings-theme__chrome"><span /><span /><span /><strong>termflow</strong></div>
           <div className="app-settings-theme__body">
-            <div className="app-settings-theme__sidebar"><span /><span /><span /></div>
+            <div className="app-settings-theme__sidebar"><FolderOpenOutlined /><CodeOutlined /><SettingOutlined /></div>
             <div className="app-settings-theme__editor">
-              <div className="app-settings-theme__line" /><div className="app-settings-theme__line app-settings-theme__line--short" />
-              <div className="app-settings-theme__terminal"><span>&gt;</span> termflow<span className="app-settings-theme__cursor" /></div>
+              <div className="app-settings-theme__tab"><FileMarkdownOutlined />AGENTS.md</div>
+              <div className="app-settings-theme__source"># Termflow</div>
+              <div className="app-settings-theme__terminal"><span>&gt;</span> pnpm dev<span className="app-settings-theme__cursor" /></div>
             </div>
           </div>
         </div>
       </div>
       <span className="app-settings-theme__footer">
         <span>{t(opt.labelKey)}</span>
-        {isActive && <CheckOutlined aria-hidden="true" className="text-[var(--cs-primary)]" />}
+        <span className="app-settings-theme__palette" aria-hidden="true">
+          <span className="app-settings-theme__swatch app-settings-theme__swatch--surface" />
+          <span className="app-settings-theme__swatch app-settings-theme__swatch--active" />
+          <span className="app-settings-theme__swatch app-settings-theme__swatch--primary" />
+          <span className="app-settings-theme__swatch app-settings-theme__swatch--text" />
+        </span>
+        {isActive && <CheckOutlined aria-hidden="true" className="app-settings-theme__check" />}
       </span>
     </button>
   );
@@ -929,7 +937,7 @@ export function VoiceRecognitionPage() {
           <VoiceSettingsField htmlFor="voice-asr-model" label={t("settings.voiceRecognition.model")}>
             <Select id="voice-asr-model" className="w-full" value={asrModel} onChange={setAsrModel}
               options={currentModelOptions} optionRender={renderAsrModelOption}
-              popupClassName="app-asr-model-select-dropdown"
+              classNames={{ popup: { root: "app-asr-model-select-dropdown" } }}
               placeholder={t("settings.voiceRecognition.modelPlaceholder")} />
           </VoiceSettingsField>
           {isDashScopeProvider ? (
@@ -1217,11 +1225,11 @@ function CommandRow({
           <span className="text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>
             {command.name}
           </span>
-          <Tag className="!m-0" color={command.format === "claude_native" ? "cyan" : "purple"}>
+          <Tag className="m-0!" color={command.format === "claude_native" ? "cyan" : "purple"}>
             {command.format === "claude_native" ? t("settings.commands.claudeNative") : t("settings.commands.extended")}
           </Tag>
           {command.supportsTestRun && (
-            <Tag className="!m-0" color="purple">
+            <Tag className="m-0!" color="purple">
               {formatCommandShellLabel(command.shell, t)}
             </Tag>
           )}
@@ -1274,10 +1282,10 @@ function CommandDetailPanel({
     <Drawer
       title={detail?.command.name ?? t("settings.commands.detailTitle")}
       placement="right"
-      width={620}
+      size={620}
       open={open}
       onClose={onClose}
-      destroyOnClose={false}
+      destroyOnHidden={false}
     >
       {loading ? (
         <div className="flex justify-center py-10">
@@ -1319,7 +1327,7 @@ function CommandDetailPanel({
               <div className="text-xs" style={{ color: "var(--cs-text-tertiary)" }}>{t("settings.commands.allowedTools")}</div>
               <div className="flex gap-2 flex-wrap">
                 {detail.command.allowedTools.map((tool) => (
-                  <Tag key={tool} className="!m-0">@{tool}</Tag>
+                  <Tag key={tool} className="m-0!">@{tool}</Tag>
                 ))}
               </div>
             </div>
@@ -1393,7 +1401,7 @@ function CommandDetailPanel({
               <div className="flex gap-2 flex-wrap">
                 {detail.command.tags.length > 0 ? (
                   detail.command.tags.map((tag) => (
-                    <Tag key={tag} className="!m-0">#{tag}</Tag>
+                    <Tag key={tag} className="m-0!">#{tag}</Tag>
                   ))
                 ) : (
                   <span className="text-xs" style={{ color: "var(--cs-text-secondary)" }}>{t("settings.commands.noTags")}</span>
@@ -1714,50 +1722,23 @@ function CommandsPage() {
     });
 
     return (
-      <SettingSection title={`${t("settings.commands.workspaceCommands")} (${totalItems})`}>
-        <div className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
-          <div className="min-w-0">
-
-            <div className="text-[11px] mt-1 break-all" style={{ color: "var(--cs-text-tertiary)" }}>
-              {directoryPath || t("settings.commands.workspaceDirUnavailable")}
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              size="small"
-              icon={<FolderOpenOutlined />}
-              onClick={() => handleOpenConfig()}
-              disabled={!projectPath}
-            >
-              {t("settings.commands.openCommandDirectory")}
-            </Button>
-            <Button
-              size="small"
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={openCreateModal}
-              disabled={!projectPath}
-            >
-              {t("settings.commands.newCommand")}
-            </Button>
-          </div>
-        </div>
+      <SettingSection
+        title={`${t("settings.commands.workspaceCommands")} (${totalItems})`}
+        actions={<SettingsConfigAction
+          label={t("settings.commands.openCommandDirectory")}
+          path={directoryPath}
+          disabled={!projectPath}
+          onOpen={() => void handleOpenConfig()}
+        />}
+      >
         {items.length === 0 ? (
           <Empty
             description={emptyState.description}
-            style={{ padding: "28px 0" }}
+            className="py-7"
           >
-            <div className="text-xs mb-4" style={{ color: "var(--cs-text-tertiary)" }}>
+            <div className="text-xs text-[var(--cs-text-tertiary)]">
               {emptyState.detail}
             </div>
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={openCreateModal}
-              disabled={!projectPath}
-            >
-              {t("settings.commands.newCommand")}
-            </Button>
           </Empty>
         ) : (
           <>
@@ -1870,7 +1851,7 @@ function CommandsPage() {
         onOk={handleSaveCommand}
         confirmLoading={saving}
         okText={editingCommand ? t("settings.shared.save") : t("common.create")}
-        destroyOnClose={false}
+        destroyOnHidden={false}
       >
         <div className="space-y-4">
           <div>
@@ -2058,8 +2039,8 @@ function buildHookEmptyState(params: {
 function HookRow({ hook, onOpen }: { hook: HookInfo; onOpen: () => void }) {
   const { t } = useTranslation();
   return (
-    <div className="app-settings-resource-row">
-      <button type="button" className="app-settings-resource-row__open" onClick={onOpen}>
+    <button type="button" className="app-settings-resource-row" onClick={onOpen}>
+      <div className="app-settings-resource-row__open">
         <div className="app-settings-resource-row__name">
           <ApiOutlined className="text-[var(--cs-primary)]" aria-hidden="true" />
           <span className="text-sm font-medium text-[var(--cs-text-primary)]">{formatHookEventLabel(hook.event)}</span>
@@ -2069,9 +2050,9 @@ function HookRow({ hook, onOpen }: { hook: HookInfo; onOpen: () => void }) {
           {t("settings.hooks.matcher")}: {formatHookMatcher(hook.matcher, t)}
           <span className="ml-3 break-all">{getHookCommandName(hook)}</span>
         </div>
-      </button>
-      <Button type="text" size="small" onClick={onOpen}>{t("settings.hooks.viewDetails")}</Button>
-    </div>
+      </div>
+      <span className="shrink-0 text-xs text-[var(--cs-text-secondary)]">{t("settings.hooks.viewDetails")}</span>
+    </button>
   );
 }
 
@@ -2099,10 +2080,10 @@ function HookDetailPanel({
     <Drawer
       title={detail?.hook.name ?? t("settings.hooks.detailTitle")}
       placement="right"
-      width={560}
+      size={560}
       open={open}
       onClose={onClose}
-      destroyOnClose={false}
+      destroyOnHidden={false}
     >
       {loading ? (
         <div className="flex justify-center py-10">
@@ -2307,8 +2288,8 @@ function HooksAgentPage({ activeAgent, setActiveAgent, projectPath }: {
     });
   }, [catalog?.hooks, eventFilter, search]);
 
-  const workspaceCount = (catalog?.hooks ?? []).filter((hook) => hook.scope === "workspace").length;
-  const userCount = (catalog?.hooks ?? []).filter((hook) => hook.scope === "user").length;
+  const workspaceCount = baseFilteredHooks.filter((hook) => hook.scope === "workspace").length;
+  const userCount = baseFilteredHooks.filter((hook) => hook.scope === "user").length;
   const workspaceManagedHookCount = (catalog?.hooks ?? []).filter(
     (hook) => hook.agent === "claude" && hook.scope === "workspace" && isDefaultHook(hook)
   ).length;
@@ -2443,12 +2424,9 @@ function HooksAgentPage({ activeAgent, setActiveAgent, projectPath }: {
           {group.hooks.map((hook) => <HookRow key={hook.id} hook={hook} onOpen={() => void handleOpenDetail(hook)} />)}
         </div>
       </details>)}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--cs-border)] py-4">
-        <span className="min-w-0 break-all text-xs text-[var(--cs-text-secondary)]">{t("settings.hooks.configFile")}: {configPath || t("settings.hooks.notSet")}</span>
-        <Button size="small" icon={<FolderOpenOutlined />} disabled={!configPath}
-          onClick={() => { if (configPath) void openInFileManager(configPath).catch(() => message.error(t("settings.hooks.openConfigFailed"))); }}>
-          {t("settings.hooks.openConfigFile")}
-        </Button>
+      <div className="flex justify-end border-t border-[var(--cs-border)] py-4">
+        <SettingsConfigAction label={t("settings.hooks.openConfigFile")} path={configPath} disabled={!configPath}
+          onOpen={() => { if (configPath) void openInFileManager(configPath).catch(() => message.error(t("settings.hooks.openConfigFailed"))); }} />
       </div>
     </section>;
   }
@@ -2581,7 +2559,7 @@ function HooksAgentPage({ activeAgent, setActiveAgent, projectPath }: {
         confirmLoading={migrating}
         cancelButtonProps={{ disabled: migrating }}
         closable={!migrating}
-        maskClosable={!migrating}
+        mask={{ closable: !migrating }}
         okText={t("settings.hooks.migrateToGlobal")}
         cancelText={t("common.cancel")}
         centered
@@ -2731,18 +2709,18 @@ export function McpServersPage() {
     return () => { catalogRequestRef.current += 1; };
   }, [loadCatalog]);
 
-  const filteredServers = useMemo(() => {
+  const matchingServers = useMemo(() => {
     const all = catalog?.servers ?? [];
     const keyword = search.trim().toLowerCase();
     return all.filter((s) => {
-      if (s.scope !== activeScope) return false;
       if (!keyword) return true;
       return [s.name, s.command ?? "", s.url ?? "", ...(s.args ?? [])]
         .join(" ")
         .toLowerCase()
         .includes(keyword);
     });
-  }, [catalog?.servers, activeScope, search]);
+  }, [catalog?.servers, search]);
+  const filteredServers = matchingServers.filter((server) => server.scope === activeScope);
 
   function openAddForm() {
     setEditingServer(null);
@@ -2966,7 +2944,7 @@ export function McpServersPage() {
         agents={mcpAgents}
         agent={activeAgent}
         scope={activeScope}
-        servers={catalog?.servers ?? []}
+        servers={matchingServers}
         filteredServers={filteredServers}
         projectName={currentProject?.name}
         configPath={configPath}
@@ -3006,7 +2984,7 @@ export function McpServersPage() {
         }
         onCancel={() => { if (!saving) closeForm(); }}
         closable={!saving}
-        maskClosable={!saving}
+        mask={{ closable: !saving }}
         cancelButtonProps={{ disabled: saving }}
         onOk={handleSave}
         confirmLoading={saving}
@@ -3177,7 +3155,7 @@ export function McpServersPage() {
         title={t("settings.mcpServers.confirmDeleteTitle")}
         onCancel={() => { if (!deleting) setDeleteTarget(null); }}
         closable={!deleting}
-        maskClosable={!deleting}
+        mask={{ closable: !deleting }}
         cancelButtonProps={{ disabled: deleting }}
         onOk={handleDelete}
         confirmLoading={deleting}

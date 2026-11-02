@@ -2,6 +2,7 @@ import { Modal } from "antd";
 import type { TFunction } from "i18next";
 import type { TabEntity } from "@/store";
 import { closePty } from "@/lib/api";
+import { useAppStore } from "@/store";
 
 export async function closeTabRuntime(
   tab: TabEntity | undefined,
@@ -9,6 +10,7 @@ export async function closeTabRuntime(
 ): Promise<void> {
   if (tab?.kind === "session") {
     await closeSession(tab.resourceId);
+    useAppStore.getState().clearTerminalExitCode(tab.resourceId);
   }
 }
 

@@ -516,7 +516,7 @@ function FileDiffSection({
               modifiedOid={diff.modifiedContent}
             />
           ) : diff?.isBinary ? (
-            <Alert className="m-3" type="info" showIcon message={t("checkpointReview.binary")} />
+            <Alert className="m-3" type="info" showIcon title={t("checkpointReview.binary")} />
           ) : diff ? (
             <UnifiedDiffView
               hunks={hunks}
@@ -673,8 +673,8 @@ function CheckpointReviewDrawer({
     <Drawer
       open={open}
       onClose={onClose}
-      width={embedded ? "100%" : "min(1180px, 92vw)"}
-      destroyOnClose
+      size={embedded ? "100%" : "min(1180px, 92vw)"}
+      destroyOnHidden
       getContainer={embedded ? false : undefined}
       mask={!embedded}
       rootStyle={embedded ? { position: "absolute", inset: 0 } : undefined}
@@ -787,7 +787,7 @@ function CheckpointReviewDrawer({
               className="m-3 mb-0"
               type="info"
               showIcon
-              message={t("checkpointReview.running")}
+              title={t("checkpointReview.running")}
               action={session ? (
                 <Button
                   size="small"
@@ -855,7 +855,7 @@ function CheckpointReviewDrawer({
         okButtonProps={{ danger: true }}
         confirmLoading={operating === pendingConfirmation?.key}
         closable={!operating}
-        maskClosable={!operating}
+        mask={{ closable: !operating }}
         onOk={() => void confirmPendingOperation()}
         onCancel={() => {
           if (!operating) setPendingConfirmation(null);

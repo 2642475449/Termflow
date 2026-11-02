@@ -168,7 +168,7 @@ export function createToastArgs(
   const duration = options.duration ?? DEFAULT_DURATION[level];
 
   return {
-    message: guardToastText(hasTitle ? options.title : options.content),
+    title: guardToastText(hasTitle ? options.title : options.content),
     description: hasTitle
       ? guardToastText(options.description ?? options.content)
       : guardToastText(options.description),

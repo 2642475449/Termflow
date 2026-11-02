@@ -689,7 +689,7 @@ export function GitGraphSection({
 
       {fileHistoryPath ? (
         <div
-          className="mx-2 mb-1.5 flex min-w-0 items-center gap-1.5 rounded px-2 py-1.5 text-[11px]"
+          className="mx-2 mb-1.5 flex min-w-0 items-center gap-1.5 rounded-sm px-2 py-1.5 text-[11px]"
           style={{
             background: "color-mix(in srgb, var(--cs-primary) 10%, transparent)",
             color: "var(--cs-text-secondary)",

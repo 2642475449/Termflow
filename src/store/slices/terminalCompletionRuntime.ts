@@ -15,6 +15,9 @@ export interface TerminalCompletionIntegrationState {
 }
 
 export interface TerminalCompletionRuntimeSlice {
+  terminalExitCodeBySession: Record<string, number | null>;
+  setTerminalExitCode: (sessionId: string, code: number | null) => void;
+  clearTerminalExitCode: (sessionId: string) => void;
   terminalCompletionIntegrationBySession: Record<string, TerminalCompletionIntegrationState>;
   setTerminalCompletionIntegration: (
     sessionId: string,
@@ -28,6 +31,14 @@ export function createTerminalCompletionRuntimeSlice(
   get: () => TerminalCompletionRuntimeSlice,
 ): TerminalCompletionRuntimeSlice {
   return {
+    terminalExitCodeBySession: {},
+    setTerminalExitCode: (sessionId, code) => set({
+      terminalExitCodeBySession: { ...get().terminalExitCodeBySession, [sessionId]: code },
+    }),
+    clearTerminalExitCode: (sessionId) => {
+      const { [sessionId]: _removed, ...remaining } = get().terminalExitCodeBySession;
+      set({ terminalExitCodeBySession: remaining });
+    },
     terminalCompletionIntegrationBySession: {},
     setTerminalCompletionIntegration: (sessionId, integration) =>
       set({

@@ -1,9 +1,10 @@
 import { useShortcutStore } from "@/store/slices/shortcutSlice";
+import { useResumeSession } from "@/hooks/useResumeSession";
 import { getAppShortcut } from "@/lib/appShortcuts";
 import { matchesShortcut } from "@/lib/shortcut";
 import { useEffect, useRef, useCallback, useState, useId } from "react";
 import type { DragEvent as ReactDragEvent } from "react";
-import { Dropdown, Modal, message } from "antd";
+import { Button, Dropdown, Modal, message } from "antd";
 import type { MenuProps } from "antd";
 import {
   CopyOutlined,
@@ -11,6 +12,8 @@ import {
   SelectOutlined,
   DeleteOutlined,
   MessageOutlined,
+  ReloadOutlined,
+  CloseOutlined,
 } from "@ant-design/icons";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
@@ -235,6 +238,8 @@ export function normalizeDecscusrCursorStyle(param: number | undefined): {
 }
 
 function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, runnerOptions }: TerminalProps) {
+  const resumeSession = useResumeSession();
+  const exitCode = useAppStore((state) => state.terminalExitCodeBySession[sessionId]);
   const { t } = useTranslation();
   const runtimeId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1495,11 +1500,13 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
             reason: "terminal-closed",
             updatedAt: Date.now(),
           });
-          imeOutputGate.write(`\r\n\x1b[33m[${t("terminal.processExited")}]\x1b[0m\r\n`);
+          useAppStore.getState().setTerminalExitCode(sessionId, event.payload.code);
+          const exitMessage = event.payload.code === null
+            ? t("terminal.processExited")
+            : t("terminal.processExitedWithCode", { code: event.payload.code });
+          imeOutputGate.write(`\r\n\x1b[33m[${exitMessage}]\x1b[0m\r\n`);
           onExitRef.current?.();
-          if (onCloseRef.current) {
-            setTimeout(onCloseRef.current, 1500);
-          }
+          runnerOptionsRef.current?.onCommandComplete(sessionId, event.payload.code);
         }
       }
     );
@@ -1693,7 +1700,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
         >
           {isAgentFileDragOver ? (
             <div
-              className="pointer-events-none absolute inset-x-3 bottom-3 z-10 rounded border px-3 py-2 text-xs shadow-sm"
+              className="pointer-events-none absolute inset-x-3 bottom-3 z-10 rounded-sm border px-3 py-2 text-xs shadow-xs"
               style={{
                 borderColor: "var(--cs-accent)",
                 background: "var(--cs-bg-card-solid, rgba(255,255,255,0.94))",
@@ -1712,7 +1719,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
           ) : null}
           {imagePreview ? (
             <div
-              className="xterm-hover pointer-events-none absolute z-20 overflow-hidden rounded border p-1 shadow-lg"
+              className="xterm-hover pointer-events-none absolute z-20 overflow-hidden rounded-sm border p-1 shadow-lg"
               style={{
                 left: imagePreview.x,
                 top: imagePreview.y,
@@ -1732,6 +1739,26 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
           ) : null}
         </div>
       </Dropdown>
+      {!runnerOptions && exitCode !== undefined && !currentSession?.active && (
+        <div className="app-terminal-exit flex shrink-0 flex-wrap items-center gap-2 border-t border-[var(--cs-border)] bg-[var(--cs-bg-header)] pl-3 pr-16 py-2 text-xs text-[var(--cs-text-secondary)]">
+          <span role="status" className="min-w-0 flex-1">
+            {exitCode === null ? t("terminal.processExited") : t("terminal.processExitedWithCode", { code: exitCode })}
+          </span>
+          <Button size="small" icon={<ReloadOutlined />} loading={currentSession?.status === "starting"}
+            onClick={() => void resumeSession(sessionId)}>
+            {t("terminal.restartProcess")}
+          </Button>
+          {onClose && (
+            <Button size="small" icon={<CloseOutlined />} disabled={currentSession?.status === "starting"}
+              onClick={() => {
+                onCloseRef.current?.();
+                useAppStore.getState().clearTerminalExitCode(sessionId);
+              }}>
+              {t("common.close")}
+            </Button>
+          )}
+        </div>
+      )}
       </div>
       <SideQuestionComposer
         open={Boolean(sideQuestionDraft)}

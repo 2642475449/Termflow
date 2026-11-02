@@ -78,7 +78,6 @@ export function TaskMonitorPanel({
 
   const summary = useMemo(() => {
     let running = 0;
-    let waiting = 0;
     let completed = 0;
     let error = 0;
     let totalTabs = 0;
@@ -88,7 +87,6 @@ export function TaskMonitorPanel({
       totalTabs += item.projectTabs.length;
       for (const tab of item.projectTabs) {
         if (tab.status === "running" || tab.status === "starting") running += 1;
-        else if (tab.status === "waiting") waiting += 1;
         else if (tab.status === "completed") completed += 1;
         else if (tab.status === "error") error += 1;
       }
@@ -98,7 +96,6 @@ export function TaskMonitorPanel({
       totalProjects: projects.length,
       totalTabs,
       running,
-      waiting,
       completed,
       error,
     };
@@ -163,16 +160,6 @@ export function TaskMonitorPanel({
           </Tooltip>
         )}
 
-        {summary.waiting > 0 && (
-          <Tooltip title={t("taskMonitor.waitingHint", { count: summary.waiting })}>
-            <div className="app-task-monitor-stat-pill" data-variant="waiting">
-              <span className="app-task-monitor-pulse-dot" />
-              <span className="tabular-nums font-semibold">{summary.waiting}</span>
-              <span className="app-task-monitor-stat-label">{t("taskMonitor.waitingUnit")}</span>
-            </div>
-          </Tooltip>
-        )}
-
         {summary.error > 0 && (
           <Tooltip title={t("taskMonitor.errorHint", { count: summary.error })}>
             <div className="app-task-monitor-stat-pill" data-variant="error">
@@ -204,7 +191,7 @@ export function TaskMonitorPanel({
                 <span className="min-w-0 flex-1 truncate">{project.name}</span>
                 {targetWindowLabel && (
                   <Tooltip title={t("taskMonitor.closeProject")}>
-                    <button type="button" className="app-task-monitor-project-close flex h-6 w-6 shrink-0 items-center justify-center rounded"
+                    <button type="button" className="app-task-monitor-project-close flex h-6 w-6 shrink-0 items-center justify-center rounded-sm"
                       aria-label={t("taskMonitor.closeProject")}
                       onClick={() => void closeProject(targetWindowLabel, project.path)}>
                       <CloseOutlined />
@@ -264,7 +251,7 @@ export function TaskMonitorPopover() {
         placement="bottomRight"
         arrow={false}
         content={<TaskMonitorPanel active={open} onBeforeCloseProject={() => setOpen(false)} />}
-        overlayClassName="app-task-monitor-popover"
+        classNames={{ root: "app-task-monitor-popover" }}
       >
         <Tooltip title={t("taskMonitor.title")} mouseEnterDelay={0.4}
           open={!open && tooltipOpen} onOpenChange={setTooltipOpen}>

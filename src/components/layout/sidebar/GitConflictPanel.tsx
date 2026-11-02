@@ -178,7 +178,7 @@ export function GitConflictPanel({
           </span>
           {hasConflicts && (
             <span
-              className="text-[10px] px-1 rounded"
+              className="text-[10px] px-1 rounded-sm"
               style={{ background: "color-mix(in srgb, var(--cs-error) 15%, transparent)", color: "var(--cs-error)" }}
             >
               {conflictFiles.length}

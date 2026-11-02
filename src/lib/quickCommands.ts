@@ -14,7 +14,7 @@ export const MAX_QUICK_COMMAND_TEXT_LENGTH = 4000;
  * 创建一个新的快速命令草稿，带 UUID 标识
  */
 export function createQuickCommandDraft(
-  scope: QuickCommandScope = { type: "global" },
+  scope: QuickCommandScope,
 ): TerminalQuickCommand {
   return {
     id: `quick-command-${crypto.randomUUID()}`,
@@ -30,11 +30,11 @@ export function createQuickCommandDraft(
 
 /**
  * 规范化单个作用域
- * - 缺失或非法作用域回退为全局
- * - 空仓库 ID 回退为全局
+ * - 缺失、非法或旧全局作用域不再加载
+ * - 空仓库 ID 无效
  * - 仓库 ID 截断到最大长度
  */
-function normalizeScope(input: unknown): QuickCommandScope {
+function normalizeScope(input: unknown): QuickCommandScope | null {
   if (
     input &&
     typeof input === "object" &&
@@ -50,7 +50,7 @@ function normalizeScope(input: unknown): QuickCommandScope {
       };
     }
   }
-  return { type: "global" };
+  return null;
 }
 
 function normalizeAgentId(input: unknown): AiAgentId | undefined {
@@ -89,7 +89,7 @@ function resolveUniqueId(
  * - 非对象项丢弃
  * - ID 去重（保留首条，后续追加后缀）
  * - 字段截断到最大长度
- * - 作用域回退为全局
+ * - 丢弃不属于项目的旧缓存
  * - appendEnter 默认 true
  * - 超出 MAX_QUICK_COMMANDS 的项丢弃
  */
@@ -108,9 +108,6 @@ export function normalizeQuickCommands(input: unknown): TerminalQuickCommand[] {
     }
 
     const raw = item as Record<string, unknown>;
-
-    // 解析并去重 ID
-    const id = resolveUniqueId(raw.id, i, seenIds);
 
     // 解析标签
     const label =
@@ -131,6 +128,11 @@ export function normalizeQuickCommands(input: unknown): TerminalQuickCommand[] {
 
     // 作用域
     const scope = normalizeScope(raw.scope);
+    if (!scope) {
+      continue;
+    }
+
+    const id = resolveUniqueId(raw.id, i, seenIds);
 
     // appendEnter：只有显式 false 才关闭
     const action = raw.action === "agent-prompt" ? "agent-prompt" : "terminal-command";
@@ -155,18 +157,15 @@ export function normalizeQuickCommands(input: unknown): TerminalQuickCommand[] {
 
 /**
  * 检查命令是否在给定仓库上下文中可见
- * - 全局命令始终可见
  * - 仓库命令仅在 repositoryId 匹配时可见
- * - repositoryId 为 null 时只显示全局命令
+ * - 未打开项目时不显示命令
  */
 export function quickCommandMatchesRepository(
   command: TerminalQuickCommand,
   repositoryId: string | null,
 ): boolean {
-  if (command.scope.type === "global") {
-    return true;
-  }
-  return repositoryId !== null && command.scope.repositoryId === repositoryId;
+  return repositoryId !== null && command.scope.type === "repository"
+    && command.scope.repositoryId === repositoryId;
 }
 
 // ── 完整性检查 ───────────────────────────────────────────────

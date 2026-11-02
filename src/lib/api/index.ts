@@ -125,6 +125,14 @@ export async function onQuickCommandsUpdated(handler: () => void): Promise<Unlis
   return await listen("quick-commands-updated", handler);
 }
 
+export async function loadQuickCommandUsage(projectPath: string): Promise<Record<string, number>> {
+  return await invoke("load_quick_command_usage", { projectPath });
+}
+
+export async function recordQuickCommandUse(projectPath: string, commandId: string, usedAt: number): Promise<number> {
+  return await invoke("record_quick_command_use", { projectPath, commandId, usedAt });
+}
+
 export async function loadProjectLaunchers(projectPath: string): Promise<import("@/lib/projectLaunchers").ProjectLauncherFile> {
   return await invoke("load_project_launchers", { projectPath });
 }

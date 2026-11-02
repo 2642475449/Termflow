@@ -127,7 +127,7 @@ export function DataPrivacyPage() {
         ) : null}
       </SettingsSection>
 
-      <SettingsSection title={<>{t("settings.usageData.privacyTitle")} <Tag color="success" className="!m-0">{t("settings.usageData.localOnly")}</Tag></>}>
+      <SettingsSection title={<>{t("settings.usageData.privacyTitle")} <Tag color="success" className="m-0!">{t("settings.usageData.localOnly")}</Tag></>}>
         <p className="mb-1 text-xs leading-6 text-[var(--cs-text-secondary)]">{t("settings.usageData.included")}</p>
         <p className="mb-0 text-xs leading-6 text-[var(--cs-text-secondary)]">{t("settings.usageData.excluded")}</p>
       </SettingsSection>

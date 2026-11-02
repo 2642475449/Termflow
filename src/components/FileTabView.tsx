@@ -575,7 +575,7 @@ function FileTabView({ tabId, projectPath, path, isActive }: FileTabViewProps) {
                   <Dropdown menu={{ items: collapsedBreadcrumbMenuItems }} trigger={["click"]}>
                     <button
                       type="button"
-                      className="rounded bg-transparent border-0 px-1 py-0.5 leading-none text-[var(--cs-text-secondary)] transition-colors hover:text-[var(--cs-primary)]"
+                      className="rounded-sm bg-transparent border-0 px-1 py-0.5 leading-none text-[var(--cs-text-secondary)] transition-colors hover:text-[var(--cs-primary)]"
                       title={collapsedBreadcrumbs.hiddenItems.map((segment) => segment.label).join(" \\ ")}
                     >
                       <EllipsisOutlined />
@@ -586,7 +586,7 @@ function FileTabView({ tabId, projectPath, path, isActive }: FileTabViewProps) {
               )}
               <button
                 type="button"
-                className={`rounded bg-transparent border-0 px-1 py-0.5 leading-none transition-colors ${
+                className={`rounded-sm bg-transparent border-0 px-1 py-0.5 leading-none transition-colors ${
                   isCurrent
                     ? "text-[var(--cs-text-primary)] hover:text-[var(--cs-primary)]"
                     : "text-[var(--cs-text-secondary)] hover:text-[var(--cs-primary)]"
@@ -607,7 +607,7 @@ function FileTabView({ tabId, projectPath, path, isActive }: FileTabViewProps) {
         <Alert
           type="info"
           showIcon
-          message={t("fileTabs.largeFileReadOnly", { size: fileSizeLabel ?? "--" })}
+          title={t("fileTabs.largeFileReadOnly", { size: fileSizeLabel ?? "--" })}
         />
       </div>
     ) : null;
@@ -615,7 +615,7 @@ function FileTabView({ tabId, projectPath, path, isActive }: FileTabViewProps) {
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center">
-        <Spin tip={t("fileTabs.loading")} />
+        <Spin description={t("fileTabs.loading")} />
       </div>
     );
   }

@@ -13,7 +13,7 @@ import type { ThemeMode } from "@/store";
 /** AntD colorPrimary：必须与 themes.css 中各主题的 --cs-primary 保持一致 */
 export const ANTD_PRIMARY_COLORS: Record<ThemeMode, string> = {
   "light-glass": "#4263eb",
-  "light-warm": "#c2713a",
+  "light-warm": "#a75d2b",
   "dark-starry": "#8198ff",
   "dark-mocha": "#f5bd69",
 };

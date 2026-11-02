@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import { appendFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -35,6 +36,7 @@ export default defineConfig(async () => ({
       },
     },
     react(),
+    tailwindcss(),
     fileViewerRenderers({
       formats: [
         "doc", "docx", "dot", "dotx", "rtf", "odt",

@@ -24,7 +24,7 @@ function renderInlineTokens(tokens: CommitMarkdownInlineToken[], keyPrefix: stri
         return (
           <code
             key={key}
-            className="rounded px-1 py-0.5 font-mono text-[11px]"
+            className="rounded-sm px-1 py-0.5 font-mono text-[11px]"
             style={{
               background: "var(--cs-bg-hover)",
               color: "var(--cs-primary)",
@@ -126,7 +126,7 @@ export function GitGraphCommitMarkdown({ source, className }: GitGraphCommitMark
       return (
         <pre
           key={key}
-          className="m-0 overflow-x-auto rounded border px-2 py-1 font-mono text-[11px] leading-[16px]"
+          className="m-0 overflow-x-auto rounded-sm border px-2 py-1 font-mono text-[11px] leading-[16px]"
           style={{
             background: "var(--cs-bg-hover)",
             color: "var(--cs-text-primary)",

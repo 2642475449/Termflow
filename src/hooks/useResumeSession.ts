@@ -51,7 +51,7 @@ export function useResumeSession() {
         session.agentId === "claude" || !session.agentId
           ? (session.claudeSkipPermissions ?? false)
           : false,
-        getAgentStartupCommand(
+        session.agentId === "cmd" || session.agentId === "powershell" ? "" : getAgentStartupCommand(
           session.agentId,
           session.agentExecutablePath,
           agentSessionId,
@@ -62,11 +62,13 @@ export function useResumeSession() {
         undefined,
         isAiAgentId(session.agentId)
           ? getAgentCommandShell(session.agentId)
-          : defaultTerminalShell,
+          : session.agentId === "cmd" || session.agentId === "powershell"
+            ? session.agentId : defaultTerminalShell,
         session.agentId === "claude" ? (session.runtimeEffort ?? undefined) : undefined,
         session.agentId,
       );
       updateSession(sessionId, { active: true, status: "waiting", agentSessionId });
+      useAppStore.getState().clearTerminalExitCode(sessionId);
     } catch (error) {
       console.error("Failed to resume session:", error);
       updateSession(sessionId, { active: false, status: "error" });

@@ -284,8 +284,8 @@ export function ScheduledTaskForm({
           <p>{t("scheduledTasks.formDescription")}</p>
         </div>
       </div>
-      {saveError && <Alert className="mb-4" type="error" showIcon message={saveError} />}
-      {agentLoadError && <Alert className="mb-4" type="warning" showIcon message={agentLoadError} />}
+      {saveError && <Alert className="mb-4" type="error" showIcon title={saveError} />}
+      {agentLoadError && <Alert className="mb-4" type="warning" showIcon title={agentLoadError} />}
       <Form
         form={form}
         layout="vertical"
@@ -344,7 +344,7 @@ export function ScheduledTaskForm({
 
         {executionKind === "agent" ? (
           <>
-            <Alert className="mb-4" type="info" showIcon message={t("scheduledTasks.codexReadOnlyHint")} />
+            <Alert className="mb-4" type="info" showIcon title={t("scheduledTasks.codexReadOnlyHint")} />
             <Form.Item
               label={t("scheduledTasks.prompt")}
               name="prompt"

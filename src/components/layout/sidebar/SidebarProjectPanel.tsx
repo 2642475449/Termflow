@@ -2047,7 +2047,7 @@ function SidebarProjectPanel({
           if (externalCopySubmitting) return;
           setPendingExternalCopy(null);
         }}
-        destroyOnClose
+        destroyOnHidden
         width={680}
       >
         {pendingExternalCopy ? (
@@ -2192,7 +2192,7 @@ function SidebarProjectPanel({
           if (deleteSubmitting) return;
           setDeletingEntries([]);
         }}
-        destroyOnClose
+        destroyOnHidden
       >
         {deletingEntries.length > 1
           ? t("sidebar.resourceDeleteConfirmMultiple", { count: deletingEntries.length })

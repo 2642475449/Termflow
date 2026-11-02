@@ -55,8 +55,8 @@ export function SkillContentEditor({ editorKey, editor, skill, saving, conflict,
         </Button>
       </div>
     </div>
-    {conflict && <Alert type="warning" showIcon message={t("settings.skills.editor.conflict")} />}
-    {!!editor.validation?.issues.length && <Alert type="error" showIcon message={t("settings.skills.editor.validationTitle")}
+    {conflict && <Alert type="warning" showIcon title={t("settings.skills.editor.conflict")} />}
+    {!!editor.validation?.issues.length && <Alert type="error" showIcon title={t("settings.skills.editor.validationTitle")}
       description={<ul className="list-disc pl-4">{editor.validation.issues.map((issue) => <li key={issue}>
         {t(`settings.skills.editor.issues.${issue}`, { folder: skill.folderName })}
       </li>)}</ul>}

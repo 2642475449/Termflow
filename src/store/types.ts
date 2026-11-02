@@ -1,7 +1,7 @@
 import type {
   AiAgentId, ClaudeCliInfo, AgentPermissionDefaults, SessionLaunchOptions,
   GitCloneTask, GitCommitMessageProfile, ProjectOpenBehavior, Session,
-  TerminalQuickCommand, WindowMode, WindowProjectContext,
+  TerminalQuickCommand, QuickCommandUsage, WindowMode, WindowProjectContext,
 } from "@/types";
 import type { AttentionItem } from "@/lib/attention";
 import type {
@@ -20,6 +20,28 @@ import type { ShortcutAction, ShortcutOverrides } from "@/constants/shortcuts";
 
 export type { ProjectInfo, RecentProjectEntry } from "./utils/recentProjects";
 export type { RemoteNotificationProvider } from "@/lib/remoteNotifications";
+
+export interface QuickCommandUsageState {
+  usageByProject: QuickCommandUsage;
+  setProjectUsage: (projectPath: string, usage: Record<string, number>) => void;
+  setCommandUsed: (projectPath: string, commandId: string) => Promise<void>;
+}
+
+export interface AgentInstructionDocument {
+  exists: boolean | null;
+  content: string;
+  draft: string;
+  encoding?: string | null;
+  loading: boolean;
+  saving: boolean;
+  loaded: boolean;
+  error: string | null;
+}
+
+export interface AgentInstructionsState {
+  documents: Record<string, AgentInstructionDocument>;
+  setDraft: (filePath: string, draft: string) => void;
+}
 
 export interface AsrLanguageSlice {
   asrLanguage: AsrLanguage;

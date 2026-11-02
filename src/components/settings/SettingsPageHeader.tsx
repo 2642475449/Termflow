@@ -16,7 +16,7 @@ export function SettingsPageHeader({
   return (
     <header className="app-settings-page-header">
       <div className="app-settings-page-header__main">
-        <div className="min-w-0 flex-1">
+        <div className="app-settings-page-header__heading min-w-0 flex-1">
           <h1 className="app-settings-page-header__title">{title}</h1>
           {description && <p className="app-settings-page-header__description">{description}</p>}
         </div>

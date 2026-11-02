@@ -86,7 +86,7 @@ export default function SkillMarketplacePage({ isActive }: Props) {
         <section className="min-w-0">
           {market.detailLoading ? <div className="flex justify-center py-20"><Spin /></div> : market.detailError ?
             <Alert type={detailErrorKind === "previewUnavailable" ? "info" : detailErrorKind === "unavailable" ? "warning" : "error"} showIcon
-              message={t(`settings.skillMarket.${detailErrorKind === "request" ? "detailFailed" : detailErrorKind}`)}
+              title={t(`settings.skillMarket.${detailErrorKind === "request" ? "detailFailed" : detailErrorKind}`)}
               description={detailErrorKind === "request" ? market.detailError : t(`settings.skillMarket.${detailErrorKind}Hint`)}
               action={<Button onClick={() => market.selected && void market.selectSkill(market.selected, true)}>{t("common.refresh")}</Button>} /> : detail && <>
               <p className="app-skills-secondary text-sm mb-3">{detail.skill.description}</p>
@@ -135,10 +135,10 @@ export default function SkillMarketplacePage({ isActive }: Props) {
           <Button size="small" icon={<ReloadOutlined />} onClick={() => void market.search(true)}>{t("settings.skillMarket.retry")}</Button>
         </div>
       </div>}
-      {market.error && <Alert type="error" showIcon className="mb-3" message={t("settings.skillMarket.loadFailed")}
+      {market.error && <Alert type="error" showIcon className="mb-3" title={t("settings.skillMarket.loadFailed")}
         description={market.error === "marketplace_request_timeout" ? t("settings.skillMarket.requestTimedOut") : market.error}
         action={<Button onClick={() => void market.search(true)}>{t("settings.skillMarket.retry")}</Button>} />}
-      {market.loadMoreError && <Alert type="error" showIcon className="mb-3" message={t("settings.skillMarket.loadMoreFailed")} description={market.loadMoreError}
+      {market.loadMoreError && <Alert type="error" showIcon className="mb-3" title={t("settings.skillMarket.loadMoreFailed")} description={market.loadMoreError}
         action={<Button loading={market.loadingMore} onClick={() => void market.nextPage()}>{t("settings.skillMarket.retry")}</Button>} />}
       <div className="app-skill-market-results" aria-busy={listLoading || market.loadingMore}>
         {initialLoading ? <SkillMarketplaceSkeleton grouped={view.overview} /> : market.results && !view.total ?

@@ -186,17 +186,17 @@ export function GitConflictTabView({ projectPath, filePath, isBinary }: GitConfl
   if (loading) return <div className="flex h-full items-center justify-center"><Spin /></div>;
 
   if (loadError) {
-    return <div className="p-4"><Alert type="error" showIcon message={t("sidebar.gitConflictResolverLoadFailed")} description={loadError} action={<Button size="small" icon={<ReloadOutlined />} onClick={() => void loadDetail()}>{t("sidebar.gitConflictResolverReload")}</Button>} /></div>;
+    return <div className="p-4"><Alert type="error" showIcon title={t("sidebar.gitConflictResolverLoadFailed")} description={loadError} action={<Button size="small" icon={<ReloadOutlined />} onClick={() => void loadDetail()}>{t("sidebar.gitConflictResolverReload")}</Button>} /></div>;
   }
 
   if (resolved || !detail?.hasConflict) {
-    return <div className="p-4"><Alert type="success" showIcon message={t("sidebar.gitConflictResolverResolved")} description={t("sidebar.gitConflictResolverResolvedDescription", { operation: operationLabel })} action={<Button size="small" icon={<ReloadOutlined />} onClick={() => void loadDetail()}>{t("sidebar.gitConflictResolverReload")}</Button>} /></div>;
+    return <div className="p-4"><Alert type="success" showIcon title={t("sidebar.gitConflictResolverResolved")} description={t("sidebar.gitConflictResolverResolvedDescription", { operation: operationLabel })} action={<Button size="small" icon={<ReloadOutlined />} onClick={() => void loadDetail()}>{t("sidebar.gitConflictResolverReload")}</Button>} /></div>;
   }
 
   if (isBinary) {
     return (
       <div className="flex h-full min-h-0 flex-col gap-3 p-4">
-        <Alert type="warning" showIcon message={t("sidebar.gitConflictResolverBinary")} description={t("sidebar.gitConflictResolverBinaryDescription")} />
+        <Alert type="warning" showIcon title={t("sidebar.gitConflictResolverBinary")} description={t("sidebar.gitConflictResolverBinaryDescription")} />
         <div className="flex flex-wrap gap-2">
           <Button type="primary" loading={resolving} onClick={() => void handleResolveAsDeletedSide("ours")}>{oursLabel}</Button>
           <Button loading={resolving} onClick={() => void handleResolveAsDeletedSide("theirs")}>{theirsLabel}</Button>
@@ -227,7 +227,7 @@ export function GitConflictTabView({ projectPath, filePath, isBinary }: GitConfl
       </div>
 
       <div className="shrink-0 border-b border-[var(--cs-border-sidebar)] px-3 py-2">
-        <Alert type={hasMarkers ? "warning" : "info"} showIcon message={hasMarkers ? t("sidebar.gitConflictResolverMarkersRemain") : t("sidebar.gitConflictResolverIntro")} description={hasMarkers ? t("sidebar.gitConflictResolverMarkersRemainDescription") : t("sidebar.gitConflictResolverIntroDescription")} />
+        <Alert type={hasMarkers ? "warning" : "info"} showIcon title={hasMarkers ? t("sidebar.gitConflictResolverMarkersRemain") : t("sidebar.gitConflictResolverIntro")} description={hasMarkers ? t("sidebar.gitConflictResolverMarkersRemainDescription") : t("sidebar.gitConflictResolverIntroDescription")} />
       </div>
 
       <div className="grid min-h-[220px] flex-1 grid-cols-1 gap-px overflow-hidden bg-[var(--cs-border-sidebar)] lg:grid-cols-3">

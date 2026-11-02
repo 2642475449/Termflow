@@ -10,7 +10,7 @@ import { useSkillsStore } from "@/store/slices/skillsSlice";
 import { openSkillMarketplaceTab } from "@/store/slices/skillMarketplaceTabsSlice";
 import { getAgentIdsWithCapability } from "@/lib/agents";
 import { ensureSkillDirectory, getSkillDetail, installSkill, openInFileManager, saveSkillContent, selectSkillImportDirectory, setSkillEnabled } from "@/lib/api";
-import { filterSkillGroups, groupSkills, isSkillLinked, skillEditorKey, skillFolderName, skillInstallTargets, skillToggleBlocked } from "@/lib/skills";
+import { getSkillLibraryView, groupSkills, isSkillLinked, skillEditorKey, skillFolderName, skillInstallTargets, skillToggleBlocked } from "@/lib/skills";
 import type { SkillAgent, SkillInfo, SkillScope } from "@/types";
 
 const SKILL_AGENTS = getAgentIdsWithCapability("skills");
@@ -66,7 +66,8 @@ export function SkillsSettingsPage() {
   }, [projectPath, refresh]);
 
   const groups = useMemo(() => groupSkills(catalog?.skills ?? []), [catalog]);
-  const filtered = filterSkillGroups(groups, search, agent, scope, status);
+  const { groups: filtered, counts } = useMemo(() => getSkillLibraryView(groups, search, agent, scope, status),
+    [groups, search, agent, scope, status]);
   const selectedGroup = groups.find((group) => group.id === selected);
   const selectedLocation = selectedGroup?.locations[0];
   const editorKey = selected ? skillEditorKey(projectPath, selected) : "";
@@ -197,8 +198,8 @@ export function SkillsSettingsPage() {
 
   const changeFilter = () => setPage(1);
   return <div className="app-skills-library">
-    <SettingsPageHeader title={<>{t("settings.menu.skills")} <span className="app-skills-muted text-sm font-normal">{groups.length}</span></>}
-      description={t("settings.skills.libraryDescription")}
+    <SettingsPageHeader title={<>{t("settings.menu.skills")} <span className="app-skills-muted text-sm font-normal">{filtered.length}</span></>}
+      description={agent === "all" ? t("settings.skills.libraryDescription") : t("settings.skills.agentFilterHint", { agent: label(agent) })}
       actions={<div className="flex gap-2">
         <Button icon={<ShopOutlined />} onClick={openSkillMarketplaceTab}>{t("settings.skillMarket.title")}</Button>
         <Button icon={<ReloadOutlined spin={loading} />} onClick={() => void refresh()}>{t("common.refresh")}</Button>
@@ -216,14 +217,14 @@ export function SkillsSettingsPage() {
       </div>
       <div className="app-settings-scope-tabs" role="group" aria-label={t("settings.skills.skillScope")}>
         <button type="button" aria-pressed={scope === "all"} onClick={() => { setScope("all"); changeFilter(); }}>
-          {t("settings.skills.allScopes")}<span>{groups.length}</span>
+          {t("settings.skills.allScopes")}<span>{counts.all}</span>
         </button>
         <button type="button" aria-pressed={scope === "workspace"} disabled={!projectPath}
           onClick={() => { setScope("workspace"); changeFilter(); }}>
-          {scopeLabel("workspace")}<span>{groups.filter((group) => group.locations.some((item) => item.scope === "workspace")).length}</span>
+          {scopeLabel("workspace")}<span>{counts.workspace}</span>
         </button>
         <button type="button" aria-pressed={scope === "user"} onClick={() => { setScope("user"); changeFilter(); }}>
-          {scopeLabel("user")}<span>{groups.filter((group) => group.locations.some((item) => item.scope === "user")).length}</span>
+          {scopeLabel("user")}<span>{counts.user}</span>
         </button>
       </div>
     </SettingsPageHeader>
@@ -242,10 +243,9 @@ export function SkillsSettingsPage() {
         }}>{agent === "all" ? t("settings.skills.openSharedDirectory") : t("settings.skills.openEnabledDir")}</Button>
       </div>
     </div>
-    {error && <Alert type="error" showIcon message={t("settings.skills.loadFailed")} action={<Button onClick={() => void refresh()}>{t("common.refresh")}</Button>} />}
+    {error && <Alert type="error" showIcon title={t("settings.skills.loadFailed")} />}
     {loading && !catalog ? <div className="flex justify-center py-20"><Spin /></div> : <div className="app-skills-list" aria-busy={loading}>
-      {!filtered.length ? <div className="py-10"><Empty description={t("settings.skills.emptyFiltered")} />
-        <div className="text-center mt-3"><Button onClick={openAdd} disabled={!catalog}>{t("settings.skills.addSkill")}</Button></div></div> :
+      {!filtered.length ? <div className="py-10"><Empty description={t("settings.skills.emptyFiltered")} /></div> :
         filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE).map((group) => {
           const skill = group.locations[0];
           const conflict = group.locations.find((item) => item.conflictStatus !== "none")?.conflictStatus;
@@ -268,11 +268,11 @@ export function SkillsSettingsPage() {
 
     <Modal title={selectedGroup?.skill.name ?? t("settings.skills.detailTitle")} open={!!selectedGroup} width={1040}
       centered className="app-skills-detail-modal" footer={discardIntent ? <Alert type="warning" showIcon
-        message={t("settings.skills.editor.discardPrompt")} action={<div className="flex gap-2">
+        title={t("settings.skills.editor.discardPrompt")} action={<div className="flex gap-2">
           <Button onClick={() => setDiscardIntent(null)}>{t("settings.skills.editor.keepEditing")}</Button>
           <Button danger onClick={discardChanges}>{t(`settings.skills.editor.${discardIntent === "reload" ? "discardReload" : "discardClose"}`)}</Button>
         </div>} /> : null}
-      onCancel={closeDetail} closable={!saving} maskClosable={!saving} keyboard={!saving} destroyOnClose={false}>
+      onCancel={closeDetail} closable={!saving} mask={{ closable: !saving }} keyboard={!saving} destroyOnHidden={false}>
       {selectedGroup && catalog && <div className="app-skills-detail">
         {selectedGroup.skill.description && <p className="app-skills-secondary text-sm mb-3 line-clamp-2">{selectedGroup.skill.description}</p>}
         <Tabs activeKey={detailTab} onChange={setDetailTab} items={[
@@ -331,7 +331,7 @@ export function SkillsSettingsPage() {
     </Modal>
 
     <Modal title={t("settings.skills.addSkill")} open={addOpen} onCancel={() => !installing && setAddOpen(false)} onOk={() => void submit()}
-      confirmLoading={installing} closable={!installing} maskClosable={!installing} keyboard={!installing}
+      confirmLoading={installing} closable={!installing} mask={{ closable: !installing }} keyboard={!installing}
       okText={t(mode === "create" ? "common.create" : "settings.skills.importLocal")}
       okButtonProps={{ disabled: !targets.length || !preview.length || (mode === "create" ? !name.trim() : !source) }}>
       <div className="space-y-4 app-skills-detail">

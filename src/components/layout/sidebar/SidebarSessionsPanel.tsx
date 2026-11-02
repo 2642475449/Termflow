@@ -222,7 +222,7 @@ function SidebarSessionsPanel({
                 <button
                   type="button"
                   aria-label={session.pinned ? unpinSessionText : pinSessionText}
-                  className="flex h-6 w-6 items-center justify-center rounded"
+                  className="flex h-6 w-6 items-center justify-center rounded-sm"
                   style={{ color: "var(--cs-text-tertiary)" }}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -238,7 +238,7 @@ function SidebarSessionsPanel({
                 <button
                   type="button"
                   aria-label={archiveSessionText}
-                  className="flex h-6 w-6 items-center justify-center rounded"
+                  className="flex h-6 w-6 items-center justify-center rounded-sm"
                   style={{ color: "var(--cs-text-tertiary)" }}
                   onClick={(e) => {
                     e.stopPropagation();

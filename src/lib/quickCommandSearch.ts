@@ -1,4 +1,4 @@
-import type { TerminalQuickCommand } from "@/types";
+import type { QuickCommandUsage, TerminalQuickCommand } from "@/types";
 import { isQuickCommandComplete } from "./quickCommands";
 
 // ── 常量 ─────────────────────────────────────────────────────
@@ -132,15 +132,21 @@ export function scoreQuickCommand(
  *
  * - 查询超过 2KB 返回空结果
  * - 同时匹配标签和命令正文
- * - 按评分排序，相同分数保持原列表顺序
- * - 空查询返回所有完整命令（保持原序）
+ * - 按评分排序，相同分数按最近使用排序
+ * - 空查询按最近使用排序；未使用或时间相同时保持原序
  */
 export function searchQuickCommands(
   query: string,
   commands: TerminalQuickCommand[],
+  usageByProject: QuickCommandUsage = {},
 ): TerminalQuickCommand[] {
-  // 只搜索完整命令
-  const completeCommands = commands.filter(isQuickCommandComplete);
+  const lastUsedAt = (command: TerminalQuickCommand) => {
+    const usage = usageByProject[command.scope.repositoryId];
+    return usage && Object.prototype.hasOwnProperty.call(usage, command.id) ? usage[command.id] : 0;
+  };
+  // filter 生成新数组，不改变项目配置或设置页的命令顺序。
+  const completeCommands = commands.filter(isQuickCommandComplete)
+    .sort((a, b) => lastUsedAt(b) - lastUsedAt(a));
 
   // 空查询返回所有完整命令
   const trimmed = query.trim();

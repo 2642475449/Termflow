@@ -23,7 +23,7 @@ describe("toast policy", () => {
       title: "无法恢复 Codex 会话",
       content: "未找到对应的会话 ID，请新建会话或重试。",
     })).toMatchObject({
-      message: "无法恢复 Codex 会话",
+      title: "无法恢复 Codex 会话",
       description: "未找到对应的会话 ID，请新建会话或重试。",
       placement: "bottomRight",
       duration: 8,
@@ -49,7 +49,7 @@ describe("toast policy", () => {
 
   it("auto-dismisses non-error feedback using the shared durations", () => {
     expect(createToastArgs("success", "已保存")).toMatchObject({
-      message: "已保存",
+      title: "已保存",
       placement: "bottomRight",
       duration: 3,
       pauseOnHover: true,
@@ -79,7 +79,7 @@ describe("toast policy", () => {
 
   it("removes ANSI terminal sequences from toast text", () => {
     expect(guardToastText("\u001b[31mfatal:\u001b[0m failed")).toBe("fatal: failed");
-    expect(createToastArgs("error", "\u001b[31mfailed\u001b[0m").message).toBe("failed");
+    expect(createToastArgs("error", "\u001b[31mfailed\u001b[0m").title).toBe("failed");
   });
 
   it("wraps text over the global limit with the complete content", () => {
@@ -91,7 +91,7 @@ describe("toast policy", () => {
     expect(guarded).toMatchObject({
       props: { text: content },
     });
-    expect(createToastArgs("error", content).message).toMatchObject({
+    expect(createToastArgs("error", content).title).toMatchObject({
       props: { text: content },
     });
   });

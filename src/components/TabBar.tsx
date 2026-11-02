@@ -125,6 +125,7 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
   const panesById = useAppStore((s) => s.panesById);
   const dragState = useAppStore((s) => s.dragState);
   const currentProject = useAppStore((s) => s.currentProject);
+  const defaultTerminalShell = useAppStore((s) => s.defaultTerminalShell);
   const agentPermissionDefaults = useAppStore((s) => s.agentPermissionDefaults);
   const setActiveSession = useAppStore((s) => s.setActiveSession);
   const closeTab = useAppStore((s) => s.closeTab);
@@ -384,15 +385,15 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
       { type: "divider" },
       {
         key: "split-right-move",
-        label: t("tabBar.splitMoveRight"),
+        label: t(openTabs.length <= 1 ? "tabBar.splitNewTerminalRight" : "tabBar.splitMoveRight"),
         icon: <SplitRightIcon />,
-        disabled: openTabs.length <= 1,
+        disabled: !currentProject,
       },
       {
         key: "split-down-move",
-        label: t("tabBar.splitMoveDown"),
+        label: t(openTabs.length <= 1 ? "tabBar.splitNewTerminalDown" : "tabBar.splitMoveDown"),
         icon: <SplitDownIcon />,
-        disabled: openTabs.length <= 1,
+        disabled: !currentProject,
       },
     ];
 
@@ -433,6 +434,12 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
 
     if (key.startsWith("split-")) {
       const [, direction, mode] = key.split("-");
+      if (openTabs.length <= 1 && (direction === "right" || direction === "down")) {
+        const shell = session?.agentId === "cmd" || session?.agentId === "powershell"
+          ? session.agentId : defaultTerminalShell;
+        handleCreateSession({ kind: "terminal", shell, split: { paneId, tabId, direction } });
+        return;
+      }
       splitTab(tabId, direction as SplitDirection, paneId, mode as "copy" | "move");
       return;
     }

@@ -104,7 +104,7 @@ function CloneRepositoryModal({ open, onCancel, onCloneStarted }: CloneRepositor
       open={open}
       width={560}
       centered
-      maskClosable={!submitting}
+      mask={{ closable: !submitting }}
       keyboard={!submitting}
       closable={!submitting}
       onCancel={onCancel}
@@ -229,7 +229,7 @@ function CloneRepositoryModal({ open, onCancel, onCloneStarted }: CloneRepositor
           </div>
         ) : null}
 
-        {error ? <Alert className="mt-5" type="error" showIcon message={t("projectLauncher.cloneFailed")} description={error} /> : null}
+        {error ? <Alert className="mt-5" type="error" showIcon title={t("projectLauncher.cloneFailed")} description={error} /> : null}
       </div>
     </Modal>
   );

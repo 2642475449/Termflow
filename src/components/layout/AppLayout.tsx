@@ -23,6 +23,8 @@ import { useAgentHookHealthStore } from "@/store/slices/agentHookHealth";
 import { REMOTE_NOTIFICATION_PROVIDERS } from "@/lib/remoteNotifications";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useResumeSession } from "@/hooks/useResumeSession";
+import { addTerminalSession } from "@/lib/sessions";
+import type { TerminalSplitTarget } from "@/types";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { emit, listen } from "@tauri-apps/api/event";
 import {
@@ -188,6 +190,7 @@ function WorkspacePane({ paneId }: { paneId: string }) {
   const pane = useAppStore((state) => state.panesById[paneId]);
   const tabsById = useAppStore((state) => state.tabsById);
   const sessions = useAppStore((state) => state.sessions);
+  const terminalExitCodes = useAppStore((state) => state.terminalExitCodeBySession);
   const currentProject = useAppStore((state) => state.currentProject);
   const activePaneId = useAppStore((state) => state.activePaneId);
   const setActiveSession = useAppStore((state) => state.setActiveSession);
@@ -261,7 +264,7 @@ function WorkspacePane({ paneId }: { paneId: string }) {
                       />
                     ) : isDiff ? (
                       <GitDiffTabView tabId={tabId} />
-                    ) : session?.active ? (
+                    ) : session && (session.active || terminalExitCodes[tabId] !== undefined) ? (
                       <Terminal
                         sessionId={tabId}
                         onExit={() => updateSession(tabId, { active: false })}
@@ -808,6 +811,7 @@ function AppLayout() {
     async (
       shell: "powershell" | "cmd",
       presentation: "workspace" | "auxiliary" = "workspace",
+      split?: TerminalSplitTarget,
     ) => {
       if (!currentProject || creatingSession) return;
       setCreatingSession(true);
@@ -815,7 +819,7 @@ function AppLayout() {
       const shellName = i18n.t(`newSessionMenu.${shell}`);
       const sessionName = `${shellName} ${dayjs().format("HH:mm:ss")}`;
 
-      addSession({
+      const added = addTerminalSession(useAppStore.getState(), {
         id: sessionId,
         path: currentProject.path,
         name: sessionName,
@@ -828,7 +832,11 @@ function AppLayout() {
         agentId: shell as AgentId,
         agentExecutablePath: null,
         presentation,
-      }, { openInWorkspace: presentation === "workspace" });
+      }, split);
+      if (!added) {
+        setCreatingSession(false);
+        return;
+      }
 
       try {
         await spawnPty(
@@ -874,7 +882,7 @@ function AppLayout() {
     const handler = (event: Event) => {
       const request = (event as CustomEvent<NewSessionLaunchRequest>).detail;
       if (request.kind === "terminal") {
-        void handleCreateTerminal(request.shell);
+        void handleCreateTerminal(request.shell, "workspace", request.split);
         return;
       }
       void handleCreateSession(

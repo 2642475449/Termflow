@@ -196,7 +196,7 @@ export const AboutPage: FC<AboutPageProps> = ({ onNavigate }) => {
                 <h1 className="app-about-hero-title m-0 text-2xl font-semibold tracking-tight">
                   Termflow
                 </h1>
-                <Tag className="app-about-hero-version !m-0 rounded-full !px-2.5">
+                <Tag className="app-about-hero-version m-0! rounded-full !px-2.5">
                   v{packageJson.version}
                 </Tag>
               </div>
@@ -219,7 +219,7 @@ export const AboutPage: FC<AboutPageProps> = ({ onNavigate }) => {
               GitHub
             </Button>
             {!ABOUT_LINKS.website && !ABOUT_LINKS.github && (
-              <Tag className="!m-0 flex items-center rounded-full !px-2.5">
+              <Tag className="m-0! flex items-center rounded-full !px-2.5">
                 {t("settings.about.comingSoon")}
               </Tag>
             )}
@@ -405,7 +405,7 @@ export const AboutPage: FC<AboutPageProps> = ({ onNavigate }) => {
                     <span className="text-xs font-semibold text-[var(--cs-text-primary)]">
                       {lib.name}
                     </span>
-                    <Tag className="!m-0 text-[10px]">{lib.license}</Tag>
+                    <Tag className="m-0! text-[10px]">{lib.license}</Tag>
                   </div>
                   <p className="mb-0 mt-1 text-xs text-[var(--cs-text-secondary)]">
                     {t(lib.descriptionKey)}

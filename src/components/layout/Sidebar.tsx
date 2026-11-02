@@ -551,7 +551,7 @@ function Sidebar({ collapsed, section }: SidebarProps) {
         onCancel={() => setRenameModalOpen(false)}
         okText={t("common.confirm")}
         cancelText={t("common.cancel")}
-        destroyOnClose
+        destroyOnHidden
       >
         <Input
           value={renameValue}

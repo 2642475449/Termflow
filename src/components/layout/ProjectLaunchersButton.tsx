@@ -59,7 +59,7 @@ export function ProjectLaunchersButton() {
       </button>
     </Tooltip>
     <Modal open={open} title={t("projectLaunchers.title")} width={720}
-      closable={!busy} maskClosable={!busy} keyboard={!busy} onCancel={() => setOpen(false)}
+      closable={!busy} mask={{ closable: !busy }} keyboard={!busy} onCancel={() => setOpen(false)}
       footer={editing ? <>
         <Button disabled={busy} onClick={() => setEditing(false)}>{t("common.cancel")}</Button>
         <Button type="primary" loading={state.saving} disabled={busy || !!state.error} onClick={() => void save()}>{t("common.save")}</Button>
@@ -86,7 +86,7 @@ export function ProjectLaunchersButton() {
           <Input.TextArea aria-label={t("projectLaunchers.edit")} value={state.draft} onChange={(event) => state.setDraft(event.target.value)} rows={18} disabled={busy} className="font-mono" />
         </> : selected ? <>
           <p>{t("projectLaunchers.preview", { name: selected.name })}</p>
-          {selected.terminals.map((terminal, index) => <div key={index} className="rounded border border-[var(--cs-border)] p-3">
+          {selected.terminals.map((terminal, index) => <div key={index} className="rounded-sm border border-[var(--cs-border)] p-3">
             <strong>{terminal.title}</strong>
             <p className="font-mono">{terminal.directory}</p>
             <pre className="whitespace-pre-wrap break-words">{terminal.command || t("projectLaunchers.emptyCommand")}</pre>

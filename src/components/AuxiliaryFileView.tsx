@@ -252,7 +252,7 @@ export default function AuxiliaryFileView({
             />
           </Suspense>
         ) : error ? (
-          <div className="p-4"><Alert type="error" showIcon message={error} /></div>
+          <div className="p-4"><Alert type="error" showIcon title={error} /></div>
         ) : kind === "binary" ? (
           supportsOfficePreview(path) ? (
             <Suspense fallback={<div className="flex h-full items-center justify-center"><Spin /></div>}>

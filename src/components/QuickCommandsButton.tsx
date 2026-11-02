@@ -13,6 +13,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "@/store";
 import { launchRunner } from "@/store/slices/bottomRunnerRuntime";
+import { refreshQuickCommandUsage, useQuickCommandUsageStore } from "@/store/slices/quickCommandUsage";
 import { useProjectQuickCommandsStore, persistQuickCommand, deletePersistedQuickCommand } from "@/store/slices/projectQuickCommands";
 import type { AgentCliInfo, AntigravitySessionLaunchOptions, ClaudeSessionLaunchOptions, QoderSessionLaunchOptions, TerminalQuickCommand } from "@/types";
 import {
@@ -36,6 +37,7 @@ export function QuickCommandsButton() {
   const { t } = useTranslation();
   const currentProject = useAppStore((s) => s.currentProject);
   const terminalQuickCommands = useAppStore((s) => s.terminalQuickCommands);
+  const usageByProject = useQuickCommandUsageStore((s) => s.usageByProject);
   const saving = useProjectQuickCommandsStore((s) => s.saving);
   const addSession = useAppStore((s) => s.addSession);
   const openTab = useAppStore((s) => s.openTab);
@@ -46,7 +48,6 @@ export function QuickCommandsButton() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [preferredCommandId, setPreferredCommandId] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCommand, setEditingCommand] = useState<TerminalQuickCommand | null>(null);
   const [deletingCommand, setDeletingCommand] = useState<TerminalQuickCommand | null>(null);
@@ -65,48 +66,33 @@ export function QuickCommandsButton() {
 
   const repositoryId = currentProject?.path ?? null;
 
-  // 过滤出当前仓库可见的命令（仓库命令在前，全局命令在后）
-  const { repoCommands, globalCommands, allVisible } = useMemo(() => {
-    const repo: TerminalQuickCommand[] = [];
-    const global: TerminalQuickCommand[] = [];
+  useEffect(() => {
+    if (repositoryId) void refreshQuickCommandUsage(repositoryId);
+  }, [repositoryId]);
 
-    for (const cmd of terminalQuickCommands) {
-      if (!isQuickCommandComplete(cmd)) continue;
-      if (quickCommandMatchesRepository(cmd, repositoryId)) {
-        if (cmd.scope.type === "repository") {
-          repo.push(cmd);
-        } else {
-          global.push(cmd);
-        }
-      }
-    }
-
-    return {
-      repoCommands: repo,
-      globalCommands: global,
-      allVisible: [...repo, ...global],
-    };
-  }, [terminalQuickCommands, repositoryId]);
+  // 终端入口只展示当前项目的完整命令。
+  const allVisible = useMemo(() => {
+    const visible = terminalQuickCommands.filter((command) =>
+      isQuickCommandComplete(command) && quickCommandMatchesRepository(command, repositoryId),
+    );
+    return searchQuickCommands("", visible, usageByProject);
+  }, [terminalQuickCommands, repositoryId, usageByProject]);
 
   // 搜索过滤
   const filteredCommands = useMemo(() => {
     return searchQuickCommands(searchQuery, allVisible);
   }, [searchQuery, allVisible]);
 
-  // 首选命令（最近使用；不可用时回退到第一条可见命令）
-  const preferredCommand = useMemo(() => {
-    return allVisible.find((command) => command.id === preferredCommandId)
-      ?? allVisible[0]
-      ?? null;
-  }, [allVisible, preferredCommandId]);
+  // 主按钮与空搜索列表使用同一个最近使用顺序。
+  const preferredCommand = allVisible[0] ?? null;
 
   // 运行命令
   const runCommand = useCallback(
     async (command: TerminalQuickCommand) => {
-      if (!currentProject || Date.now() - lastRunTimestampRef.current < 300) return;
+      if (!currentProject || !quickCommandMatchesRepository(command, currentProject.path)
+        || Date.now() - lastRunTimestampRef.current < 300) return;
       lastRunTimestampRef.current = Date.now();
       setMenuOpen(false);
-      setPreferredCommandId(command.id);
       if (command.action === "terminal-command") {
         restoreRunnerFocusRef.current = menuOpen;
         try {
@@ -201,6 +187,7 @@ export function QuickCommandsButton() {
           isAgentPrompt ? selectedAgent!.id : defaultTerminalShell,
         );
         updateSession(sessionId, { active: true, status: "running" });
+        void useQuickCommandUsageStore.getState().setCommandUsed(projectPath, command.id);
         if (isAgentPrompt && selectedAgent!.id === "codex") {
           try {
             const codexSessionId = await resolveRecentCodexSessionId(projectPath, sessionCreatedAt);
@@ -262,18 +249,17 @@ export function QuickCommandsButton() {
 
   // 打开新增对话框
   const openAddDialog = useCallback(() => {
-    setEditingCommand(createQuickCommandDraft(repositoryId
-      ? { type: "repository", repositoryId }
-      : { type: "global" }));
-    setDialogOpen(true);
+    if (!repositoryId) return;
     setMenuOpen(false);
+    setEditingCommand(createQuickCommandDraft({ type: "repository", repositoryId }));
+    setDialogOpen(true);
   }, [repositoryId]);
 
   // 打开编辑对话框
   const openEditDialog = useCallback((command: TerminalQuickCommand) => {
+    setMenuOpen(false);
     setEditingCommand(command);
     setDialogOpen(true);
-    setMenuOpen(false);
   }, []);
 
   // 键盘导航
@@ -322,6 +308,7 @@ export function QuickCommandsButton() {
     (open: boolean) => {
       setMenuOpen(open);
       if (open) {
+        if (repositoryId) void refreshQuickCommandUsage(repositoryId);
         setSearchQuery("");
         setSelectedIndex(0);
         // 聚焦搜索框
@@ -330,7 +317,7 @@ export function QuickCommandsButton() {
         });
       }
     },
-    [],
+    [repositoryId],
   );
 
   // 渲染命令项
@@ -341,7 +328,7 @@ export function QuickCommandsButton() {
       <div
         key={command.id}
         data-qc-item
-        className="flex items-center gap-2 px-3 py-1.5 cursor-pointer rounded transition-colors"
+        className="flex items-center gap-2 px-3 py-1.5 cursor-pointer rounded-sm transition-colors"
         style={{
           background: isSelected ? "var(--cs-bg-hover)" : "transparent",
           minHeight: 32,
@@ -461,39 +448,7 @@ export function QuickCommandsButton() {
             {searchQuery ? t("quickCommands.noCommands") : t("quickCommands.noCommands")}
           </div>
         ) : (
-          <>
-            {/* 仓库命令 */}
-            {repoCommands.length > 0 && (
-              <div>
-                {searchQuery
-                  ? filteredCommands
-                      .filter((c) => c.scope.type === "repository")
-                      .map((c) => renderCommandItem(c, filteredCommands.indexOf(c)))
-                  : repoCommands.map((c, i) => renderCommandItem(c, i))}
-              </div>
-            )}
-
-            {/* 分隔线 */}
-            {repoCommands.length > 0 && globalCommands.length > 0 && !searchQuery && (
-              <div
-                className="my-1 mx-2"
-                style={{ borderTop: "1px solid var(--cs-border-secondary)" }}
-              />
-            )}
-
-            {/* 全局命令 */}
-            {globalCommands.length > 0 && (
-              <div>
-                {searchQuery
-                  ? filteredCommands
-                      .filter((c) => c.scope.type === "global")
-                      .map((c) => renderCommandItem(c, filteredCommands.indexOf(c)))
-                  : globalCommands.map((c, i) =>
-                      renderCommandItem(c, repoCommands.length + i),
-                    )}
-              </div>
-            )}
-          </>
+          filteredCommands.map((command, index) => renderCommandItem(command, index))
         )}
       </div>
 
@@ -542,7 +497,7 @@ export function QuickCommandsButton() {
             setDialogOpen(false);
             setEditingCommand(null);
           }}
-          repositoryId={repositoryId}
+          repositoryId={editingCommand?.scope.repositoryId ?? repositoryId}
         />
       </>
     );
@@ -594,7 +549,7 @@ export function QuickCommandsButton() {
           open={menuOpen}
           onOpenChange={handleOpenChange}
           placement="bottomRight"
-          overlayInnerStyle={{ padding: 0 }}
+          styles={{ container: { padding: 0 } }}
           arrow={false}
         >
           <button
@@ -622,7 +577,7 @@ export function QuickCommandsButton() {
           setDialogOpen(false);
           setEditingCommand(null);
         }}
-        repositoryId={repositoryId}
+        repositoryId={editingCommand?.scope.repositoryId ?? repositoryId}
       />
 
       <Modal

@@ -9,7 +9,7 @@ function makeCommand(id: string): TerminalQuickCommand {
     action: "terminal-command",
     command: `echo ${id}`,
     appendEnter: true,
-    scope: { type: "global" },
+    scope: { type: "repository", repositoryId: "E:/A" },
   };
 }
 

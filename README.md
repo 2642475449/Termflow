@@ -111,11 +111,11 @@ Termflow 最初是为了做一款符合自己使用习惯的应用。在功能�
 |------|------|------|
 | 框架 | Tauri 2 | 跨平台桌面应用框架 |
 | 后端 | Rust + portable-pty | PTY 终端模拟、进程管理 |
-| 前端 | React 19 + TypeScript 5.8 | UI 渲染 |
+| 前端 | React 19 + TypeScript 7 | UI 渲染 |
 | 终端 | xterm.js | 浏览器端终端模拟器 |
 | 状态管理 | Zustand + persist | 全局状态 + 本地持久化 |
-| UI 组件 | Ant Design 5 | 按钮、弹窗、标签等 |
-| 样式 | TailwindCSS 3 + CSS 变量 | 原子化样式 + 主题系统 |
+| UI 组件 | Ant Design 6 | 按钮、弹窗、标签等 |
+| 样式 | Tailwind CSS 4 + CSS 变量 | Vite 插件、原子化样式 + 主题系统 |
 | 构建 | Vite 6 | 前端构建工具 |
 | 国际化 | i18next | 多语言支持（简体中文/英文/日语） |
 | 代码编辑器 | Monaco Editor | 代码查看与编辑（Geist Mono 字体） |

@@ -371,7 +371,7 @@ export function GitCommitComposer({
             onChange={(e) => setCommitMessage(e.target.value)}
             placeholder={t("sidebar.gitCommitPlaceholder", { branch: branchName })}
             autoSize={{ minRows: 2, maxRows: 8 }}
-            bordered={false}
+            variant="borderless"
             onKeyDown={(e) => {
               if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && canCommit) {
                 e.preventDefault();
@@ -576,7 +576,7 @@ export function GitCommitComposer({
         confirmLoading={committing}
         cancelButtonProps={{ disabled: committing }}
         closable={!committing}
-        maskClosable={!committing}
+        mask={{ closable: !committing }}
         onOk={() => void handleConfirmPullWithStash()}
         onCancel={() => setPullConfirmOpen(false)}
       >

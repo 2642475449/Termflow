@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Session } from "@/types";
+import { createAppStore } from "@/store";
 import {
   isEphemeralTerminalSession,
+  addTerminalSession,
   isSessionTurnRunning,
   isSessionVisibleInHistory,
   toPersistedProjectSessions,
@@ -9,6 +11,39 @@ import {
   withoutEphemeralTerminalSessions,
   withoutSessionHistoryExcludedSessions,
 } from "./sessions";
+
+it.each(["right", "down"] as const)("opens an independent terminal to the %s of a single tab using store actions", (direction) => {
+  const store = createAppStore();
+  store.getState().setCurrentProject({ name: "Project", path: "D:/project" });
+  store.getState().addSession(session({ id: "original", agentId: "cmd" }));
+  const nextSession = session({ id: "split-terminal", agentId: "cmd", ephemeral: true, active: false, status: "starting" });
+
+  expect(addTerminalSession(store.getState(), nextSession, { paneId: "main", tabId: "original", direction })).toBe(true);
+  const state = store.getState();
+  expect(state.panesById.main.tabIds).toEqual(["original"]);
+  expect(state.panesById[state.activePaneId ?? ""].tabIds).toEqual(["split-terminal"]);
+  expect(state.activePaneId).not.toBe("main");
+  expect(state.focusedTabId).toBe("split-terminal");
+  expect(state.sessions.find((item) => item.id === "original")?.active).toBe(true);
+  expect(state.projectWorkspaces["D:/project"].layout.root).toMatchObject({
+    type: "split", direction: direction === "right" ? "horizontal" : "vertical",
+  });
+
+  // 启动失败时移除新会话，原终端与布局仍然完整。
+  state.removeSession("split-terminal");
+  expect(store.getState().panesById.main.tabIds).toEqual(["original"]);
+  expect(store.getState().projectWorkspaces["D:/project"].layout.root).toEqual({ type: "pane", paneId: "main" });
+});
+
+it("does not create a split terminal when its source tab or project has disappeared", () => {
+  const store = createAppStore();
+  store.getState().setCurrentProject({ name: "Project", path: "D:/project" });
+  const target = { paneId: "main", tabId: "missing", direction: "right" as const };
+  expect(addTerminalSession(store.getState(), session(), target)).toBe(false);
+  expect(store.getState().sessions).toEqual([]);
+  expect(addTerminalSession(store.getState(), session({ path: "D:/other" }))).toBe(false);
+  expect(store.getState().sessions).toEqual([]);
+});
 
 function session(overrides: Partial<Session> = {}): Session {
   return {

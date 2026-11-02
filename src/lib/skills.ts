@@ -63,10 +63,26 @@ export function skillToggleBlocked(skill: SkillInfo, catalog: SkillCatalog): boo
 export function filterSkillGroups(groups: SkillGroup[], search: string, agent: "all" | SkillAgent,
   scope: "all" | SkillScope, status: "all" | "enabled" | "disabled") {
   const keyword = search.trim().toLowerCase();
-  return groups.map((group) => ({ ...group, locations: group.locations.filter((skill) =>
-    (agent === "all" || skill.effectiveAgents.includes(agent))
-    && (scope === "all" || skill.scope === scope)
-    && (status === "all" || skill.enabled === (status === "enabled"))) }))
-    .filter((group) => group.locations.length && (!keyword || group.locations.some((skill) =>
-      [skill.name, skill.description, skill.filePath, skill.resolvedFilePath].join(" ").toLowerCase().includes(keyword))));
+  return groups.flatMap((group) => {
+    // 所有条件必须命中同一个目录入口，不能让不同入口分别满足条件。
+    const locations = group.locations.filter((skill) =>
+      (agent === "all" || skill.effectiveAgents.includes(agent))
+      && (scope === "all" || skill.scope === scope)
+      && (status === "all" || skill.enabled === (status === "enabled"))
+      && (!keyword || [skill.name, skill.description, skill.folderName, skill.filePath, skill.resolvedFilePath]
+        .join(" ").toLowerCase().includes(keyword)));
+    return locations.length ? [{ ...group, skill: locations[0], locations }] : [];
+  });
+}
+
+export function getSkillLibraryView(groups: SkillGroup[], search: string, agent: "all" | SkillAgent,
+  scope: "all" | SkillScope, status: "all" | "enabled" | "disabled") {
+  const matching = filterSkillGroups(groups, search, agent, "all", status);
+  const workspace = filterSkillGroups(matching, "", "all", "workspace", "all");
+  const user = filterSkillGroups(matching, "", "all", "user", "all");
+  return {
+    groups: scope === "all" ? matching : scope === "workspace" ? workspace : user,
+    // 分类数字排除自身范围条件，保留智能体、搜索和状态条件。
+    counts: { all: matching.length, workspace: workspace.length, user: user.length },
+  };
 }

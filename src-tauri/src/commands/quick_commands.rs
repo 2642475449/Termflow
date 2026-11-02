@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -11,7 +11,7 @@ use tauri::{AppHandle, Emitter, State};
 use crate::database::Database;
 use crate::path_utils::display_path;
 
-// 项目文件为权威来源；数据库只保留全局命令与尚未迁移的旧项目命令。
+// 项目文件为权威来源；数据库仅用于迁移旧项目命令，旧全局记录原样保留但不再使用。
 static QUICK_COMMAND_LOCK: Mutex<()> = Mutex::new(());
 const FILE_NAME: &str = "quick-commands.json";
 const MAX_FILE_BYTES: u64 = 1024 * 1024;
@@ -20,7 +20,6 @@ const UPDATED_EVENT: &str = "quick-commands-updated";
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum QuickCommandScope {
-    Global,
     Repository {
         #[serde(rename = "repositoryId")]
         repository_id: String,
@@ -88,6 +87,9 @@ fn validate(commands: &[CommandDefinition]) -> Result<(), String> {
 }
 
 fn project_file(project_path: &str) -> Result<PathBuf, String> {
+    if project_path.trim().is_empty() {
+        return Err("快捷命令需要项目路径".into());
+    }
     let root =
         fs::canonicalize(project_path).map_err(|error| format!("无法打开项目目录: {error}"))?;
     if !root.is_dir() {
@@ -126,7 +128,6 @@ fn same_project(first: &str, second: &str) -> bool {
 
 fn same_scope(first: &QuickCommandScope, second: &QuickCommandScope) -> bool {
     match (first, second) {
-        (QuickCommandScope::Global, QuickCommandScope::Global) => true,
         (
             QuickCommandScope::Repository {
                 repository_id: first,
@@ -135,18 +136,36 @@ fn same_scope(first: &QuickCommandScope, second: &QuickCommandScope) -> bool {
                 repository_id: second,
             },
         ) => same_project(first, second),
-        _ => false,
     }
 }
 
-fn read_local(database: &Database) -> Result<Vec<QuickCommand>, String> {
+fn read_local(database: &Database) -> Result<Vec<serde_json::Value>, String> {
     serde_json::from_value(database.load_stored_quick_commands()?)
         .map_err(|error| format!("无法读取本地快捷命令: {error}"))
 }
 
-fn write_local(database: &Database, commands: &[QuickCommand]) -> Result<(), String> {
+fn write_local(database: &Database, commands: &[serde_json::Value]) -> Result<(), String> {
     let value = serde_json::to_value(commands).map_err(|error| error.to_string())?;
     database.save_stored_quick_commands(&value)
+}
+
+fn legacy_scope(command: &serde_json::Value) -> Option<QuickCommandScope> {
+    serde_json::from_value(command.get("scope")?.clone()).ok()
+}
+
+fn legacy_commands(
+    local: &[serde_json::Value],
+    scope: &QuickCommandScope,
+) -> Result<Vec<CommandDefinition>, String> {
+    local
+        .iter()
+        .filter(|command| legacy_scope(command).is_some_and(|value| same_scope(&value, scope)))
+        .map(|command| {
+            serde_json::from_value::<QuickCommand>(command.clone())
+                .map(|command| command.definition)
+                .map_err(|error| format!("无法读取旧项目快捷命令: {error}"))
+        })
+        .collect()
 }
 
 fn write_file(path: &Path, commands: &[CommandDefinition]) -> Result<(), String> {
@@ -187,40 +206,29 @@ fn load_scope(
     database: &Database,
     scope: &QuickCommandScope,
 ) -> Result<Vec<CommandDefinition>, String> {
+    let QuickCommandScope::Repository { repository_id } = scope;
+    let path = project_file(repository_id)?;
     let local = read_local(database)?;
-    if let QuickCommandScope::Repository { repository_id } = scope {
-        let path = project_file(repository_id)?;
-        let commands = match read_project_file(&path)? {
-            Some(commands) => commands,
-            None => {
-                let commands: Vec<_> = local
-                    .iter()
-                    .filter(|command| same_scope(&command.scope, scope))
-                    .map(|command| command.definition.clone())
-                    .collect();
-                if !commands.is_empty() {
-                    write_file(&path, &commands)?;
-                }
-                commands
+    let commands = match read_project_file(&path)? {
+        Some(commands) => commands,
+        None => {
+            let commands = legacy_commands(&local, scope)?;
+            if !commands.is_empty() {
+                write_file(&path, &commands)?;
             }
-        };
-        // 只有成功读取或写入项目文件后才移除旧数据；空文件同样是权威配置。
-        let remaining: Vec<_> = local
-            .iter()
-            .filter(|command| !same_scope(&command.scope, scope))
-            .cloned()
-            .collect();
-        if remaining.len() != local.len() {
-            write_local(database, &remaining)?;
+            commands
         }
-        Ok(commands)
-    } else {
-        Ok(local
-            .into_iter()
-            .filter(|command| command.scope == QuickCommandScope::Global)
-            .map(|command| command.definition)
-            .collect())
+    };
+    // 成功读取或写入项目文件后才移除对应的旧项目记录，其他记录（含旧全局数据）不变。
+    let remaining: Vec<_> = local
+        .iter()
+        .filter(|command| !legacy_scope(command).is_some_and(|value| same_scope(&value, scope)))
+        .cloned()
+        .collect();
+    if remaining.len() != local.len() {
+        write_local(database, &remaining)?;
     }
+    Ok(commands)
 }
 
 fn read_project_file(path: &Path) -> Result<Option<Vec<CommandDefinition>>, String> {
@@ -262,16 +270,12 @@ fn load_catalog(
 ) -> Result<QuickCommandCatalog, String> {
     let local = read_local(database)?;
     let mut paths = project_paths.to_vec();
-    paths.extend(local.iter().filter_map(|command| match &command.scope {
-        QuickCommandScope::Repository { repository_id } => Some(repository_id.clone()),
-        QuickCommandScope::Global => None,
+    paths.extend(local.iter().filter_map(legacy_scope).map(|scope| {
+        let QuickCommandScope::Repository { repository_id } = scope;
+        repository_id
     }));
     let mut catalog = QuickCommandCatalog {
-        commands: local
-            .iter()
-            .filter(|command| command.scope == QuickCommandScope::Global)
-            .cloned()
-            .collect(),
+        commands: vec![],
         errors: vec![],
     };
     let mut seen: Vec<String> = vec![];
@@ -283,24 +287,18 @@ fn load_catalog(
         let scope = QuickCommandScope::Repository {
             repository_id: path.clone(),
         };
-        let legacy = || {
-            local
-                .iter()
-                .filter(|command| same_scope(&command.scope, &scope))
-                .map(|command| command.definition.clone())
-                .collect::<Vec<_>>()
-        };
+        let legacy = || legacy_commands(&local, &scope);
         let commands = if !Path::new(&path).is_dir() {
             catalog.errors.push(ProjectCommandReadError {
                 project_path: path.clone(),
                 error: "项目目录不可用".into(),
             });
             // 尚未迁移的命令仍可查看；编辑时会正常报告路径不可用。
-            legacy()
+            legacy()?
         } else {
             match project_file(&path).and_then(|file| read_project_file(&file)) {
                 Ok(Some(commands)) => commands,
-                Ok(None) => legacy(),
+                Ok(None) => legacy()?,
                 Err(error) => {
                     catalog.errors.push(ProjectCommandReadError {
                         project_path: path.clone(),
@@ -320,24 +318,11 @@ fn load_catalog(
     Ok(catalog)
 }
 
-fn save_scope(
-    database: &Database,
-    scope: &QuickCommandScope,
-    commands: &[CommandDefinition],
-) -> Result<(), String> {
+fn save_scope(scope: &QuickCommandScope, commands: &[CommandDefinition]) -> Result<(), String> {
     validate(commands)?;
     match scope {
         QuickCommandScope::Repository { repository_id } => {
             write_file(&project_file(repository_id)?, commands)
-        }
-        QuickCommandScope::Global => {
-            let mut local = read_local(database)?;
-            local.retain(|command| command.scope != QuickCommandScope::Global);
-            local.extend(commands.iter().cloned().map(|definition| QuickCommand {
-                definition,
-                scope: QuickCommandScope::Global,
-            }));
-            write_local(database, &local)
         }
     }
 }
@@ -346,27 +331,19 @@ fn load_commands(
     database: &Database,
     project_path: Option<&str>,
 ) -> Result<Vec<QuickCommand>, String> {
-    let mut result: Vec<_> = load_scope(database, &QuickCommandScope::Global)?
+    let Some(path) = project_path.filter(|path| !path.trim().is_empty()) else {
+        return Ok(vec![]);
+    };
+    let scope = QuickCommandScope::Repository {
+        repository_id: path.to_string(),
+    };
+    Ok(load_scope(database, &scope)?
         .into_iter()
         .map(|definition| QuickCommand {
             definition,
-            scope: QuickCommandScope::Global,
+            scope: scope.clone(),
         })
-        .collect();
-    if let Some(path) = project_path {
-        let scope = QuickCommandScope::Repository {
-            repository_id: path.to_string(),
-        };
-        result.extend(
-            load_scope(database, &scope)?
-                .into_iter()
-                .map(|definition| QuickCommand {
-                    definition,
-                    scope: scope.clone(),
-                }),
-        );
-    }
-    Ok(result)
+        .collect())
 }
 
 fn upsert(
@@ -377,6 +354,9 @@ fn upsert(
     validate(std::slice::from_ref(&command.definition))?;
     let original = load_scope(database, &command.scope)?;
     let source = previous_scope.filter(|scope| !same_scope(scope, &command.scope));
+    if source.is_some() && original.iter().any(|item| item.id == command.definition.id) {
+        return Err("目标项目已存在相同 ID 的快捷命令".into());
+    }
     let mut source_commands = source
         .as_ref()
         .map(|scope| load_scope(database, scope))
@@ -390,11 +370,11 @@ fn upsert(
     } else {
         target.push(command.definition.clone());
     }
-    save_scope(database, &command.scope, &target)?;
+    save_scope(&command.scope, &target)?;
     if let (Some(scope), Some(commands)) = (source, source_commands.as_mut()) {
         commands.retain(|item| item.id != command.definition.id);
-        if let Err(error) = save_scope(database, &scope, commands) {
-            if let Err(rollback) = save_scope(database, &command.scope, &original) {
+        if let Err(error) = save_scope(&scope, commands) {
+            if let Err(rollback) = save_scope(&command.scope, &original) {
                 return Err(format!("{error}; 回滚目标配置失败: {rollback}"));
             }
             return Err(error);
@@ -406,7 +386,25 @@ fn upsert(
 fn remove(database: &Database, id: &str, scope: &QuickCommandScope) -> Result<(), String> {
     let mut commands = load_scope(database, scope)?;
     commands.retain(|command| command.id != id);
-    save_scope(database, scope, &commands)
+    save_scope(scope, &commands)
+}
+
+#[tauri::command]
+pub fn load_quick_command_usage(
+    database: State<'_, Arc<Database>>,
+    project_path: String,
+) -> Result<BTreeMap<String, u64>, String> {
+    database.load_quick_command_usage(&project_path)
+}
+
+#[tauri::command]
+pub fn record_quick_command_use(
+    database: State<'_, Arc<Database>>,
+    project_path: String,
+    command_id: String,
+    used_at: u64,
+) -> Result<u64, String> {
+    database.record_quick_command_use(&project_path, &command_id, used_at)
 }
 
 #[tauri::command]
@@ -479,13 +477,65 @@ mod tests {
         }
     }
 
+    fn seed_project_commands(database: &Database, commands: &[QuickCommand]) {
+        let records = commands
+            .iter()
+            .map(|command| serde_json::to_value(command).unwrap())
+            .collect::<Vec<_>>();
+        write_local(database, &records).unwrap();
+    }
+
+    fn legacy_global() -> serde_json::Value {
+        serde_json::json!({
+            "id": "global",
+            "label": "Old global command",
+            "action": "terminal-command",
+            "command": "pwd",
+            "appendEnter": true,
+            "scope": { "type": "global" },
+            "legacyMetadata": { "keep": true },
+        })
+    }
+
     #[test]
     fn ipc_definition_round_trips_with_scope() {
-        let original = command("preview", QuickCommandScope::Global);
+        let root = TempDir::new().unwrap();
+        let original = command("preview", scope(&root));
         let value = serde_json::to_value(&original).unwrap();
         let parsed: QuickCommand = serde_json::from_value(value).unwrap();
         assert_eq!(parsed.definition.id, "preview");
-        assert_eq!(parsed.scope, QuickCommandScope::Global);
+        assert_eq!(parsed.scope, scope(&root));
+        assert!(serde_json::from_value::<QuickCommand>(legacy_global()).is_err());
+        assert!(serde_json::from_value::<QuickCommandScope>(
+            serde_json::json!({ "type": "global" })
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn no_project_loads_no_commands_and_old_global_records_remain_untouched() {
+        let db = Database::open_in_memory();
+        let original = vec![legacy_global()];
+        write_local(&db, &original).unwrap();
+        for project_path in [None, Some(""), Some("   ")] {
+            assert!(load_commands(&db, project_path).unwrap().is_empty());
+        }
+        let catalog = load_catalog(&db, &[]).unwrap();
+        assert!(catalog.commands.is_empty());
+        assert!(catalog.errors.is_empty());
+        assert_eq!(read_local(&db).unwrap(), original);
+    }
+
+    #[test]
+    fn blank_project_scope_cannot_write_or_delete_commands() {
+        let db = Database::open_in_memory();
+        for path in ["", "   "] {
+            let scope = QuickCommandScope::Repository {
+                repository_id: path.into(),
+            };
+            assert!(upsert(&db, command("new", scope.clone()), None).is_err());
+            assert!(remove(&db, "existing", &scope).is_err());
+        }
     }
 
     #[test]
@@ -496,14 +546,14 @@ mod tests {
         write_local(
             &db,
             &[
-                command("global", QuickCommandScope::Global),
-                command("preview", scope(&root)),
-                command("other", scope(&other)),
+                legacy_global(),
+                serde_json::to_value(command("preview", scope(&root))).unwrap(),
+                serde_json::to_value(command("other", scope(&other))).unwrap(),
             ],
         )
         .unwrap();
         let loaded = load_commands(&db, Some(root.path().to_str().unwrap())).unwrap();
-        assert_eq!(loaded.len(), 2);
+        assert_eq!(loaded.len(), 1);
         let file = fs::read_to_string(root.path().join(".termflow").join(FILE_NAME)).unwrap();
         assert!(!file.contains("repositoryId"));
         assert!(!file.contains("scope"));
@@ -512,10 +562,11 @@ mod tests {
             read_local(&db)
                 .unwrap()
                 .iter()
-                .map(|item| item.definition.id.as_str())
+                .map(|item| item["id"].as_str().unwrap())
                 .collect::<Vec<_>>(),
             vec!["global", "other"]
         );
+        assert_eq!(read_local(&db).unwrap()[0], legacy_global());
     }
 
     #[test]
@@ -541,7 +592,7 @@ mod tests {
     fn empty_file_is_authoritative_and_deleted_commands_do_not_return() {
         let db = Database::open_in_memory();
         let root = TempDir::new().unwrap();
-        write_local(&db, &[command("legacy", scope(&root))]).unwrap();
+        seed_project_commands(&db, &[command("legacy", scope(&root))]);
         let file = project_file(root.path().to_str().unwrap()).unwrap();
         write_file(&file, &[]).unwrap();
         assert!(load_scope(&db, &scope(&root)).unwrap().is_empty());
@@ -554,7 +605,7 @@ mod tests {
     fn invalid_or_future_file_is_not_overwritten_and_legacy_data_survives() {
         let db = Database::open_in_memory();
         let root = TempDir::new().unwrap();
-        write_local(&db, &[command("legacy", scope(&root))]).unwrap();
+        seed_project_commands(&db, &[command("legacy", scope(&root))]);
         let file = project_file(root.path().to_str().unwrap()).unwrap();
         fs::create_dir_all(file.parent().unwrap()).unwrap();
         for content in [
@@ -588,33 +639,43 @@ mod tests {
     }
 
     #[test]
-    fn moves_scope_in_both_directions_preserving_other_global_commands() {
+    fn moves_commands_between_project_files_preserving_unrelated_commands() {
         let db = Database::open_in_memory();
-        let root = TempDir::new().unwrap();
-        upsert(&db, command("keep", QuickCommandScope::Global), None).unwrap();
-        upsert(&db, command("move", QuickCommandScope::Global), None).unwrap();
-        upsert(
+        let first = TempDir::new().unwrap();
+        let second = TempDir::new().unwrap();
+        upsert(&db, command("keep", scope(&first)), None).unwrap();
+        upsert(&db, command("move", scope(&first)), None).unwrap();
+        upsert(&db, command("move", scope(&second)), Some(scope(&first))).unwrap();
+        assert_eq!(load_scope(&db, &scope(&first)).unwrap()[0].id, "keep");
+        assert_eq!(load_scope(&db, &scope(&second)).unwrap()[0].id, "move");
+        upsert(&db, command("move", scope(&first)), Some(scope(&second))).unwrap();
+        assert_eq!(load_scope(&db, &scope(&first)).unwrap().len(), 2);
+        assert!(load_scope(&db, &scope(&second)).unwrap().is_empty());
+    }
+
+    #[test]
+    fn moving_to_a_project_with_the_same_id_does_not_overwrite_either_file() {
+        let db = Database::open_in_memory();
+        let first = TempDir::new().unwrap();
+        let second = TempDir::new().unwrap();
+        upsert(&db, command("shared-id", scope(&first)), None).unwrap();
+        let mut other = command("shared-id", scope(&second));
+        other.definition.command = "pnpm build".into();
+        upsert(&db, other, None).unwrap();
+        assert!(upsert(
             &db,
-            command("move", scope(&root)),
-            Some(QuickCommandScope::Global),
+            command("shared-id", scope(&second)),
+            Some(scope(&first)),
         )
-        .unwrap();
+        .is_err());
         assert_eq!(
-            load_scope(&db, &QuickCommandScope::Global).unwrap().len(),
-            1
+            load_scope(&db, &scope(&first)).unwrap()[0].command,
+            "pnpm dev"
         );
-        assert_eq!(load_scope(&db, &scope(&root)).unwrap().len(), 1);
-        upsert(
-            &db,
-            command("move", QuickCommandScope::Global),
-            Some(scope(&root)),
-        )
-        .unwrap();
         assert_eq!(
-            load_scope(&db, &QuickCommandScope::Global).unwrap().len(),
-            2
+            load_scope(&db, &scope(&second)).unwrap()[0].command,
+            "pnpm build"
         );
-        assert!(load_scope(&db, &scope(&root)).unwrap().is_empty());
     }
 
     #[test]
@@ -622,7 +683,7 @@ mod tests {
         let db = Database::open_in_memory();
         let first = TempDir::new().unwrap();
         let second = TempDir::new().unwrap();
-        upsert(&db, command("global", QuickCommandScope::Global), None).unwrap();
+        write_local(&db, &[legacy_global()]).unwrap();
         upsert(&db, command("shared-id", scope(&first)), None).unwrap();
         upsert(&db, command("shared-id", scope(&second)), None).unwrap();
         let catalog = load_catalog(
@@ -635,18 +696,22 @@ mod tests {
         )
         .unwrap();
         assert!(catalog.errors.is_empty());
-        assert_eq!(catalog.commands.len(), 3);
-        assert_eq!(catalog.commands[1].scope, scope(&first));
-        assert_eq!(catalog.commands[2].scope, scope(&second));
-        // 标题栏的单项目查询仍只返回当前项目与全局命令。
-        assert_eq!(load_commands(&db, first.path().to_str()).unwrap().len(), 2);
+        assert_eq!(catalog.commands.len(), 2);
+        assert_eq!(catalog.commands[0].scope, scope(&first));
+        assert_eq!(catalog.commands[1].scope, scope(&second));
+        // 标题栏的单项目查询只返回当前项目命令。
+        assert_eq!(load_commands(&db, first.path().to_str()).unwrap().len(), 1);
+        remove(&db, "shared-id", &scope(&first)).unwrap();
+        assert!(load_scope(&db, &scope(&first)).unwrap().is_empty());
+        assert_eq!(load_scope(&db, &scope(&second)).unwrap().len(), 1);
+        assert_eq!(read_local(&db).unwrap(), vec![legacy_global()]);
     }
 
     #[test]
     fn catalog_includes_unmigrated_projects_without_writing_their_files() {
         let db = Database::open_in_memory();
         let root = TempDir::new().unwrap();
-        write_local(&db, &[command("legacy", scope(&root))]).unwrap();
+        seed_project_commands(&db, &[command("legacy", scope(&root))]);
         let catalog = load_catalog(&db, &[]).unwrap();
         assert_eq!(catalog.commands.len(), 1);
         assert_eq!(catalog.commands[0].scope, scope(&root));
@@ -658,7 +723,7 @@ mod tests {
     fn catalog_respects_empty_project_files_over_legacy_cache() {
         let db = Database::open_in_memory();
         let root = TempDir::new().unwrap();
-        write_local(&db, &[command("legacy", scope(&root))]).unwrap();
+        seed_project_commands(&db, &[command("legacy", scope(&root))]);
         write_file(&project_file(root.path().to_str().unwrap()).unwrap(), &[]).unwrap();
         assert!(load_catalog(&db, &[]).unwrap().commands.is_empty());
         // 汇总查询不修改数据库，当前项目正常加载时才迁移。
@@ -687,7 +752,7 @@ mod tests {
         let db = Database::open_in_memory();
         let root = TempDir::new().unwrap();
         let missing = display_path(root.path().join("missing"));
-        write_local(
+        seed_project_commands(
             &db,
             &[command(
                 "legacy",
@@ -695,8 +760,7 @@ mod tests {
                     repository_id: missing.clone(),
                 },
             )],
-        )
-        .unwrap();
+        );
         let catalog = load_catalog(&db, &[]).unwrap();
         assert_eq!(catalog.commands.len(), 1);
         assert_eq!(catalog.errors[0].project_path, missing);
@@ -707,14 +771,14 @@ mod tests {
     fn failed_migration_keeps_original_database_commands() {
         let db = Database::open_in_memory();
         let root = TempDir::new().unwrap();
-        write_local(&db, &[command("legacy", scope(&root))]).unwrap();
+        seed_project_commands(&db, &[command("legacy", scope(&root))]);
         fs::write(
             root.path().join(".termflow"),
             "occupied by an existing file",
         )
         .unwrap();
         assert!(load_scope(&db, &scope(&root)).is_err());
-        assert_eq!(read_local(&db).unwrap()[0].definition.id, "legacy");
+        assert_eq!(read_local(&db).unwrap()[0]["id"], "legacy");
         assert_eq!(
             fs::read_to_string(root.path().join(".termflow")).unwrap(),
             "occupied by an existing file"
@@ -725,10 +789,23 @@ mod tests {
     fn stale_general_settings_cannot_overwrite_dedicated_command_storage() {
         let db = Database::open_in_memory();
         let root = TempDir::new().unwrap();
-        write_local(&db, &[command("legacy", scope(&root))]).unwrap();
-        upsert(&db, command("global", QuickCommandScope::Global), None).unwrap();
+        write_local(
+            &db,
+            &[
+                legacy_global(),
+                serde_json::to_value(command("legacy", scope(&root))).unwrap(),
+            ],
+        )
+        .unwrap();
+        let original = db.load_stored_quick_commands().unwrap();
         db.save_general_persistent_settings(&PersistentSettingsRecord::default())
             .unwrap();
-        assert_eq!(read_local(&db).unwrap().len(), 2);
+        assert_eq!(db.load_stored_quick_commands().unwrap(), original);
+        db.save_general_persistent_settings_patch(
+            &PersistentSettingsRecord::default(),
+            &["terminalQuickCommands".into(), "language".into()],
+        )
+        .unwrap();
+        assert_eq!(db.load_stored_quick_commands().unwrap(), original);
     }
 }

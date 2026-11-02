@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Root } from "hast";
@@ -8,6 +8,23 @@ import MarkdownPreview, {
   renderInlineMarkdown,
   renderMarkdownCodeTree,
 } from "./MarkdownPreview";
+
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
+
+it.each([false, true])("keeps a Mermaid source placeholder in the document before async rendering (editable=%s)", (editable) => {
+  const markup = renderToStaticMarkup(createElement(MarkdownPreview, {
+    content: "## Before\n\n```mermaid\nflowchart TD\nA[Start] --> B[End]\n```\n\n## After",
+    emptyText: "empty",
+    onEditBlock: editable ? () => undefined : undefined,
+  }));
+
+  expect(markup).toContain('class="app-markdown-mermaid" aria-busy="true"');
+  expect(markup).toContain('class="app-markdown-mermaid-placeholder"');
+  expect(markup).toContain("A[Start] --&gt; B[End]");
+  expect(markup.indexOf("A[Start]")).toBeLessThan(markup.indexOf('id="after"'));
+});
 
 it("renders a saved scheduled-task report as a table, list and code block", () => {
   const { output } = parseScheduledTaskLog("status: succeeded\nexitCode: 0\n\n--- output ---\n**新增功能**\n\n| 功能 | 说明 |\n|---|---|\n| 定时任务 | 代码巡查 |\n\n- 支持每日运行\n\n```sh\ngit status\n```\n\n--- stderr ---\nCLI diagnostics");

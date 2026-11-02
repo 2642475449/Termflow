@@ -34,7 +34,7 @@ export function BackgroundCloseController() {
 
   return (
     <Modal open={promptOpen} title={t("background.closeTitle")} onCancel={() => setPromptOpen(false)}
-      closable={!busy} maskClosable={!busy} keyboard={!busy}
+      closable={!busy} mask={{ closable: !busy }} keyboard={!busy}
       footer={[
         <Button key="cancel" disabled={busy} onClick={() => setPromptOpen(false)}>{t("common.cancel")}</Button>,
         <Button key="close" disabled={busy} onClick={() => void chooseWorkspaceClose(false).catch(reportError)}>{t("background.closeNow")}</Button>,

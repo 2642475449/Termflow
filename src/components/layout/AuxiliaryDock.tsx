@@ -8,7 +8,7 @@ import {
   RobotOutlined,
   SafetyCertificateOutlined,
 } from "@ant-design/icons";
-import { Dropdown, Empty, Input, List, Modal, Spin, Tooltip, message } from "antd";
+import { Dropdown, Empty, Input, Modal, Spin, Tooltip, message } from "antd";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AgentActivityIcon } from "@/components/AgentActivityIcon";
@@ -201,6 +201,7 @@ export default function AuxiliaryDock({
     }
     const session = useAppStore.getState().sessions.find((item) => item.id === tab.resourceId);
     if (!session?.active) {
+      useAppStore.getState().clearTerminalExitCode(tab.resourceId);
       removeSession(tab.resourceId);
       closeTab(tab.id);
       return;
@@ -299,7 +300,7 @@ export default function AuxiliaryDock({
                   <span className="min-w-0 flex-1 truncate">{displayTitle}</span>
                   <button
                     type="button"
-                    className="tab-close-btn ml-auto flex h-4 w-4 shrink-0 items-center justify-center rounded border-0 bg-transparent p-0 hover:bg-[var(--cs-bg-hover)]"
+                    className="tab-close-btn ml-auto flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border-0 bg-transparent p-0 hover:bg-[var(--cs-bg-hover)]"
                     aria-label={t("common.delete")}
                     onClick={(event) => {
                       event.stopPropagation();
@@ -428,6 +429,7 @@ export default function AuxiliaryDock({
                         >
                           <Terminal
                             sessionId={session.id}
+                            allowIndependentFocus={open && active}
                             onExit={() => updateSession(session.id, { active: false })}
                             onClose={() => void handleCloseTab(tab)}
                           />
@@ -497,25 +499,29 @@ export default function AuxiliaryDock({
             <div className="flex h-24 items-center justify-center"><Spin /></div>
           ) : !fileQuery.trim() ? (
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("auxiliaryDock.fileHint")} />
+          ) : fileResults.length === 0 ? (
+            <div className="px-4 py-4 text-center text-sm text-[var(--cs-text-secondary)]">
+              {t("auxiliaryDock.noFiles")}
+            </div>
           ) : (
-            <List
-              size="small"
-              dataSource={fileResults}
-              locale={{ emptyText: t("auxiliaryDock.noFiles") }}
-              renderItem={(item) => (
-                <List.Item
-                  className="cursor-pointer"
-                  onClick={() => {
-                    if (!currentProject) return;
-                    openFile({ projectPath: currentProject.path, path: item.path, preview: true });
-                    setFilePickerOpen(false);
-                    setFileQuery("");
-                  }}
-                >
-                  <span className="truncate text-xs" title={item.path}>{item.path}</span>
-                </List.Item>
-              )}
-            />
+            <ul className="divide-y divide-[var(--cs-border)]">
+              {fileResults.map((item) => (
+                <li key={item.path}>
+                  <button
+                    type="button"
+                    className="flex w-full items-center px-4 py-2 text-left hover:bg-[var(--cs-bg-hover)]"
+                    onClick={() => {
+                      if (!currentProject) return;
+                      openFile({ projectPath: currentProject.path, path: item.path, preview: true });
+                      setFilePickerOpen(false);
+                      setFileQuery("");
+                    }}
+                  >
+                    <span className="truncate text-xs" title={item.path}>{item.path}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       </Modal>

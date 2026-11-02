@@ -11,9 +11,9 @@ Termflow 是基于 **Tauri 2** 的本地桌面工作台，在同一项目上下�
 
 | 层 | 技术 |
 |---|---|
-| 前端 | React 19 + TypeScript 5.8+（严格模式）+ Vite 6 |
+| 前端 | React 19 + TypeScript 7（严格模式）+ Vite 6 |
 | 状态管理 | Zustand 5（带 persist 中间件） |
-| UI | Ant Design 5 + Tailwind CSS 3 |
+| UI | Ant Design 6 + Tailwind CSS 4（Vite 插件） |
 | 终端 | xterm.js 6 |
 | 编辑器 | Monaco Editor |
 | 国际化 | i18next + react-i18next |

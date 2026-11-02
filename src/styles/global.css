@@ -1,10 +1,29 @@
 @import "./themes.css";
+@import "tailwindcss" source("../");
 @import "./shell.css";
 @import "./motion.css";
+@source "../../index.html";
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@custom-variant dark (&:where([data-theme="dark-starry"], [data-theme="dark-starry"] *, [data-theme="dark-mocha"], [data-theme="dark-mocha"] *));
+
+/* v4 的默认边框和占位文字改为 currentColor；工作台继续使用四套主题的配对变量。 */
+@layer base {
+  *, ::before, ::after, ::backdrop, ::file-selector-button {
+    border-color: var(--cs-border);
+  }
+
+  input::placeholder, textarea::placeholder {
+    color: var(--cs-text-tertiary);
+  }
+
+  button, [role="button"] {
+    cursor: pointer;
+  }
+
+  :disabled {
+    cursor: default;
+  }
+}
 
 /* 仅开发入口创建此元素，启动失败时展示实际调用栈供排查。 */
 .app-dev-runtime-error {
@@ -979,7 +998,7 @@ html, body, #root {
 }
 
 /* 默认 Tooltip：与页面背景拉开层次（配色由 App.tsx 中 Tooltip 组件 token 提供） */
-[data-theme] .ant-tooltip .ant-tooltip-inner {
+[data-theme] .ant-tooltip .ant-tooltip-container {
   border: 1px solid var(--cs-border-card, var(--cs-border));
   box-shadow: 0 8px 24px color-mix(in srgb, var(--cs-bg-app) 50%, transparent);
 }
@@ -989,8 +1008,8 @@ html, body, #root {
   -webkit-backdrop-filter: blur(6px) saturate(118%);
 }
 
-.app-status-tooltip .ant-tooltip-inner,
-.app-status-popover .ant-popover-inner {
+.app-status-tooltip .ant-tooltip-container,
+.app-status-popover .ant-popover-container {
   background:
     linear-gradient(
       180deg,
@@ -1007,12 +1026,12 @@ html, body, #root {
   -webkit-backdrop-filter: blur(18px) saturate(140%);
 }
 
-.app-status-tooltip .ant-tooltip-inner {
+.app-status-tooltip .ant-tooltip-container {
   padding: 12px 14px !important;
   min-width: 280px;
 }
 
-.app-status-popover .ant-popover-inner {
+.app-status-popover .ant-popover-container {
   padding: 8px !important;
 }
 
@@ -1022,21 +1041,21 @@ html, body, #root {
     color-mix(in srgb, var(--cs-bg-card, var(--cs-bg-statusbar)) 94%, transparent) !important;
 }
 
-[data-theme="light-glass"] .app-status-tooltip .ant-tooltip-inner,
-[data-theme="light-glass"] .app-status-popover .ant-popover-inner {
+[data-theme="light-glass"] .app-status-tooltip .ant-tooltip-container,
+[data-theme="light-glass"] .app-status-popover .ant-popover-container {
   background-image: none !important;
   box-shadow: 0 14px 30px rgba(31, 42, 68, 0.08);
 }
 
-[data-theme="dark-starry"] .app-status-tooltip .ant-tooltip-inner,
-[data-theme="dark-starry"] .app-status-popover .ant-popover-inner {
+[data-theme="dark-starry"] .app-status-tooltip .ant-tooltip-container,
+[data-theme="dark-starry"] .app-status-popover .ant-popover-container {
   box-shadow:
     0 20px 44px rgba(6, 8, 20, 0.48),
     0 0 0 1px rgba(96, 165, 250, 0.08);
 }
 
-[data-theme="dark-mocha"] .app-status-tooltip .ant-tooltip-inner,
-[data-theme="dark-mocha"] .app-status-popover .ant-popover-inner {
+[data-theme="dark-mocha"] .app-status-tooltip .ant-tooltip-container,
+[data-theme="dark-mocha"] .app-status-popover .ant-popover-container {
   box-shadow:
     0 18px 38px rgba(8, 8, 16, 0.42),
     0 0 0 1px rgba(245, 189, 105, 0.08);
@@ -1452,8 +1471,63 @@ html, body, #root {
 }
 
 .app-markdown-preview-shell {
+  /* 正文按内容撑高；横向居中交给 article 的 auto margin，避免 flex 拉伸滚动锚点。 */
+  display: block;
+}
+
+.app-markdown-mermaid {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--cs-border-card);
+  border-radius: 12px;
+  background: var(--cs-bg-hover);
+  color: var(--cs-text-secondary);
+  padding: 16px;
+  text-align: center;
+}
+
+.app-markdown-mermaid.is-fullscreen {
   display: flex;
+  align-items: center;
   justify-content: center;
+}
+
+.app-markdown-mermaid.is-error {
+  border-color: var(--cs-error);
+}
+
+.app-markdown-mermaid-error {
+  text-align: left;
+  font-size: 12px;
+  color: var(--cs-text-secondary);
+}
+
+.app-markdown-preview .app-markdown-mermaid-placeholder {
+  min-height: 96px;
+  max-height: 240px;
+  margin: 0;
+  overflow: auto;
+  text-align: left;
+  font-size: 12px;
+  line-height: 24px;
+}
+
+.app-markdown-mermaid-action {
+  display: flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--cs-text-secondary);
+  transition: color 150ms, background-color 150ms;
+}
+
+.app-markdown-mermaid-action:hover {
+  background: var(--cs-bg-hover);
+  color: var(--cs-primary);
 }
 
 .app-markdown-preview {
@@ -2280,7 +2354,7 @@ html, body, #root {
 }
 
 /* Global text search dialog */
-.app-global-search-modal .ant-modal-content {
+.app-global-search-modal .ant-modal-container {
   padding: 0;
   overflow: hidden;
   border: 1px solid var(--cs-border-sidebar);
@@ -2584,7 +2658,7 @@ html, body, #root {
   }
 }
 
-.app-global-search-modal .ant-modal-content {
+.app-global-search-modal .ant-modal-container {
   box-shadow: var(--cs-shadow-floating);
 }
 
@@ -2627,7 +2701,7 @@ html, body, #root {
   color: var(--cs-text-secondary);
 }
 
-.app-global-search-scope .ant-select-selector {
+.app-global-search-scope.ant-select {
   border-radius: 4px !important;
   background: var(--cs-bg-hover) !important;
 }
@@ -2784,7 +2858,7 @@ html, body, #root {
   inset-inline-end: 12px !important;
 }
 
-.app-task-monitor-popover .ant-popover-inner {
+.app-task-monitor-popover .ant-popover-container {
   width: min(320px, calc(100vw - 24px));
   padding: 0;
   overflow: hidden;
@@ -2847,12 +2921,6 @@ html, body, #root {
   border-color: color-mix(in srgb, var(--cs-primary) 28%, transparent);
 }
 
-.app-task-monitor-stat-pill[data-variant="waiting"] {
-  background: color-mix(in srgb, var(--cs-warning) 14%, transparent);
-  color: var(--cs-warning);
-  border-color: color-mix(in srgb, var(--cs-warning) 30%, transparent);
-}
-
 .app-task-monitor-stat-pill[data-variant="completed"] {
   background: color-mix(in srgb, var(--cs-success) 12%, transparent);
   color: var(--cs-success);
@@ -2893,8 +2961,8 @@ html, body, #root {
 .app-task-monitor-dot { width: 8px; height: 8px; flex-shrink: 0; border-radius: 50%; background: var(--cs-text-tertiary); }
 .app-task-monitor-dot[data-status="starting"], .app-task-monitor-dot[data-status="running"] { background: transparent; border: 1.5px solid var(--cs-text-tertiary); border-top-color: transparent; }
 .app-task-monitor-dot[data-status="running"], .app-task-monitor-dot[data-status="starting"] { animation: app-task-monitor-spin 1s linear infinite; }
-.app-task-monitor-dot[data-status="waiting"] { background: var(--cs-warning); }
-.app-task-monitor-dot[data-status="idle"], .app-task-monitor-dot[data-status="stopped"] { visibility: hidden; }
+/* 等待输入与空闲状态留白，不作为待处理提醒展示。 */
+.app-task-monitor-dot[data-status="waiting"], .app-task-monitor-dot[data-status="idle"], .app-task-monitor-dot[data-status="stopped"] { visibility: hidden; }
 .app-task-monitor-dot[data-status="completed"] { background: var(--cs-success); }
 .app-task-monitor-dot[data-status="error"] { background: var(--cs-error); }
 .app-task-monitor-row[data-closable="true"]:hover .app-task-monitor-dot,
@@ -2903,33 +2971,6 @@ html, body, #root {
 @keyframes app-task-monitor-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
   .app-task-monitor-dot[data-status="starting"], .app-task-monitor-dot[data-status="running"] { animation: none; }
-}
-
-.app-task-monitor-pulse-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--cs-warning);
-  box-shadow: 0 0 0 0 color-mix(in srgb, var(--cs-warning) 70%, transparent);
-  animation: app-task-monitor-pulse 1.8s infinite;
-}
-
-@keyframes app-task-monitor-pulse {
-  0% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--cs-warning) 70%, transparent);
-  }
-  70% {
-    box-shadow: 0 0 0 5px transparent;
-  }
-  100% {
-    box-shadow: 0 0 0 0 transparent;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .app-task-monitor-pulse-dot {
-    animation: none;
-  }
 }
 
 .app-agent-quota-progress {

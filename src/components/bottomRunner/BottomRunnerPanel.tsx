@@ -59,15 +59,14 @@ export function BottomRunnerPanel() {
       }}>
       <BottomRunnerDivider activeSessionId={active?.sessionId} />
       <div className="app-bottom-runner-header flex min-h-9 shrink-0 items-center gap-2 px-2">
-        <span className="shrink-0 text-xs font-medium">{t("bottomRunner.title")}</span>
         <div role="tablist" aria-label={t("bottomRunner.title")} className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-          {tabs.map((tab) => <div key={tab.id} className="app-bottom-runner-tab flex shrink-0 items-center rounded" data-active={tab.id === active?.id}>
+          {tabs.map((tab) => <div key={tab.id} className="app-bottom-runner-tab flex shrink-0 items-center rounded-sm" data-active={tab.id === active?.id}>
             <button role="tab" id={tab.id} aria-controls={`output:${tab.sessionId}`} aria-selected={tab.id === active?.id}
               type="button" className="flex max-w-56 items-center gap-1.5 px-2 py-1 text-xs" title={t(`bottomRunner.status.${tab.status}`, { code: tab.exitCode })}
               onClick={() => store.activateTab(projectPath, tab.id)}>
               <RunnerStatusIcon status={tab.status} /><span className="truncate">{tab.commandLabel}</span>
             </button>
-            <button type="button" className="app-bottom-runner-tool flex h-6 w-6 items-center justify-center rounded text-xs"
+            <button type="button" className="app-bottom-runner-tool flex h-6 w-6 items-center justify-center rounded-sm text-xs"
               aria-label={t("bottomRunner.closeTabName", { name: tab.commandLabel })} title={t("bottomRunner.closeTab")}
               onClick={() => runAction(closeRunnerTab(tab))}><CloseOutlined /></button>
           </div>)}

@@ -84,7 +84,7 @@ export default function OfficeFilePreview({ projectPath, path }: OfficeFilePrevi
   }, [data]);
 
   if (loading) {
-    return <div className="flex h-full items-center justify-center"><Spin tip={t("fileTabs.loading")} /></div>;
+    return <div className="flex h-full items-center justify-center"><Spin description={t("fileTabs.loading")} /></div>;
   }
 
   if (error || !data) {

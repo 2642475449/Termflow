@@ -9,7 +9,7 @@ export function ShortcutHint({ keys }: ShortcutHintProps) {
       {parts.map((k, i) => (
         <span key={i} className="inline-flex items-center">
           <kbd
-            className="inline-block rounded bg-[var(--cs-bg-hover)] px-1 py-px text-[10px] font-mono leading-tight text-[var(--cs-text-secondary)]"
+            className="inline-block rounded-sm bg-[var(--cs-bg-hover)] px-1 py-px text-[10px] font-mono leading-tight text-[var(--cs-text-secondary)]"
           >
             {k}
           </kbd>

@@ -80,7 +80,7 @@ export function ApplicationUpdateModal() {
         okButtonProps={{ disabled: isBusy }}
         confirmLoading={update.phase === "installing"}
         closable={update.phase !== "installing"}
-        maskClosable={update.phase !== "installing"}
+        mask={{ closable: update.phase !== "installing" }}
         keyboard={update.phase !== "installing"}
         onOk={handlePrimaryAction}
         onCancel={update.closeModal}
@@ -96,7 +96,7 @@ export function ApplicationUpdateModal() {
           ) : null}
 
           {update.phase === "checking" || update.phase === "available" ? (
-            <Alert type="info" showIcon message={t("updater.preparingDownload")} />
+            <Alert type="info" showIcon title={t("updater.preparingDownload")} />
           ) : null}
 
           {update.phase === "downloading" || update.phase === "ready" || update.phase === "installing" ? (
@@ -142,7 +142,7 @@ export function ApplicationUpdateModal() {
             <Alert
               type="error"
               showIcon
-              message={update.errorStage === "check"
+              title={update.errorStage === "check"
                 ? t("updater.checkFailed")
                 : update.errorStage === "download"
                   ? t("updater.downloadFailed")
@@ -194,14 +194,14 @@ export function ApplicationUpdateModal() {
             <Alert
               type="warning"
               showIcon
-              message={t("updater.runningTurnsWarning", { count: confirmCounts.runningTurns })}
+              title={t("updater.runningTurnsWarning", { count: confirmCounts.runningTurns })}
             />
           ) : null}
           {confirmCounts && confirmCounts.dirtyTabs > 0 ? (
             <Alert
               type="warning"
               showIcon
-              message={t("updater.dirtyTabsWarning", { count: confirmCounts.dirtyTabs })}
+              title={t("updater.dirtyTabsWarning", { count: confirmCounts.dirtyTabs })}
             />
           ) : null}
         </div>

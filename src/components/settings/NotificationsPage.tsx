@@ -520,7 +520,7 @@ export function NotificationsPage() {
         onCancel={closeConfigModal}
         confirmLoading={credentialSaving}
         closable={!credentialSaving}
-        maskClosable={!credentialSaving}
+        mask={{ closable: !credentialSaving }}
         cancelButtonProps={{ disabled: credentialSaving }}
         okButtonProps={{
           disabled: !webhookUrl.trim() || !credentialStatus?.secureStorageAvailable,

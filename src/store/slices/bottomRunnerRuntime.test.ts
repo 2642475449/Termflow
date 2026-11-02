@@ -6,13 +6,16 @@ const mocks = vi.hoisted(() => ({
   input: vi.fn<(...args: unknown[]) => Promise<void>>(),
   exit: null as null | ((event: { payload: { session_id: string; code: number | null } }) => void),
 }));
-vi.mock("@/lib/api", () => ({ spawnPty: mocks.spawn, closePty: mocks.close, ptyInput: mocks.input }));
+vi.mock("@/lib/api", () => ({ spawnPty: mocks.spawn, closePty: mocks.close, ptyInput: mocks.input,
+  recordQuickCommandUse: vi.fn(async (_path: string, _id: string, timestamp: number) => timestamp),
+}));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async (_: string, callback: typeof mocks.exit) => {
   mocks.exit = callback;
   return () => {};
 }) }));
 import { useAppStore } from "@/store";
 import { useBottomRunnerStore } from "./bottomRunner";
+import { useQuickCommandUsageStore } from "./quickCommandUsage";
 import { buildRunnerCommand, clearFinishedRunnerTabs, closeRunnerTab, completeRunner, launchRunner,
   markRunnerTerminalReady, rerunRunner, stopRunner } from "./bottomRunnerRuntime";
 const path = "D:/project";
@@ -30,6 +33,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.spawn.mockResolvedValue(); mocks.close.mockResolvedValue(); mocks.input.mockResolvedValue();
   runner().reset();
+  useQuickCommandUsageStore.setState({ usageByProject: {} });
   useAppStore.setState({ projectSessions: {}, projectWorkspaces: {} });
   useAppStore.getState().setCurrentProject({ path, name: "Project" });
   useAppStore.getState().addSession({ id: "main", name: "Main", path, active: true, createdAt: 1, agentId: "codex" });
@@ -57,6 +61,18 @@ it("reuses the same command in a project and automatically expands it, even afte
   expect(runner().activeTabIdByProject[path]).toBe(tab().id);
   expect(runner().open).toBe(true);
 });
+
+it("moves a reused command ahead of a more recently opened task without spawning again", async () => {
+  const clock = vi.spyOn(Date, "now").mockReturnValue(100);
+  await start("build").promise;
+  clock.mockReturnValue(200);
+  await start("preview").promise;
+  clock.mockReturnValue(300);
+  await launchRunner(path, command, "powershell");
+  expect(useQuickCommandUsageStore.getState().usageByProject[path]).toEqual({ build: 300, preview: 200 });
+  expect(mocks.spawn).toHaveBeenCalledTimes(2);
+  clock.mockRestore();
+});
 it("awaits terminal listener readiness before spawning and can cancel before readiness", async () => {
   const promise = launchRunner(path, command, "powershell");
   await flush();
@@ -64,6 +80,7 @@ it("awaits terminal listener readiness before spawning and can cancel before rea
   await closeRunnerTab(tab());
   await promise;
   expect(mocks.spawn).not.toHaveBeenCalled();
+  expect(useQuickCommandUsageStore.getState().usageByProject).toEqual({});
   expect(useAppStore.getState().sessions.map((session) => session.id)).toEqual(["main"]);
 });
 it("closes a PTY again if it appears after its tab was closed during spawn", async () => {
@@ -77,6 +94,7 @@ it("closes a PTY again if it appears after its tab was closed during spawn", asy
   await promise;
   expect(mocks.close).toHaveBeenCalledTimes(2);
   expect(runner().tabsByProject[path]).toEqual([]);
+  expect(useQuickCommandUsageStore.getState().usageByProject).toEqual({});
   expect(useAppStore.getState().sessions.map((session) => session.id)).toEqual(["main"]);
 });
 it("does not restore a completed task to running when spawn resolves after exit", async () => {
@@ -105,6 +123,23 @@ it("reports spawn failure on the retained error tab", async () => {
   mocks.spawn.mockRejectedValueOnce(new Error("spawn failed"));
   await expect(start().promise).rejects.toThrow("spawn failed");
   expect(tab()).toMatchObject({ status: "error", exitCode: -1 });
+  expect(useQuickCommandUsageStore.getState().usageByProject).toEqual({});
+});
+
+it("records usage only after a successful start and includes reruns", async () => {
+  const { promise, created } = start();
+  expect(useQuickCommandUsageStore.getState().usageByProject).toEqual({});
+  await promise;
+  const first = useQuickCommandUsageStore.getState().usageByProject[path].build;
+  expect(first).toBeGreaterThan(0);
+  const clock = vi.spyOn(Date, "now").mockReturnValue(first + 1000);
+  completeRunner(created.sessionId, 0, true);
+  const rerun = rerunRunner(tab());
+  await flush();
+  markRunnerTerminalReady(tab().sessionId);
+  await rerun;
+  expect(useQuickCommandUsageStore.getState().usageByProject[path].build).toBe(first + 1000);
+  clock.mockRestore();
 });
 it("cleans sessions in their owning project when the user switches during spawn or close", async () => {
   let resolve!: () => void;
@@ -147,6 +182,7 @@ it("cancels an in-flight start on Stop and reclaims the resulting process", asyn
   await stopRunner(tab());
   resolve(); await promise;
   expect(tab().status).toBe("stopped");
+  expect(useQuickCommandUsageStore.getState().usageByProject).toEqual({});
   expect(mocks.close).toHaveBeenCalledWith(tab().sessionId);
 });
 it("reruns with a new session id and ignores stale exit events", async () => {

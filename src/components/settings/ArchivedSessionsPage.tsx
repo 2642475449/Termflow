@@ -224,7 +224,7 @@ export function ArchivedSessionsPage() {
         title={
           <div className="flex flex-wrap items-center gap-2.5">
             <span>{t("settings.archived.title")}</span>
-            <Tag className="app-glass-card !m-0 rounded-md px-2 py-0.5 text-xs" style={{ color: "var(--cs-text-secondary)" }}>
+            <Tag className="app-glass-card m-0! rounded-md px-2 py-0.5 text-xs" style={{ color: "var(--cs-text-secondary)" }}>
               {t("settings.archived.countLabel", { count: allRows.length })}
             </Tag>
           </div>

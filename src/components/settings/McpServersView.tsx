@@ -1,4 +1,5 @@
 import { SettingsPageHeader } from "./SettingsPageHeader";
+import { SettingsConfigAction } from "./SettingsConfigAction";
 import { SettingsDisclosure, SettingsSection } from "./SettingsSection";
 import { Button, Empty, Input, Spin, Tag, Tooltip } from "antd";
 import {
@@ -7,7 +8,6 @@ import {
   CodeOutlined,
   DeleteOutlined,
   EditOutlined,
-  FolderOpenOutlined,
   PlusOutlined,
   ReloadOutlined,
   SearchOutlined,
@@ -152,29 +152,17 @@ export function McpServersView(props: McpServersViewProps) {
               ? scopeHint(props.scope)
               : `${text("currentProject")}：${props.projectName || text("noProject")} · ${scopeHint(props.scope)}`
           }
+          actions={
+            <SettingsConfigAction
+              label={text("openConfigFile")}
+              path={props.configPath}
+              disabled={!props.configPath}
+              onOpen={props.onOpenConfig}
+            />
+          }
         >
-          <div className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
-            <div className="min-w-0">
-              <div className="text-[11px] font-mono break-all text-[var(--cs-text-tertiary)]">
-                {props.configPath || text("workspaceConfigUnavailable")}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                size="small"
-                icon={<FolderOpenOutlined />}
-                disabled={!props.configPath}
-                onClick={props.onOpenConfig}
-              >
-                {text("openConfigFile")}
-              </Button>
-            </div>
-          </div>
-
           {!props.available ? (
-            <Empty description={text("loadFailed")} className="py-7">
-              <Button onClick={props.onRefresh}>{text("refreshList")}</Button>
-            </Empty>
+            <Empty description={text("loadFailed")} className="py-7" />
           ) : props.filteredServers.length === 0 ? (
             <Empty
               description={
@@ -184,22 +172,13 @@ export function McpServersView(props: McpServersViewProps) {
               }
               className="py-7"
             >
-              <div className="text-xs mb-4 text-[var(--cs-text-tertiary)]">
+              <div className="text-xs text-[var(--cs-text-tertiary)]">
                 {needsProject
-                  ? text("projectServersDetail")
+                  ? text("workspaceConfigUnavailable")
                   : text(hasSearch ? "emptyFilteredDetail" : "emptyInitialDetail")}
               </div>
               {hasSearch ? (
-                <Button onClick={() => props.onSearch("")}>{text("clearSearch")}</Button>
-              ) : !needsProject ? (
-                <Button
-                  type="primary"
-                  icon={<PlusOutlined />}
-                  disabled={disabled}
-                  onClick={props.onAdd}
-                >
-                  {text("addServer")}
-                </Button>
+                <Button className="mt-4" onClick={() => props.onSearch("")}>{text("clearSearch")}</Button>
               ) : null}
             </Empty>
           ) : (
@@ -234,10 +213,10 @@ export function McpServersView(props: McpServersViewProps) {
                           >
                             {server.name}
                           </span>
-                          <Tag className="!m-0" color={remote ? "cyan" : "purple"}>
+                          <Tag className="m-0!" color={remote ? "cyan" : "purple"}>
                             {server.serverType.toUpperCase()}
                           </Tag>
-                          <Tag className="!m-0">
+                          <Tag className="m-0!">
                             {text(remote ? "remoteService" : "localProcess")}
                           </Tag>
                           <span

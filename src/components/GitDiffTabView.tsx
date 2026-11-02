@@ -187,7 +187,7 @@ function GitDiffTabView({ tabId }: GitDiffTabViewProps) {
                     src={version.src}
                     alt={`${document.name} (${version.label})`}
                     className="max-h-full max-w-full object-contain"
-                    wrapperClassName="flex h-full min-h-0 w-full items-center justify-center"
+                    classNames={{ root: "flex h-full min-h-0 w-full items-center justify-center" }}
                   />
                 ) : (
                   <Empty
@@ -209,7 +209,7 @@ function GitDiffTabView({ tabId }: GitDiffTabViewProps) {
         <Alert
           type="info"
           showIcon
-          message={t("common.binaryUnsupported")}
+          title={t("common.binaryUnsupported")}
           action={
             <Button
               size="small"

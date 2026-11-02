@@ -3,7 +3,7 @@ import { Modal, Input, Switch, Segmented, Collapse, Select, Spin, Button, type I
 import { FolderOpenOutlined } from "@ant-design/icons";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
-import type { AgentCliInfo, AiAgentId, QuickCommandAction, QuickCommandScope, TerminalQuickCommand } from "@/types";
+import type { AgentCliInfo, AiAgentId, QuickCommandAction, TerminalQuickCommand } from "@/types";
 import { ShortcutHint } from "@/components/ui/ShortcutHint";
 import { AgentIcon } from "@/components/AgentIcon";
 import { inspectAgentClis } from "@/lib/api";
@@ -33,7 +33,6 @@ export function QuickCommandDialog({
   const [commandText, setCommandText] = useState("");
   const [action, setAction] = useState<QuickCommandAction>("terminal-command");
   const [appendEnter, setAppendEnter] = useState(true);
-  const [scopeType, setScopeType] = useState<"global" | "repository">("repository");
   const [agentId, setAgentId] = useState<AiAgentId | undefined>(undefined);
   const [installedAgents, setInstalledAgents] = useState<AgentCliInfo[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
@@ -51,7 +50,6 @@ export function QuickCommandDialog({
       setCommandText(command.command);
       setAction(command.action);
       setAppendEnter(command.appendEnter !== false);
-      setScopeType(command.scope.type === "repository" ? "repository" : "global");
       setAgentId(command.agentId);
 
       // 聚焦标签输入框
@@ -105,7 +103,7 @@ export function QuickCommandDialog({
 
   const isEdit = command.label.length > 0 || command.command.length > 0;
   const canSave =
-    (scopeType !== "repository" || !!repositoryId)
+    !!repositoryId.trim()
     && label.trim().length > 0
     && commandText.trimEnd().length > 0
     && (action !== "agent-prompt" || !!agentId);
@@ -169,14 +167,8 @@ export function QuickCommandDialog({
       console.error("Failed to select script file:", error);
     }
   }, [repositoryId, label, t]);
-
   const handleSave = useCallback(() => {
     if (!canSave || saving) return;
-
-    const finalScope: QuickCommandScope =
-      scopeType === "repository"
-        ? { type: "repository", repositoryId }
-        : { type: "global" };
 
     void onSave({
       ...command,
@@ -184,10 +176,10 @@ export function QuickCommandDialog({
       command: commandText.trimEnd(),
       action,
       appendEnter,
-      scope: finalScope,
+      scope: { type: "repository", repositoryId },
       agentId: action === "agent-prompt" ? agentId : undefined,
     });
-  }, [canSave, saving, label, commandText, action, appendEnter, scopeType, repositoryId, command, onSave, agentId]);
+  }, [canSave, saving, label, commandText, action, appendEnter, repositoryId, command, onSave, agentId]);
 
   // Ctrl+Enter / Cmd+Enter 提交
   const handleKeyDown = useCallback(
@@ -207,12 +199,12 @@ export function QuickCommandDialog({
       title={isEdit ? t("quickCommands.editCommand") : t("quickCommands.addCommand")}
       onCancel={saving ? undefined : onCancel}
       closable={!saving}
-      destroyOnClose
+      destroyOnHidden
       width={560}
       footer={[
         <button
           key="cancel"
-          className="px-4 py-1.5 text-sm rounded transition-colors"
+          className="px-4 py-1.5 text-sm rounded-sm transition-colors"
           style={{
             background: "transparent",
             color: "var(--cs-text-secondary)",
@@ -225,7 +217,7 @@ export function QuickCommandDialog({
         </button>,
         <button
           key="save"
-          className="px-4 py-1.5 text-sm rounded transition-colors ml-2"
+          className="px-4 py-1.5 text-sm rounded-sm transition-colors ml-2"
           style={{
             background: canSave ? "var(--cs-primary)" : "var(--cs-bg-hover)",
             color: canSave ? "#fff" : "var(--cs-text-tertiary)",
@@ -244,6 +236,10 @@ export function QuickCommandDialog({
         <p className="text-sm -mt-1 mb-0" style={{ color: "var(--cs-text-secondary)" }}>
           {t("quickCommands.dialogDescription")}
         </p>
+        <div className="text-xs text-[var(--cs-text-tertiary)]">
+          <div className="break-all">{repositoryId}</div>
+          <p className="mt-1 mb-0">{t("quickCommands.projectStorageHint")}</p>
+        </div>
         {/* 标签 */}
         <div>
           <label
@@ -361,67 +357,39 @@ export function QuickCommandDialog({
         </div>
 
         {/* 高级选项 */}
-        <Collapse
-          ghost
-          size="small"
-          items={[
-            {
-              key: "advanced",
-              label: (
-                <span className="text-sm" style={{ color: "var(--cs-text-secondary)" }}>
-                  {t("quickCommands.advanced")}
-                </span>
-              ),
-              children: (
-                <div className="flex flex-col gap-3">
-                  {/* Append Enter */}
-                  {action === "terminal-command" && (
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-sm" style={{ color: "var(--cs-text-primary)" }}>
-                          {t("quickCommands.appendEnter")}
-                        </div>
-                        <div className="text-sm" style={{ color: "var(--cs-text-tertiary)" }}>
-                          {t("quickCommands.appendEnterHint")}
-                        </div>
+        {action === "terminal-command" && (
+          <Collapse
+            ghost
+            size="small"
+            items={[
+              {
+                key: "advanced",
+                label: (
+                  <span className="text-sm" style={{ color: "var(--cs-text-secondary)" }}>
+                    {t("quickCommands.advanced")}
+                  </span>
+                ),
+                children: (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm" style={{ color: "var(--cs-text-primary)" }}>
+                        {t("quickCommands.appendEnter")}
                       </div>
-                      <Switch
-                        size="small"
-                        checked={appendEnter}
-                        onChange={setAppendEnter}
-                      />
+                      <div className="text-sm" style={{ color: "var(--cs-text-tertiary)" }}>
+                        {t("quickCommands.appendEnterHint")}
+                      </div>
                     </div>
-                  )}
-
-                  {/* 作用域 */}
-                  <div>
-                    <div className="text-sm mb-1.5" style={{ color: "var(--cs-text-primary)" }}>
-                      {t("quickCommands.scope")}
-                    </div>
-                    <Segmented
+                    <Switch
                       size="small"
-                      value={scopeType}
-                      onChange={(val) => setScopeType(val as "global" | "repository")}
-                      options={[
-                        {
-                          label: t("quickCommands.scopeProject"),
-                          value: "repository",
-                        },
-                        {
-                          label: t("quickCommands.scopeGlobal"),
-                          value: "global",
-                        },
-                      ]}
+                      checked={appendEnter}
+                      onChange={setAppendEnter}
                     />
-                    <p className="text-xs text-[var(--cs-text-tertiary)] mt-1.5 mb-0">
-                      {t(scopeType === "repository" ? "quickCommands.projectStorageHint" : "quickCommands.globalStorageHint")}
-                    </p>
                   </div>
-                </div>
-              ),
-            },
-          ]}
-        />
+                ),
+              },
+            ]}
+          />
+        )}
       </div>
     </Modal>
   );

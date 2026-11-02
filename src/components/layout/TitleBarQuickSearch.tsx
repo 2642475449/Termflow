@@ -318,7 +318,7 @@ function TitleBarQuickSearch() {
         width={820}
         style={{ top: "12vh", maxWidth: "calc(100vw - 32px)" }}
         styles={{
-          content: {
+          container: {
             padding: 8,
             background: "var(--cs-bg-card)",
             border: "1px solid var(--cs-border-card, var(--cs-border))",

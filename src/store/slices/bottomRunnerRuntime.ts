@@ -5,6 +5,7 @@ import { useAppStore } from "@/store";
 import type { Session, TerminalQuickCommand } from "@/types";
 import type { BottomRunnerTab, TerminalShell } from "../types";
 import { isRunnerRunning, runnerExitStatus, useBottomRunnerStore } from "./bottomRunner";
+import { useQuickCommandUsageStore } from "./quickCommandUsage";
 
 // 所有异步操作按 sessionId 关联；重跑使用新 ID，晚到的退出事件不会污染新任务。
 const pending = new Map<string, { ready: Promise<void>; resolve: () => void; cancelled: boolean }>();
@@ -124,6 +125,7 @@ async function spawnRunner(tab: BottomRunnerTab) {
       await closePty(tab.sessionId);
       return;
     }
+    void useQuickCommandUsageStore.getState().setCommandUsed(tab.projectPath, tab.commandId);
     // 极短脚本可能先退出再兑现 spawn IPC，不能回写 running。
     if (findRunnerTab(tab.sessionId)?.status === "starting") {
       useBottomRunnerStore.getState().updateTabStatus(tab.projectPath, tab.id, "running", null);
@@ -154,7 +156,15 @@ function createRunnerSession(tab: BottomRunnerTab) {
 export async function launchRunner(projectPath: string, command: Pick<TerminalQuickCommand, "id" | "label" | "command">, shell: TerminalShell) {
   const store = useBottomRunnerStore.getState();
   const existing = store.tabsByProject[projectPath]?.find((tab) => tab.commandId === command.id);
-  if (existing) { store.activateTab(projectPath, existing.id); store.setOpen(true); return; }
+  if (existing) {
+    store.activateTab(projectPath, existing.id);
+    store.setOpen(true);
+    // 复用已有任务也属于使用；等待启动中的任务由 spawn 成功后记录。
+    if (existing.status !== "starting") {
+      void useQuickCommandUsageStore.getState().setCommandUsed(projectPath, command.id);
+    }
+    return;
+  }
   if (useAppStore.getState().currentProject?.path !== projectPath) return;
   const sessionId = crypto.randomUUID();
   const tab: BottomRunnerTab = { id: `runner:${sessionId}`, sessionId, commandId: command.id,

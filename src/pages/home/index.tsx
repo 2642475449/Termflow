@@ -881,7 +881,7 @@ function HomePage() {
                     type="button"
                     onClick={handleManualRefresh}
                     disabled={refreshing}
-                    className="flex h-8 w-8 items-center justify-center rounded-full border-0 bg-transparent p-0 text-[18px] transition-colors hover:bg-[var(--cs-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--cs-primary)] disabled:cursor-wait disabled:opacity-60"
+                    className="flex h-8 w-8 items-center justify-center rounded-full border-0 bg-transparent p-0 text-[18px] transition-colors hover:bg-[var(--cs-bg-hover)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--cs-primary)] disabled:cursor-wait disabled:opacity-60"
                     style={{ color: "var(--cs-text-primary)" }}
                     aria-label={t("home.overview.manualRefresh")}
                     title={t("home.overview.manualRefresh")}
@@ -958,7 +958,7 @@ function HomePage() {
                       {t("home.overview.todayTitle")}
                     </h2>
                   </div>
-                  <div className="grid grid-cols-3 divide-x" style={{ borderColor: "var(--cs-border-card)" }}>
+                  <div className="grid grid-cols-3 divide-x divide-[var(--cs-border-card)]" style={{ borderColor: "var(--cs-border-card)" }}>
                     {[
                       [
                         (todayActivity?.sessionCount ?? 0).toLocaleString(locale),
@@ -999,7 +999,7 @@ function HomePage() {
                       {t("home.overview.rhythmTitle")}
                     </h2>
                   </div>
-                  <div className="grid grid-cols-[0.9fr_0.9fr_1.2fr] divide-x" style={{ borderColor: "var(--cs-border-card)" }}>
+                  <div className="grid grid-cols-[0.9fr_0.9fr_1.2fr] divide-x divide-[var(--cs-border-card)]" style={{ borderColor: "var(--cs-border-card)" }}>
                     {[
                       [
                         t("home.overview.rhythmDayCount", { count: metrics.currentStreak }),
@@ -1046,7 +1046,7 @@ function HomePage() {
                       {homeCopy(i18n.language, "使用规模", "Usage", "使用状況")}
                     </h2>
                   </div>
-                  <div className="grid grid-cols-3 divide-x" style={{ borderColor: "var(--cs-border-card)" }}>
+                  <div className="grid grid-cols-3 divide-x divide-[var(--cs-border-card)]" style={{ borderColor: "var(--cs-border-card)" }}>
                     {[
                       [metrics.sessions.toLocaleString(locale), t("home.overview.sessionThreads"), t("home.overview.activeDayAverage", { count: metrics.averageDailySessions.toLocaleString(locale) })],
                       [metrics.messages.toLocaleString(locale), t("home.overview.messages"), t("home.overview.activeDayAverage", { count: metrics.averageDailyMessages.toLocaleString(locale) })],

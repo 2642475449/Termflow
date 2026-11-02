@@ -537,8 +537,8 @@ function StatusBar() {
             placement="topRight"
             content={backgroundTaskPopoverContent}
             arrow={false}
-            overlayInnerStyle={{ padding: 0, background: "transparent", boxShadow: "none" }}
-            styles={{ body: { padding: 0 } }}
+
+            styles={{ container: { padding: 0, background: "transparent", boxShadow: "none" } }}
             getPopupContainer={() => document.body}
           >
             <button
@@ -736,8 +736,8 @@ function QoderUsageStatus({
       placement="topLeft"
       content={popoverContent}
       arrow={false}
-      overlayInnerStyle={{ padding: 0, background: "transparent", boxShadow: "none" }}
-      styles={{ body: { padding: 0 } }}
+
+      styles={{ container: { padding: 0, background: "transparent", boxShadow: "none" } }}
       getPopupContainer={() => document.body}
     >
       <button
@@ -901,8 +901,8 @@ function AntigravityUsageStatus({
       placement="topLeft"
       content={content}
       arrow={false}
-      overlayInnerStyle={{ padding: 0, background: "transparent", boxShadow: "none" }}
-      styles={{ body: { padding: 0 } }}
+
+      styles={{ container: { padding: 0, background: "transparent", boxShadow: "none" } }}
       getPopupContainer={() => document.body}
     >
       <button
@@ -1119,8 +1119,8 @@ function RateLimitUsageStatus({
         if (!open) setResetCreditsExpanded(false);
       }}
       arrow={false}
-      overlayInnerStyle={{ padding: 0, background: "transparent", boxShadow: "none" }}
-      styles={{ body: { padding: 0 } }}
+
+      styles={{ container: { padding: 0, background: "transparent", boxShadow: "none" } }}
       getPopupContainer={() => document.body}
     >
       <button
@@ -1238,7 +1238,7 @@ function CodexResetCreditList({
         <button
           type="button"
           aria-expanded={expanded}
-          className="flex w-full items-center justify-between gap-2 rounded px-1 py-0.5 text-left font-medium text-[var(--cs-text-secondary)] hover:bg-[var(--cs-bg-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--cs-text-secondary)]"
+          className="flex w-full items-center justify-between gap-2 rounded-sm px-1 py-0.5 text-left font-medium text-[var(--cs-text-secondary)] hover:bg-[var(--cs-bg-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--cs-text-secondary)]"
           onClick={(event) => {
             event.stopPropagation();
             onToggle();

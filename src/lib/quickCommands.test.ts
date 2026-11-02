@@ -11,11 +11,13 @@ import { scoreQuickCommand, searchQuickCommands, normalizeSearchText } from "./q
 import type { TerminalQuickCommand } from "@/types";
 // ── 辅助函数 ─────────────────────────────────────────────────
 
+const projectScope = { type: "repository", repositoryId: "/repo-a" } as const;
+
 function makeCommand(overrides: Partial<TerminalQuickCommand> = {}): TerminalQuickCommand {
   return {
     id: "test-cmd",
     label: "Test Command",
-    scope: { type: "global" },
+    scope: projectScope,
     action: "terminal-command",
     command: "echo hello",
     appendEnter: true,
@@ -38,20 +40,20 @@ describe("normalizeQuickCommands", () => {
   });
 
   it("skips non-object items", () => {
-    expect(normalizeQuickCommands([null, 123, "str", { id: "1", label: "a", command: "b" }])).toHaveLength(1);
+    expect(normalizeQuickCommands([null, 123, "str", { id: "1", label: "a", command: "b", scope: projectScope }])).toHaveLength(1);
   });
 
   it("generates ID for items without one", () => {
-    const result = normalizeQuickCommands([{ label: "test", command: "echo 1" }]);
+    const result = normalizeQuickCommands([{ label: "test", command: "echo 1", scope: projectScope }]);
     expect(result).toHaveLength(1);
     expect(result[0].id).toMatch(/^quick-command-/);
   });
 
   it("deduplicates IDs", () => {
     const result = normalizeQuickCommands([
-      { id: "dup", label: "a", command: "echo 1" },
-      { id: "dup", label: "b", command: "echo 2" },
-      { id: "dup", label: "c", command: "echo 3" },
+      { id: "dup", label: "a", command: "echo 1", scope: projectScope },
+      { id: "dup", label: "b", command: "echo 2", scope: projectScope },
+      { id: "dup", label: "c", command: "echo 3", scope: projectScope },
     ]);
     expect(result).toHaveLength(3);
     expect(result[0].id).toBe("dup");
@@ -60,12 +62,12 @@ describe("normalizeQuickCommands", () => {
   });
 
   it("skips items with no label and no command", () => {
-    expect(normalizeQuickCommands([{ id: "1" }])).toEqual([]);
-    expect(normalizeQuickCommands([{ id: "1", label: "   ", command: "   " }])).toEqual([]);
+    expect(normalizeQuickCommands([{ id: "1", scope: projectScope }])).toEqual([]);
+    expect(normalizeQuickCommands([{ id: "1", label: "   ", command: "   ", scope: projectScope }])).toEqual([]);
   });
 
   it("preserves items with only label (incomplete drafts)", () => {
-    const result = normalizeQuickCommands([{ id: "1", label: "Draft" }]);
+    const result = normalizeQuickCommands([{ id: "1", label: "Draft", scope: projectScope }]);
     expect(result).toHaveLength(1);
     expect(result[0].label).toBe("Draft");
   });
@@ -74,20 +76,20 @@ describe("normalizeQuickCommands", () => {
     const longLabel = "a".repeat(100);
     const longCommand = "b".repeat(5000);
     const result = normalizeQuickCommands([
-      { id: "1", label: longLabel, command: longCommand },
+      { id: "1", label: longLabel, command: longCommand, scope: projectScope },
     ]);
     expect(result[0].label).toHaveLength(80);
     expect(result[0].command).toHaveLength(4000);
   });
 
   it("defaults appendEnter to true", () => {
-    const result = normalizeQuickCommands([{ id: "1", label: "a", command: "b" }]);
+    const result = normalizeQuickCommands([{ id: "1", label: "a", command: "b", scope: projectScope }]);
     expect(result[0].appendEnter).toBe(true);
   });
 
   it("keeps appendEnter false when explicitly set", () => {
     const result = normalizeQuickCommands([
-      { id: "1", label: "a", command: "b", appendEnter: false },
+      { id: "1", label: "a", command: "b", appendEnter: false, scope: projectScope },
     ]);
     expect(result[0].appendEnter).toBe(false);
   });
@@ -100,8 +102,9 @@ describe("normalizeQuickCommands", () => {
         command: "Review this change",
         action: "agent-prompt",
         agentId: "claude",
+        scope: projectScope,
       },
-      { id: "legacy", label: "Build", command: "pnpm build", action: "unknown" },
+      { id: "legacy", label: "Build", command: "pnpm build", action: "unknown", scope: projectScope },
     ]);
 
     expect(result[0].action).toBe("agent-prompt");
@@ -117,24 +120,34 @@ describe("normalizeQuickCommands", () => {
         command: "Review this change",
         action: "agent-prompt",
         agentId: "powershell",
+        scope: projectScope,
       },
     ]);
 
     expect(result[0].agentId).toBeUndefined();
   });
 
-  it("normalizes invalid scope to global", () => {
+  it("discards invalid scopes instead of treating commands as global", () => {
     const result = normalizeQuickCommands([
       { id: "1", label: "a", command: "b", scope: { type: "invalid" } },
     ]);
-    expect(result[0].scope).toEqual({ type: "global" });
+    expect(result).toEqual([]);
   });
 
-  it("normalizes empty repositoryId to global", () => {
+  it("discards empty repository IDs", () => {
     const result = normalizeQuickCommands([
       { id: "1", label: "a", command: "b", scope: { type: "repository", repositoryId: "" } },
     ]);
-    expect(result[0].scope).toEqual({ type: "global" });
+    expect(result).toEqual([]);
+  });
+
+  it("discards legacy global and unscoped settings without assigning them to a project", () => {
+    const result = normalizeQuickCommands([
+      { id: "global", label: "Global", command: "pwd", scope: { type: "global" } },
+      { id: "unscoped", label: "Legacy", command: "pwd" },
+      makeCommand(),
+    ]);
+    expect(result).toEqual([makeCommand()]);
   });
 
   it("preserves valid repository scope", () => {
@@ -154,6 +167,7 @@ describe("normalizeQuickCommands", () => {
       id: `cmd-${i}`,
       label: `Cmd ${i}`,
       command: `echo ${i}`,
+      scope: projectScope,
     }));
     const result = normalizeQuickCommands(items);
     expect(result).toHaveLength(MAX_QUICK_COMMANDS);
@@ -195,18 +209,6 @@ describe("flattenQuickCommand", () => {
 // ── quickCommandMatchesRepository ────────────────────────────
 
 describe("quickCommandMatchesRepository", () => {
-  it("global commands always match", () => {
-    expect(quickCommandMatchesRepository(makeCommand({ scope: { type: "global" } }), null)).toBe(
-      true,
-    );
-    expect(
-      quickCommandMatchesRepository(
-        makeCommand({ scope: { type: "global" } }),
-        "/some/repo",
-      ),
-    ).toBe(true);
-  });
-
   it("repository commands match when ID matches", () => {
     expect(
       quickCommandMatchesRepository(
@@ -264,14 +266,14 @@ describe("isQuickCommandComplete", () => {
 // ── createQuickCommandDraft ──────────────────────────────────
 
 describe("createQuickCommandDraft", () => {
-  it("creates a draft with default global scope", () => {
-    const draft = createQuickCommandDraft();
+  it("creates a draft bound to the supplied project", () => {
+    const draft = createQuickCommandDraft(projectScope);
     expect(draft.id).toMatch(/^quick-command-/);
     expect(draft.label).toBe("");
     expect(draft.command).toBe("");
     expect(draft.appendEnter).toBe(true);
     expect(draft.agentId).toBeUndefined();
-    expect(draft.scope).toEqual({ type: "global" });
+    expect(draft.scope).toEqual(projectScope);
     expect(draft.action).toBe("terminal-command");
   });
 

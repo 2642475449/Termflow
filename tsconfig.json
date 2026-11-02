@@ -17,10 +17,11 @@
     "noFallthroughCasesInSwitch": true,
     "resolveJsonModule": true,
     "esModuleInterop": true,
-    "baseUrl": ".",
+    "types": ["node", "vite/client"],
+    "rootDir": ".",
     "paths": {
-      "@/*": ["src/*"],
-      "antd": ["src/lib/antd.ts"]
+      "@/*": ["./src/*"],
+      "antd": ["./src/lib/antd.ts"]
     }
   },
   "include": ["src"]

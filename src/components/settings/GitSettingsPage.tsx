@@ -218,9 +218,9 @@ export function GitSettingsPage() {
                     <span className="block min-w-0 flex-1">
                       <span className="flex min-w-0 items-center gap-2">
                         <span title={profile.name} className="min-w-0 truncate text-sm font-medium text-[var(--cs-text-primary)]">{profile.name}</span>
-                        {isDefault && <Tag icon={<CheckOutlined aria-hidden="true" />} color="processing" className="!m-0 shrink-0">{t("settings.agents.gitProfiles.default")}</Tag>}
-                        {!builtIn && <Tag className="!m-0 shrink-0">{t("settings.agents.gitProfiles.custom")}</Tag>}
-                        {modified && <Tag color="warning" className="!m-0 shrink-0">{t("settings.agents.gitProfiles.modified")}</Tag>}
+                        {isDefault && <Tag icon={<CheckOutlined aria-hidden="true" />} color="processing" className="m-0! shrink-0">{t("settings.agents.gitProfiles.default")}</Tag>}
+                        {!builtIn && <Tag className="m-0! shrink-0">{t("settings.agents.gitProfiles.custom")}</Tag>}
+                        {modified && <Tag color="warning" className="m-0! shrink-0">{t("settings.agents.gitProfiles.modified")}</Tag>}
                       </span>
                       <span className="mt-1 line-clamp-1 break-words text-xs leading-5 text-[var(--cs-text-secondary)]">{summary}</span>
                     </span>

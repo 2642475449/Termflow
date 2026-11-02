@@ -7,8 +7,6 @@ import {
   CopyOutlined,
   BoldOutlined,
   EditOutlined,
-  FullscreenExitOutlined,
-  FullscreenOutlined,
   ItalicOutlined,
   LinkOutlined,
   OrderedListOutlined,
@@ -18,7 +16,7 @@ import {
   ZoomOutOutlined,
 } from "@ant-design/icons";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import mermaid from "mermaid";
+import { MermaidBlock } from "./MermaidBlock";
 import { readProjectImage } from "@/lib/api";
 import type { ElementContent, Root, RootContent } from "hast";
 import {
@@ -328,7 +326,7 @@ function ImagePreviewModal({
       >
         <button
           type="button"
-          className="flex items-center justify-center w-8 h-8 rounded hover:bg-white/10 transition-colors"
+          className="flex items-center justify-center w-8 h-8 rounded-sm hover:bg-white/10 transition-colors"
           style={{ color: "rgba(255, 255, 255, 0.8)" }}
           onClick={handleZoomIn}
           title="放大 (+)"
@@ -337,7 +335,7 @@ function ImagePreviewModal({
         </button>
         <button
           type="button"
-          className="flex items-center justify-center w-8 h-8 rounded hover:bg-white/10 transition-colors"
+          className="flex items-center justify-center w-8 h-8 rounded-sm hover:bg-white/10 transition-colors"
           style={{ color: "rgba(255, 255, 255, 0.8)" }}
           onClick={handleZoomOut}
           title="缩小 (-)"
@@ -346,7 +344,7 @@ function ImagePreviewModal({
         </button>
         <button
           type="button"
-          className="flex items-center justify-center w-8 h-8 rounded hover:bg-white/10 transition-colors"
+          className="flex items-center justify-center w-8 h-8 rounded-sm hover:bg-white/10 transition-colors"
           style={{ color: "rgba(255, 255, 255, 0.8)" }}
           onClick={handleRotate}
           title="旋转 (R)"
@@ -355,7 +353,7 @@ function ImagePreviewModal({
         </button>
         <button
           type="button"
-          className="flex items-center justify-center w-8 h-8 rounded hover:bg-white/10 transition-colors"
+          className="flex items-center justify-center w-8 h-8 rounded-sm hover:bg-white/10 transition-colors"
           style={{ color: "rgba(255, 255, 255, 0.8)" }}
           onClick={handleReset}
           title="重置 (0)"
@@ -506,7 +504,7 @@ function ImageWithFallback({
   if (!displaySrc) {
     return (
       <span
-        className={`inline-block h-6 w-6 animate-pulse rounded bg-[var(--cs-bg-hover)] ${className ?? ""}`}
+        className={`inline-block h-6 w-6 animate-pulse rounded-sm bg-[var(--cs-bg-hover)] ${className ?? ""}`}
         aria-label={alt || "图片加载中"}
       />
     );
@@ -688,7 +686,7 @@ export function renderInlineMarkdown(
         : null;
       const codeNode = (
         <code
-          className="rounded px-1.5 py-0.5"
+          className="rounded-sm px-1.5 py-0.5"
           style={{
             background: "var(--cs-bg-hover)",
             color: "var(--cs-primary)",
@@ -912,7 +910,7 @@ function CodeBlock({ code, language }: { code: string; language?: string }) {
         <span className="uppercase tracking-wide">{language || "code"}</span>
         <button
           type="button"
-          className="inline-flex items-center gap-1.5 rounded px-2 py-1 transition-colors hover:bg-black/5 dark:hover:bg-white/10"
+          className="inline-flex items-center gap-1.5 rounded-sm px-2 py-1 transition-colors hover:bg-black/5 dark:hover:bg-white/10"
           style={{ color: copied ? "var(--cs-primary)" : "var(--cs-text-tertiary)" }}
           onClick={() => void handleCopy()}
           aria-label={copied ? "已复制" : "复制代码"}
@@ -1257,165 +1255,6 @@ function MarkdownPreviewRenderer({
     );
     quoteLines = [];
   };
-
-  const mermaidIdCounter = useRef(0);
-
-  function MermaidBlock({ code }: { code: string }) {
-    const [svg, setSvg] = useState<string>("");
-    const [error, setError] = useState<string>("");
-    const [copied, setCopied] = useState(false);
-    const [isFullscreen, setIsFullscreen] = useState(false);
-    const containerRef = useRef<HTMLDivElement | null>(null);
-    const diagramRef = useRef<HTMLDivElement | null>(null);
-    const copyResetTimerRef = useRef<number | null>(null);
-
-    useEffect(() => () => {
-      if (copyResetTimerRef.current !== null) {
-        window.clearTimeout(copyResetTimerRef.current);
-      }
-    }, []);
-
-    useEffect(() => {
-      const syncFullscreenState = () => {
-        setIsFullscreen(document.fullscreenElement === containerRef.current);
-      };
-      document.addEventListener("fullscreenchange", syncFullscreenState);
-      return () => document.removeEventListener("fullscreenchange", syncFullscreenState);
-    }, []);
-
-    useEffect(() => {
-      const svgElement = diagramRef.current?.querySelector("svg");
-      if (!svgElement) return;
-      svgElement.style.width = isFullscreen ? "92vw" : "";
-      svgElement.style.height = "auto";
-      svgElement.style.maxWidth = isFullscreen ? "92vw" : "";
-      svgElement.style.maxHeight = isFullscreen ? "88vh" : "";
-    }, [isFullscreen, svg]);
-
-    useEffect(() => {
-      const theme = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "default";
-      mermaid.initialize({ startOnLoad: false, theme });
-      const id = `mermaid-${++mermaidIdCounter.current}`;
-      let cancelled = false;
-      mermaid
-        .render(id, code)
-        .then(({ svg: renderedSvg }) => {
-          if (!cancelled) {
-            setSvg(renderedSvg);
-            setError("");
-          }
-        })
-        .catch((err: unknown) => {
-          if (!cancelled) {
-            setError(err instanceof Error ? err.message : String(err));
-            setSvg("");
-          }
-        });
-      return () => {
-        cancelled = true;
-      };
-    }, [code]);
-
-    if (error) {
-      return (
-        <div
-          className="overflow-hidden rounded-xl"
-          style={{
-            border: "1px solid var(--cs-error)",
-            background: "var(--cs-bg-hover)",
-          }}
-        >
-          <div
-            className="px-3 py-2 text-[11px] uppercase tracking-wide"
-            style={{
-              color: "var(--cs-error)",
-              borderBottom: "1px solid var(--cs-error)",
-            }}
-          >
-            mermaid (error)
-          </div>
-          <div className="p-4 text-xs" style={{ color: "var(--cs-text-secondary)" }}>
-            <div style={{ color: "var(--cs-error)", marginBottom: 8 }}>{error}</div>
-            <details>
-              <summary style={{ cursor: "pointer", color: "var(--cs-text-tertiary)" }}>
-                查看源码
-              </summary>
-              <pre className="mt-2 overflow-x-auto text-xs leading-6" style={{ color: "var(--cs-text-secondary)" }}>
-                <code>{code}</code>
-              </pre>
-            </details>
-          </div>
-        </div>
-      );
-    }
-
-    if (!svg) return null;
-
-    const handleFullscreen = async () => {
-      if (document.fullscreenElement === containerRef.current) {
-        await document.exitFullscreen();
-        return;
-      }
-      if (containerRef.current?.requestFullscreen) {
-        await containerRef.current.requestFullscreen();
-      }
-    };
-
-    const handleCopy = async () => {
-      try {
-        await navigator.clipboard.writeText(svg);
-        setCopied(true);
-        if (copyResetTimerRef.current !== null) {
-          window.clearTimeout(copyResetTimerRef.current);
-        }
-        copyResetTimerRef.current = window.setTimeout(() => setCopied(false), 1600);
-      } catch {
-        setCopied(false);
-      }
-    };
-
-    return (
-      <div
-        ref={containerRef}
-        className="relative overflow-hidden rounded-xl"
-        style={{
-          border: "1px solid var(--cs-border-card)",
-          background: "var(--cs-bg-hover)",
-          padding: 16,
-          textAlign: "center",
-          ...(isFullscreen
-            ? {
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }
-            : {}),
-        }}
-      >
-        <div className="absolute right-2 top-2 z-10 flex items-center gap-1 bg-transparent">
-          <button
-            type="button"
-            className="flex h-7 w-7 items-center justify-center rounded border-0 bg-transparent text-[var(--cs-text-secondary)] transition-colors hover:bg-black/5 hover:text-[var(--cs-primary)] dark:hover:bg-white/10"
-            onClick={() => void handleFullscreen()}
-            aria-label={isFullscreen ? "退出全屏" : "全屏查看图表"}
-            title={isFullscreen ? "缩小图表" : "全屏查看"}
-          >
-            {isFullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
-          </button>
-          <button
-            type="button"
-            className="flex h-7 w-7 items-center justify-center rounded border-0 bg-transparent text-[var(--cs-text-secondary)] transition-colors hover:bg-black/5 hover:text-[var(--cs-primary)] dark:hover:bg-white/10"
-            onClick={() => void handleCopy()}
-            aria-label="复制图表"
-            title={copied ? "已复制" : "复制图表"}
-          >
-            {copied ? <CheckOutlined /> : <CopyOutlined />}
-          </button>
-        </div>
-        <div ref={diagramRef} dangerouslySetInnerHTML={{ __html: svg }} />
-      </div>
-    );
-  }
 
   const flushCode = () => {
     if (codeFenceLanguage?.toLowerCase() === "mermaid") {

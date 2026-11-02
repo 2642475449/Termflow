@@ -1,6 +1,6 @@
 /* 终端链接：文件名 → 位置 → 确认，沿用四套主题的成对前景/背景变量。 */
 .app-terminal-link-dialog.ant-modal { max-width: calc(100vw - 32px); padding-bottom: 0; }
-.app-terminal-link-dialog .ant-modal-content {
+.app-terminal-link-dialog .ant-modal-container {
   display: flex;
   flex-direction: column;
   max-height: calc(100dvh - 32px);

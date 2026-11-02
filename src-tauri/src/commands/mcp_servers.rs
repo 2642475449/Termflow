@@ -195,7 +195,12 @@ fn read_json(path: &Path) -> Result<Value, String> {
     }
     let contents =
         fs::read_to_string(path).map_err(|error| format!("Failed to read MCP config: {error}"))?;
-    parse_json_or_jsonc(&contents).map_err(|error| format!("Failed to parse MCP config: {error}"))
+    // CLI 可能预先创建空文件；Windows 编辑器也可能写入 UTF-8 BOM。
+    let contents = contents.trim_start_matches('\u{feff}');
+    if contents.trim().is_empty() {
+        return Ok(json!({}));
+    }
+    parse_json_or_jsonc(contents).map_err(|error| format!("Failed to parse MCP config: {error}"))
 }
 
 fn strip_jsonc_comments(source: &str) -> String {
@@ -1334,6 +1339,66 @@ mod tests {
         CODEX, OPENCODE, QODER,
     };
     use serde_json::json;
+
+    #[test]
+    fn reads_empty_mcp_files_as_unconfigured_without_rewriting_them() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("mcp_config.json");
+        for contents in ["", " \r\n\t", "\u{feff}", "\u{feff}\r\n "] {
+            std::fs::write(&path, contents).unwrap();
+            assert!(super::read_mcp_configs(ANTIGRAVITY, &path).unwrap().is_empty());
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), contents);
+        }
+    }
+
+    #[test]
+    fn reads_mcp_json_with_a_utf8_bom() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("mcp_config.json");
+        std::fs::write(
+            &path,
+            "\u{feff}{\"mcpServers\":{\"demo\":{\"command\":\"node\"}}}",
+        )
+        .unwrap();
+        let servers = super::read_mcp_configs(ANTIGRAVITY, &path).unwrap();
+        assert_eq!(servers.len(), 1);
+        assert_eq!(servers[0].0, "demo");
+        assert_eq!(servers[0].1.command.as_deref(), Some("node"));
+    }
+
+    #[test]
+    fn adds_mcp_servers_to_an_empty_config_file() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("mcp_config.json");
+        std::fs::write(&path, "").unwrap();
+        let config = super::McpServerConfig {
+            command: Some("node".to_string()),
+            ..super::empty_config()
+        };
+        super::update_mcp_config(ANTIGRAVITY, &path, "demo", &config, false).unwrap();
+        let servers = super::read_mcp_configs(ANTIGRAVITY, &path).unwrap();
+        assert_eq!(servers.len(), 1);
+        assert_eq!(servers[0].0, "demo");
+        assert_eq!(servers[0].1.command.as_deref(), Some("node"));
+    }
+
+    #[test]
+    fn still_rejects_malformed_nonempty_mcp_configs_without_overwriting_them() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("mcp_config.json");
+        let contents = r#"{"mcpServers":{"demo":{"command":"node"}}"#;
+        std::fs::write(&path, contents).unwrap();
+        assert!(super::read_mcp_configs(ANTIGRAVITY, &path).is_err());
+        assert!(super::update_mcp_config(
+            ANTIGRAVITY,
+            &path,
+            "demo",
+            &super::empty_config(),
+            false,
+        )
+        .is_err());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), contents);
+    }
 
     #[test]
     fn parses_opencode_local_server_commands() {

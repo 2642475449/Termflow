@@ -1074,6 +1074,45 @@ impl Database {
         write_setting(&conn, "quickCommands.terminalCommands", commands)
     }
 
+    /// 使用记录仅保存在本机，独立于命令定义和通用设置快照。
+    pub fn load_quick_command_usage(
+        &self,
+        project_path: &str,
+    ) -> Result<BTreeMap<String, u64>, String> {
+        let conn = self.conn.lock();
+        let usage: BTreeMap<String, BTreeMap<String, u64>> =
+            read_setting(&conn, "quickCommands.usageByProject")?.unwrap_or_default();
+        Ok(usage.get(project_path).cloned().unwrap_or_default())
+    }
+
+    pub fn record_quick_command_use(
+        &self,
+        project_path: &str,
+        command_id: &str,
+        used_at: u64,
+    ) -> Result<u64, String> {
+        if project_path.is_empty()
+            || command_id.is_empty()
+            || used_at == 0
+            || used_at > 9_007_199_254_740_991
+        {
+            return Err("Invalid quick command usage".into());
+        }
+        // 同一锁内按命令合并，迟到的窗口快照不能抹掉其他命令或更新的时间。
+        let conn = self.conn.lock();
+        let mut usage: BTreeMap<String, BTreeMap<String, u64>> =
+            read_setting(&conn, "quickCommands.usageByProject")?.unwrap_or_default();
+        let timestamp = usage
+            .entry(project_path.into())
+            .or_default()
+            .entry(command_id.into())
+            .or_default();
+        *timestamp = (*timestamp).max(used_at);
+        let saved_at = *timestamp;
+        write_setting(&conn, "quickCommands.usageByProject", &usage)?;
+        Ok(saved_at)
+    }
+
     pub fn save_last_project_path(&self, project_path: &str) -> Result<(), String> {
         let conn = self.conn.lock();
         write_setting(
@@ -1694,6 +1733,63 @@ mod tests {
             updated_at_ms: 1,
             deleted_at_ms: None,
         }
+    }
+
+    #[test]
+    fn quick_command_usage_is_project_scoped_and_merges_stale_writes() -> Result<(), String> {
+        let database = Database::open_in_memory();
+        assert!(database.load_quick_command_usage("E:/A")?.is_empty());
+        database.record_quick_command_use("E:/A", "build", 200)?;
+        database.record_quick_command_use("E:/A", "preview", 150)?;
+        database.record_quick_command_use("E:/B", "build", 300)?;
+        assert_eq!(database.record_quick_command_use("E:/A", "build", 100)?, 200);
+        // 通用设置保存不能将最近使用记录替换为旧快照。
+        database.save_general_persistent_settings(&PersistentSettingsRecord::default())?;
+        let usage = database.load_quick_command_usage("E:/A")?;
+        assert_eq!(usage.get("build"), Some(&200));
+        assert_eq!(usage.get("preview"), Some(&150));
+        assert_eq!(usage.len(), 2);
+        assert_eq!(
+            database.load_quick_command_usage("E:/B")?.get("build"),
+            Some(&300)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn quick_command_usage_survives_reopening_the_database() -> Result<(), String> {
+        let root = tempfile::tempdir().map_err(|error| error.to_string())?;
+        let path = root.path().join("usage.db");
+        let open = || -> Result<Database, String> {
+            let conn = rusqlite::Connection::open(&path).map_err(|error| error.to_string())?;
+            super::schema::migrate(&conn)?;
+            Ok(Database {
+                conn: super::Mutex::new(conn),
+            })
+        };
+        let database = open()?;
+        database.record_quick_command_use("E:/A", "build", 200)?;
+        drop(database);
+        assert_eq!(
+            open()?.load_quick_command_usage("E:/A")?.get("build"),
+            Some(&200)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn quick_command_usage_rejects_invalid_input_without_changing_records() -> Result<(), String> {
+        let database = Database::open_in_memory();
+        for (path, id, timestamp) in [
+            ("", "build", 100),
+            ("E:/A", "", 100),
+            ("E:/A", "build", 0),
+            ("E:/A", "build", 9_007_199_254_740_992),
+        ] {
+            assert!(database.record_quick_command_use(path, id, timestamp).is_err());
+        }
+        assert!(database.load_quick_command_usage("E:/A")?.is_empty());
+        Ok(())
     }
 
     #[test]

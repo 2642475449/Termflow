@@ -441,8 +441,8 @@ function TitleBarProjectSwitcher() {
         placement="bottomLeft"
         align={{ offset: [0, 6] }}
         arrow={false}
-        overlayInnerStyle={{ padding: 0, background: "transparent", boxShadow: "none" }}
-        styles={{ body: { padding: 0 } }}
+
+        styles={{ container: { padding: 0, background: "transparent", boxShadow: "none" } }}
         getPopupContainer={() => document.body}
       >
         <button
@@ -506,7 +506,7 @@ function TitleBarProjectSwitcher() {
         title={t("projectLauncher.createProject")}
         centered
         width={520}
-        maskClosable={!creating}
+        mask={{ closable: !creating }}
         keyboard={!creating}
         closable={!creating}
         onCancel={closeCreateProject}
@@ -565,7 +565,7 @@ function TitleBarProjectSwitcher() {
         width={520}
         destroyOnHidden
         closable={openingChoice === null}
-        maskClosable={openingChoice === null}
+        mask={{ closable: openingChoice === null }}
         keyboard={openingChoice === null}
         onCancel={() => {
           if (!openingProject.current) setPendingProjectPath(null);

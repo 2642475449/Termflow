@@ -331,7 +331,7 @@ function AgentDetailsDrawer({ agent, open, onClose, quotas, quotaLoading, refres
     }
   };
   return (
-    <Drawer open={open} width={520} title={definition?.displayName} onClose={onClose} destroyOnHidden>
+    <Drawer open={open} size={520} title={definition?.displayName} onClose={onClose} destroyOnHidden>
       {agent && definition ? <div className="app-agent-details space-y-5">
         <section className="rounded-xl border border-[var(--cs-border-card)] bg-[var(--cs-bg-card)] p-4">
           <div className="flex items-center gap-3">

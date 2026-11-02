@@ -32,6 +32,17 @@ pub struct PtyExitPayload {
     pub code: Option<i32>,
 }
 
+fn wait_for_pty_exit(child: &mut dyn portable_pty::Child) -> Option<i32> {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return Some(status.exit_code() as i32),
+            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(10)),
+            _ => return None,
+        }
+    }
+}
+
 /// Decodes PTY output while retaining an incomplete UTF-8 sequence until the
 /// next read. PTY reads are byte-oriented, so a character can straddle two
 /// buffers even when the process only writes valid UTF-8.
@@ -171,7 +182,8 @@ struct PtySession {
     writer: Box<dyn Write + Send>,
     child: Box<dyn portable_pty::Child + Send>,
     child_pid: u32,
-    _pty: PtyPair,
+    exit_code: Option<i32>,
+    pty: Option<PtyPair>,
 }
 
 #[cfg(target_os = "windows")]
@@ -186,6 +198,9 @@ fn windows_taskkill_tree_args(pid: u32) -> [String; 4] {
 
 impl Drop for PtySession {
     fn drop(&mut self) {
+        if self.exit_code.is_some() {
+            return;
+        }
         // 显式 kill 子进程，确保资源回收
         // 在 Windows 上，使用 taskkill 确保进程被完全清理
         #[cfg(target_os = "windows")]
@@ -354,7 +369,8 @@ impl PtyManager {
             writer,
             child,
             child_pid,
-            _pty: pty,
+            exit_code: None,
+            pty: Some(pty),
         };
         self.sessions.lock().insert(session_id.clone(), session);
         if monitor_claude_usage {
@@ -418,9 +434,14 @@ impl PtyManager {
                 }
                 true
             });
-            if !manager.remove_session_instance(&sid, instance_id) {
+            let Some(mut exited_session) = manager.take_session_instance(&sid, instance_id) else {
                 return;
-            }
+            };
+            // 输出已排空后再回收子进程，保留真实退出码；等待时不持有会话锁。
+            let code = exited_session
+                .exit_code
+                .or_else(|| wait_for_pty_exit(exited_session.child.as_mut()));
+            exited_session.exit_code = code;
             if let Ok(Some(review)) = manager.complete_active_turn(&sid, "process_exit") {
                 let _ = app_clone.emit("checkpoint-review-ready", review);
             }
@@ -448,10 +469,13 @@ impl PtyManager {
                 "pty-exit",
                 PtyExitPayload {
                     session_id: sid,
-                    code: None,
+                    code,
                 },
             );
         });
+
+        let manager = Arc::clone(self);
+        std::thread::spawn(move || manager.monitor_session_exit(&session_id, instance_id));
 
         Ok(opencode_control)
     }
@@ -535,9 +559,10 @@ impl PtyManager {
     pub fn resize(&self, session_id: &str, rows: u16, cols: u16) -> Result<(), String> {
         let sessions = self.sessions.lock();
         let session = sessions.get(session_id).ok_or("会话不存在")?;
-        session
-            ._pty
-            .master
+        let Some(pty) = session.pty.as_ref() else {
+            return Ok(());
+        };
+        pty.master
             .resize(PtySize {
                 rows,
                 cols,
@@ -579,14 +604,45 @@ impl PtyManager {
         is_same_pty_instance(current_instance_id, instance_id)
     }
 
-    fn remove_session_instance(&self, session_id: &str, instance_id: u64) -> bool {
+    fn monitor_session_exit(&self, session_id: &str, instance_id: u64) {
+        loop {
+            let exited_pty = {
+                let mut sessions = self.sessions.lock();
+                let Some(session) = sessions.get_mut(session_id) else {
+                    return;
+                };
+                if session.instance_id != instance_id {
+                    return;
+                }
+                match session.child.try_wait() {
+                    Ok(Some(status)) => {
+                        session.exit_code = Some(status.exit_code() as i32);
+                        Some(session.pty.take())
+                    }
+                    Ok(None) => None,
+                    Err(error) => {
+                        log::warn!("Failed to query PTY child exit for {session_id}: {error}");
+                        return;
+                    }
+                }
+            };
+            if let Some(pty) = exited_pty {
+                // Windows ConPTY 在子进程退出后仍持有输出管道。
+                // 锁外释放伪控制台以触发 EOF，保留会话身份直到最后的输出发送完。
+                drop(pty);
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+
+    fn take_session_instance(&self, session_id: &str, instance_id: u64) -> Option<PtySession> {
         let mut sessions = self.sessions.lock();
         let current_instance_id = sessions.get(session_id).map(|session| session.instance_id);
         if !is_same_pty_instance(current_instance_id, instance_id) {
-            return false;
+            return None;
         }
-        sessions.remove(session_id);
-        true
+        sessions.remove(session_id)
     }
 
     /// Cleanup all active PTY sessions
@@ -1031,6 +1087,81 @@ fn runtime_agent_label(agent_id: Option<&str>) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exited_pty_closes_output_only_after_delivering_the_final_screen() {
+        let pair = create_test_pty_pair();
+        #[cfg(target_os = "windows")]
+        let mut command = CommandBuilder::new("cmd.exe");
+        #[cfg(target_os = "windows")]
+        command.args(["/C", "echo FINAL_TERMINAL_OUTPUT & exit /b 7"]);
+        #[cfg(not(target_os = "windows"))]
+        let mut command = CommandBuilder::new("sh");
+        #[cfg(not(target_os = "windows"))]
+        command.args(["-c", "printf FINAL_TERMINAL_OUTPUT; exit 7"]);
+        let child = pair.slave.spawn_command(command).unwrap();
+        let child_pid = child.process_id().unwrap_or(0);
+        let reader = pair.master.try_clone_reader().unwrap();
+        let writer = pair.master.take_writer().unwrap();
+        let manager = PtyManager::new(Arc::new(HookIngestConfig {
+            port: 0,
+            token: "test".to_string(),
+        }));
+        manager.sessions.lock().insert(
+            "exit-test".to_string(),
+            PtySession {
+                instance_id: 1,
+                project_path: String::new(),
+                agent_id: "cmd".to_string(),
+                writer,
+                child,
+                child_pid,
+                exit_code: None,
+                pty: Some(pair),
+            },
+        );
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let mut output = String::new();
+            read_pty_output(reader, |data| {
+                output.push_str(&data);
+                true
+            });
+            let _ = sender.send(output);
+        });
+        let monitor = Arc::clone(&manager);
+        std::thread::spawn(move || monitor.monitor_session_exit("exit-test", 1));
+        let output = receiver
+            .recv_timeout(Duration::from_secs(10))
+            .expect("PTY output never reached EOF after child exit");
+        assert!(output.contains("FINAL_TERMINAL_OUTPUT"));
+        let session = manager.take_session_instance("exit-test", 1).unwrap();
+        assert_eq!(session.exit_code, Some(7));
+    }
+
+    #[test]
+    fn pty_exit_reports_the_actual_shell_exit_code() {
+        for expected_code in [0, 7] {
+            let pair = portable_pty::native_pty_system()
+                .openpty(PtySize {
+                    rows: 24,
+                    cols: 80,
+                    pixel_width: 0,
+                    pixel_height: 0,
+                })
+                .unwrap();
+            #[cfg(target_os = "windows")]
+            let mut command = CommandBuilder::new("cmd.exe");
+            #[cfg(target_os = "windows")]
+            command.args(["/C", &format!("exit /b {expected_code}")]);
+            #[cfg(not(target_os = "windows"))]
+            let mut command = CommandBuilder::new("sh");
+            #[cfg(not(target_os = "windows"))]
+            command.args(["-c", &format!("exit {expected_code}")]);
+            let mut child = pair.slave.spawn_command(command).unwrap();
+            assert_eq!(wait_for_pty_exit(child.as_mut()), Some(expected_code));
+        }
+    }
 
     #[test]
     fn pty_output_batches_preserve_order_and_flush_tail_before_exit() {

@@ -42,7 +42,7 @@ export function TerminalLinkDialog({
       okButtonProps={{ disabled: choosingTarget && !selectedPath }}
       cancelButtonProps={{ type: "text", disabled: opening }}
       closable={!opening}
-      maskClosable={!opening}
+      mask={{ closable: !opening }}
       keyboard={!opening}
       onOk={onConfirm}
       onCancel={onCancel}

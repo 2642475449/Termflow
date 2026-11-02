@@ -6,16 +6,13 @@ import {
   ReloadOutlined,
   SaveOutlined,
 } from "@ant-design/icons";
-import { Button, Drawer, Empty, Modal, Segmented, Tag, Tooltip, message } from "antd";
+import { Alert, Button, Drawer, Empty, Modal, Segmented, Tag, Tooltip, message } from "antd";
 import { useTranslation } from "react-i18next";
 import {
-  createProjectFile,
   getClaudeMdDetail,
   openInAssociatedApplication,
   openInFileManager,
-  readProjectFile,
   saveClaudeMd,
-  writeProjectFile,
 } from "@/lib/api";
 import { getAgentDisplayName } from "@/lib/agents";
 import { AgentIcon } from "@/components/AgentIcon";
@@ -23,6 +20,11 @@ import MonacoTextEditor from "@/components/editors/MonacoTextEditor";
 import MarkdownPreview from "@/components/markdown/MarkdownPreview";
 import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
 import { useAppStore } from "@/store";
+import {
+  loadAgentInstructionFile,
+  saveAgentInstructionFile,
+  useAgentInstructionsStore,
+} from "@/store/slices/agentInstructions";
 import type { AiAgentId, ClaudeMdDetail, ClaudeMdScope } from "@/types";
 
 type InstructionStandard = "agents" | "claude";
@@ -97,7 +99,8 @@ function projectFile(projectPath: string | null, filePath: string) {
   if (!projectPath) return filePath;
   const normalizedRoot = projectPath.replace(/[\\/]+$/, "");
   const normalizedFile = filePath.replace(/^[\\/]+/, "");
-  return `${normalizedRoot}\\${normalizedFile}`;
+  const separator = projectPath.includes("\\") ? "\\" : "/";
+  return `${normalizedRoot}${separator}${normalizedFile}`;
 }
 
 function fileName(filePath: string) {
@@ -132,17 +135,8 @@ export function ClaudeMdPage() {
     local: { detail: null, draft: "", loading: false, saving: false, loaded: false },
   });
 
-  // 通用 AGENTS.md 规范数据状态（基于 relativePath 缓存）
-  const [genericDocs, setGenericDocs] = useState<Record<string, {
-    filePath: string;
-    exists: boolean;
-    content: string;
-    draft: string;
-    encoding?: string | null;
-    loading: boolean;
-    saving: boolean;
-    loaded: boolean;
-  }>>({});
+  const genericDocs = useAgentInstructionsStore((state) => state.documents);
+  const setGenericDraft = useAgentInstructionsStore((state) => state.setDraft);
 
   const [viewMode, setViewMode] = useState<"edit" | "preview">("edit");
   const [templateDrawerOpen, setTemplateDrawerOpen] = useState(false);
@@ -204,7 +198,7 @@ export function ClaudeMdPage() {
     if (isClaude) {
       return claudeDocs[claudeScope].draft;
     }
-    const docKey = currentAgentsTarget.relativePath ?? "";
+    const docKey = currentAgentsTarget.absolutePath ?? "";
     return genericDocs[docKey]?.draft ?? "";
   }, [isClaude, claudeDocs, claudeScope, currentAgentsTarget, genericDocs]);
 
@@ -212,7 +206,7 @@ export function ClaudeMdPage() {
     if (isClaude) {
       return claudeDocs[claudeScope].detail?.exists ?? false;
     }
-    const docKey = currentAgentsTarget.relativePath ?? "";
+    const docKey = currentAgentsTarget.absolutePath ?? "";
     return genericDocs[docKey]?.exists ?? false;
   }, [isClaude, claudeDocs, claudeScope, currentAgentsTarget, genericDocs]);
 
@@ -221,7 +215,7 @@ export function ClaudeMdPage() {
       const state = claudeDocs[claudeScope];
       return state.loaded && state.draft !== (state.detail?.content ?? "");
     }
-    const docKey = currentAgentsTarget.relativePath ?? "";
+    const docKey = currentAgentsTarget.absolutePath ?? "";
     const state = genericDocs[docKey];
     return Boolean(state?.loaded && state.draft !== state.content);
   }, [isClaude, claudeDocs, claudeScope, currentAgentsTarget, genericDocs]);
@@ -230,7 +224,7 @@ export function ClaudeMdPage() {
     if (isClaude) {
       return claudeDocs[claudeScope].loading;
     }
-    const docKey = currentAgentsTarget.relativePath ?? "";
+    const docKey = currentAgentsTarget.absolutePath ?? "";
     return Boolean(genericDocs[docKey]?.loading);
   }, [isClaude, claudeDocs, claudeScope, currentAgentsTarget, genericDocs]);
 
@@ -238,16 +232,20 @@ export function ClaudeMdPage() {
     if (isClaude) {
       return claudeDocs[claudeScope].saving;
     }
-    const docKey = currentAgentsTarget.relativePath ?? "";
+    const docKey = currentAgentsTarget.absolutePath ?? "";
     return Boolean(genericDocs[docKey]?.saving);
   }, [isClaude, claudeDocs, claudeScope, currentAgentsTarget, genericDocs]);
 
+  const activeGenericDoc = genericDocs[currentAgentsTarget.absolutePath ?? ""];
+  const activeError = isClaude ? null : activeGenericDoc?.error;
+  const activeLoaded = isClaude ? claudeDocs[claudeScope].loaded : Boolean(activeGenericDoc?.loaded && !activeError);
+
   const canSave = useMemo(() => {
     if (isClaude) {
-      return claudeDocs[claudeScope].loaded && activeDirty && !activeSaving;
+      return claudeDocs[claudeScope].loaded && activeDirty && !activeSaving && !activeLoading;
     }
-    return Boolean(projectPath && activeDirty && !activeSaving);
-  }, [isClaude, claudeDocs, claudeScope, activeDirty, activeSaving, projectPath]);
+    return Boolean(projectPath && activeLoaded && activeDirty && !activeSaving && !activeLoading);
+  }, [isClaude, claudeDocs, claudeScope, activeLoaded, activeDirty, activeSaving, activeLoading, projectPath]);
 
   // 读取 Claude 配置
   const loadClaudeScope = useCallback(async (scope: ClaudeMdScope, force = false) => {
@@ -285,60 +283,9 @@ export function ClaudeMdPage() {
 
   // 读取通用文件（AGENTS.md / AGENTS.local.md / GEMINI.md）
   const loadGenericFile = useCallback(async (target: TargetDescriptor, force = false) => {
-    if (!projectPath || !target.relativePath) return;
-
-    const key = target.relativePath;
-    const existing = genericDocs[key];
-    if (!force && (existing?.loading || existing?.loaded)) return;
-
-    setGenericDocs((prev) => ({
-      ...prev,
-      [key]: {
-        ...(prev[key] ?? {
-          filePath: target.absolutePath ?? target.fileName,
-          exists: false,
-          content: "",
-          draft: "",
-          loading: false,
-          saving: false,
-          loaded: false,
-        }),
-        loading: true,
-      },
-    }));
-
-    try {
-      const file = await readProjectFile(projectPath, target.relativePath);
-      setGenericDocs((prev) => ({
-        ...prev,
-        [key]: {
-          filePath: file.path,
-          exists: true,
-          content: file.content,
-          draft: file.content,
-          encoding: file.encoding,
-          loading: false,
-          saving: false,
-          loaded: true,
-        },
-      }));
-    } catch {
-      // 文件尚未创建
-      setGenericDocs((prev) => ({
-        ...prev,
-        [key]: {
-          filePath: target.absolutePath ?? target.fileName,
-          exists: false,
-          content: "",
-          draft: "",
-          encoding: null,
-          loading: false,
-          saving: false,
-          loaded: true,
-        },
-      }));
-    }
-  }, [genericDocs, projectPath]);
+    if (!projectPath || !target.absolutePath) return;
+    await loadAgentInstructionFile(projectPath, target.absolutePath, force);
+  }, [projectPath]);
 
   // 依赖监听与初始化
   useEffect(() => {
@@ -357,16 +304,13 @@ export function ClaudeMdPage() {
         [claudeScope]: { ...prev[claudeScope], draft: value },
       }));
     } else {
-      const key = currentAgentsTarget.relativePath ?? "";
-      setGenericDocs((prev) => ({
-        ...prev,
-        [key]: { ...prev[key], draft: value },
-      }));
+      if (currentAgentsTarget.absolutePath) setGenericDraft(currentAgentsTarget.absolutePath, value);
     }
   }
 
   // 保存当前内容
   async function handleSave() {
+    if (!canSave) return;
     if (isClaude) {
       setClaudeDocs((prev) => ({
         ...prev,
@@ -396,39 +340,16 @@ export function ClaudeMdPage() {
       return;
     }
 
-    if (!projectPath || !currentAgentsTarget.relativePath) return;
-
-    const key = currentAgentsTarget.relativePath;
-    setGenericDocs((prev) => ({
-      ...prev,
-      [key]: { ...prev[key], saving: true },
-    }));
+    if (!projectPath || !currentAgentsTarget.absolutePath) return;
 
     try {
-      if (!activeExists) {
-        try {
-          await createProjectFile(projectPath, projectPath, currentAgentsTarget.relativePath);
-        } catch (error) {
-          const detail = typeof error === "string" ? error : error instanceof Error ? error.message : "";
-          if (!detail.includes("已存在")) throw error;
-        }
+      if (await saveAgentInstructionFile(projectPath, currentAgentsTarget.absolutePath)) {
+        message.success(t("settings.claudeMd.saveSuccess"));
       }
-      await writeProjectFile(
-        projectPath,
-        currentAgentsTarget.relativePath,
-        activeDraft,
-        genericDocs[key]?.encoding ?? undefined
-      );
-      await loadGenericFile(currentAgentsTarget, true);
-      message.success(t("settings.claudeMd.saveSuccess"));
     } catch (error) {
       console.error("Failed to save instruction file:", error);
       const detail = typeof error === "string" ? error : error instanceof Error ? error.message : "";
       message.error(detail || t("settings.claudeMd.saveFailed"));
-      setGenericDocs((prev) => ({
-        ...prev,
-        [key]: { ...prev[key], saving: false },
-      }));
     }
   }
 
@@ -606,14 +527,14 @@ export function ClaudeMdPage() {
               COMPATIBLE_AGENTS.map((agentId) => (
                 <span
                   key={agentId}
-                  className="inline-flex items-center gap-1.5 rounded bg-[var(--cs-bg-hover)] px-2 py-0.5 text-[var(--cs-text-primary)]"
+                  className="inline-flex items-center gap-1.5 rounded-sm bg-[var(--cs-bg-hover)] px-2 py-0.5 text-[var(--cs-text-primary)]"
                 >
                   <AgentIcon agentId={agentId} size={13} />
                   <span>{getAgentDisplayName(agentId)}</span>
                 </span>
               ))
             ) : (
-              <span className="inline-flex items-center gap-1.5 rounded bg-[var(--cs-bg-hover)] px-2 py-0.5 text-[var(--cs-text-primary)]">
+              <span className="inline-flex items-center gap-1.5 rounded-sm bg-[var(--cs-bg-hover)] px-2 py-0.5 text-[var(--cs-text-primary)]">
                 <AgentIcon agentId="claude" size={13} />
                 <span>{getAgentDisplayName("claude")}</span>
               </span>
@@ -621,8 +542,10 @@ export function ClaudeMdPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Tag color={activeExists ? "green" : "default"} className="!m-0">
-              {activeExists ? t("settings.claudeMd.fileExists") : t("settings.claudeMd.fileMissing")}
+            <Tag color={activeError ? "error" : activeExists ? "green" : "default"} className="m-0!">
+              {activeError ? t("settings.claudeMd.loadFailed")
+                : activeLoading || !activeLoaded ? t("settings.loading")
+                : activeExists ? t("settings.claudeMd.fileExists") : t("settings.claudeMd.fileMissing")}
             </Tag>
             <span
               className="max-w-[420px] truncate font-mono text-[var(--cs-text-tertiary)]"
@@ -651,10 +574,12 @@ export function ClaudeMdPage() {
           description={t("settings.claudeMd.openProjectFirst")}
           style={{ padding: "48px 0" }}
         />
-      ) : activeLoading ? (
+      ) : activeLoading || (!isClaude && !activeLoaded && !activeError) ? (
         <div className="flex justify-center py-24">
           <ReloadOutlined spin style={{ fontSize: 20, color: "var(--cs-primary)" }} />
         </div>
+      ) : activeError ? (
+        <Alert type="error" showIcon title={t("settings.claudeMd.loadFailed")} description={activeError} />
       ) : (
         <div className="app-settings-editor">
           {/* 编辑器顶部工具栏 */}
@@ -667,7 +592,7 @@ export function ClaudeMdPage() {
                 {fileName(activeFilePath)}
               </span>
               <span className="text-xs text-[var(--cs-text-tertiary)]">
-                {activeDirty ? t("settings.claudeMd.unsaved") : t("common.saved")}
+                {activeDirty ? t("settings.claudeMd.unsaved") : t("statusBar.file.saved")}
               </span>
             </div>
 
@@ -748,7 +673,7 @@ export function ClaudeMdPage() {
       <Drawer
         title={t("settings.claudeMd.templatesTitle")}
         placement="right"
-        width={480}
+        size={480}
         open={templateDrawerOpen}
         onClose={() => setTemplateDrawerOpen(false)}
       >
@@ -774,7 +699,7 @@ export function ClaudeMdPage() {
                   {t("settings.claudeMd.applySnippet")}
                 </Button>
               </div>
-              <pre className="max-h-36 overflow-auto rounded bg-[var(--cs-bg-hover)] p-2 text-xs font-mono text-[var(--cs-text-secondary)] whitespace-pre-wrap">
+              <pre className="max-h-36 overflow-auto rounded-sm bg-[var(--cs-bg-hover)] p-2 text-xs font-mono text-[var(--cs-text-secondary)] whitespace-pre-wrap">
                 {snippet.content.trim()}
               </pre>
             </div>

@@ -1,5 +1,22 @@
-import type { Session } from "@/types";
+import type { Session, TerminalSplitTarget } from "@/types";
+import type { AppState } from "@/store/types";
 import { normalizeSessionTitles } from "./sessionTitles";
+
+/** 单标签分屏创建独立会话，保留源标签；复用现有 store action 处理布局。 */
+export function addTerminalSession(
+  state: Pick<AppState, "currentProject" | "panesById" | "setActiveSession" | "addSession" | "splitTab">,
+  session: Session,
+  split?: TerminalSplitTarget,
+): boolean {
+  if (state.currentProject?.path !== session.path) return false;
+  if (split) {
+    if (!state.panesById[split.paneId]?.tabIds.includes(split.tabId)) return false;
+    state.setActiveSession(split.tabId, split.paneId);
+  }
+  state.addSession(session, { openInWorkspace: session.presentation !== "auxiliary" });
+  if (split) state.splitTab(session.id, split.direction, split.paneId, "move");
+  return true;
+}
 
 /**
  * Terminal tabs have no resumable agent conversation behind them. The legacy

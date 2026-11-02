@@ -130,11 +130,12 @@ export interface PersistentSettings {
 
 // ── 快速命令类型 ──────────────────────────────────────────────
 
-export type QuickCommandScope =
-  | { type: 'global' }
-  | { type: 'repository'; repositoryId: string }
+export type QuickCommandScope = { type: 'repository'; repositoryId: string };
 
 export type QuickCommandAction = 'terminal-command' | 'agent-prompt';
+
+/** 本机使用记录：项目路径 → 命令 ID → 最近使用时间（毫秒）。 */
+export type QuickCommandUsage = Record<string, Record<string, number>>;
 
 export interface TerminalQuickCommand {
   id: string;
@@ -382,9 +383,15 @@ export interface AgentPermissionDefaults {
   qoder?: Pick<QoderSessionLaunchOptions, "permissionMode">;
 }
 
+export interface TerminalSplitTarget {
+  paneId: string;
+  tabId: string;
+  direction: "right" | "down";
+}
+
 export type NewSessionLaunchRequest =
   | { kind: "agent"; agent: AgentCliInfo; launchOptions?: SessionLaunchOptions }
-  | { kind: "terminal"; shell: "powershell" | "cmd" };
+  | { kind: "terminal"; shell: "powershell" | "cmd"; split?: TerminalSplitTarget };
 
 export interface ClaudeEffortInfo {
   effectiveLevel: ClaudeEffortLevel;

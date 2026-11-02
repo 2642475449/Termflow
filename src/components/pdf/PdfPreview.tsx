@@ -385,7 +385,7 @@ function PdfScrollProgress({
       aria-valuetext={`${progressPercent}%`}
       aria-disabled={!canScroll}
       title={`${t("fileTabs.pdfReadingProgress")} ${progressPercent}%`}
-      className="group absolute bottom-2 right-1.5 top-2 z-20 w-3 touch-none rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[var(--cs-primary)]"
+      className="group absolute bottom-2 right-1.5 top-2 z-20 w-3 touch-none rounded-full outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--cs-primary)]"
       style={{
         background: "var(--cs-scrollbar-thumb)",
         cursor: canScroll ? (dragging ? "grabbing" : "pointer") : "default",
@@ -401,7 +401,7 @@ function PdfScrollProgress({
       onKeyDown={handleKeyDown}
     >
       <div
-        className="absolute left-0.5 right-0.5 rounded-full bg-[var(--cs-primary)] opacity-60 shadow-sm transition-[opacity,width,left,right] group-hover:left-0 group-hover:right-0 group-hover:opacity-90"
+        className="absolute left-0.5 right-0.5 rounded-full bg-[var(--cs-primary)] opacity-60 shadow-xs transition-[opacity,width,left,right] group-hover:left-0 group-hover:right-0 group-hover:opacity-90"
         style={{
           height: thumbHeight,
           transform: `translateY(${thumbTop}px)`,
@@ -699,7 +699,7 @@ export default function PdfPreview({
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
-        <Spin tip={t("fileTabs.pdfLoading")} />
+        <Spin description={t("fileTabs.pdfLoading")} />
       </div>
     );
   }
@@ -828,7 +828,7 @@ export default function PdfPreview({
           type="error"
           showIcon
           closable
-          message={error}
+          title={error}
           action={
             <Button size="small" onClick={openExternal}>
               {t("common.openInAssociatedApp")}

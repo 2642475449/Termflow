@@ -184,8 +184,8 @@ function ScheduledTaskRunDetail({
           <p>{t(statusKey)}</p>
         </div>
       </div>
-      {detail.error && <Alert className="mb-4" type="error" showIcon message={detail.error} />}
-      {loadError && <Alert className="mb-4" type="error" showIcon message={loadError} />}
+      {detail.error && <Alert className="mb-4" type="error" showIcon title={detail.error} />}
+      {loadError && <Alert className="mb-4" type="error" showIcon title={loadError} />}
       {loading ? <div className="app-scheduled-loading"><Spin /></div> : (
         <>
           <dl className="app-scheduled-detail-grid">
@@ -386,7 +386,7 @@ export default function ScheduledTasksPanel() {
             className="mb-4"
             type="error"
             showIcon
-            message={t("scheduledTasks.loadFailed")}
+            title={t("scheduledTasks.loadFailed")}
             description={loadError}
             action={<Button size="small" onClick={() => void refreshScheduledTasks()}>{t("common.refresh")}</Button>}
           />

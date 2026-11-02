@@ -221,7 +221,7 @@ function SettingsMenu({
               >
                 <div className="flex items-center gap-2">
                   <div
-                    className="w-3 h-3 rounded-full flex-shrink-0"
+                    className="w-3 h-3 rounded-full shrink-0"
                     style={{ background: opt.accent }}
                   />
                   <span className="text-sm">{t(opt.labelKey)}</span>
@@ -433,7 +433,7 @@ function PrimarySidebarRail() {
           )}
           open={quickSettingsOpen}
           onOpenChange={handleQuickSettingsOpenChange}
-          overlayInnerStyle={{ padding: 0, background: "transparent", boxShadow: "none" }}
+          styles={{ container: { padding: 0, background: "transparent", boxShadow: "none" } }}
         >
           <div>
             <RailButton

@@ -384,7 +384,7 @@ export function GitBranchPanel({
                       )}
                       {branch.ahead > 0 && (
                         <span
-                          className="text-[10px] px-1 rounded"
+                          className="text-[10px] px-1 rounded-sm"
                           style={{
                             background: "color-mix(in srgb, var(--cs-success) 12%, transparent)",
                             color: "var(--cs-success)",
@@ -395,7 +395,7 @@ export function GitBranchPanel({
                       )}
                       {branch.behind > 0 && (
                         <span
-                          className="text-[10px] px-1 rounded"
+                          className="text-[10px] px-1 rounded-sm"
                           style={{
                             background: "color-mix(in srgb, var(--cs-error) 12%, transparent)",
                             color: "var(--cs-error)",
