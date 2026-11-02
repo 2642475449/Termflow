@@ -1,9 +1,13 @@
-export type WorkbenchGlyphKind = "terminal" | "folder" | "git";
+export type WorkbenchGlyphKind = "terminal" | "folder" | "git" | "runner";
 
 /** 小尺寸导航图标共享轮廓；可动画部分使用独立 SVG 图层。 */
 export function WorkbenchGlyph({ kind }: { kind: WorkbenchGlyphKind }) {
   return (
     <svg className={`app-nav-artwork app-nav-artwork-${kind}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {kind === "runner" && <>
+        <circle cx="12" cy="12" r="9" />
+        <path className="app-nav-runner-play" fill="currentColor" d="m10 7.5 6 4.5-6 4.5Z" />
+      </>}
       {kind === "terminal" && <>
         <rect x="3" y="4.5" width="18" height="15" rx="3" />
         <path d="m7 9 3 3-3 3" />

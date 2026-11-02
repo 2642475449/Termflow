@@ -107,6 +107,7 @@ const SkillMarketplacePage = lazy(() => import("@/components/settings/SkillMarke
 const FileTabView = lazy(() => import("@/components/FileTabView"));
 const GitDiffTabView = lazy(() => import("@/components/GitDiffTabView"));
 const Terminal = lazy(() => import("@/components/Terminal"));
+const RemoteWorkspacePanel = lazy(() => import("@/components/remote/RemoteWorkspacePanel").then((module) => ({ default: module.RemoteWorkspacePanel })));
 
 function WorkspaceContentFallback() {
   return (
@@ -733,6 +734,8 @@ function AppLayout() {
           getAgentCommandShell(agent.id),
           claudeEffort ?? undefined,
           agent.id,
+          undefined,
+          { label: name, kind: "agent" },
         );
         if (closeDialog) setNewSessionOpen(false);
         if (rememberPermissionDefaults) {
@@ -849,6 +852,8 @@ function AppLayout() {
           shell,
           undefined,
           shell,
+          undefined,
+          { label: sessionName, kind: "terminal" },
         );
         updateSession(sessionId, { active: true, status: "waiting" });
         if (presentation === "auxiliary") {
@@ -1323,6 +1328,8 @@ function AppLayout() {
         active: true,
         statusRevision: payload.revision,
         statusUpdatedAt: payload.createdAt,
+        // 原生新状态取代本地中断标记，避免下一轮权限等待沿用旧的输入就绪状态。
+        lastEventType: payload.eventType ?? undefined,
         ...(payload.agentSessionId ? { agentSessionId: payload.agentSessionId } : {}),
       });
       useAppStore.getState().recordAttentionEventDiagnostic({
@@ -1962,6 +1969,7 @@ function AppLayout() {
           )
         }
       />
+      <Suspense fallback={null}><RemoteWorkspacePanel /></Suspense>
       <GlobalTextSearchDialog
         open={globalTextSearchState.open}
         initialScopePath={globalTextSearchState.scopePath}

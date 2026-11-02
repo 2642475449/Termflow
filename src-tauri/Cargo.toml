@@ -41,7 +41,7 @@ encoding_rs = "0.8"
 grep-regex = "0.1"
 grep-searcher = "0.1"
 ignore = "0.4"
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "multipart", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "multipart", "rustls-tls", "socks"] }
 futures-util = "0.3"
 tokio = { version = "1", features = ["sync", "time", "macros"] }
 tokio-tungstenite = { version = "0.26", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }

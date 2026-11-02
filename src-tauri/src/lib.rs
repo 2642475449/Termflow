@@ -14,6 +14,12 @@ mod powershell_integration;
 mod pty;
 mod qoder_config;
 mod qoder_usage;
+mod remote_ssh;
+mod ssh_config;
+pub mod runtime_cli;
+mod runtime_context;
+mod runtime_output;
+mod runtime_skill;
 mod scheduled_tasks;
 mod usage_cache;
 mod usage_process;
@@ -108,6 +114,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(pty_manager.clone())
+        .manage(remote_ssh::RemoteSshManager::new())
         .manage(ingest_config.clone())
         .manage(hook_status_runtime.clone())
         .manage(claude_rate_limits.clone())
@@ -167,6 +174,7 @@ pub fn run() {
                         &voice_shortcut_state,
                     );
                     manager.cleanup_all();
+                    window.app_handle().state::<Arc<remote_ssh::RemoteSshManager>>().disconnect_all();
                     window.app_handle().exit(0);
                 }
             }
@@ -219,11 +227,27 @@ pub fn run() {
                 claude_rate_limits.clone(),
                 hook_status_runtime.clone(),
             );
+            if let Err(error) = runtime_cli::install_shim() {
+                log::warn!("Failed to install Termflow CLI shim: {error}");
+            } else {
+                runtime_skill::ensure_existing_agents();
+            }
+            if let Err(error) = runtime_cli::publish_descriptor(&ingest_config) {
+                log::warn!("Failed to publish Termflow runtime descriptor: {error}");
+            }
             commands::window::create_voice_overlay_window(&app.handle())?;
             commands::window::create_voice_worker_window(&app.handle())?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::remote_hosts::list_remote_hosts,
+            commands::remote_hosts::save_remote_host,
+            commands::remote_hosts::delete_remote_host,
+            commands::remote::connect_remote_host,
+            commands::remote::get_remote_connection,
+            commands::remote::remote_auth_input,
+            commands::remote::disconnect_remote_host,
+            commands::remote::remote_request,
             commands::background::get_background_settings,
             commands::background::set_background_settings,
             commands::background::complete_workspace_close,
@@ -242,8 +266,10 @@ pub fn run() {
             commands::session::check_claude_ready,
             commands::session::get_claude_cli_info,
             commands::session::spawn_pty,
+            commands::session::set_runtime_runner_context,
             commands::session::pty_input,
             commands::session::infer_agent_user_response,
+            commands::session::infer_agent_interrupt,
             commands::session::submit_agent_turn_input,
             commands::session::complete_agent_turn,
             commands::session::generate_session_title,
@@ -266,6 +292,7 @@ pub fn run() {
             commands::file_tree::create_project_directory,
             commands::file_tree::read_project_file,
             commands::file_tree::read_project_image,
+            commands::project_icon::detect_project_icon,
             commands::file_tree::read_project_pdf,
             commands::file_tree::read_project_office_preview,
             commands::file_tree::write_project_file,

@@ -75,7 +75,8 @@ it("creates fresh ephemeral terminals using the local shell and prepared directo
   expect(sessions).toHaveLength(2);
   expect(sessions.every((session) => session.ephemeral && session.active && session.path === "E:/A")).toBe(true);
   expect(new Set(sessions.map((session) => session.id)).size).toBe(2);
-  expect(api.spawnPty).toHaveBeenCalledWith(expect.any(String), "E:/A", false, false, "", undefined, useAppStore.getState().defaultTerminalShell, undefined, useAppStore.getState().defaultTerminalShell, "E:/A/src-tauri");
+  expect(api.spawnPty).toHaveBeenCalledWith(expect.any(String), "E:/A", false, false, "", undefined, useAppStore.getState().defaultTerminalShell, undefined, useAppStore.getState().defaultTerminalShell, "E:/A/src-tauri",
+    { label: expect.any(String), kind: "terminal" });
 });
 
 it("closes terminals created by a failed launch while preserving existing sessions", async () => {

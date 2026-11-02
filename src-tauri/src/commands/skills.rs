@@ -119,7 +119,7 @@ pub struct SkillDetail {
     pub content: String,
 }
 
-pub(super) fn parse_skill_frontmatter(content: &str) -> (String, String) {
+pub(crate) fn parse_skill_frontmatter(content: &str) -> (String, String) {
     super::skill_editor::skill_metadata(content).unwrap_or_default()
 }
 
@@ -693,6 +693,20 @@ fn resolve_skill_roots(
         enabled_dir: Some(base.join("skills")),
         disabled_dir: Some(base.join("skills-disabled")),
     })
+}
+
+pub(crate) fn runtime_skill_roots(agent_id: &str) -> Result<Option<(PathBuf, PathBuf)>, String> {
+    let agent = match agent_id {
+        "claude" => SkillAgent::Claude,
+        "codex" => SkillAgent::Codex,
+        "qoder" => SkillAgent::Qoder,
+        "antigravity" => SkillAgent::Antigravity,
+        "opencode" => SkillAgent::Opencode,
+        "pi" => SkillAgent::Pi,
+        _ => return Ok(None),
+    };
+    let roots = resolve_skill_roots(agent, SkillScope::User, None)?;
+    Ok(roots.enabled_dir.zip(roots.disabled_dir))
 }
 
 fn agent_workspace_directory(agent: SkillAgent) -> &'static str {

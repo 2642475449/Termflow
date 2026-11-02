@@ -16,6 +16,7 @@ import type { TerminalCompletionNotificationSlice } from "./slices/terminalCompl
 import type { TerminalCompletionRuntimeSlice } from "./slices/terminalCompletionRuntime";
 import type { VoicePolishSlice } from "./slices/voicePolish";
 import type { ProjectInfo, RecentProjectEntry } from "./utils/recentProjects";
+import type { RemoteAgentId, RemoteConnection, RemoteHost, RemoteHostDraft, RemoteInspection, RemoteSession } from "@/lib/remote";
 import type { ShortcutAction, ShortcutOverrides } from "@/constants/shortcuts";
 
 export type { ProjectInfo, RecentProjectEntry } from "./utils/recentProjects";
@@ -497,4 +498,37 @@ export interface BottomRunnerState {
   clearFinishedTabs: (projectPath: string) => void;
   handleProjectChange: (projectPath: string) => void;
   reset: () => void;
+}
+
+/** 远端目录与会话独立于本地项目工作区，避免传入本地文件/Git 命令。 */
+export interface RemoteWorkspaceState {
+  visible: boolean;
+  initialized: boolean;
+  loading: boolean;
+  hosts: RemoteHost[];
+  selectedHostId: string | null;
+  connections: Record<string, RemoteConnection>;
+  inspections: Record<string, RemoteInspection>;
+  sessionsByHost: Record<string, RemoteSession[]>;
+  selectedSessionByHost: Record<string, string>;
+  errors: Record<string, string | null>;
+  pendingActions: Record<string, boolean>;
+  reconnectAttempts: Record<string, number>;
+  editorOpen: boolean;
+  hostDraft: RemoteHostDraft;
+  cwd: string;
+  agentId: RemoteAgentId;
+  pendingStop: { hostId: string; session: RemoteSession; action?: "stop" | "forget" } | null;
+  pendingServerAction: { hostId: string; action: "stop" | "uninstall" } | null;
+  setVisible: (visible: boolean) => void;
+  setSelectedHost: (hostId: string) => void;
+  setSelectedSession: (hostId: string, sessionId: string) => void;
+  setHostEditor: (host: RemoteHost | null | false) => void;
+  setHostDraft: (patch: Partial<RemoteHostDraft>) => void;
+  setLaunchDirectory: (cwd: string) => void;
+  setLaunchAgent: (agentId: RemoteAgentId) => void;
+  setPendingStop: (pendingStop: RemoteWorkspaceState["pendingStop"]) => void;
+  setPendingServerAction: (pendingServerAction: RemoteWorkspaceState["pendingServerAction"]) => void;
+  setError: (hostId: string, error: string | null) => void;
+  setSessionSnapshot: (hostId: string, session: RemoteSession) => void;
 }

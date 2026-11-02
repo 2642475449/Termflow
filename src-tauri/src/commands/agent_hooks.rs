@@ -417,6 +417,8 @@ fn install_pi_extension_at(extension_path: &Path) -> Result<AgentHookStatus, Str
 
 fn pi_extension_source() -> &'static str {
     r#"// Termflow managed Pi status extension
+import { createRequire } from 'node:module';
+const requireRuntime = createRequire(import.meta.url);
 let sequence = 0;
 let outcome = 'completed';
 
@@ -445,6 +447,24 @@ async function post(state, eventType, ctx) {
 }
 
 export default function (pi) {
+  pi.on('before_agent_start', async (event) => {
+    if (!process.env.TERMFLOW_RUNTIME_HELPER || event.messageType === 'custom') return;
+    try {
+      const context = await requireRuntime(process.env.TERMFLOW_RUNTIME_HELPER).getContext({ prompt: event.prompt });
+      if (!context) return;
+      let systemPrompt;
+      if (event.systemPromptOptions) {
+        const guidelines = event.systemPromptOptions.promptGuidelines ??= [];
+        if (Array.isArray(guidelines) && !guidelines.includes(context.guidance)) guidelines.push(context.guidance);
+      } else if (typeof event.systemPrompt === 'string') {
+        systemPrompt = `${event.systemPrompt}\n\n${context.guidance}`;
+      }
+      return {
+        ...(systemPrompt ? { systemPrompt } : {}),
+        message: { customType: 'termflow-runtime-context', content: context.text, display: false },
+      };
+    } catch {}
+  });
   pi.on('agent_start', async (_event, ctx) => {
     outcome = 'completed';
     await post('running', 'working', ctx);
@@ -660,6 +680,8 @@ fn antigravity_hook_command(script_path: &Path, event: &str) -> String {
 }
 
 fn managed_hook_script() -> &'static str {
+    static SOURCE: OnceLock<String> = OnceLock::new();
+    SOURCE.get_or_init(|| {
     r#"#!/usr/bin/env node
 const crypto = require('crypto');
 const fs = require('fs');
@@ -715,6 +737,7 @@ if (agent === 'antigravity') {
 const port = process.env.TERMFLOW_INGEST_PORT;
 const token = process.env.TERMFLOW_INGEST_TOKEN;
 if (!state || !port || !token || !process.env.TERMFLOW_SESSION_ID) process.exit(0);
+/* TERMFLOW_RUNTIME_CONTEXT */
 const stable = (value) => {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
@@ -753,15 +776,19 @@ const payload = JSON.stringify({
   provider_session_id: providerSessionId,
   payload: correlationPayload,
 });
-const req = http.request({ hostname: '127.0.0.1', port: Number(port), path: '/internal/session-events', method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload), 'X-TERMFLOW-TOKEN': token }, timeout: 1200 }, () => process.exit(0));
-req.on('error', () => process.exit(0));
-req.on('timeout', () => { req.destroy(); process.exit(0); });
+const req = http.request({ hostname: '127.0.0.1', port: Number(port), path: '/internal/session-events', method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload), 'X-TERMFLOW-TOKEN': token }, timeout: 1200 }, finishTermflowHook);
+req.on('error', finishTermflowHook);
+req.on('timeout', () => { req.destroy(); finishTermflowHook(); });
 req.end(payload);
 "#
+    .replace("/* TERMFLOW_RUNTIME_CONTEXT */", crate::runtime_context::hook_bridge())
+    }).as_str()
 }
 
 fn opencode_plugin_source() -> &'static str {
     r#"import { createHmac } from 'node:crypto';
+import { createRequire } from 'node:module';
+const requireRuntime = createRequire(import.meta.url);
 let lastState = 'completed';
 let lastEventType = 'assistant_complete';
 let eventSequence = 0;
@@ -811,6 +838,16 @@ async function setState(state, eventType, safePayload = {}, force = false) {
   await post(state, eventType, safePayload);
 }
 export const TermflowStatusPlugin = async () => ({
+  'experimental.chat.system.transform': async (_input, output) => {
+    if (!process.env.TERMFLOW_RUNTIME_HELPER) return;
+    try {
+      const context = await requireRuntime(process.env.TERMFLOW_RUNTIME_HELPER).getContext({ includeOutput: false });
+      if (context && Array.isArray(output.system)) {
+        if (output.system.length) output.system[0] += `\n\n${context.text}`;
+        else output.system.push(context.text);
+      }
+    } catch {}
+  },
   event: async ({ event }) => {
     if (!event?.type) return;
     const properties = event.properties || {};
@@ -908,6 +945,21 @@ mod tests {
     };
     use serde_json::json;
     use std::fs;
+
+    #[test]
+    fn pi_receives_visible_runner_logs_from_an_ordinary_user_request() {
+        crate::runtime_context::check_native_integration("pi", pi_extension_source());
+    }
+
+    #[test]
+    fn codex_injects_logs_while_preserving_status_reporting() {
+        crate::runtime_context::check_native_integration("codex", managed_hook_script());
+    }
+
+    #[test]
+    fn opencode_receives_runtime_capabilities_and_selected_runner() {
+        crate::runtime_context::check_native_integration("opencode", opencode_plugin_source());
+    }
 
     #[test]
     #[cfg(windows)]
@@ -1225,7 +1277,7 @@ mod tests {
         );
         assert!(source.contains("payload: correlationPayload"));
         assert!(!source.contains("payload: input"));
-        assert!(!source.contains("prompt: input"));
+        crate::runtime_context::check_native_integration("qoder", source);
     }
 
     #[test]

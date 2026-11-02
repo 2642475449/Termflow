@@ -5,7 +5,9 @@ import { expect, it } from "vitest";
 
 // 执行后端实际安装的脚本，验证原生事件到 IPC 载荷的完整映射，不调用模型。
 const rust = readFileSync(new URL("../../src-tauri/src/commands/claude_config.rs", import.meta.url), "utf8");
-const script = rust.split("fn build_hook_script_content() -> String {")[1].split('r#"')[1].split('"#')[0];
+const bridge = readFileSync(new URL("../../src-tauri/src/runtime_hooks/bridge.cjs", import.meta.url), "utf8");
+const script = rust.split("fn build_hook_script_content() -> String {")[1].split('r#"')[1].split('"#')[0]
+  .replace("/* TERMFLOW_RUNTIME_CONTEXT */", bridge);
 
 function replay(event: string, input: Record<string, unknown> = {}) {
   const payloads: Array<Record<string, unknown>> = [];

@@ -50,6 +50,7 @@ it("starts outside the workspace and never changes its active session, focus or 
   expect(after.projectWorkspaces[path]).toEqual(before.projectWorkspaces[path]);
   expect(after.sessions.find((session) => session.id === created.sessionId)).toMatchObject({ presentation: "bottom-runner", ephemeral: true });
   expect(tab().status).toBe("running");
+  expect(mocks.spawn.mock.calls[0].at(-1)).toEqual({ label: "Build", kind: "runner" });
 });
 it("reuses the same command in a project and automatically expands it, even after completion", async () => {
   await start().promise;

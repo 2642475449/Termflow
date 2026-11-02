@@ -1,0 +1,123 @@
+.app-remote-modal { max-width: 1540px; padding-bottom: 0; }
+.app-remote-modal .ant-modal-container { padding: 0; overflow: hidden; }
+.app-remote-modal .ant-modal-header { margin-bottom: 0; padding: 16px 56px 16px 20px; border-bottom: 1px solid var(--cs-border); }
+.app-remote-modal .ant-modal-body { height: min(820px, calc(100dvh - 112px)); min-height: 360px; }
+.app-remote-modal .ant-btn { box-shadow: none; }
+.app-remote-title { display: inline-flex; align-items: center; gap: 10px; font-size: 16px; }
+.app-remote-workspace { display: grid; grid-template-columns: 220px minmax(0, 1fr); height: 100%; color: var(--cs-text-primary); background: var(--cs-bg-body); }
+.app-remote-workspace h1, .app-remote-workspace h2, .app-remote-workspace p { margin: 0; }
+.app-remote-workspace h1 { font-size: 16px; font-weight: 600; }
+.app-remote-workspace h2 { font-size: 13px; font-weight: 600; }
+.app-remote-hosts { display: flex; flex-direction: column; gap: 4px; min-width: 0; overflow-y: auto; border-right: 1px solid var(--cs-border); padding: 16px 12px; background: var(--cs-bg-sidebar); }
+.app-remote-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.app-remote-hosts > .app-remote-section-heading { padding: 0 4px 12px; }
+.app-remote-host-row { display: flex; flex-direction: column; gap: 5px; width: 100%; padding: 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; text-align: left; cursor: pointer; color: var(--cs-text-primary); }
+.app-remote-host-row:hover { background: var(--cs-bg-hover); }
+.app-remote-host-row[aria-pressed="true"] { border-color: var(--cs-border); background: var(--cs-bg-active); }
+.app-remote-host-row:focus-visible, .app-remote-session-tab:focus-visible { outline: 2px solid var(--cs-focus-ring); outline-offset: 2px; }
+.app-remote-host-row__name { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
+.app-remote-host-row__target { font-family: 'Cascadia Code', Consolas, monospace; font-size: 11px; color: var(--cs-text-secondary); overflow-wrap: anywhere; }
+.app-remote-host-row__source { font-size: 11px; color: var(--cs-text-secondary); }
+.app-remote-state { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--cs-text-secondary); white-space: nowrap; }
+.app-remote-state::before { content: ''; width: 6px; height: 6px; flex-shrink: 0; border-radius: 50%; background: var(--cs-text-tertiary); }
+.app-remote-state[data-state="connected"]::before { background: var(--cs-success); }
+.app-remote-state[data-state="error"]::before { background: var(--cs-danger); }
+.app-remote-state[data-state="authenticating"]::before, .app-remote-state[data-state="connecting"]::before, .app-remote-state[data-state="deploying"]::before { background: var(--cs-warning); }
+.app-remote-hosts__note { margin-top: auto !important; padding: 20px 4px 0; font-size: 11px; line-height: 1.7; color: var(--cs-text-secondary); }
+.app-remote-host-empty { display: flex; flex-direction: column; gap: 14px; padding: 20px 4px; font-size: 12px; color: var(--cs-text-secondary); }
+.app-remote-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+.app-remote-connection-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; min-height: 66px; padding: 12px 20px; border-bottom: 1px solid var(--cs-border); }
+.app-remote-connection-header__identity { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; min-width: 0; }
+.app-remote-connection-header__identity h1 { overflow-wrap: anywhere; }
+.app-remote-monospace { font-family: 'Cascadia Code', Consolas, monospace; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-remote-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.app-remote-muted { color: var(--cs-text-secondary); font-size: 12px; line-height: 1.6; }
+.app-remote-error { border-left: 3px solid var(--cs-danger); padding: 8px 10px; color: var(--cs-text-primary); background: var(--cs-bg-card); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.app-remote-error--banner { margin: 10px 20px 0; max-height: 100px; overflow: auto; flex-shrink: 0; }
+.app-remote-diagnostic { margin-top: 6px; font-size: 11px; }
+.app-remote-diagnostic > summary { cursor: pointer; }
+.app-remote-diagnostic pre { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 4px; font-size: 11px; }
+.app-remote-auth { padding: 16px 20px; border-bottom: 1px solid var(--cs-border); }
+.app-remote-auth > .app-remote-muted { margin: 8px 0; }
+.app-remote-auth-frame { height: 150px; padding: 8px; border: 1px solid var(--cs-border); border-radius: 4px; background: var(--cs-bg-content); }
+.app-remote-auth-terminal { width: 100%; height: 100%; }
+.app-remote-environment { flex-shrink: 0; max-height: 300px; overflow: auto; border-bottom: 1px solid var(--cs-border); font-size: 12px; }
+.app-remote-environment > summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 11px 20px; cursor: pointer; font-weight: 500; list-style: none; }
+.app-remote-environment > summary::before { content: '›'; transform: rotate(0); margin-right: 4px; }
+.app-remote-environment[open] > summary::before { transform: rotate(90deg); }
+.app-remote-environment > summary > span { margin-left: auto; font-weight: 400; }
+.app-remote-environment__content { padding: 0 20px 12px; }
+.app-remote-environment__content > .app-remote-muted { margin-bottom: 8px; }
+.app-remote-agent-row { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(80px, 1fr) minmax(100px, 1fr) auto; align-items: center; gap: 12px; min-height: 36px; border-bottom: 1px solid var(--cs-border); font-size: 12px; }
+.app-remote-agent-row > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-remote-agent-row__name { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+.app-remote-agent-setup + .app-remote-agent-setup { margin-top: 8px; }
+.app-remote-agent-setup__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding-top: 4px; }
+.app-remote-environment-actions { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 12px; flex-shrink: 0; padding: 8px 20px; border-bottom: 1px solid var(--cs-border); }
+.app-remote-install-root { display: inline-block; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: 'Cascadia Code', Consolas, monospace; color: var(--cs-text-secondary); font-size: 11px; }
+.app-remote-session-area { display: flex; flex: 1; flex-direction: column; min-height: 160px; overflow: hidden; }
+.app-remote-launch { display: grid; grid-template-columns: minmax(120px, 1fr) 138px auto; align-items: center; gap: 8px; padding: 14px 20px; }
+.app-remote-session-tabs { display: flex; gap: 0; padding: 0 12px; overflow-x: auto; flex-shrink: 0; border-bottom: 1px solid var(--cs-border); }
+.app-remote-session-tab { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; max-width: 280px; min-height: 36px; padding: 7px 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--cs-text-secondary); cursor: pointer; font-size: 12px; }
+.app-remote-session-tab > span:first-of-type { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-remote-session-tab[aria-pressed="true"] { border-bottom-color: var(--cs-primary); color: var(--cs-text-primary); }
+.app-remote-session-tab:hover { background: var(--cs-bg-hover); }
+.app-remote-session-tab__state { color: var(--cs-text-secondary); font-size: 11px; white-space: nowrap; }
+.app-remote-session-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-height: 36px; padding: 4px 20px; }
+.app-remote-session-toolbar > .app-remote-monospace { max-width: 45%; }
+.app-remote-session-toolbar > button { margin-left: auto; }
+.app-remote-terminal-frame { flex: 1; min-height: 80px; padding: 8px 12px; overflow: hidden; background: var(--cs-bg-content); }
+.app-remote-terminal { width: 100%; height: 100%; }
+.app-remote-terminal .xterm, .app-remote-auth-terminal .xterm { height: 100%; }
+.app-remote-terminal .xterm .xterm-viewport, .app-remote-auth-terminal .xterm .xterm-viewport { background-color: inherit !important; color: inherit; }
+.app-remote-terminal-empty { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; color: var(--cs-text-secondary); text-align: center; font-size: 13px; }
+.app-remote-terminal-empty > .anticon { font-size: 26px; }
+.app-remote-terminal-empty > span { max-width: 480px; font-size: 12px; line-height: 1.7; }
+.app-remote-status-footer { border-top: 1px solid var(--cs-border); padding: 8px 20px; font-size: 11px; color: var(--cs-text-secondary); }
+.app-remote-welcome { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 32px; text-align: center; }
+.app-remote-welcome > .anticon { font-size: 32px; color: var(--cs-text-secondary); }
+.app-remote-welcome p { max-width: 480px; font-size: 13px; line-height: 1.8; color: var(--cs-text-secondary); }
+.app-remote-loading { display: flex; justify-content: center; padding: 24px; }
+.app-remote-host-form { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; }
+.app-remote-host-form > label, .app-remote-host-form__advanced label { font-size: 13px; font-weight: 500; }
+.app-remote-host-form > label { margin-top: 8px; }
+.app-remote-host-form__advanced { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 12px; margin-top: 8px; }
+.app-remote-host-form__advanced > div { display: flex; flex-direction: column; gap: 8px; }
+.app-remote-field-help { margin-top: 8px !important; color: var(--cs-text-secondary); font-size: 12px; line-height: 1.6; }
+.app-remote-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+
+@media (max-width: 900px) {
+  .app-remote-workspace { grid-template-columns: 180px minmax(0, 1fr); }
+  .app-remote-agent-row { grid-template-columns: 120px minmax(70px, 1fr) auto; gap: 8px; }
+  .app-remote-agent-row > .app-remote-muted { grid-column: 1 / 3; grid-row: 2; margin-bottom: 6px; }
+  .app-remote-agent-row > button { grid-column: 3; grid-row: 1 / 3; }
+  .app-remote-launch { grid-template-columns: minmax(0, 1fr) auto; }
+  .app-remote-launch > .ant-input-affix-wrapper { grid-column: 1 / -1; }
+  .app-remote-environment { max-height: 280px; }
+  .app-remote-install-root { display: none; }
+}
+@media (max-width: 620px) {
+  .app-remote-modal { width: calc(100vw - 16px) !important; max-width: none; }
+  .app-remote-modal .ant-modal-body { height: calc(100dvh - 92px); }
+  .app-remote-workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .app-remote-hosts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; max-height: 142px; border-right: 0; border-bottom: 1px solid var(--cs-border); padding: 8px 12px; }
+  .app-remote-hosts > .app-remote-section-heading { grid-column: 1 / -1; padding-bottom: 0; }
+  .app-remote-hosts__note { display: none; }
+  .app-remote-host-empty { grid-column: 1 / -1; padding: 4px; }
+  .app-remote-connection-header, .app-remote-launch { padding: 10px 12px; }
+  .app-remote-connection-header__identity h1 { font-size: 14px; }
+  .app-remote-environment > summary { padding: 8px 12px; }
+  .app-remote-environment__content { padding: 0 12px 8px; }
+  .app-remote-environment-actions { padding: 8px 12px; }
+  .app-remote-status-footer { padding: 6px 12px; }
+  .app-remote-install-root { display: none; }
+}
+
+@media (max-height: 700px) {
+  .app-remote-connection-header { min-height: 52px; padding-top: 8px; padding-bottom: 8px; }
+  .app-remote-environment { max-height: 160px; }
+  .app-remote-auth-frame { height: 112px; }
+  .app-remote-auth { padding-top: 10px; padding-bottom: 10px; }
+  .app-remote-launch { padding-top: 8px; padding-bottom: 8px; }
+  .app-remote-status-footer { padding-top: 6px; padding-bottom: 6px; }
+}

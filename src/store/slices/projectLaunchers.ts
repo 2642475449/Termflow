@@ -92,7 +92,8 @@ export async function runLauncher(launcher: ProjectLauncher): Promise<void> {
         status: "starting", titleSource: "manual", agentId: shell,
         terminalWorkingDirectory: terminal.directory,
       });
-      await spawnPty(id, projectPath, false, false, terminal.command, undefined, shell, undefined, shell, terminal.directory);
+      await spawnPty(id, projectPath, false, false, terminal.command, undefined, shell, undefined, shell, terminal.directory,
+        { label: terminal.title, kind: "terminal" });
       if (!isCurrent()) throw new Error(i18n.t("projectLaunchers.projectChanged"));
       useAppStore.getState().updateSession(id, { active: true, status: terminal.command ? "running" : "waiting" });
     }

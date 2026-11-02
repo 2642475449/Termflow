@@ -1,8 +1,8 @@
 import { BottomRunnerRailButton } from "@/components/bottomRunner/BottomRunnerStatus";
-import { SettingOutlined } from "@ant-design/icons";
+import { CloudServerOutlined, SettingOutlined } from "@ant-design/icons";
 import { message, Popover, Tooltip } from "antd";
-import { useCallback, useState } from "react";
-import { getQuickSettingsSubmenuOnPopoverChange, toggleQuickSettingsSubmenu, type QuickSettingsSubmenu } from "@/lib/quickSettingsMenu";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { getQuickSettingsMenuFocusIndex, getQuickSettingsSubmenuOnPopoverChange, toggleQuickSettingsSubmenu, type QuickSettingsSubmenu } from "@/lib/quickSettingsMenu";
 import { useTranslation } from "react-i18next";
 import { ShortcutHint } from "@/components/ui/ShortcutHint";
 import { WorkbenchGlyph } from "@/components/ui/WorkbenchGlyph";
@@ -11,6 +11,7 @@ import { getAppShortcut } from "@/lib/appShortcuts";
 import { useAppStore, type Language, type SidebarSection, type ThemeCategory } from "@/store";
 import { checkForApplicationUpdate } from "@/lib/applicationUpdater";
 import { useApplicationUpdateStore } from "@/store/slices/applicationUpdate";
+import { useRemoteWorkspaceStore } from "@/store/slices/remoteWorkspace";
 import i18n, { toI18nLanguage } from "@/i18n";
 
 interface RailButtonProps {
@@ -18,20 +19,29 @@ interface RailButtonProps {
   active?: boolean;
   title: React.ReactNode;
   tooltipOpen?: boolean;
+  buttonRef?: React.Ref<HTMLButtonElement>;
+  expanded?: boolean;
+  controls?: string;
+  onKeyDown?: React.KeyboardEventHandler<HTMLButtonElement>;
   onClick: () => void;
   children: React.ReactNode;
 }
 
-function RailButton({ active = false, title, label, tooltipOpen, onClick, children }: RailButtonProps) {
+function RailButton({ active = false, title, label, tooltipOpen, buttonRef, expanded, controls, onKeyDown, onClick, children }: RailButtonProps) {
   return (
     <Tooltip title={title} placement="right" mouseEnterDelay={0.4} open={tooltipOpen}>
       <button
         type="button"
-        aria-pressed={active}
+        ref={buttonRef}
+        aria-pressed={expanded === undefined ? active : undefined}
+        aria-haspopup={controls ? "menu" : undefined}
+        aria-expanded={expanded}
+        aria-controls={controls}
         aria-label={label ?? (typeof title === "string" ? title : undefined)}
         data-active={active ? "true" : "false"}
         className="app-rail-button app-marker-host app-marker-rail h-10 w-10 flex items-center justify-center rounded-md"
         onClick={onClick}
+        onKeyDown={onKeyDown}
       >
         {children}
       </button>
@@ -65,7 +75,9 @@ const quickThemeModeOptions: QuickThemeModeOption[] = [
 
 const SETTINGS_ID = "__settings__";
 
-function SettingsMenu({
+export function SettingsMenu({
+  open,
+  menuId,
   activeSubmenu,
   onClose,
   onCheckVersion,
@@ -73,6 +85,8 @@ function SettingsMenu({
   onClearSubmenu,
   checkingForUpdate,
 }: {
+  open: boolean;
+  menuId: string;
   activeSubmenu: QuickSettingsSubmenu;
   onClose: () => void;
   onCheckVersion: () => void;
@@ -86,6 +100,68 @@ function SettingsMenu({
   const language = useAppStore((s) => s.language);
   const setLanguage = useAppStore((s) => s.setLanguage);
   const openTab = useAppStore((s) => s.openTab);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const previousSubmenuRef = useRef<QuickSettingsSubmenu>(null);
+
+  function focusSubmenu(submenu: Exclude<QuickSettingsSubmenu, null>) {
+    const menu = containerRef.current?.querySelector<HTMLElement>(`[data-submenu="${submenu}"]`);
+    const selected = menu?.querySelector<HTMLButtonElement>('[aria-checked="true"]');
+    (selected ?? menu?.querySelector<HTMLButtonElement>("button"))?.focus();
+  }
+
+  useEffect(() => {
+    const previousSubmenu = previousSubmenuRef.current;
+    previousSubmenuRef.current = activeSubmenu;
+    if (!open) return;
+
+    if (activeSubmenu) {
+      focusSubmenu(activeSubmenu);
+    } else {
+      const selector = previousSubmenu
+        ? `[data-opens-submenu="${previousSubmenu}"]`
+        : '[role="menuitem"]';
+      containerRef.current?.querySelector<HTMLButtonElement>(selector)?.focus();
+    }
+  }, [open, activeSubmenu]);
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button");
+    const menu = button?.closest<HTMLElement>('[role="menu"]');
+    if (!button || !menu) return;
+
+    if (event.key === "Escape" || (event.key === "ArrowLeft" && menu.dataset.submenu)) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (activeSubmenu) onClearSubmenu();
+      else onClose();
+      return;
+    }
+
+    if (event.key === "Tab") {
+      // 先返回触发按钮，再由浏览器将 Tab 焦点移到工作台中的下一个控件。
+      onClose();
+      return;
+    }
+
+    if (event.key === "ArrowRight") {
+      const submenu = button.dataset.opensSubmenu as QuickSettingsSubmenu;
+      if (submenu) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (activeSubmenu === submenu) focusSubmenu(submenu);
+        else onToggleSubmenu(submenu);
+      }
+      return;
+    }
+
+    const buttons = Array.from(menu.querySelectorAll<HTMLButtonElement>("button"));
+    const nextIndex = getQuickSettingsMenuFocusIndex(event.key, buttons.indexOf(button), buttons.length);
+    if (nextIndex !== null) {
+      event.preventDefault();
+      event.stopPropagation();
+      buttons[nextIndex]?.focus();
+    }
+  }
 
   const currentThemeLabel = t(`settings.general.appearance.${themeCategory}`);
   const languageLabels = [
@@ -98,8 +174,8 @@ function SettingsMenu({
   const settingsShortcut = useShortcutStore((s) => getAppShortcut(s.overrides, "openSettings"));
 
   const handleOpenSettings = () => {
-    openTab(SETTINGS_ID);
     onClose();
+    openTab(SETTINGS_ID);
   };
 
   const handleSelectLanguage = (lang: Language) => {
@@ -114,9 +190,12 @@ function SettingsMenu({
   };
 
   return (
-    <div className="relative">
+    <div ref={containerRef} className="relative" onKeyDown={handleKeyDown}>
       {/* Main menu */}
       <div
+        id={menuId}
+        role="menu"
+        aria-label={t("common.settings")}
         className="w-56 rounded-lg overflow-hidden"
         style={{
           background: "var(--cs-bg-sidebar)",
@@ -131,6 +210,8 @@ function SettingsMenu({
             value={currentThemeLabel}
             showArrow
             active={activeSubmenu === "theme"}
+            submenu="theme"
+            controls={`${menuId}-theme`}
             onClick={() => onToggleSubmenu("theme")}
           />
           <MenuItem
@@ -138,13 +219,14 @@ function SettingsMenu({
             value={currentLangLabel}
             showArrow
             active={activeSubmenu === "language"}
+            submenu="language"
+            controls={`${menuId}-language`}
             onClick={() => onToggleSubmenu("language")}
           />
-          <div style={{ borderTop: "1px solid var(--cs-border-sidebar)", margin: "4px 0" }} />
+          <div role="separator" className="my-1 border-t border-[var(--cs-border-sidebar)]" />
           <MenuItem
             label={t("common.settings", "设置")}
             shortcut={settingsShortcut}
-            showArrow
             onClick={handleOpenSettings}
           />
 
@@ -160,6 +242,10 @@ function SettingsMenu({
       {/* Submenu: Language */}
       {activeSubmenu === "language" && (
         <div
+          id={`${menuId}-language`}
+          role="menu"
+          aria-label={t("settings.quickMenu.language")}
+          data-submenu="language"
           className="absolute left-full top-0 ml-1 w-48 rounded-lg overflow-hidden py-1"
           style={{
             background: "var(--cs-bg-sidebar)",
@@ -170,25 +256,22 @@ function SettingsMenu({
           {languageLabels.map(({ value: lang, label }) => {
             const isSelected = language === lang;
             return (
-              <div
+              <button
                 key={lang}
-                className="flex items-center justify-between px-4 py-2 cursor-pointer transition-colors"
-                style={{ color: "var(--cs-text-primary)" }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "var(--cs-bg-hover)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "transparent";
-                }}
+                type="button"
+                role="menuitemradio"
+                aria-checked={isSelected}
+                tabIndex={-1}
+                className="app-quick-settings-item flex w-full items-center justify-between px-4 py-2 text-left transition-colors"
                 onClick={() => handleSelectLanguage(lang)}
               >
                 <span className="text-sm">{label}</span>
                 {isSelected && (
-                  <span className="text-xs" style={{ color: "var(--cs-primary)" }}>
+                  <span aria-hidden="true" className="text-xs text-[var(--cs-primary)]">
                     ✓
                   </span>
                 )}
-              </div>
+              </button>
             );
           })}
         </div>
@@ -197,6 +280,10 @@ function SettingsMenu({
       {/* Submenu: Theme */}
       {activeSubmenu === "theme" && (
         <div
+          id={`${menuId}-theme`}
+          role="menu"
+          aria-label={t("settings.quickMenu.theme")}
+          data-submenu="theme"
           className="absolute left-full top-0 ml-1 w-48 rounded-lg overflow-hidden py-1"
           style={{
             background: "var(--cs-bg-sidebar)",
@@ -207,31 +294,29 @@ function SettingsMenu({
           {quickThemeModeOptions.map((opt) => {
             const isSelected = themeCategory === opt.key;
             return (
-              <div
+              <button
                 key={opt.key}
-                className="flex items-center justify-between px-4 py-2 cursor-pointer transition-colors"
-                style={{ color: "var(--cs-text-primary)" }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "var(--cs-bg-hover)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "transparent";
-                }}
+                type="button"
+                role="menuitemradio"
+                aria-checked={isSelected}
+                tabIndex={-1}
+                className="app-quick-settings-item flex w-full items-center justify-between px-4 py-2 text-left transition-colors"
                 onClick={() => handleSelectThemeCategory(opt.key)}
               >
-                <div className="flex items-center gap-2">
-                  <div
+                <span className="flex items-center gap-2">
+                  <span
+                    aria-hidden="true"
                     className="w-3 h-3 rounded-full shrink-0"
                     style={{ background: opt.accent }}
                   />
                   <span className="text-sm">{t(opt.labelKey)}</span>
-                </div>
+                </span>
                 {isSelected && (
-                  <span className="text-xs" style={{ color: "var(--cs-primary)" }}>
+                  <span aria-hidden="true" className="text-xs text-[var(--cs-primary)]">
                     ✓
                   </span>
                 )}
-              </div>
+              </button>
             );
           })}
         </div>
@@ -246,6 +331,8 @@ function MenuItem({
   shortcut,
   showArrow,
   active,
+  submenu,
+  controls,
   onClick,
 }: {
   label: string;
@@ -253,25 +340,25 @@ function MenuItem({
   shortcut?: string;
   showArrow?: boolean;
   active?: boolean;
+  submenu?: Exclude<QuickSettingsSubmenu, null>;
+  controls?: string;
   onClick: () => void;
 }) {
   return (
-    <div
-      className="flex items-center justify-between px-4 py-2 cursor-pointer transition-colors"
-      style={{
-        color: "var(--cs-text-primary)",
-        background: active ? "var(--cs-bg-hover)" : "transparent",
-      }}
-      onMouseEnter={(e) => {
-        if (!active) e.currentTarget.style.background = "var(--cs-bg-hover)";
-      }}
-      onMouseLeave={(e) => {
-        if (!active) e.currentTarget.style.background = "transparent";
-      }}
+    <button
+      type="button"
+      role="menuitem"
+      tabIndex={-1}
+      aria-haspopup={submenu ? "menu" : undefined}
+      aria-expanded={submenu ? Boolean(active) : undefined}
+      aria-controls={controls}
+      data-opens-submenu={submenu}
+      data-active={active ? "true" : "false"}
+      className="app-quick-settings-item flex w-full items-center justify-between px-4 py-2 text-left transition-colors"
       onClick={onClick}
     >
       <span className="text-sm">{label}</span>
-      <div className="flex items-center gap-1.5">
+      <span className="flex items-center gap-1.5">
         {value && (
           <span className="text-xs" style={{ color: "var(--cs-text-secondary)" }}>
             {value}
@@ -279,12 +366,12 @@ function MenuItem({
         )}
         {shortcut && <ShortcutHint keys={shortcut} />}
         {showArrow && (
-          <span className="text-xs" style={{ color: active ? "var(--cs-primary)" : "var(--cs-text-secondary)" }}>
+          <span aria-hidden="true" className="text-xs" style={{ color: active ? "var(--cs-primary)" : "var(--cs-text-secondary)" }}>
             ›
           </span>
         )}
-      </div>
-    </div>
+      </span>
+    </button>
   );
 }
 
@@ -299,7 +386,10 @@ function PrimarySidebarRail() {
   const gitBehindCount = useAppStore((s) => s.gitBehindCount);
   const [quickSettingsOpen, setQuickSettingsOpen] = useState(false);
   const [quickSettingsSubmenu, setQuickSettingsSubmenu] = useState<QuickSettingsSubmenu>(null);
+  const quickSettingsButtonRef = useRef<HTMLButtonElement>(null);
+  const quickSettingsMenuId = useId();
   const checkingForUpdate = useApplicationUpdateStore((state) => state.phase === "checking");
+  const remoteWorkspaceVisible = useRemoteWorkspaceStore((state) => state.visible);
 
   const handleQuickSettingsOpenChange = useCallback((open: boolean) => {
     setQuickSettingsOpen(open);
@@ -319,6 +409,7 @@ function PrimarySidebarRail() {
 
   const handleCloseQuickSettings = useCallback(() => {
     handleQuickSettingsOpenChange(false);
+    quickSettingsButtonRef.current?.focus();
   }, [handleQuickSettingsOpenChange]);
 
   const handleCheckVersion = useCallback(async () => {
@@ -417,12 +508,21 @@ function PrimarySidebarRail() {
         </div>
       </div>
       <div className="flex flex-col items-center gap-1.5">
+        <RailButton
+          active={remoteWorkspaceVisible}
+          title={t("remote.title")}
+          onClick={() => useRemoteWorkspaceStore.getState().setVisible(!remoteWorkspaceVisible)}
+        >
+          <CloudServerOutlined className="text-[18px]" />
+        </RailButton>
         <BottomRunnerRailButton />
         <Popover
           trigger="click"
           placement="rightBottom"
           content={(
             <SettingsMenu
+              open={quickSettingsOpen}
+              menuId={quickSettingsMenuId}
               activeSubmenu={quickSettingsSubmenu}
               onClose={handleCloseQuickSettings}
               onCheckVersion={() => void handleCheckVersion()}
@@ -440,6 +540,16 @@ function PrimarySidebarRail() {
               active={quickSettingsOpen}
               title={t("common.settings")}
               tooltipOpen={quickSettingsOpen ? false : undefined}
+              buttonRef={quickSettingsButtonRef}
+              expanded={quickSettingsOpen}
+              controls={quickSettingsMenuId}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  handleQuickSettingsOpenChange(true);
+                }
+              }}
               onClick={() => {}}
             >
               <SettingOutlined className="app-nav-settings-gear text-[18px]" />

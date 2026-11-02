@@ -60,6 +60,33 @@
 .app-tabbar-tabs[data-reordering="true"] .app-tab-selection-indicator { transition: none; }
 
 .app-nav-artwork { width: 22px; height: 22px; overflow: visible; }
+/* 圆环固定，播放符号在圆内翻面并实心化，始终保留完整的播放按钮轮廓。 */
+.app-nav-artwork-runner {
+  --app-runner-play-turn: 0deg;
+  --app-runner-play-fill: 0;
+}
+.app-nav-runner-play {
+  fill-opacity: var(--app-runner-play-fill);
+  transition: fill-opacity 150ms ease;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .app-nav-runner-play {
+    transform-box: fill-box;
+    transform-origin: center;
+    transform: rotateY(var(--app-runner-play-turn));
+    transition: transform 420ms var(--cs-motion-ease), fill-opacity 150ms ease;
+  }
+}
+.app-rail-button:focus-visible .app-nav-artwork-runner {
+  --app-runner-play-turn: 360deg;
+  --app-runner-play-fill: 1;
+}
+@media (hover: hover) {
+  .app-rail-button:hover .app-nav-artwork-runner {
+    --app-runner-play-turn: 360deg;
+    --app-runner-play-fill: 1;
+  }
+}
 .app-nav-folder-front {
   fill: var(--cs-bg-card-solid);
   transform-origin: 4px 19px;

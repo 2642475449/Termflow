@@ -20,27 +20,10 @@ import { createProjectDirectory } from "@/lib/api";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { collectOpenProjects, projectPathKey } from "@/lib/openProjects";
 import { useOpenProjectsStore } from "@/store/slices/openProjects";
+import { ProjectIcon } from "./ProjectIcon";
 
-const PROJECT_SWATCHES = ["#34d399", "#a78bfa", "#60a5fa", "#f59e0b", "#f472b6", "#22d3ee"];
 const CURRENT_PROJECT_BACKGROUND =
   "color-mix(in srgb, var(--cs-primary) 8%, transparent)";
-
-function getProjectInitial(name: string) {
-  const trimmed = name.trim();
-  return trimmed ? trimmed.slice(0, 2).toUpperCase() : "?";
-}
-
-function getProjectSwatch(seed: string) {
-  // FNV-1a distributes similar project paths better than a simple base-31
-  // hash, whose modulo clustered paths with long shared Windows prefixes.
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < seed.length; index += 1) {
-    hash ^= seed.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  hash ^= hash >>> 16;
-  return PROJECT_SWATCHES[(hash >>> 0) % PROJECT_SWATCHES.length];
-}
 
 function TitleBarProjectSwitcher() {
   const { t } = useTranslation();
@@ -263,7 +246,6 @@ function TitleBarProjectSwitcher() {
     project: { name: string; path: string },
     options: { current?: boolean; removable?: boolean } = {},
   ) {
-    const projectSwatch = getProjectSwatch(project.path || project.name);
     return (
       <div
         key={project.path}
@@ -288,16 +270,7 @@ function TitleBarProjectSwitcher() {
             if (!options.current) void handleOpenRecentProject(project.path);
           }}
         >
-          <div
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] border text-[11px] font-semibold"
-            style={{
-              background: `color-mix(in srgb, ${projectSwatch} 60%, var(--cs-bg-card, #ffffff))`,
-              borderColor: `color-mix(in srgb, ${projectSwatch} 68%, transparent)`,
-              color: "var(--cs-text-primary)",
-            }}
-          >
-            {getProjectInitial(project.name)}
-          </div>
+          <ProjectIcon path={project.path} name={project.name} refresh={open} />
           <div className="min-w-0 flex-1">
             <div className="truncate text-[12px] font-medium leading-4">{project.name}</div>
             <div
@@ -455,16 +428,7 @@ function TitleBarProjectSwitcher() {
           }}
         >
           {currentProject ? (
-            <span
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[5px] text-[12px] font-semibold leading-none"
-              style={{
-                background: getProjectSwatch(currentProject.path || currentProject.name),
-                color: "#0b0f14",
-              }}
-              aria-hidden="true"
-            >
-              {getProjectInitial(currentProject.name)}
-            </span>
+            <ProjectIcon path={currentProject.path} name={currentProject.name} compact refresh={open} />
           ) : null}
           <span
             className="min-w-0 flex-1 truncate text-[12px] font-medium"

@@ -1,11 +1,12 @@
 import { lazy, Suspense, useEffect } from "react";
-import { DeleteOutlined, CloseOutlined, MinusOutlined, FullscreenExitOutlined, FullscreenOutlined,
-  ReloadOutlined, StopOutlined, VerticalAlignBottomOutlined, EnterOutlined, ClearOutlined } from "@ant-design/icons";
+import { DeleteOutlined, CloseOutlined, MinusOutlined,
+  ReloadOutlined, StopOutlined, VerticalAlignBottomOutlined, EnterOutlined } from "@ant-design/icons";
 import { Tooltip, message } from "antd";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "@/store";
+import { setRuntimeRunnerContext } from "@/lib/api";
 import { EMPTY_RUNNER_TABS, isRunnerRunning, useBottomRunnerStore } from "@/store/slices/bottomRunner";
-import { clearFinishedRunnerTabs, closeRunnerTab, completeRunner, markRunnerTerminalReady,
+import { closeRunnerTab, completeRunner, markRunnerTerminalReady,
   rerunRunner, stopRunner } from "@/store/slices/bottomRunnerRuntime";
 import { BottomRunnerDivider, syncRunnerLayout } from "./BottomRunnerDivider";
 import { RunnerStatusIcon } from "./BottomRunnerStatus";
@@ -19,6 +20,10 @@ export function BottomRunnerPanel() {
   const store = useBottomRunnerStore();
   const tabs = store.tabsByProject[projectPath] ?? EMPTY_RUNNER_TABS;
   const active = tabs.find((tab) => tab.id === store.activeTabIdByProject[projectPath]);
+  useEffect(() => {
+    if (projectPath) void setRuntimeRunnerContext(projectPath, active?.sessionId ?? null)
+      .catch((error: unknown) => console.warn("Failed to sync runtime runner context:", error));
+  }, [projectPath, active?.sessionId]);
   useEffect(() => { store.handleProjectChange(projectPath); }, [projectPath, store.handleProjectChange]);
   useEffect(() => {
     const onResize = () => {
@@ -78,9 +83,6 @@ export function BottomRunnerPanel() {
           <span aria-hidden="true" className="app-bottom-runner-tool-divider mx-1 h-4" />
           {tool("autoScroll", <VerticalAlignBottomOutlined />, store.toggleAutoScroll, false, store.autoScroll)}
           {tool("wordWrap", <EnterOutlined />, store.toggleWordWrap, false, store.wordWrap)}
-          <span aria-hidden="true" className="app-bottom-runner-tool-divider mx-1 h-4" />
-          {tool("clearFinished", <ClearOutlined />, () => runAction(clearFinishedRunnerTabs(projectPath)), !tabs.some((tab) => !isRunnerRunning(tab)))}
-          {tool(store.maximized ? "restore" : "maximize", store.maximized ? <FullscreenExitOutlined /> : <FullscreenOutlined />, store.toggleMaximized)}
           {tool("collapse", <MinusOutlined />, () => store.setOpen(false))}
         </div>
       </div>

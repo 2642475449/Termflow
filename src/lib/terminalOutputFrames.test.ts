@@ -12,16 +12,74 @@ const PLACE = "\x1b[4;8H";
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
-function setup(shouldHideCursor = false) {
+function setup(enabled = true) {
   const write = vi.fn<(data: string) => void>();
   const gate = createTerminalOutputFrameGate((data) => write(data), {
-    enabled: true,
-    shouldHideCursor: () => shouldHideCursor,
+    enabled,
   });
   return { write, gate, output: () => write.mock.calls.map(([data]) => data).join("") };
 }
 
 describe("terminal synchronized output frames", () => {
+  it("leaves native cursor visibility to the CLI until a restore is requested", () => {
+    const { gate, output } = setup();
+    gate.write(`${HIDE}working${SHOW}`);
+    expect(output()).toBe(`${HIDE}working${SHOW}`);
+    expect(gate.hasNativeCursor()).toBe(true);
+    gate.write(`${HIDE}software cursor`);
+    vi.runAllTimers();
+    expect(output()).toBe(`${HIDE}working${SHOW}${HIDE}software cursor`);
+  });
+
+  it("restores after the terminal's final hide without inserting into a split OSC", () => {
+    const { gate, output } = setup();
+    gate.write(SHOW);
+    gate.requestCursorRestore();
+    gate.write(`${HIDE}\x1b]0;late title`);
+    vi.advanceTimersByTime(32);
+    expect(output()).toBe(`${SHOW}${HIDE}\x1b]0;late title`);
+    gate.write("\x07");
+    expect(output()).toBe(`${SHOW}${HIDE}\x1b]0;late title\x07${SHOW}`);
+  });
+
+  it("cancels the old cursor repair when a new turn starts", () => {
+    const { gate, output } = setup();
+    gate.write(HIDE);
+    gate.requestCursorRestore();
+    gate.cancelCursorRestore();
+    vi.runAllTimers();
+    expect(output()).toBe(HIDE);
+  });
+
+  it("settles cursor repair after late redraw packets and bounds continuous output", () => {
+    const { gate, output } = setup();
+    gate.requestCursorRestore();
+    for (let index = 0; index < 12; index++) {
+      vi.advanceTimersByTime(20);
+      gate.write(HIDE);
+    }
+    expect(output()).toBe(HIDE.repeat(12));
+    vi.advanceTimersByTime(10);
+    expect(output()).toBe(`${HIDE.repeat(12)}${SHOW}`);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([false, true])("restores at a safe CSI boundary with frame buffering %s", (enabled) => {
+    const { gate, output } = setup(enabled);
+    gate.requestCursorRestore();
+    gate.write("\x1b[4;");
+    vi.advanceTimersByTime(32);
+    expect(output()).toBe(enabled ? "" : "\x1b[4;");
+    gate.write("8H");
+    expect(output()).toBe(`${PLACE}${SHOW}`);
+  });
+
+  it("does not infer a native caret from cursor bytes inside an OSC string", () => {
+    const { gate } = setup();
+    gate.write(`\x1b]0;${SHOW}\x07`);
+    expect(gate.hasNativeCursor()).toBe(false);
+  });
+
   it("passes ordinary output through without a timer", () => {
     const { gate, write } = setup();
     gate.write("hello\r\n");
@@ -54,7 +112,7 @@ describe("terminal synchronized output frames", () => {
     const { gate, output } = setup(true);
     const frame = `${START}${HIDE}中文${SHOW}${PLACE}${END}`;
     for (const char of frame) gate.write(char);
-    expect(output()).toBe(`${START}${HIDE}中文${PLACE}${END}${SHOW}${HIDE}`);
+    expect(output()).toBe(`${START}${HIDE}中文${PLACE}${END}${SHOW}`);
   });
 
   it("keeps a completed frame ahead of the next open frame", () => {
@@ -132,15 +190,17 @@ describe("terminal synchronized output frames", () => {
     gate.write("\x1b]0;title");
     expect(output()).toBe("\x1b]0;title");
     gate.write("\x07");
-    expect(output()).toBe(`\x1b]0;title\x07${HIDE}`);
+    expect(output()).toBe("\x1b]0;title\x07");
   });
 
-  it("keeps running-cursor suppression from aborting a split CSI", () => {
+  it("keeps cursor restoration from aborting a split CSI", () => {
     const { gate, output } = setup(true);
     gate.write("\x1b[4;");
+    gate.requestCursorRestore();
+    vi.advanceTimersByTime(32);
     expect(output()).toBe("");
     gate.write("8H");
-    expect(output()).toBe(`${PLACE}${HIDE}`);
+    expect(output()).toBe(`${PLACE}${SHOW}`);
   });
 
   it("releases an incomplete frame at a fixed deadline", () => {
@@ -184,7 +244,8 @@ describe("terminal synchronized output frames", () => {
   it("defers cursor visibility changes until a buffered frame completes", () => {
     const { gate, write } = setup();
     gate.write(`${START}body`);
-    gate.syncCursorVisibility(false);
+    gate.requestCursorRestore();
+    vi.advanceTimersByTime(32);
     expect(write).not.toHaveBeenCalled();
     gate.write(END);
     expect(write).toHaveBeenCalledExactlyOnceWith(`${START}body${END}${SHOW}`);
@@ -205,7 +266,7 @@ describe("terminal synchronized output frames", () => {
     vi.runAllTimers();
     gate.markUserInput();
     gate.write(END);
-    gate.syncCursorVisibility(false);
+    gate.requestCursorRestore();
     gate.flush();
     expect(write).not.toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);
@@ -222,7 +283,7 @@ describe("terminal synchronized output frames", () => {
     const { gate, output } = setup(true);
     const data = `\x1b[${"0;".repeat(128 * 1024)}1m`;
     gate.write(data);
-    expect(output()).toBe(`${data}${HIDE}`);
+    expect(output() === data).toBe(true);
   });
 
   it("preserves the existing stream behavior when protection is disabled", () => {

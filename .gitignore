@@ -40,6 +40,10 @@ Thumbs.db
 *.log
 
 # Local AI tooling and workspace state
+AGENTS.md
+AGENTS.local.md
+CLAUDE.md
+CLAUDE.local.md
 .termflow/
 .agents/
 .codex-tmp/

@@ -92,11 +92,14 @@ export function terminalInputContainsInsertedText(
 }
 
 /**
- * CLI 中断不一定发出生命周期 Hook，因此使用按键作为本地状态兜底。
- * Antigravity 用独立 Esc 中断；方向键等含 Esc 的序列不能误判为中断。
+ * 识别中断意图，不代表中断已经完成。粘贴、方向键和 Kitty 松键/重复事件不算中断。
  */
 export function containsTerminalInterrupt(data: string, agentId?: unknown): boolean {
-  return data.includes("\x03") || (agentId === "antigravity" && data === "\x1b");
+  const escape = data === "\x1b" || /^\x1b\[27(?:;1(?::1)?)?u$/.test(data);
+  const ctrlC = data === "\x03" || /^\x1b\[99;5(?::1)?u$/.test(data);
+  // Codex 的 Ctrl+C 还可退出侧边对话，不能据此推断主任务被中断。
+  return ctrlC ? agentId !== "codex" : escape
+    && ["claude", "codex", "antigravity", "opencode", "qoder", "pi"].includes(String(agentId));
 }
 
 function consumeTerminalEscapeSequence(source: string, start: number): number | null {

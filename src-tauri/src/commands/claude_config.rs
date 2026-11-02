@@ -4026,6 +4026,7 @@ const token = process.env.TERMFLOW_INGEST_TOKEN;
 if (!port || !token || !eventType || !stateByHook[hookName]) {
   process.exit(0);
 }
+/* TERMFLOW_RUNTIME_CONTEXT */
 
 function stableJson(value) {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
@@ -4090,18 +4091,18 @@ const req = http.request(
     },
     timeout: 1200,
   },
-  () => process.exit(0)
+  finishTermflowHook
 );
 
-req.on('error', () => process.exit(0));
+req.on('error', finishTermflowHook);
 req.on('timeout', () => {
   req.destroy();
-  process.exit(0);
+  finishTermflowHook();
 });
 req.write(body);
 req.end();
 "#
-    .to_string()
+    .replace("/* TERMFLOW_RUNTIME_CONTEXT */", crate::runtime_context::hook_bridge())
 }
 
 fn list_hooks_for_scope(scope: &str, project_path: Option<&str>) -> Result<Vec<HookInfo>, String> {
@@ -4664,6 +4665,11 @@ pub fn configure_claude_hook() -> Result<HookStatus, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn claude_injects_visible_runner_logs_while_preserving_status_reporting() {
+        crate::runtime_context::check_native_integration("claude", &build_hook_script_content());
+    }
 
     #[test]
     fn pi_catalog_uses_global_and_project_extension_paths() {

@@ -120,7 +120,8 @@ async function spawnRunner(tab: BottomRunnerTab) {
     if (operation.cancelled || !findRunnerTab(tab.sessionId)) return;
     const windows = typeof navigator !== "undefined" && /Windows/i.test(navigator.userAgent);
     await spawnPty(tab.sessionId, tab.projectPath, false, false,
-      buildRunnerCommand(tab.commandText, tab.shell, windows), undefined, tab.shell, undefined, tab.shell);
+      buildRunnerCommand(tab.commandText, tab.shell, windows), undefined, tab.shell, undefined, tab.shell,
+      undefined, { label: tab.commandLabel, kind: "runner" });
     if (operation.cancelled || !findRunnerTab(tab.sessionId)) {
       await closePty(tab.sessionId);
       return;

@@ -44,15 +44,27 @@ describe("terminal submission tracking", () => {
 
   it("recognizes Ctrl+C as a terminal interrupt", () => {
     expect(containsTerminalInterrupt("\x03")).toBe(true);
-    expect(containsTerminalInterrupt("draft\x03")).toBe(true);
+    expect(containsTerminalInterrupt("draft\x03")).toBe(false);
     expect(containsTerminalInterrupt("draft")).toBe(false);
   });
 
-  it("recognizes standalone Esc as an Antigravity interrupt only", () => {
+  it("recognizes standalone Esc as an agent interrupt intent", () => {
     expect(containsTerminalInterrupt("\x1b", "antigravity")).toBe(true);
-    expect(containsTerminalInterrupt("\x1b", "claude")).toBe(false);
+    expect(containsTerminalInterrupt("\x1b", "claude")).toBe(true);
+    expect(containsTerminalInterrupt("\x1b", "codex")).toBe(true);
     expect(containsTerminalInterrupt("\x1b")).toBe(false);
     expect(containsTerminalInterrupt("\x03", "antigravity")).toBe(true);
+  });
+
+  it("recognizes Kitty key presses without treating release or repeat as another interrupt", () => {
+    expect(containsTerminalInterrupt("\x1b[27u", "claude")).toBe(true);
+    expect(containsTerminalInterrupt("\x1b[27;1:1u", "codex")).toBe(true);
+    expect(containsTerminalInterrupt("\x1b[99;5u", "claude")).toBe(true);
+    for (const input of ["\x1b[27;1:2u", "\x1b[27;1:3u", "\x1b[27;2u", "\x1b[99;5:3u"]) {
+      expect(containsTerminalInterrupt(input, "claude")).toBe(false);
+    }
+    expect(containsTerminalInterrupt("\x03", "codex")).toBe(false);
+    expect(containsTerminalInterrupt("\x1b[99;5u", "codex")).toBe(false);
   });
 
   it.each(["\x1b[A", "\x1b[B", "\x1bOP", "\x1b[200~text\x1b[201~", "\x1bx"])(

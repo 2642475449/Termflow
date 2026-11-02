@@ -1,4 +1,5 @@
-import { CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined, PlayCircleOutlined, StopOutlined } from "@ant-design/icons";
+import { CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined, StopOutlined } from "@ant-design/icons";
+import { WorkbenchGlyph } from "@/components/ui/WorkbenchGlyph";
 import { Tooltip } from "antd";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "@/store";
@@ -24,13 +25,12 @@ export function BottomRunnerRailButton() {
   const overrides = useShortcutStore((state) => state.overrides);
   if (!projectPath) return null;
   const runningCount = tabs.filter(isRunnerRunning).length;
-  const toggleLabel = t("bottomRunner.toggleShortcut", { shortcut: getAppShortcut(overrides, "toggleBottomRunner") });
-  const label = runningCount > 0 ? `${toggleLabel} · ${t("bottomRunner.runningTasks", { count: runningCount })}` : toggleLabel;
+  const label = t("bottomRunner.toggleShortcut", { shortcut: getAppShortcut(overrides, "toggleBottomRunner") });
   return <Tooltip title={label} placement="right">
     <button type="button" aria-label={label} aria-pressed={open} data-active={open}
       onMouseDown={(event) => event.preventDefault()} onClick={() => useBottomRunnerStore.getState().toggleOpen()}
       className="app-bottom-runner-rail app-rail-button relative flex h-10 w-10 items-center justify-center rounded-md">
-      <PlayCircleOutlined className="text-lg" />
+      <WorkbenchGlyph kind="runner" />
       {runningCount > 0 && <span aria-hidden="true"
         className="app-bottom-runner-running-count pointer-events-none absolute bottom-0 right-0 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-semibold leading-none">
         {runningCount}

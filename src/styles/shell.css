@@ -71,6 +71,23 @@
     border-color: var(--cs-border);
   }
 
+  .app-quick-settings-item {
+    color: var(--cs-text-primary);
+    background: var(--cs-bg-sidebar);
+  }
+
+  .app-quick-settings-item:hover,
+  .app-quick-settings-item:focus-visible,
+  .app-quick-settings-item[data-active="true"] {
+    color: var(--cs-text-primary);
+    background: var(--cs-bg-hover);
+  }
+
+  .app-quick-settings-item:focus-visible {
+    outline: 2px solid var(--cs-primary);
+    outline-offset: -2px;
+  }
+
   .app-session-list-item {
     min-height: 48px;
     padding: 7px 10px;
@@ -142,6 +159,10 @@
     .app-window-control,
     .app-titlebar-search,
     .app-titlebar-project {
+      transition: none;
+    }
+
+    .app-quick-settings-item {
       transition: none;
     }
   }

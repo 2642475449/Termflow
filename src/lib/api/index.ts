@@ -149,6 +149,47 @@ export async function prepareProjectLauncher(
   return await invoke("prepare_project_launcher", { projectPath, launcher });
 }
 
+export interface TerminalRuntimeMetadata {
+  label: string;
+  kind: "agent" | "terminal" | "runner";
+}
+
+export async function setRuntimeRunnerContext(projectPath: string, sessionId: string | null): Promise<void> {
+  await invoke("set_runtime_runner_context", { projectPath, sessionId });
+}
+
+export async function listRemoteHosts(): Promise<import("@/lib/remote").RemoteHost[]> {
+  return invoke("list_remote_hosts");
+}
+
+export async function saveRemoteHost(host: import("@/lib/remote").RemoteHost): Promise<import("@/lib/remote").RemoteHost> {
+  return invoke("save_remote_host", { host });
+}
+
+export async function deleteRemoteHost(hostId: string): Promise<void> {
+  await invoke("delete_remote_host", { hostId });
+}
+
+export async function connectRemoteHost(host: import("@/lib/remote").RemoteHost): Promise<import("@/lib/remote").RemoteConnection> {
+  return invoke("connect_remote_host", { host });
+}
+
+export async function getRemoteConnection(hostId: string): Promise<import("@/lib/remote").RemoteConnection> {
+  return invoke("get_remote_connection", { hostId });
+}
+
+export async function remoteAuthInput(hostId: string, data: string): Promise<void> {
+  await invoke("remote_auth_input", { hostId, data });
+}
+
+export async function disconnectRemoteHost(hostId: string): Promise<void> {
+  await invoke("disconnect_remote_host", { hostId });
+}
+
+export async function remoteRequest<T>(hostId: string, method: string, params: Record<string, unknown> = {}): Promise<T> {
+  return invoke<T>("remote_request", { hostId, method, params });
+}
+
 export async function spawnPty(
   sessionId: string,
   path: string,
@@ -160,6 +201,7 @@ export async function spawnPty(
   claudeEffort?: string,
   agentId?: string,
   workingDirectory?: string,
+  runtimeMetadata?: TerminalRuntimeMetadata,
 ): Promise<void> {
   await invoke("spawn_pty", {
     sessionId,
@@ -172,6 +214,7 @@ export async function spawnPty(
     claudeEffort: claudeEffort ?? null,
     agentId: agentId ?? null,
     workingDirectory: workingDirectory ?? null,
+    runtimeMetadata: runtimeMetadata ?? null,
   });
 }
 
@@ -646,6 +689,13 @@ export async function inferAgentUserResponse(
     baselineRevision,
     expectedEventType,
   });
+}
+
+export async function inferAgentInterrupt(
+  sessionId: string,
+  baselineRevision: number | null,
+): Promise<{ revision: number; createdAt: number } | null> {
+  return await invoke("infer_agent_interrupt", { sessionId, baselineRevision });
 }
 
 export async function generateSessionTitle(
@@ -1447,6 +1497,10 @@ export async function gitGenerateCommitMessage(
     agentId,
     profileInstructions,
   });
+}
+
+export async function detectProjectIcon(projectPath: string): Promise<string | null> {
+  return await invoke("detect_project_icon", { projectPath });
 }
 
 export async function readImagePreview(path: string): Promise<ImagePreviewPayload> {

@@ -66,6 +66,8 @@ export function useResumeSession() {
             ? session.agentId : defaultTerminalShell,
         session.agentId === "claude" ? (session.runtimeEffort ?? undefined) : undefined,
         session.agentId,
+        undefined,
+        { label: session.name, kind: isAiAgentId(session.agentId) ? "agent" : "terminal" },
       );
       updateSession(sessionId, { active: true, status: "waiting", agentSessionId });
       useAppStore.getState().clearTerminalExitCode(sessionId);

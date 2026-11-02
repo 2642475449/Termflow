@@ -112,6 +112,36 @@ pub struct HookStatusRuntime {
 }
 
 impl HookStatusRuntime {
+    pub fn infer_interrupt(&self, session_id: &str, baseline_revision: Option<u64>) -> Option<(u64, i64)> {
+        let Ok(mut guards) = self.guards.lock() else { return None };
+        // 没收到过 Hook 的会话也可依据原生终端证据纠正，但不能越过已到达的新 Hook。
+        if !guards.contains_key(session_id) && guards.len() >= MAX_STATUS_GUARDS {
+            return None;
+        }
+        if let Some(guard) = guards.get(session_id) {
+            if Some(guard.revision) != baseline_revision
+                || guard.last_state.as_deref() != Some("running")
+                || !guard.task_coordinator.active_subagents.is_empty()
+                || guard.task_coordinator.unverifiable_subagent_seen
+            {
+                return None;
+            }
+        } else if baseline_revision.unwrap_or(0) != 0 {
+            return None;
+        }
+        let guard = guards.entry(session_id.to_string()).or_default();
+        guard.revision = guard.revision.saturating_add(1);
+        guard.last_state = Some("waiting".to_string());
+        guard.last_event_type = Some("interrupted".to_string());
+        guard.last_created_at = now_ms();
+        guard.last_event_id = Some(format!("interrupt:{session_id}:{}", guard.revision));
+        guard.pending_permission = None;
+        guard.permission_pending = false;
+        guard.last_pre_tool = None;
+        invalidate_task_completion(&mut guard.task_coordinator);
+        Some((guard.revision, guard.last_created_at))
+    }
+
     pub fn infer_user_response(
         &self,
         session_id: &str,
@@ -158,11 +188,9 @@ pub fn create_ingest_config() -> Result<(HookIngestConfig, TcpListener), String>
         .map_err(|e| format!("无法读取本地 Hook 接收端口: {e}"))?
         .port();
     let token = format!(
-        "{:x}",
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos()
+        "{:032x}{:032x}",
+        rand::random::<u128>(),
+        rand::random::<u128>()
     );
     Ok((HookIngestConfig { port, token }, listener))
 }
@@ -188,8 +216,46 @@ pub fn start_ingest_server(
         info!("hook ingest server listening on 127.0.0.1:{}", config.port);
         let guards = status_runtime.guards.clone();
 
+        // 日志查询不能占住 Hook 接收循环；慢客户端最多占用两个工作线程和四个排队位。
+        let (runtime_sender, runtime_receiver) =
+            std::sync::mpsc::sync_channel::<tiny_http::Request>(4);
+        let runtime_receiver = Arc::new(Mutex::new(runtime_receiver));
+        for _ in 0..2 {
+            let receiver = runtime_receiver.clone();
+            let app = app.clone();
+            let config = config.clone();
+            let manager = manager.clone();
+            thread::spawn(move || loop {
+                let next = match receiver.lock() {
+                    Ok(receiver) => receiver.recv(),
+                    Err(_) => return,
+                };
+                match next {
+                    Ok(request) => {
+                        crate::runtime_cli::handle_request(request, &app, &config, &manager)
+                    }
+                    Err(_) => return,
+                }
+            });
+        }
+
         for mut request in server.incoming_requests() {
             let request_path = request.url().to_string();
+            if request_path == crate::runtime_cli::API_PATH {
+                if let Err(error) = runtime_sender.try_send(request) {
+                    let request = match error {
+                        std::sync::mpsc::TrySendError::Full(request)
+                        | std::sync::mpsc::TrySendError::Disconnected(request) => request,
+                    };
+                    let _ = request.respond(
+                        tiny_http::Response::from_string(
+                            r#"{"protocolVersion":1,"ok":false,"error":{"code":"runtime_busy"}}"#,
+                        )
+                        .with_status_code(503),
+                    );
+                }
+                continue;
+            }
             if request.method() != &tiny_http::Method::Post
                 || !matches!(
                     request_path.as_str(),
@@ -1057,8 +1123,13 @@ fn should_ignore_post_completion_event(
     event: Option<PermissionLifecycleEvent>,
     state: &str,
 ) -> bool {
+    // 已由用户中断的任务不能再被迟到的 Stop 当成正常完成并发送通知。
+    if state == "completed" && guard.last_event_type.as_deref() == Some("interrupted") {
+        return true;
+    }
     state == "running"
-        && guard.last_state.as_deref() == Some("completed")
+        && (guard.last_state.as_deref() == Some("completed")
+            || guard.last_event_type.as_deref() == Some("interrupted"))
         && matches!(
             event,
             Some(
@@ -1846,6 +1917,70 @@ mod tests {
         assert_eq!(guard.revision, 8);
         assert_eq!(guard.last_state.as_deref(), Some("running"));
         assert_eq!(guard.last_event_type.as_deref(), Some("user_response"));
+    }
+
+    #[test]
+    fn interrupt_inference_requires_the_current_running_revision() {
+        let runtime = HookStatusRuntime::default();
+        runtime.guards.lock().unwrap().insert("session-a".into(), SessionStatusGuard {
+            revision: 7,
+            last_state: Some("running".into()),
+            ..SessionStatusGuard::default()
+        });
+        assert_eq!(runtime.infer_interrupt("session-a", None), None);
+        assert_eq!(runtime.infer_interrupt("session-a", Some(6)), None);
+        assert_eq!(runtime.infer_interrupt("session-a", Some(7)).map(|value| value.0), Some(8));
+        assert_eq!(runtime.infer_interrupt("session-a", Some(7)), None);
+        let guards = runtime.guards.lock().unwrap();
+        let guard = &guards["session-a"];
+        assert_eq!(guard.last_state.as_deref(), Some("waiting"));
+        assert_eq!(guard.last_event_type.as_deref(), Some("interrupted"));
+        assert!(should_ignore_post_completion_event(guard,
+            Some(PermissionLifecycleEvent::PostToolUse), "running"));
+        assert!(should_ignore_post_completion_event(guard,
+            Some(PermissionLifecycleEvent::Stop), "completed"));
+        assert!(!should_ignore_post_completion_event(guard,
+            Some(PermissionLifecycleEvent::UserPromptSubmit), "running"));
+    }
+
+    #[test]
+    fn interrupt_inference_does_not_override_a_new_provider_state() {
+        for state in ["waiting", "completed", "error"] {
+            let runtime = HookStatusRuntime::default();
+            runtime.guards.lock().unwrap().insert("session-a".into(), SessionStatusGuard {
+                revision: 7, last_state: Some(state.into()),
+                ..SessionStatusGuard::default()
+            });
+            assert_eq!(runtime.infer_interrupt("session-a", Some(7)), None);
+        }
+    }
+
+    #[test]
+    fn root_idle_does_not_interrupt_running_or_unverifiable_children() {
+        for identifiable in [true, false] {
+            let runtime = HookStatusRuntime::default();
+            let mut guard = SessionStatusGuard {
+                revision: 7, last_state: Some("running".into()),
+                ..SessionStatusGuard::default()
+            };
+            if identifiable { guard.task_coordinator.active_subagents.insert("child".into()); }
+            else { guard.task_coordinator.unverifiable_subagent_seen = true; }
+            runtime.guards.lock().unwrap().insert("session-a".into(), guard);
+            assert_eq!(runtime.infer_interrupt("session-a", Some(7)), None);
+        }
+    }
+
+    #[test]
+    fn terminal_evidence_can_reconcile_a_session_without_hooks() {
+        let runtime = HookStatusRuntime::default();
+        assert_eq!(runtime.infer_interrupt("session-a", Some(5)), None);
+        assert_eq!(runtime.infer_interrupt("session-a", None).map(|value| value.0), Some(1));
+        assert_eq!(runtime.infer_interrupt("session-a", None), None);
+        assert_eq!(runtime.infer_interrupt("session-b", Some(0)).map(|value| value.0), Some(1));
+        let guards = runtime.guards.lock().unwrap();
+        let guard = &guards["session-a"];
+        assert!(!guard.permission_pending);
+        assert!(!super::guard_event_is_fresh(guard, "late-tool", guard.last_created_at - 1));
     }
 
     #[test]

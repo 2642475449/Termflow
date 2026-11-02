@@ -1,6 +1,7 @@
 pub(crate) mod antigravity;
 pub mod background;
 pub mod clipboard;
+pub mod remote;
 pub mod schema;
 
 use parking_lot::Mutex;

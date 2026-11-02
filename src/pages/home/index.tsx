@@ -963,23 +963,19 @@ function HomePage() {
                       [
                         (todayActivity?.sessionCount ?? 0).toLocaleString(locale),
                         t("home.overview.todaySessions"),
-                        t("home.overview.todayRecorded"),
                       ],
                       [
                         (todayActivity?.messageCount ?? 0).toLocaleString(locale),
                         t("home.overview.todayInteractions"),
-                        t("home.overview.todayMessagesAndEvents"),
                       ],
                       [
                         formatCompactTokenCount(todayTokens, i18n.language),
                         t("home.overview.todayTokens"),
-                        t("home.overview.todayLocalStats"),
                       ],
-                    ].map(([value, label, caption]) => (
+                    ].map(([value, label]) => (
                       <div key={label} className="min-w-0 px-3 first:pl-0 last:pr-0">
                         <div className="truncate text-[20px] font-semibold" style={{ color: "var(--cs-text-primary)" }}>{value}</div>
                         <div className="mt-1.5 text-[12px]" style={{ color: "var(--cs-text-secondary)" }}>{label}</div>
-                        <div className="mt-5 truncate text-[11px]" style={{ color: "var(--cs-text-tertiary)" }} title={caption}>{caption}</div>
                       </div>
                     ))}
                   </div>
@@ -1004,19 +1000,16 @@ function HomePage() {
                       [
                         t("home.overview.rhythmDayCount", { count: metrics.currentStreak }),
                         t("home.overview.rhythmCurrentStreak"),
-                        t("home.overview.rhythmLongestStreak", { count: metrics.longestStreak }),
                       ],
                       [
                         t("home.overview.rhythmDayCount", { count: metrics.activeDays }),
                         t("home.overview.rhythmActiveDays"),
-                        t("home.overview.rhythmUsageRecorded"),
                       ],
                       [
                         formatHourRange(metrics.peakHour, i18n.language),
                         t("home.overview.rhythmPeakHour"),
-                        t("home.overview.rhythmLocalTime"),
                       ],
-                    ].map(([value, label, caption]) => (
+                    ].map(([value, label]) => (
                       <div key={label} className="min-w-0 px-3 first:pl-0 last:pr-0">
                         <div
                           className="whitespace-nowrap text-[18px] font-semibold tabular-nums"
@@ -1026,7 +1019,6 @@ function HomePage() {
                           {value}
                         </div>
                         <div className="mt-1.5 text-[12px]" style={{ color: "var(--cs-text-secondary)" }}>{label}</div>
-                        <div className="mt-5 truncate text-[11px]" style={{ color: "var(--cs-text-tertiary)" }} title={caption}>{caption}</div>
                       </div>
                     ))}
                   </div>
@@ -1048,14 +1040,13 @@ function HomePage() {
                   </div>
                   <div className="grid grid-cols-3 divide-x divide-[var(--cs-border-card)]" style={{ borderColor: "var(--cs-border-card)" }}>
                     {[
-                      [metrics.sessions.toLocaleString(locale), t("home.overview.sessionThreads"), t("home.overview.activeDayAverage", { count: metrics.averageDailySessions.toLocaleString(locale) })],
-                      [metrics.messages.toLocaleString(locale), t("home.overview.messages"), t("home.overview.activeDayAverage", { count: metrics.averageDailyMessages.toLocaleString(locale) })],
-                      [formatCompactTokenCount(metrics.totalTokens, i18n.language), t("home.overview.measuredTotalTokens"), ""],
-                    ].map(([value, label, caption]) => (
+                      [metrics.sessions.toLocaleString(locale), t("home.overview.sessionThreads")],
+                      [metrics.messages.toLocaleString(locale), t("home.overview.messages")],
+                      [formatCompactTokenCount(metrics.totalTokens, i18n.language), t("home.overview.measuredTotalTokens")],
+                    ].map(([value, label]) => (
                       <div key={label} className="min-w-0 px-3 first:pl-0 last:pr-0">
                         <div className="truncate text-[20px] font-semibold" style={{ color: "var(--cs-text-primary)" }}>{value}</div>
                         <div className="mt-1.5 text-[12px]" style={{ color: "var(--cs-text-secondary)" }}>{label}</div>
-                        <div className="mt-5 text-[11px]" style={{ color: "var(--cs-text-tertiary)" }}>{caption || "\u00a0"}</div>
                       </div>
                     ))}
                   </div>

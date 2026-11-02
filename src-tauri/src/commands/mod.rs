@@ -1,4 +1,6 @@
 pub mod agent_hooks;
+pub mod remote;
+pub mod remote_hosts;
 pub(crate) mod agent_runner;
 pub mod agent_usage;
 pub mod agent_versions;
@@ -17,6 +19,7 @@ pub mod mcp_servers;
 pub mod network_proxy;
 pub mod notification;
 pub mod project_launchers;
+pub mod project_icon;
 pub mod quick_commands;
 pub mod remote_notification;
 pub(crate) mod scheduled_tasks;

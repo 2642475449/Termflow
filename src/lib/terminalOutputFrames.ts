@@ -1,7 +1,6 @@
 const ESC = "\x1b";
 const SYNC_END = `${ESC}[?2026l`;
 const CURSOR_SHOW = `${ESC}[?25h`;
-const CURSOR_HIDE = `${ESC}[?25l`;
 const FRAME_TIMEOUT_MS = 250;
 const INPUT_FRAME_TIMEOUT_MS = 32;
 const CURSOR_SETTLE_MS = 16;
@@ -13,7 +12,6 @@ type Timer = ReturnType<typeof setTimeout>;
 
 interface TerminalOutputFrameOptions {
   enabled: boolean;
-  shouldHideCursor?: () => boolean;
   now?: () => number;
 }
 
@@ -145,7 +143,7 @@ function createOutputScanner() {
       flushText();
       return tokens;
     },
-    canInsertControl: () => mode !== "string" && !streamedCsi,
+    canInsertControl: () => mode === "text" && !streamedCsi,
     hasPendingSequence: () => pending.length > 0,
     getBufferedChars: () => pending.length,
     finish() {
@@ -231,7 +229,10 @@ export function createTerminalOutputFrameGate(
   let timerDeadline = Infinity;
   let disposed = false;
   let releaseSyncWhenSafe = false;
-  let requestedCursor: boolean | null = null;
+  let restoreCursor = false;
+  let cursorRestoreTimer: Timer | null = null;
+  let cursorRestoreDeadline = Infinity;
+  let nativeCursorShown = false;
 
   const cancelTimer = () => {
     if (timer !== null) clearTimeout(timer);
@@ -244,17 +245,20 @@ export function createTerminalOutputFrameGate(
     synchronizedFrame = false,
     safeBoundary = scanner.canInsertControl(),
   ) => {
-    if (!data && requestedCursor === null && !releaseSyncWhenSafe) return;
+    if (!data && !restoreCursor && !releaseSyncWhenSafe) return;
+    let cursorRestored = false;
     if (safeBoundary) {
       if (releaseSyncWhenSafe) {
         data += SYNC_END;
         releaseSyncWhenSafe = false;
       }
-      if (options.shouldHideCursor?.() || requestedCursor === true) data += CURSOR_HIDE;
-      else if (requestedCursor === false) data += CURSOR_SHOW;
-      requestedCursor = null;
+      if (restoreCursor && cursorRestoreTimer === null) {
+        data += CURSOR_SHOW;
+        restoreCursor = false;
+        cursorRestored = true;
+      }
     }
-    if (data) write(data, synchronizedFrame);
+    if (data) write(data, synchronizedFrame || cursorRestored);
   };
 
   const drain = (force = false) => {
@@ -285,14 +289,26 @@ export function createTerminalOutputFrameGate(
     }, Math.max(0, deadline - now()));
   };
 
+  const scheduleCursorRestore = () => {
+    if (cursorRestoreTimer !== null) clearTimeout(cursorRestoreTimer);
+    cursorRestoreTimer = setTimeout(() => {
+      cursorRestoreTimer = null;
+      if (!frameBuffered && !scanner.hasPendingSequence()) emit("");
+    }, Math.max(0, Math.min(INPUT_FRAME_TIMEOUT_MS, cursorRestoreDeadline - now())));
+  };
+
   return {
     write(data: string) {
       if (disposed || !data) return;
+      if (restoreCursor && cursorRestoreTimer !== null) scheduleCursorRestore();
+      const scanned = scanner.scan(data);
+      if (scanned.some((token) => getPrivateMode(token, 25) === "h")) nativeCursorShown = true;
       if (!options.enabled) {
-        write(options.shouldHideCursor?.() ? `${data}${CURSOR_HIDE}` : data, false);
+        // 非 Windows 同样跟踪解析边界，恢复光标不能插进未完成的 OSC/CSI。
+        emit(data);
         return;
       }
-      for (const token of scanner.scan(data)) {
+      for (const token of scanned) {
         const synchronized = getPrivateMode(token, 2026);
         if (synchronized === "h" && !frameActive) {
           drain();
@@ -316,15 +332,23 @@ export function createTerminalOutputFrameGate(
       }
     },
     getBufferedChars: () => queuedChars + scanner.getBufferedChars(),
+    hasNativeCursor: () => nativeCursorShown,
     markUserInput() {
       if (disposed) return;
       lastInputAt = now();
       if (frameActive) scheduleDeadline(now() + INPUT_FRAME_TIMEOUT_MS);
     },
-    syncCursorVisibility(hidden: boolean) {
+    requestCursorRestore() {
       if (disposed) return;
-      requestedCursor = hidden;
-      if (!frameBuffered && !scanner.hasPendingSequence()) emit("");
+      if (!restoreCursor) cursorRestoreDeadline = now() + FRAME_TIMEOUT_MS;
+      restoreCursor = true;
+      // 等本次状态切换后的重绘到齐，避免先 show 又被末尾的 hide 覆盖。
+      scheduleCursorRestore();
+    },
+    cancelCursorRestore() {
+      restoreCursor = false;
+      if (cursorRestoreTimer !== null) clearTimeout(cursorRestoreTimer);
+      cursorRestoreTimer = null;
     },
     flush() {
       if (disposed) return;
@@ -339,6 +363,7 @@ export function createTerminalOutputFrameGate(
     dispose() {
       disposed = true;
       cancelTimer();
+      if (cursorRestoreTimer !== null) clearTimeout(cursorRestoreTimer);
       tokens = [];
       queuedChars = 0;
       scanner.finish();

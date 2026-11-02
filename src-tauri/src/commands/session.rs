@@ -58,6 +58,7 @@ pub async fn spawn_pty(
     claude_effort: Option<String>,
     agent_id: Option<String>,
     working_directory: Option<String>,
+    runtime_metadata: Option<crate::runtime_output::RuntimeTerminalMetadata>,
 ) -> Result<(), String> {
     if path.is_empty() {
         return Err("项目路径不能为空".into());
@@ -131,6 +132,7 @@ pub async fn spawn_pty(
         agent_id,
         network_proxy,
         working_directory,
+        runtime_metadata,
     );
     let result = match result {
         Ok(Some(control)) => {
@@ -203,6 +205,18 @@ fn get_claude_cli_info_blocking() -> ClaudeCliInfo {
     }
 }
 
+/// 同步下方运行面板的当前任务，供智能体理解“下面的报错”。
+#[tauri::command]
+pub fn set_runtime_runner_context(
+    project_path: String,
+    session_id: Option<String>,
+    manager: State<'_, Arc<PtyManager>>,
+) {
+    manager
+        .runtime_context
+        .select_runner(&project_path, session_id);
+}
+
 /// 向 PTY 写入数据
 #[tauri::command]
 pub fn pty_input(
@@ -223,6 +237,29 @@ pub fn infer_agent_user_response(
     runtime: State<'_, Arc<HookStatusRuntime>>,
 ) -> Option<u64> {
     runtime.infer_user_response(&session_id, baseline_revision, expected_event_type.as_str())
+}
+
+/// 终端已确认中断；仅补齐仍停留在同一运行版本的 Hook 状态，不发送完成通知。
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentInterruptResult {
+    revision: u64,
+    created_at: i64,
+}
+
+#[tauri::command]
+pub fn infer_agent_interrupt(
+    session_id: String,
+    baseline_revision: Option<u64>,
+    manager: State<'_, Arc<PtyManager>>,
+    runtime: State<'_, Arc<HookStatusRuntime>>,
+) -> Option<AgentInterruptResult> {
+    let (_, agent_id) = manager.session_context(&session_id)?;
+    if !super::agent_hooks::supports_agent_status_hook(&agent_id) {
+        return None;
+    }
+    runtime.infer_interrupt(&session_id, baseline_revision)
+        .map(|(revision, created_at)| AgentInterruptResult { revision, created_at })
 }
 
 /// Atomically capture a provider-independent turn baseline before forwarding Enter to the PTY.

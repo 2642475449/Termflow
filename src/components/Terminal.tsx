@@ -23,6 +23,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { emit, listen } from "@tauri-apps/api/event";
 import {
   inferAgentUserResponse,
+  inferAgentInterrupt,
   ptyInput,
   ptyResize,
   submitAgentTurnInput,
@@ -63,7 +64,6 @@ import {
   type SanitizedTerminalSelection,
 } from "@/lib/sideQuestion";
 import {
-  containsTerminalInterrupt,
   consumeTerminalSubmissionInput,
   hasTerminalPromptText,
 } from "@/lib/terminalSubmission";
@@ -72,6 +72,7 @@ import { SideQuestionComposer } from "@/components/SideQuestionComposer";
 import { TerminalLinkDialog } from "@/components/terminal/TerminalLinkDialog";
 import { getAgentDisplayName, getAgentTerminalBehavior, isAiAgentId } from "@/lib/agents";
 import { isSessionTurnRunning } from "@/lib/sessions";
+import { canRestoreTerminalInputCursor, createTerminalAgentInterrupt } from "@/lib/terminalAgentInterrupt";
 import { getTerminalTheme } from "@/lib/terminalTheme";
 import {
   getCheckpointedAgentUserResponseBaseline,
@@ -106,20 +107,7 @@ const TERMINAL_LAYOUT_SYNC_EVENT = "terminal:layout-sync";
 const AGENT_FILE_DRAG_MIME = "application/x-termflow-agent-files";
 const TERMINAL_FOCUS_RETRY_DELAYS_MS = [0, 50, 150, 300];
 const TERMINAL_SCROLLBAR_HIDE_DELAY_MS = 700;
-const HIDE_CURSOR_SEQUENCE = "\x1b[?25l";
 let cachedWebglSupport: boolean | null = null;
-
-export function keepRunningCursorHidden(data: string, shouldHideCursor: boolean): string {
-  return shouldHideCursor ? `${data}${HIDE_CURSOR_SEQUENCE}` : data;
-}
-
-export function shouldHideRunningAgentCursor(
-  agentId: unknown,
-  isTurnRunning: boolean,
-): boolean {
-  // Antigravity 运行期间仍可编辑输入，光标可见性由 CLI 自身控制。
-  return isAiAgentId(agentId) && agentId !== "antigravity" && isTurnRunning;
-}
 
 function canUseWebglRenderer(): boolean {
   if (cachedWebglSupport !== null) {
@@ -256,7 +244,6 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
   const pendingSubmissionEscapeSequenceRef = useRef("");
   const enqueueInputRef = useRef<((operation: () => Promise<void>) => Promise<void>) | null>(null);
   const sideQuestionSubmittingRef = useRef(false);
-  const hideCursorWhileRunningRef = useRef(false);
   const outputFrameGateRef = useRef<ReturnType<typeof createTerminalOutputFrameGate> | null>(null);
   const suppressedFocusSequenceUntilRef = useRef(0);
   const processedResourceDropStartedAtRef = useRef<number | null>(null);
@@ -306,13 +293,6 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
   );
   const terminalBehavior = getAgentTerminalBehavior(currentSession?.agentId);
   const forceStableCursor = terminalBehavior.forceStableCursor === true;
-  const manageAgentCursorVisibility = isAiAgentId(currentSession?.agentId)
-    && currentSession.agentId !== "antigravity";
-  const hideCursorWhileRunning = shouldHideRunningAgentCursor(
-    currentSession?.agentId,
-    Boolean(currentSession && isSessionTurnRunning(currentSession)),
-  );
-  hideCursorWhileRunningRef.current = hideCursorWhileRunning;
   const termTheme = getTerminalTheme(activeTheme);
   const currentSessionPath = currentSession?.path ?? "";
   currentTerminalDirectoryRef.current = currentSession?.terminalWorkingDirectory ?? currentSessionPath;
@@ -1190,7 +1170,6 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       },
       {
         enabled: /Windows/i.test(navigator.userAgent),
-        shouldHideCursor: () => hideCursorWhileRunningRef.current,
       },
     );
     outputFrameGateRef.current = outputFrameGate;
@@ -1198,6 +1177,47 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
 
     const enqueueInput = createTerminalInputQueue();
     enqueueInputRef.current = enqueueInput;
+    const getSession = () => useAppStore.getState().sessions.find((item) => item.id === sessionId);
+    const interruptTracker = createTerminalAgentInterrupt({
+      getSession,
+      getScreen: () => {
+        const buffer = term.buffer.active;
+        return Array.from({ length: Math.min(term.rows, 12) }, (_, index) => {
+          const row = buffer.baseY + term.rows - Math.min(term.rows, 12) + index;
+          return { row, text: buffer.getLine(row)?.translateToString(true) ?? "" };
+        });
+      },
+      confirm: (baseline) => {
+        void inferAgentInterrupt(sessionId, baseline.statusRevision ?? null).then((result) => {
+          if (isTerminalDisposed || result === null || !interruptTracker.isCurrent(baseline)) return;
+          updateSession(sessionId, {
+            status: "waiting", statusRevision: result.revision,
+            statusUpdatedAt: result.createdAt, lastEventType: "interrupted",
+          });
+        }).catch((error: unknown) => console.warn("Failed to reconcile terminal interrupt:", error));
+      },
+    });
+    const titleDisposable = term.onTitleChange((title) => interruptTracker.observeTitle(title));
+    const programStatusDisposable = term.parser.registerOscHandler(7501, (data) => {
+      if (data === "?") {
+        void enqueueInput(() => ptyInput(sessionId, "\x1b]7501;?\x1b\\")).catch(console.error);
+      } else interruptTracker.observeProgramStatus(data);
+      return true;
+    });
+    const parsedDisposable = term.onWriteParsed(() => interruptTracker.observeScreen());
+    // 用实时 store 订阅覆盖终端重建与后台标签；只有离开运行状态时才请求一次恢复。
+    const unsubscribeSession = useAppStore.subscribe((state, previous) => {
+      const session = state.sessions.find((item) => item.id === sessionId);
+      const before = previous.sessions.find((item) => item.id === sessionId);
+      if (session === before) return;
+      if (!session?.active || isSessionTurnRunning(session)) outputFrameGate.cancelCursorRestore();
+      if (canRestoreTerminalInputCursor(session)
+        && outputFrameGate.hasNativeCursor()
+        && before && isSessionTurnRunning(before)) {
+        outputFrameGate.requestCursorRestore();
+      }
+      if (session?.status !== "running") interruptTracker.cancel();
+    });
     let processingClipboardPaste = false;
 
     // Send user input to PTY as-is. Control keys like Backspace may repeat rapidly,
@@ -1214,20 +1234,25 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
 
       outputFrameGate.markUserInput();
 
-      // Ctrl+C 与 Antigravity 的独立 Esc 中断不一定有 Stop Hook，先回退到等待输入。
-      const session = useAppStore.getState().sessions.find((item) => item.id === sessionId);
-      if (containsTerminalInterrupt(data, session?.agentId)) {
-        if (
-          session &&
-          isAiAgentId(session.agentId) &&
-          (session.status === "starting" || session.status === "running")
-        ) {
-          updateSession(sessionId, {
-            status: "waiting",
-            statusUpdatedAt: Date.now(),
-          });
+      const acknowledgeInput = interruptTracker.prepareInput(data);
+      const editingSession = getSession();
+      // 只修复曾使用原生光标的 CLI；始终自行绘制插入点的 TUI 保留其光标策略。
+      const restoreEditingCursor = canRestoreTerminalInputCursor(editingSession)
+        && outputFrameGate.hasNativeCursor()
+        && (/^[^\x00-\x1f\x7f]+$/u.test(data) || /^[\x08\x7f]$/.test(data)
+          || /^\x1b\[(?:[CDFH]|3~)$/.test(data));
+      const sendInput = async () => {
+        try {
+          await ptyInput(sessionId, data);
+          acknowledgeInput(true);
+          const latest = getSession();
+          if (!isTerminalDisposed && restoreEditingCursor && canRestoreTerminalInputCursor(latest)) {
+            outputFrameGate.requestCursorRestore();
+          }
         }
-      }
+        catch (error) { acknowledgeInput(false); throw error; }
+      };
+      if (data === "\r" || data === "\n") outputFrameGate.cancelCursorRestore();
 
       const submissionCapture = consumeTerminalSubmissionInput(
         pendingSubmissionInputRef.current,
@@ -1291,10 +1316,10 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       }
       captureInputForAutoTitleRef.current?.(data);
       if (processingClipboardPaste) {
-        void enqueueInput(() => ptyInput(sessionId, data)).catch(reportPasteError);
+        void enqueueInput(sendInput).catch(reportPasteError);
       } else {
         // 系统语音会连续触发逐字输入；即使队列空闲也必须排队，避免并发 IPC 写入乱序。
-        void enqueueInput(() => ptyInput(sessionId, data)).catch(console.error);
+        void enqueueInput(sendInput).catch(console.error);
       }
     };
     const pasteGate = createTerminalPasteGate({
@@ -1569,6 +1594,11 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
         textarea.removeEventListener("compositionend", onCompositionEnd);
       }
       imeOutputGate.dispose();
+      unsubscribeSession();
+      interruptTracker.dispose();
+      titleDisposable.dispose();
+      programStatusDisposable.dispose();
+      parsedDisposable.dispose();
       outputFrameGate.dispose();
       outputMonitor.dispose();
       setDiagnostics(runtimeId, null);
@@ -1630,12 +1660,6 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     terminalRef.current.options.disableStdin =
       !currentSession?.active || currentSession?.status === "starting";
   }, [currentSession?.active, currentSession?.status]);
-
-  useEffect(() => {
-    const term = terminalRef.current;
-    if (!term || !manageAgentCursorVisibility) return;
-    outputFrameGateRef.current?.syncCursorVisibility(hideCursorWhileRunning);
-  }, [hideCursorWhileRunning, manageAgentCursorVisibility]);
 
   useEffect(() => {
     const container = containerRef.current;

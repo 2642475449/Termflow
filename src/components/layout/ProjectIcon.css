@@ -1,0 +1,19 @@
+.app-project-icon {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 7px;
+  background: var(--cs-bg-hover);
+  color: var(--cs-text-primary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.app-project-icon--compact { width: 24px; height: 24px; border-radius: 5px; }
+.app-project-icon--image { background: transparent; }
+.app-project-icon img { width: 100%; height: 100%; object-fit: contain; }

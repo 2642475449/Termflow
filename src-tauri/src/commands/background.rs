@@ -162,6 +162,7 @@ pub fn complete_workspace_close(window: WebviewWindow, background: bool) -> Resu
 #[tauri::command]
 pub fn exit_background_application(app: tauri::AppHandle) {
     app.state::<Arc<PtyManager>>().cleanup_all();
+    app.state::<Arc<crate::remote_ssh::RemoteSshManager>>().disconnect_all();
     app.exit(0);
 }
 

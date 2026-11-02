@@ -185,6 +185,8 @@ export function QuickCommandsButton() {
             : defaultTerminalShell,
           undefined,
           isAgentPrompt ? selectedAgent!.id : defaultTerminalShell,
+          undefined,
+          { label: command.label, kind: isAgentPrompt ? "agent" : "terminal" },
         );
         updateSession(sessionId, { active: true, status: "running" });
         void useQuickCommandUsageStore.getState().setCommandUsed(projectPath, command.id);

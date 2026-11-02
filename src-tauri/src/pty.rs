@@ -8,6 +8,7 @@ use crate::powershell_integration::{
     POWERSHELL_COMPLETION_INTEGRATION_COMMAND, POWERSHELL_COMPLETION_INTEGRATION_ENV,
     POWERSHELL_COMPLETION_INTEGRATION_SCRIPT,
 };
+use crate::runtime_output::{RuntimeOutputStore, RuntimeTerminalMetadata};
 use parking_lot::Mutex;
 use portable_pty::{CommandBuilder, PtyPair, PtySize};
 use serde::Serialize;
@@ -223,6 +224,8 @@ pub struct PtyManager {
     next_instance_id: AtomicU64,
     active_turns: Mutex<HashMap<String, ActiveAgentTurn>>,
     ingest_config: Arc<HookIngestConfig>,
+    pub(crate) runtime_output: RuntimeOutputStore,
+    pub(crate) runtime_context: crate::runtime_context::RuntimeContext,
 }
 
 #[derive(Clone)]
@@ -244,6 +247,8 @@ impl PtyManager {
             next_instance_id: AtomicU64::new(1),
             active_turns: Mutex::new(HashMap::new()),
             ingest_config,
+            runtime_output: RuntimeOutputStore::default(),
+            runtime_context: crate::runtime_context::RuntimeContext::default(),
         })
     }
 
@@ -261,7 +266,12 @@ impl PtyManager {
         agent_id: Option<String>,
         network_proxy: crate::network_proxy::ResolvedNetworkProxy,
         working_directory: Option<String>,
+        runtime_metadata: Option<RuntimeTerminalMetadata>,
     ) -> Result<Option<OpenCodePromptControl>, String> {
+        // 在智能体读取技能目录之前完成安装；失败不影响原有终端启动。
+        if let Err(error) = crate::runtime_skill::ensure_agent(agent_id.as_deref()) {
+            log::warn!("Failed to prepare Termflow CLI skill: {error}");
+        }
         // A restored Session reuses its stable Session ID. Invalidate and stop
         // any older PTY before creating the replacement so its delayed reader
         // cannot be mistaken for the new instance.
@@ -319,6 +329,7 @@ impl PtyManager {
         cmd.env("TERMFLOW_PROJECT_PATH", &path);
         cmd.env("TERMFLOW_INGEST_PORT", self.ingest_config.port.to_string());
         cmd.env("TERMFLOW_INGEST_TOKEN", &self.ingest_config.token);
+        crate::runtime_cli::configure_pty_command(&mut cmd);
         if enable_powershell_completion_integration {
             cmd.env(
                 POWERSHELL_COMPLETION_INTEGRATION_ENV,
@@ -362,10 +373,19 @@ impl PtyManager {
             .try_clone_reader()
             .map_err(|e| format!("获取读取器失败: {}", e))?;
 
+        let agent_id = agent_id.unwrap_or_else(|| "generic-cli".to_string());
+        let output_log = self.runtime_output.start(
+            &session_id,
+            instance_id,
+            &path,
+            &agent_id,
+            child_pid,
+            runtime_metadata,
+        );
         let session = PtySession {
             instance_id,
             project_path: path.clone(),
-            agent_id: agent_id.unwrap_or_else(|| "generic-cli".to_string()),
+            agent_id,
             writer,
             child,
             child_pid,
@@ -423,6 +443,7 @@ impl PtyManager {
                 if !manager.is_session_instance_current(&sid, instance_id) {
                     return false;
                 }
+                output_log.lock().append(&data);
                 if let Err(error) = app_clone.emit(
                     "pty-output",
                     PtyOutputPayload {
@@ -442,6 +463,7 @@ impl PtyManager {
                 .exit_code
                 .or_else(|| wait_for_pty_exit(exited_session.child.as_mut()));
             exited_session.exit_code = code;
+            output_log.lock().finish(code, false);
             if let Ok(Some(review)) = manager.complete_active_turn(&sid, "process_exit") {
                 let _ = app_clone.emit("checkpoint-review-ready", review);
             }
@@ -574,7 +596,12 @@ impl PtyManager {
     }
 
     pub fn close(&self, session_id: &str) {
-        self.sessions.lock().remove(session_id);
+        let session = self.sessions.lock().remove(session_id);
+        if let Some(session) = session {
+            self.runtime_output.close(session_id, session.instance_id);
+            // 终止进程树可能耗时，不能持有 sessions 锁。
+            drop(session);
+        }
     }
 
     pub fn close_project_sessions(&self, project_path: &str) {
