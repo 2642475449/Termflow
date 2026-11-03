@@ -30,7 +30,6 @@ interface LogicalBufferLine {
 // 先取完整候选再判断路径信号，避免未知扩展名被截成目录或已知后缀。
 // 最终是否成为链接仍由文件存在性校验决定，不把格式支持限制为扩展名白名单。
 const PATH_TOKEN_PATTERN = /(?:[a-zA-Z]:)?(?:[^\s:*?"'`()<>{}\[\]|│┃║,，。；：！？、;]+|\([^()\s]*\))+(?::\d+){0,2}/gu;
-const QUOTED_PATH_PATTERN = /(["'`])([^\r\n]+?)\1/g;
 const URI_PATTERN = /[a-zA-Z][a-zA-Z\d+.-]*:\/\/[^\s"'`<>|│┃║，。；：！？、]+/g;
 // 明确的 Windows/UNC 起点和文件后缀可确定未加引号的含空格文件路径边界。
 // 含空格且无扩展名的路径需要引号或 Markdown 括号，避免把后面的说明并入目录名。
@@ -64,7 +63,36 @@ function trimSentencePunctuation(text: string): string {
   }
 }
 
+function normalizeWindowsDrivePrefix(path: string): string {
+  // Markdown 本地链接常用 /C:/path；文件系统需要 C:/path，UNC 和 POSIX 根路径保持原样。
+  return path.replace(/^\/(?=[a-zA-Z]:[\\/])/, "");
+}
+
+function findClosingDelimiter(text: string, start: number, open: string, close: string): number {
+  let depth = 1;
+  for (let index = start + 1; index < text.length; index += 1) {
+    // 标题内可转义方括号；目标中的反斜杠保留为 Windows 路径分隔符。
+    if (open === "[" && text[index] === "\\") {
+      index += 1;
+      continue;
+    }
+    if (open === "(" && index === start + 1 && text[index] === "<") {
+      const angleEnd = text.indexOf(">", index + 1);
+      if (angleEnd < 0) return -1;
+      index = angleEnd;
+      continue;
+    }
+    if (text[index] === open) depth += 1;
+    else if (text[index] === close) {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+  return -1;
+}
+
 export function parseTerminalFilePath(text: string): ParsedPath {
+  text = normalizeWindowsDrivePrefix(text);
   const lineAndColumn = text.match(/^(.+):(\d+):(\d+)$/);
   if (lineAndColumn) {
     return {
@@ -88,26 +116,42 @@ export function detectTerminalFilePaths(line: string): DetectedFilePath[] {
   const overlapsReservedRange = (start: number, length: number) => reservedRanges.some(
     (range) => start < range.end && start + length > range.start,
   );
-  const addPath = (text: string, startIndex: number, allowBareName = false) => {
-    if (/^[a-zA-Z][a-zA-Z\d+.-]*:\/\//.test(text)) {
+  const addPath = (text: string, startIndex: number, allowBareName = false, displayText = text) => {
+    const parsed = parseTerminalFilePath(text);
+    if (/^[a-zA-Z][a-zA-Z\d+.-]*:/.test(parsed.filePath) && !/^[a-zA-Z]:[\\/]/.test(parsed.filePath)) {
       const path = parseTerminalFileUrl(text);
-      if (path) matches.push({ text, startIndex, ...parseTerminalFilePath(path) });
+      if (path) matches.push({ text: displayText, startIndex, ...parseTerminalFilePath(path) });
       return;
     }
     if (isPathCandidate(text, allowBareName)) {
-      matches.push({ text, startIndex, ...parseTerminalFilePath(text) });
+      matches.push({ text: displayText, startIndex, ...parsed });
     }
   };
 
-  for (const quoted of line.matchAll(QUOTED_PATH_PATTERN)) {
-    const text = quoted[2];
-    const start = quoted.index;
-    // 整段引号内容占位，防止 URL 或无效引用中的后半段被误识别成文件。
-    reservedRanges.push({ start, end: start + quoted[0].length });
-    addPath(text, start + 1, true);
+  // 先按结构识别 Markdown 和引号，标题只负责展示，不能把版本号等文字猜成文件名。
+  // 整条 Markdown 链接使用同一目标，让点击标题和跨行后的路径得到一致结果。
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (char === '"' || char === "'" || char === "`") {
+      const end = line.indexOf(char, index + 1);
+      if (end < 0) continue;
+      reservedRanges.push({ start: index, end: end + 1 });
+      addPath(line.slice(index + 1, end), index + 1, true);
+      index = end;
+    } else if (char === "[") {
+      const labelEnd = findClosingDelimiter(line, index, "[", "]");
+      if (labelEnd < 0 || line[labelEnd + 1] !== "(") continue;
+      const end = findClosingDelimiter(line, labelEnd + 1, "(", ")");
+      if (end < 0) continue;
+      const destination = line.slice(labelEnd + 2, end).trim()
+        .replace(/\s+(?:"[^"]*"|'[^']*')$/, "").replace(/^<([^<>]+)>$/, "$1");
+      reservedRanges.push({ start: index, end: end + 1 });
+      addPath(destination, index, true, line.slice(index, end + 1));
+      index = end;
+    }
   }
 
-  // Markdown/终端展示常用外层括号包住路径；内部括号属于文件名。
+  // 终端展示常用外层括号包住路径；内部括号属于文件名。
   let parenthesisStart = -1;
   let parenthesisDepth = 0;
   for (let index = 0; index < line.length; index += 1) {
@@ -153,7 +197,7 @@ export function detectTerminalFilePaths(line: string): DetectedFilePath[] {
 }
 
 export function resolveTerminalFilePath(filePath: string, workingDirectory: string): string {
-  const trimmedPath = filePath.trim();
+  const trimmedPath = normalizeWindowsDrivePrefix(filePath.trim());
   if (/^[a-zA-Z]:[\\/]/.test(trimmedPath) || trimmedPath.startsWith("\\\\")) {
     return normalizePathSegments(trimmedPath, "\\");
   }

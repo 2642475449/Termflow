@@ -15,5 +15,47 @@
 }
 
 .app-project-icon--compact { width: 24px; height: 24px; border-radius: 5px; }
+.app-project-icon--swatch-0 { --cs-project-icon-swatch: var(--cs-project-icon-green); }
+.app-project-icon--swatch-1 { --cs-project-icon-swatch: var(--cs-project-icon-purple); }
+.app-project-icon--swatch-2 { --cs-project-icon-swatch: var(--cs-project-icon-blue); }
+.app-project-icon--swatch-3 { --cs-project-icon-swatch: var(--cs-project-icon-amber); }
+.app-project-icon--swatch-4 { --cs-project-icon-swatch: var(--cs-project-icon-pink); }
+.app-project-icon--swatch-5 { --cs-project-icon-swatch: var(--cs-project-icon-cyan); }
+.app-project-icon[class*="app-project-icon--swatch-"] {
+  background: color-mix(in srgb, var(--cs-project-icon-swatch) 42%, var(--cs-bg-card));
+  color: var(--cs-text-primary);
+  border: 1px solid color-mix(in srgb, var(--cs-project-icon-swatch) 68%, transparent);
+}
 .app-project-icon--image { background: transparent; }
 .app-project-icon img { width: 100%; height: 100%; object-fit: contain; }
+
+.app-project-icon--swatch-6 { --cs-project-icon-swatch: var(--cs-project-icon-red); }
+.app-project-icon--swatch-7 { --cs-project-icon-swatch: var(--cs-project-icon-orange); }
+.app-project-icon--swatch-8 { --cs-project-icon-swatch: var(--cs-project-icon-lime); }
+.app-project-icon--swatch-9 { --cs-project-icon-swatch: var(--cs-project-icon-teal); }
+.app-project-icon--swatch-10 { --cs-project-icon-swatch: var(--cs-project-icon-indigo); }
+.app-project-icon--swatch-11 { --cs-project-icon-swatch: var(--cs-project-icon-copper); }
+.app-project-icon--emoji { font-size: 18px; }
+.app-project-icon-edit { display: inline-flex; flex-shrink: 0; width: 28px; height: 28px; align-items: center; justify-content: center; border-radius: 5px; color: var(--cs-text-secondary); }
+.app-project-icon-edit:hover { background: var(--cs-bg-hover); color: var(--cs-text-primary); }
+.app-project-icon-edit:focus-visible, .app-project-icon-editor__color:focus-visible { outline: 2px solid var(--cs-primary); outline-offset: 2px; }
+.app-project-icon-editor { display: flex; flex-direction: column; gap: 16px; padding-top: 8px; }
+.app-project-icon-editor__preview { display: flex; gap: 12px; align-items: center; }
+.app-project-icon-editor__preview > .app-project-icon { width: 44px; height: 44px; font-size: 18px; }
+.app-project-icon-editor__preview > .app-project-icon--emoji { font-size: 28px; }
+.app-project-icon-editor__path { color: var(--cs-text-secondary); font-size: 12px; overflow-wrap: anywhere; }
+.app-project-icon-editor__hint { color: var(--cs-text-secondary); font-size: 12px; line-height: 1.6; margin: 0; }
+.app-project-icon-editor__colors { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.app-project-icon-editor__color { display: flex; min-height: 40px; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: 6px; }
+.app-project-icon-editor__color[aria-pressed="true"] { border-color: var(--cs-primary); background: var(--cs-bg-hover); }
+.app-project-icon-editor__color:disabled { cursor: default; opacity: .6; }
+.app-project-icon-editor__color .app-project-icon { pointer-events: none; }
+.app-project-icon-editor__reset { align-self: flex-start; min-height: 32px; padding-inline: 0; color: var(--cs-text-primary); background: transparent; text-decoration: underline; text-underline-offset: 3px; }
+.app-project-icon-editor__reset:focus-visible { outline: 2px solid var(--cs-primary); outline-offset: 2px; }
+.app-project-icon-editor__reset:disabled { opacity: .6; cursor: default; }
+
+.app-project-icon-editor__modes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 3px; gap: 3px; border-radius: 7px; background: var(--cs-bg-hover); }
+.app-project-icon-editor__modes button { min-height: 32px; padding: 4px; border-radius: 5px; color: var(--cs-text-secondary); }
+.app-project-icon-editor__modes button[aria-pressed="true"] { color: var(--cs-text-primary); background: var(--cs-bg-card-solid); }
+.app-project-icon-editor__modes button:focus-visible { outline: 2px solid var(--cs-primary); outline-offset: 1px; }
+@media (max-width: 480px) { .app-project-icon-editor__modes { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

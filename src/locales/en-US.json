@@ -3121,5 +3121,43 @@
       "sshConfigReadOnly": "This connection is managed by OpenSSH configuration. Edit the original file."
     },
     "cancelReconnect": "Cancel reconnect"
+  },
+  "projectIcons": {
+    "conflict": "This icon was changed in another window. Close and reopen this dialog to edit the latest settings.",
+    "title": "Project icon",
+    "edit": "Edit icon for {{name}}",
+    "mode": "Icon type",
+    "auto": "Auto",
+    "initials": "Default icon",
+    "emoji": "Emoji",
+    "image": "Image",
+    "autoHint": "Use the project logo when available. Otherwise, use the fallback color below.",
+    "fallbackColor": "Fallback icon color",
+    "color": "Icon color",
+    "emojiLabel": "Emoji",
+    "emojiHint": "Enter one emoji. Joined emoji are supported.",
+    "chooseImage": "Choose image",
+    "replaceImage": "Replace image",
+    "imageHint": "PNG, WebP, JPEG or ICO, up to 256 KB. The image is saved locally and remains available if the original file moves.",
+    "reset": "Restore auto detection",
+    "loadFailed": "Could not load icon settings. Close this dialog and reopen it to retry.",
+    "saveFailed": "Could not save. Your changes are still here; please try again.",
+    "imageFailed": "Could not read the image. Choose a valid PNG, WebP, JPEG or ICO file up to 256 KB.",
+    "emojiInvalid": "Enter one valid emoji.",
+    "imageRequired": "Choose an image first.",
+    "colors": {
+      "green": "Green",
+      "purple": "Purple",
+      "blue": "Blue",
+      "amber": "Amber",
+      "pink": "Pink",
+      "cyan": "Cyan",
+      "red": "Red",
+      "orange": "Orange",
+      "lime": "Lime",
+      "teal": "Teal",
+      "indigo": "Indigo",
+      "copper": "Copper"
+    }
   }
 }

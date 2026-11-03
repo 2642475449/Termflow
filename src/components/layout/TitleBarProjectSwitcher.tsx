@@ -8,6 +8,7 @@ import {
   FolderOpenOutlined,
   WarningOutlined,
   RightOutlined,
+  EditOutlined,
 } from "@ant-design/icons";
 import { Button, Checkbox, Input, Modal, Popover, message } from "antd";
 import { useEffect, useRef, useState } from "react";
@@ -21,6 +22,9 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { collectOpenProjects, projectPathKey } from "@/lib/openProjects";
 import { useOpenProjectsStore } from "@/store/slices/openProjects";
 import { ProjectIcon } from "./ProjectIcon";
+import { ProjectIconEditor } from "./ProjectIconEditor";
+import { useProjectIconsStore } from "@/store/slices/projectIcons";
+import { onProjectIconPreferenceUpdated } from "@/lib/api";
 
 const CURRENT_PROJECT_BACKGROUND =
   "color-mix(in srgb, var(--cs-primary) 8%, transparent)";
@@ -51,6 +55,27 @@ function TitleBarProjectSwitcher() {
   const [openingChoice, setOpeningChoice] = useState<"current_window" | "new_window" | null>(null);
   const [projectOpenError, setProjectOpenError] = useState<string | null>(null);
   const openingProject = useRef(false);
+  const projectSwitcherButton = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    // Zustand 历史路径恢复后再迁移；用原始路径计算旧色，避免规范化改变颜色。
+    const initialize = () => {
+      const state = useAppStore.getState();
+      const paths = [...state.recentProjects.map((project) => project.path), ...Object.keys(state.projectSessions), state.currentProject?.path, state.lastProject?.path].filter((path): path is string => !!path);
+      void useProjectIconsStore.getState().setInitialized(paths).catch((error) => console.error("Failed to load project icon preferences:", error));
+    };
+    if (useAppStore.persist.hasHydrated()) initialize();
+    return useAppStore.persist.onFinishHydration(initialize);
+  }, [open]);
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void onProjectIconPreferenceUpdated((path, preference) => useProjectIconsStore.getState().setPreference(path, preference)).then((stop) => {
+      if (disposed) stop(); else unlisten = stop;
+    }).catch((error) => console.error("Failed to listen for project icon updates:", error));
+    return () => { disposed = true; unlisten?.(); };
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -281,6 +306,18 @@ function TitleBarProjectSwitcher() {
             </div>
           </div>
         </button>
+        <button
+          type="button"
+          className="app-project-icon-edit"
+          aria-label={t("projectIcons.edit", { name: project.name })}
+          title={t("projectIcons.edit", { name: project.name })}
+          onClick={() => {
+            setOpen(false);
+            void waitForOverlayToClose().then(() => useProjectIconsStore.getState().setEditor(project));
+          }}
+        >
+          <EditOutlined />
+        </button>
         {options.current ? (
           <CheckOutlined
             className="mr-2 text-[12px]"
@@ -421,6 +458,7 @@ function TitleBarProjectSwitcher() {
         <button
           type="button"
           aria-haspopup="menu"
+          ref={projectSwitcherButton}
           aria-expanded={open}
           className="app-titlebar-project flex h-8 min-w-[124px] max-w-[196px] items-center gap-2 rounded-[6px] px-2 text-left transition-colors"
           style={{
@@ -442,6 +480,7 @@ function TitleBarProjectSwitcher() {
           />
         </button>
       </Popover>
+      <ProjectIconEditor onClosed={() => projectSwitcherButton.current?.focus()} />
       <CloneRepositoryModal
         open={cloneOpen}
         onCancel={() => setCloneOpen(false)}

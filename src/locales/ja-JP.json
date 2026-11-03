@@ -3121,5 +3121,43 @@
       "sshConfigReadOnly": "この接続は OpenSSH 設定で管理されています。元の設定ファイルを編集してください。"
     },
     "cancelReconnect": "再接続をキャンセル"
+  },
+  "projectIcons": {
+    "title": "プロジェクトアイコン",
+    "edit": "{{name}} のアイコンを編集",
+    "mode": "アイコンの種類",
+    "auto": "自動検出",
+    "initials": "既定",
+    "emoji": "Emoji",
+    "image": "画像",
+    "autoHint": "プロジェクトのロゴを優先します。画像がない場合は、下の予備の色を使用します。",
+    "fallbackColor": "予備アイコンの色",
+    "color": "アイコンの色",
+    "emojiLabel": "Emoji",
+    "emojiHint": "絵文字を1つ入力してください。組み合わせ絵文字にも対応しています。",
+    "chooseImage": "画像を選択",
+    "replaceImage": "画像を変更",
+    "imageHint": "PNG、WebP、JPEG、ICO、最大256 KB。画像はローカルに保存され、元のファイルを移動しても使用できます。",
+    "reset": "自動検出に戻す",
+    "loadFailed": "設定を読み込めませんでした。閉じてから再度開いてください。",
+    "saveFailed": "保存できませんでした。変更は残っています。もう一度お試しください。",
+    "imageFailed": "画像を読み込めませんでした。256 KB以下の有効なPNG、WebP、JPEG、ICOファイルを選択してください。",
+    "emojiInvalid": "有効な絵文字を1つ入力してください。",
+    "imageRequired": "先に画像を選択してください。",
+    "conflict": "別のウィンドウでアイコンが変更されました。閉じてから再度開き、最新の設定を編集してください。",
+    "colors": {
+      "green": "緑",
+      "purple": "紫",
+      "blue": "青",
+      "amber": "琥珀色",
+      "pink": "ピンク",
+      "cyan": "シアン",
+      "red": "赤",
+      "orange": "オレンジ",
+      "lime": "黄緑",
+      "teal": "青緑",
+      "indigo": "藍色",
+      "copper": "銅色"
+    }
   }
 }

@@ -28,6 +28,47 @@ export interface QuickCommandUsageState {
   setCommandUsed: (projectPath: string, commandId: string) => Promise<void>;
 }
 
+export interface ProjectIconPreference {
+  color: number;
+  mode: "auto" | "initials" | "emoji" | "image";
+  emoji?: string;
+  image?: string;
+  revision: number;
+}
+
+export interface ProjectIconEntry {
+  src: string | null;
+  checkedAt: number;
+}
+
+export interface ProjectIconEditor {
+  loaded: boolean;
+  project: ProjectInfo;
+  draft: ProjectIconPreference;
+  loading: boolean;
+  saving: boolean;
+  importing: boolean;
+  error: string | null;
+}
+
+export interface ProjectIconsState {
+  icons: Record<string, ProjectIconEntry>;
+  loading: Record<string, boolean>;
+  preferences: Record<string, ProjectIconPreference>;
+  colors: Record<string, number>;
+  initialized: boolean;
+  editor: ProjectIconEditor | null;
+  setInitialized: (legacyPaths: string[]) => Promise<void>;
+  setPreference: (path: string, preference: ProjectIconPreference) => void;
+  setProjectIcon: (path: string) => Promise<void>;
+  setProjectIconFailed: (path: string, src: string) => void;
+  setEditor: (project: ProjectInfo) => Promise<void>;
+  setEditorDraft: (patch: Partial<ProjectIconPreference>) => void;
+  setEditorClosed: () => void;
+  setEditorImage: () => Promise<void>;
+  setEditorSaved: () => Promise<void>;
+}
+
 export interface AgentInstructionDocument {
   exists: boolean | null;
   content: string;

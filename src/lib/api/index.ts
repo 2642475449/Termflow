@@ -1503,6 +1503,32 @@ export async function detectProjectIcon(projectPath: string): Promise<string | n
   return await invoke("detect_project_icon", { projectPath });
 }
 
+export async function loadProjectIconPreferences(legacyProjects: { path: string; color: number }[]): Promise<Record<string, import("@/store/types").ProjectIconPreference>> {
+  return await invoke("load_project_icon_preferences", { legacyProjects });
+}
+
+export async function ensureProjectIconPreference(projectPath: string): Promise<import("@/store/types").ProjectIconPreference> {
+  return await invoke("ensure_project_icon_preference", { projectPath });
+}
+
+export async function saveProjectIconPreference(projectPath: string, preference: import("@/store/types").ProjectIconPreference): Promise<import("@/store/types").ProjectIconPreference> {
+  return await invoke("save_project_icon_preference", { projectPath, preference });
+}
+
+export async function chooseProjectIconImage(): Promise<string | null> {
+  const path = await openDialog({ multiple: false, filters: [{ name: "PNG / WebP / JPEG / ICO", extensions: ["png", "webp", "jpg", "jpeg", "ico"] }] });
+  if (typeof path !== "string") return null;
+  const src = await invoke<string>("import_project_icon", { path });
+  const preview = new Image();
+  preview.src = src;
+  await preview.decode();
+  return src;
+}
+
+export async function onProjectIconPreferenceUpdated(handler: (path: string, preference: import("@/store/types").ProjectIconPreference) => void): Promise<UnlistenFn> {
+  return await listen<{ path: string; preference: import("@/store/types").ProjectIconPreference }>("project-icon-preference-updated", ({ payload }) => handler(payload.path, payload.preference));
+}
+
 export async function readImagePreview(path: string): Promise<ImagePreviewPayload> {
   return await invoke("read_image_preview", { path });
 }

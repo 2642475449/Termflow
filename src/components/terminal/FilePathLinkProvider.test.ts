@@ -130,7 +130,7 @@ describe("terminal file path links", () => {
       { filePath: "README", text: "README", startIndex: 1 },
     ]);
     expect(detectTerminalFilePaths("[配置](资料/配置)")).toEqual([
-      { filePath: "资料/配置", text: "资料/配置", startIndex: 5 },
+      { filePath: "资料/配置", text: "[配置](资料/配置)", startIndex: 0 },
     ]);
     expect(detectTerminalFilePaths("README is ready; version 1.8.35")).toEqual([]);
   });
@@ -183,7 +183,7 @@ describe("terminal file path links", () => {
       { filePath: "C:/audio folder/测试.mp3", text: uri, startIndex: 3 },
     ]);
     expect(detectTerminalFilePaths("[音频](file:///C:/audio/song(1).mp3)")).toEqual([
-      { filePath: "C:/audio/song(1).mp3", text: "file:///C:/audio/song(1).mp3", startIndex: 5 },
+      { filePath: "C:/audio/song(1).mp3", text: "[音频](file:///C:/audio/song(1).mp3)", startIndex: 0 },
     ]);
   });
 
@@ -200,8 +200,89 @@ describe("terminal file path links", () => {
     const path = "folder with spaces/report (final).pdf";
     const text = `[示例](${path})`;
     expect(detectTerminalFilePaths(text)).toEqual([
-      expect.objectContaining({ filePath: path, text: path, startIndex: 5 }),
+      expect.objectContaining({ filePath: path, text, startIndex: 0 }),
     ]);
+  });
+
+  it("uses the destination for a Markdown installer link instead of guessing a filename from its versioned label", () => {
+    const path = "E:/7.project/test/Termflow/src-tauri/target/release/bundle/nsis/Termflow_1.8.35_x64-setup.exe";
+    const markdown = `[Windows x64 安装包（1.8.35，23.08 MB）](/${path})`;
+    const line = `已生成 ${markdown}。`;
+    expect(detectTerminalFilePaths(line)).toEqual([
+      { filePath: path, text: markdown, startIndex: 4 },
+    ]);
+  });
+
+  it("does not expose versioned labels or local-looking fragments of non-file Markdown links", () => {
+    for (const target of ["https://example.com/package.exe", "file:///C:/bad%ZZ.txt", "mailto:person@example.com"]) {
+      expect(detectTerminalFilePaths(`[安装包（1.8.35）](${target})`)).toEqual([]);
+    }
+  });
+
+  it("preserves Markdown labels with formatting, nested brackets and path-looking names without creating extra targets", () => {
+    const path = String.raw`E:\My Project\report (final).pdf:12:7`;
+    for (const label of ["`package.json`", "文件 [最终版]", "安装包 v1.8.35", "src/old.ts"]) {
+      const markdown = `[${label}](${path})`;
+      expect(detectTerminalFilePaths(markdown)).toEqual([
+        { filePath: String.raw`E:\My Project\report (final).pdf`, line: 12, column: 7, text: markdown, startIndex: 0 },
+      ]);
+    }
+  });
+
+  it("supports angle-wrapped Markdown destinations and optional titles while retaining adjacent file links", () => {
+    const markdown = '[安装包 1.8.35](</E:/My Project/setup (final).exe> "下载地址")';
+    const line = `${markdown} package.json`;
+    expect(detectTerminalFilePaths(line)).toEqual([
+      { filePath: "E:/My Project/setup (final).exe", text: markdown, startIndex: 0 },
+      { filePath: "package.json", text: "package.json", startIndex: markdown.length + 1 },
+    ]);
+    const quoted = '"C:/folder/[archive](backup).txt"';
+    expect(detectTerminalFilePaths(quoted)).toEqual([
+      { filePath: "C:/folder/[archive](backup).txt", text: "C:/folder/[archive](backup).txt", startIndex: 1 },
+    ]);
+  });
+
+  it("normalizes a Markdown-style Windows drive prefix without changing POSIX or UNC roots", () => {
+    expect(parseTerminalFilePath("/E:/My Project/src/main.ts:12:7")).toEqual({
+      filePath: "E:/My Project/src/main.ts", line: 12, column: 7,
+    });
+    expect(resolveTerminalFilePath("/E:/My Project/file.txt", String.raw`C:\workspace`))
+      .toBe(String.raw`E:\My Project\file.txt`);
+    for (const path of ["/home/project/file.txt", "//server/share/file.txt"]) {
+      expect(parseTerminalFilePath(path)).toEqual({ filePath: path });
+    }
+  });
+
+  it("opens the installer destination when its Markdown label is clicked across real terminal wraps", async () => {
+    const terminal = new Terminal({ cols: 44, rows: 15, allowProposedApi: true });
+    const path = "E:/7.project/test/Termflow/src-tauri/target/release/bundle/nsis/Termflow_1.8.35_x64-setup.exe";
+    const markdown = `[Windows x64 安装包（1.8.35，23.08 MB）](/${path})`;
+    const activated: string[] = [];
+    const validated: string[] = [];
+    try {
+      await writeRealTerminal(terminal, `${markdown}\r\n`);
+      const provider = new FilePathLinkProvider(terminal, (candidate) => {
+        activated.push(candidate.filePath);
+      }, async (candidate) => {
+        validated.push(candidate.filePath);
+        return candidate.filePath === path;
+      });
+      const links = await new Promise<ProvidedLinks>((resolve) => provider.provideLinks(1, resolve));
+      expect(validated).toEqual([path]);
+      expect(links).toHaveLength(1);
+      const link = links![0];
+      expect(link.text).toBe(markdown);
+      expect(link.range.start).toEqual({ x: 1, y: 1 });
+      expect(link.range.end.y).toBeGreaterThan(1);
+      for (let row = 2; row <= link.range.end.y; row += 1) {
+        const wrapped = await new Promise<ProvidedLinks>((resolve) => provider.provideLinks(row, resolve));
+        expect(wrapped?.[0]?.range).toEqual(link.range);
+      }
+      link.activate({ button: 0 } as MouseEvent, link.text);
+      expect(activated).toEqual([path]);
+    } finally {
+      terminal.dispose();
+    }
   });
 
   it("passes the complete quoted path to validation and maps only its content", async () => {

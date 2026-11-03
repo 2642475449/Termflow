@@ -3121,5 +3121,43 @@
       "sshConfigReadOnly": "此连接由 OpenSSH 配置管理，请在原配置文件中修改。"
     },
     "cancelReconnect": "取消重连"
+  },
+  "projectIcons": {
+    "conflict": "此项目的图标已在其他窗口修改。请关闭后重新打开，读取最新设置再编辑。",
+    "title": "项目图标",
+    "edit": "编辑「{{name}}」的图标",
+    "mode": "图标类型",
+    "auto": "自动识别",
+    "initials": "默认图标",
+    "emoji": "Emoji",
+    "image": "图片",
+    "autoHint": "优先使用项目内的 Logo；没有图片时使用下方的备用颜色。",
+    "fallbackColor": "备用图标颜色",
+    "color": "图标颜色",
+    "emojiLabel": "Emoji",
+    "emojiHint": "输入一个 Emoji，也支持组合表情。",
+    "chooseImage": "选择图片",
+    "replaceImage": "更换图片",
+    "imageHint": "支持 PNG、WebP、JPEG、ICO，文件最大 256 KB。图片将保存在本机，原文件移动后仍可使用。",
+    "reset": "恢复自动识别",
+    "loadFailed": "无法读取图标设置，请关闭后重新打开再试。",
+    "saveFailed": "保存失败，修改仍保留在此处，请重试。",
+    "imageFailed": "图片读取失败，请选择有效的 PNG、WebP、JPEG 或 ICO 文件（不超过 256 KB）。",
+    "emojiInvalid": "请输入一个有效的 Emoji。",
+    "imageRequired": "请先选择图片。",
+    "colors": {
+      "green": "绿色",
+      "purple": "紫色",
+      "blue": "蓝色",
+      "amber": "琥珀色",
+      "pink": "粉色",
+      "cyan": "青色",
+      "red": "红色",
+      "orange": "橙色",
+      "lime": "黄绿色",
+      "teal": "蓝绿色",
+      "indigo": "靛蓝色",
+      "copper": "铜色"
+    }
   }
 }

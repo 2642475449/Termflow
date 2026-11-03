@@ -1,6 +1,7 @@
 pub(crate) mod antigravity;
 pub mod background;
 pub mod clipboard;
+pub mod project_icons;
 pub mod remote;
 pub mod schema;
 
