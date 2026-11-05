@@ -4,14 +4,12 @@ import {
   CopyOutlined,
   GithubOutlined,
   GlobalOutlined,
-  LockOutlined,
   ReloadOutlined,
   SafetyCertificateOutlined,
   FileProtectOutlined,
   TeamOutlined,
-  ArrowRightOutlined,
 } from "@ant-design/icons";
-import { Button, Modal, Space, Tag, message } from "antd";
+import { Button, Modal, Tag, message } from "antd";
 import { useTranslation } from "react-i18next";
 import packageJson from "../../../package.json";
 import { AGENT_DEFINITIONS, AI_AGENT_ORDER } from "@/lib/agents";
@@ -21,10 +19,9 @@ import { SettingsSection } from "@/components/settings/SettingsSection";
 import { SettingRow } from "@/components/settings/SettingRow";
 import { AboutFlowBackdrop } from "./AboutFlowBackdrop";
 
-const ABOUT_LINKS: Record<"website" | "github" | "license", string | null> = {
+const ABOUT_LINKS: Record<"website" | "github", string | null> = {
   website: null,
   github: "https://github.com/2642475449/Termflow",
-  license: "https://github.com/2642475449/Termflow/blob/main/LICENSE",
 };
 
 const MIT_LICENSE_TEXT = `MIT License
@@ -113,11 +110,7 @@ const THIRD_PARTY_LIBRARIES: ThirdPartyNotice[] = [
   },
 ];
 
-export interface AboutPageProps {
-  onNavigate?: (page: string) => void;
-}
-
-export const AboutPage: FC<AboutPageProps> = ({ onNavigate }) => {
+export const AboutPage: FC = () => {
   const { t } = useTranslation();
   const [licenseModalOpen, setLicenseModalOpen] = useState(false);
   const [thirdPartyModalOpen, setThirdPartyModalOpen] = useState(false);
@@ -277,38 +270,16 @@ export const AboutPage: FC<AboutPageProps> = ({ onNavigate }) => {
           label={t("settings.about.license")}
           description={t("settings.about.licenseDesc")}
         >
-          <Space>
-            <Button onClick={() => setLicenseModalOpen(true)}>
-              {t("settings.about.viewLicense")}
-            </Button>
-            {ABOUT_LINKS.license && (
-              <Button
-                icon={<GithubOutlined />}
-                onClick={() => openAboutLink(ABOUT_LINKS.license)}
-              >
-                GitHub
-              </Button>
-            )}
-          </Space>
+          <Button onClick={() => setLicenseModalOpen(true)}>
+            {t("settings.about.viewLicense")}
+          </Button>
         </SettingRow>
 
         <SettingRow
           label={t("settings.about.privacyPolicy")}
           description={t("settings.about.privacyPolicyDesc")}
-        >
-          {onNavigate ? (
-            <Button
-              icon={<ArrowRightOutlined />}
-              onClick={() => onNavigate("dataPrivacy")}
-            >
-              {t("settings.about.managePrivacy")}
-            </Button>
-          ) : (
-            <Tag icon={<LockOutlined />} color="processing">
-              {t("settings.about.localFirstBadge")}
-            </Tag>
-          )}
-        </SettingRow>
+          children={null}
+        />
 
         <SettingRow
           label={t("settings.about.thirdPartyNotices")}

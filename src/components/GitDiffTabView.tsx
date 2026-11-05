@@ -1,5 +1,6 @@
 import { registerRichCodeTokens } from "@/lib/monaco";
-import { DiffEditor, loader } from "@monaco-editor/react";
+import { loader } from "@monaco-editor/react";
+import { MonacoDiffEditor } from "@/components/editors/MonacoDiffEditor";
 import * as monaco from "@/lib/monacoRuntime";
 import { Alert, Button, Empty, Image } from "antd";
 import {
@@ -290,7 +291,7 @@ function GitDiffTabView({ tabId }: GitDiffTabViewProps) {
             : [];
         }}
       >
-        <DiffEditor
+        <MonacoDiffEditor
           height="100%"
           width="100%"
           language={language}

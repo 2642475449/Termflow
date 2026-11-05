@@ -42,7 +42,7 @@ function RemoteHostEditor() {
       onCancel={() => { if (!pending) setEditor(false); }}
       onOk={() => void save()} confirmLoading={pending}
       okText={t("common.save")} cancelText={t("common.cancel")}
-      maskClosable={false} className="app-remote-host-modal"
+      mask={{ closable: false }} className="app-remote-host-modal"
     >
       <div className="app-remote-host-form">
         <p className="app-remote-muted">{t("remote.host.intro")}</p>
@@ -126,7 +126,7 @@ export function RemoteWorkspacePanel() {
         open={visible} onCancel={() => useRemoteWorkspaceStore.getState().setVisible(false)}
         title={<span className="app-remote-title"><CloudServerOutlined />{t("remote.title")}</span>}
         footer={null} width="calc(100vw - 48px)" className="app-remote-modal" centered
-        destroyOnHidden={false} maskClosable={false}
+        destroyOnHidden={false} mask={{ closable: false }}
       >
         <div className="app-remote-workspace">
           <aside className="app-remote-hosts" aria-label={t("remote.host.list")}>
@@ -293,7 +293,7 @@ export function RemoteWorkspacePanel() {
       <RemoteHostEditor />
       <Modal open={!!pendingStop} className="app-remote-stop-modal" title={t(`remote.sessions.${pendingSessionAction}Title`)} okText={t(`remote.sessions.${pendingSessionAction}`)} cancelText={t("common.cancel")}
         okButtonProps={{ danger: true }} confirmLoading={pendingStop ? pending[`${pendingStop.hostId}:${pendingSessionAction}`] : false}
-        cancelButtonProps={{ disabled: pendingStop ? pending[`${pendingStop.hostId}:${pendingSessionAction}`] : false }} maskClosable={false}
+        cancelButtonProps={{ disabled: pendingStop ? pending[`${pendingStop.hostId}:${pendingSessionAction}`] : false }} mask={{ closable: false }}
         onCancel={() => { if (!pendingStop || !pending[`${pendingStop.hostId}:${pendingSessionAction}`]) useRemoteWorkspaceStore.getState().setPendingStop(null); }}
         onOk={() => { if (pendingStop) void run(() => pendingSessionAction === "forget" ? forgetRemoteSession(pendingStop.hostId, pendingStop.session) : stopRemoteSession(pendingStop.hostId, pendingStop.session), pendingStop.hostId); }}>
         <p>{t(`remote.sessions.${pendingSessionAction}Description`, { name: pendingStop?.session.title, pid: pendingStop?.session.pid })}</p>
@@ -302,7 +302,7 @@ export function RemoteWorkspacePanel() {
       <Modal open={!!pendingServerAction} className="app-remote-server-modal" title={t(`remote.server.${pendingServerAction?.action ?? "stop"}`)}
         okText={t(`remote.server.${pendingServerAction?.action ?? "stop"}`)} cancelText={t("common.cancel")}
         okButtonProps={{ danger: true }} confirmLoading={pendingServerAction ? pending[`${pendingServerAction.hostId}:server`] : false}
-        cancelButtonProps={{ disabled: pendingServerAction ? pending[`${pendingServerAction.hostId}:server`] : false }} maskClosable={false}
+        cancelButtonProps={{ disabled: pendingServerAction ? pending[`${pendingServerAction.hostId}:server`] : false }} mask={{ closable: false }}
         onCancel={() => { if (!pendingServerAction || !pending[`${pendingServerAction.hostId}:server`]) useRemoteWorkspaceStore.getState().setPendingServerAction(null); }}
         onOk={() => { if (pendingServerAction) void run(() => manageRemoteServer(pendingServerAction.hostId, pendingServerAction.action), pendingServerAction.hostId); }}>
         <p>{t("remote.server.manageDescription")}</p>

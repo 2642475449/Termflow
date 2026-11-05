@@ -1,4 +1,11 @@
 {
+  "errorBoundary": {
+    "title": "此视图遇到了错误",
+    "description": "可以重试；如果再次出错，请保留以下错误信息。",
+    "retry": "重试",
+    "closeTab": "关闭标签页",
+    "reload": "重新加载应用"
+  },
   "runtimeCli": {
     "description": "查询运行中的 Termflow 项目、终端和实时输出。",
     "usage": "用法（也可使用应用可执行文件加 cli <命令>）：",
@@ -1292,7 +1299,7 @@
     "metaEnvironment": "终端环境",
     "untitledSession": "未命名会话",
     "clipboardReadFailed": "无法读取剪贴板内容",
-    "dropImageFailed": "无法处理拖入的图片",
+    "dropFilesFailed": "无法处理拖入的文件，请确认文件存在且可以访问",
     "imageInserted": "图片已插入输入区",
     "openPastedImagePreview": "查看粘贴图片",
     "closePastedImagePreview": "关闭图片预览",
@@ -1306,8 +1313,6 @@
     "clipboardCacheFull": "截图缓存已满，请在设置 → 数据与隐私中清理无引用图片，或使用已保存的图片文件",
     "clipboardImageAgentOnly": "请在智能体标签中粘贴截图",
     "clipboardSessionChanged": "会话已变化，图片未插入，请重新粘贴",
-    "dragImageUnsupported": "仅支持拖入 PNG / JPG / WEBP / GIF 图片",
-    "dragImageInserted": "已插入 {{count}} 张图片路径",
     "dropFilesIntoAgent": "放入 {{agent}}",
     "dropFilesIntoAgentHint": "插入文件引用到当前输入",
     "agentFallback": "智能体",

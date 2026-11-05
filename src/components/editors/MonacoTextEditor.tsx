@@ -1,7 +1,7 @@
 import { registerRichCodeTokens } from "@/lib/monaco";
 import Editor, { loader, type OnMount } from "@monaco-editor/react";
 import * as monaco from "@/lib/monacoRuntime";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef } from "react";
 import MonacoContextMenu from "@/components/editors/MonacoContextMenu";
 import {
   disableMonacoCommandPalette,
@@ -48,6 +48,13 @@ function MonacoTextEditor({
   const editorFontSize = useAppStore((s) => s.editorFontSize);
   const systemPrefersDark = useAppStore((s) => s.systemPrefersDark);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const editorId = useId();
+  // A file can be open in the workspace and auxiliary/search views at once.
+  // The React wrapper reuses models by URI and disposes them on unmount,
+  // so each editor must own a distinct model even for the same disk file.
+  const modelPath = useMemo(() => monaco.Uri.file(filePath)
+    .with({ query: `termflow-editor=${encodeURIComponent(editorId)}` }).toString(), [filePath, editorId]);
+  useLayoutEffect(() => () => { editorRef.current = null; }, [modelPath]);
   const statusDisposables = useRef<monaco.IDisposable[]>([]);
   useEffect(() => () => {
     statusDisposables.current.forEach((disposable) => disposable.dispose());
@@ -111,6 +118,8 @@ function MonacoTextEditor({
 
   const handleMount: OnMount = (editor, monaco) => {
     registerRichCodeTokens();
+    statusDisposables.current.forEach((disposable) => disposable.dispose());
+    statusDisposables.current = [];
     editorRef.current = editor;
     if (statusTabId) {
       const updateStatus = () => {
@@ -170,10 +179,11 @@ function MonacoTextEditor({
       }
     >
       <Editor
+        key={modelPath}
         height="100%"
         width="100%"
         loading={null}
-        path={filePath}
+        path={modelPath}
         language={language}
         theme={theme}
         value={value}

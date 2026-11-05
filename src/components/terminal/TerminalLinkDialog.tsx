@@ -31,7 +31,7 @@ export function TerminalLinkDialog({
     <Modal
       open={open}
       centered
-      width={600}
+      width={choosingTarget ? 520 : 480}
       className="app-terminal-link-dialog"
       title={t(choosingTarget
         ? "terminal.fileLinkChooseTitle"
@@ -40,7 +40,7 @@ export function TerminalLinkDialog({
       cancelText={t("common.cancel")}
       confirmLoading={opening}
       okButtonProps={{ disabled: choosingTarget && !selectedPath }}
-      cancelButtonProps={{ type: "text", disabled: opening }}
+      cancelButtonProps={{ disabled: opening }}
       closable={!opening}
       mask={{ closable: !opening }}
       keyboard={!opening}

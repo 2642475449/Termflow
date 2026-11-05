@@ -62,9 +62,13 @@ export function getMonacoLanguage(filePath: string): string {
 export function getMonacoThemeName(isDark: boolean): string {
   if (typeof document === "undefined") return isDark ? "vs-dark" : "vs";
   const styles = getComputedStyle(document.documentElement);
-  const color = (key: string) => styles.getPropertyValue(`--cs-code-${key}`).trim().replace(/^#/, "");
+  // Production CSS minification shortens #ffffff to #fff. Monaco's token
+  // color parser (including editor.foreground) only accepts 6/8-digit hex.
+  const expandHex = (value: string) => value.replace(/^#([\da-f]{3,4})$/i,
+    (_match, digits: string) => `#${[...digits].map((digit) => digit + digit).join("")}`);
+  const color = (key: string) => expandHex(styles.getPropertyValue(`--cs-code-${key}`).trim()).replace(/^#/, "");
   const surfaceColor = (key: string, alpha = "") => {
-    const value = styles.getPropertyValue(`--cs-${key}`).trim();
+    const value = expandHex(styles.getPropertyValue(`--cs-${key}`).trim());
     return /^#[\da-f]{6}$/i.test(value) ? value + alpha : value;
   };
   const name = isDark ? "termflow-dark" : "termflow-light";
@@ -78,7 +82,9 @@ export function getMonacoThemeName(isDark: boolean): string {
       { token: "type.identifier", foreground: color("type") },
       { token: "tag", foreground: color("keyword") },
       { token: "attribute.name", foreground: color("annotation") },
-    ],
+    // A theme can be requested before CSS variables are available. Let the
+    // base theme supply those tokens rather than passing invalid colors to Monaco.
+    ].filter((rule) => /^(?:[\da-f]{6}|[\da-f]{8})$/i.test(rule.foreground)),
     colors: Object.fromEntries(Object.entries({
       "editor.background": surfaceColor("bg-card-solid"),
       "editor.foreground": surfaceColor("text-primary"),

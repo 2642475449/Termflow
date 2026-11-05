@@ -1,4 +1,5 @@
 // 集中声明 Monaco 运行时入口：保留编辑功能与语言服务，仅加载应用识别的语言。
+import './monacoWorkers';
 import 'monaco-editor/esm/vs/language/css/monaco.contribution.js';
 import 'monaco-editor/esm/vs/language/html/monaco.contribution.js';
 import 'monaco-editor/esm/vs/language/json/monaco.contribution.js';

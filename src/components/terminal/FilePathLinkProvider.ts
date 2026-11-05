@@ -27,6 +27,10 @@ interface LogicalBufferLine {
   segments: LogicalBufferLineSegment[];
 }
 
+// Link detection is synchronous on the UI thread. Keep rendering long output,
+// but do not parse or allocate per-cell maps for oversized logical lines.
+export const MAX_TERMINAL_LINK_LINE_LENGTH = 16_384;
+
 // 先取完整候选再判断路径信号，避免未知扩展名被截成目录或已知后缀。
 // 最终是否成为链接仍由文件存在性校验决定，不把格式支持限制为扩展名白名单。
 const PATH_TOKEN_PATTERN = /(?:[a-zA-Z]:)?(?:[^\s:*?"'`()<>{}\[\]|│┃║,，。；：！？、;]+|\([^()\s]*\))+(?::\d+){0,2}/gu;
@@ -68,27 +72,34 @@ function normalizeWindowsDrivePrefix(path: string): string {
   return path.replace(/^\/(?=[a-zA-Z]:[\\/])/, "");
 }
 
-function findClosingDelimiter(text: string, start: number, open: string, close: string): number {
-  let depth = 1;
-  for (let index = start + 1; index < text.length; index += 1) {
-    // 标题内可转义方括号；目标中的反斜杠保留为 Windows 路径分隔符。
-    if (open === "[" && text[index] === "\\") {
-      index += 1;
-      continue;
-    }
-    if (open === "(" && index === start + 1 && text[index] === "<") {
-      const angleEnd = text.indexOf(">", index + 1);
-      if (angleEnd < 0) return -1;
-      index = angleEnd;
-      continue;
-    }
-    if (text[index] === open) depth += 1;
-    else if (text[index] === close) {
-      depth -= 1;
-      if (depth === 0) return index;
+function indexClosingDelimiters(text: string, open: string, close: string): Int32Array {
+  const ends = new Int32Array(text.length).fill(-1);
+  // suffix[i] is the next unmatched closer when scanning from i. Working
+  // backwards lets each opener skip an already indexed balanced expression.
+  const suffix = new Int32Array(text.length + 2).fill(-1);
+  let angleEnd = -1;
+  for (let index = text.length - 1; index >= 0; index -= 1) {
+    const char = text[index];
+    if (char === ">") angleEnd = index;
+    if (open === "[" && char === "\\") {
+      suffix[index] = suffix[index + 2];
+    } else if (char === close) {
+      suffix[index] = index;
+    } else if (char === open) {
+      // Only a destination's initial angle wrapper hides parentheses.
+      const contentStart = open === "(" && text[index + 1] === "<"
+        ? (angleEnd < 0 ? -1 : angleEnd + 1)
+        : index + 1;
+      const end = contentStart < 0 ? -1 : suffix[contentStart];
+      ends[index] = end;
+      // A nested opener does not start the outer destination's angle wrapper.
+      const nestedEnd = suffix[index + 1];
+      suffix[index] = nestedEnd < 0 ? -1 : suffix[nestedEnd + 1];
+    } else {
+      suffix[index] = suffix[index + 1];
     }
   }
-  return -1;
+  return ends;
 }
 
 export function parseTerminalFilePath(text: string): ParsedPath {
@@ -111,6 +122,9 @@ export function parseTerminalFilePath(text: string): ParsedPath {
 }
 
 export function detectTerminalFilePaths(line: string): DetectedFilePath[] {
+  if (line.length > MAX_TERMINAL_LINK_LINE_LENGTH) return [];
+  const labelEnds = indexClosingDelimiters(line, "[", "]");
+  const destinationEnds = indexClosingDelimiters(line, "(", ")");
   const matches: DetectedFilePath[] = [];
   const reservedRanges: Array<{ start: number; end: number }> = [];
   const overlapsReservedRange = (start: number, length: number) => reservedRanges.some(
@@ -139,9 +153,9 @@ export function detectTerminalFilePaths(line: string): DetectedFilePath[] {
       addPath(line.slice(index + 1, end), index + 1, true);
       index = end;
     } else if (char === "[") {
-      const labelEnd = findClosingDelimiter(line, index, "[", "]");
+      const labelEnd = labelEnds[index];
       if (labelEnd < 0 || line[labelEnd + 1] !== "(") continue;
-      const end = findClosingDelimiter(line, labelEnd + 1, "(", ")");
+      const end = destinationEnds[labelEnd + 1];
       if (end < 0) continue;
       const destination = line.slice(labelEnd + 2, end).trim()
         .replace(/\s+(?:"[^"]*"|'[^']*')$/, "").replace(/^<([^<>]+)>$/, "$1");
@@ -313,16 +327,23 @@ export class FilePathLinkProvider implements ILinkProvider {
 
     // A wrapped xterm row is a continuation of the previous row. Walk in both
     // directions so a hover on any visual row sees the complete logical line.
+    // Allow two cells per wide character and one padding cell. Bound traversal
+    // before translating rows, then enforce the exact UTF-16 length below.
+    const minRowLength = Math.max(1, Math.floor((this.terminal.cols - 1) / 2));
+    const maxRows = Math.ceil(MAX_TERMINAL_LINK_LINE_LENGTH / minRowLength) + 1;
     while (startIndex > 0 && buffer.getLine(startIndex)?.isWrapped) {
       startIndex -= 1;
+      if (bufferLineNumber - startIndex > maxRows) return undefined;
     }
 
     let endIndex = startIndex;
     while (endIndex + 1 < buffer.length && buffer.getLine(endIndex + 1)?.isWrapped) {
       endIndex += 1;
+      if (endIndex - startIndex + 1 > maxRows) return undefined;
     }
 
     const segments: LogicalBufferLineSegment[] = [];
+    let textLength = 0;
     for (let index = startIndex; index <= endIndex; index += 1) {
       const line = buffer.getLine(index);
       if (!line) break;
@@ -335,6 +356,8 @@ export class FilePathLinkProvider implements ILinkProvider {
         && lastCell?.getWidth() === 1 && lastCell.getChars() === ""
         && nextCell?.getWidth() === 2;
       const text = line.translateToString(!hasWrappedContinuation, 0, this.terminal.cols - Number(hasWideWrapPadding));
+      textLength += text.length;
+      if (textLength > MAX_TERMINAL_LINK_LINE_LENGTH) return undefined;
       segments.push({
         row: index + 1,
         // 保留软换行前的真实字符与空格，只丢弃宽字符换行的 null 占位。

@@ -200,7 +200,7 @@ fn parse_numstat_value(value: &str) -> Option<usize> {
 fn parse_numstat_output(output: &str) -> HashMap<String, (Option<usize>, Option<usize>)> {
     let mut stats = HashMap::new();
 
-    for line in output.lines() {
+    for line in output.split('\0').filter(|record| !record.is_empty()) {
         let mut parts = line.splitn(3, '\t');
         let Some(insertions_raw) = parts.next() else {
             continue;
@@ -233,13 +233,33 @@ pub fn collect_numstat(
     staged: bool,
 ) -> Result<HashMap<String, (Option<usize>, Option<usize>)>, String> {
     let args: &[&str] = if staged {
-        &["diff", "--cached", "--root", "--numstat", "--no-renames"]
+        &[
+            "diff",
+            "--cached",
+            "--root",
+            "--numstat",
+            "-z",
+            "--no-renames",
+        ]
     } else {
-        &["diff", "--numstat", "--no-renames"]
+        &["diff", "--numstat", "-z", "--no-renames"]
     };
 
-    let output = run_git_text_command(project_path, args)?;
-    Ok(parse_numstat_output(&output))
+    let output = git_command()
+        .args(args)
+        .env("GIT_OPTIONAL_LOCKS", "0")
+        .current_dir(normalize_input_path(project_path))
+        .output()
+        .map_err(|error| format!("Failed to execute git diff --numstat: {error}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "git diff --numstat failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    Ok(parse_numstat_output(&String::from_utf8_lossy(
+        &output.stdout,
+    )))
 }
 
 /// Stage files using git add.
@@ -494,6 +514,17 @@ fn git_image_mime_type(file_path: &str) -> Option<&'static str> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn numstat_preserves_nul_delimited_special_paths_and_binary_entries() {
+        let stats =
+            super::parse_numstat_output("2\t1\t中文 file\twith\nnewline.txt\0-\t-\tbinary.dat\0");
+        assert_eq!(
+            stats.get("中文 file\twith\nnewline.txt"),
+            Some(&(Some(2), Some(1)))
+        );
+        assert_eq!(stats.get("binary.dat"), Some(&(None, None)));
+    }
+
     use super::{
         ensure_repository_allows_normal_commit, git_repository_lock_key, is_symbolic_remote_head,
         repository_operation_state, resolve_worktree_file_path, trash_worktree_path,

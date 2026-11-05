@@ -1,3 +1,8 @@
 # The previous version contained a literal NUL byte in a regular expression.
 # Force a textual diff while transitioning it to escaped control characters.
 src/components/terminalTitle.ts text diff
+
+# Keep Tauri configuration and generated schemas consistent with tool output.
+src-tauri/Cargo.toml text eol=lf
+src-tauri/gen/schemas/desktop-schema.json text eol=lf
+src-tauri/gen/schemas/windows-schema.json text eol=lf

@@ -1,4 +1,11 @@
 {
+  "errorBoundary": {
+    "title": "This view encountered an error",
+    "description": "Try again. If the error returns, keep the details below.",
+    "retry": "Try again",
+    "closeTab": "Close tab",
+    "reload": "Reload app"
+  },
   "runtimeCli": {
     "description": "Query projects, terminals, and live output from the running Termflow app.",
     "usage": "Usage (or invoke the application executable with: cli <command>):",
@@ -1292,7 +1299,7 @@
     "metaEnvironment": "Environment",
     "untitledSession": "Untitled Session",
     "clipboardReadFailed": "Failed to read clipboard contents",
-    "dropImageFailed": "Failed to process the dropped image",
+    "dropFilesFailed": "Failed to process dropped files. Check that they exist and are accessible",
     "imageInserted": "Image path inserted into the input area",
     "openPastedImagePreview": "View pasted image",
     "closePastedImagePreview": "Close image preview",
@@ -1306,8 +1313,6 @@
     "clipboardCacheFull": "Screenshot cache is full. Clear unreferenced images in Settings → Data & Privacy, or use an existing image file",
     "clipboardImageAgentOnly": "Paste screenshots in an agent tab",
     "clipboardSessionChanged": "The session changed. The image was not inserted; please paste again",
-    "dragImageUnsupported": "Only PNG / JPG / WEBP / GIF images can be dropped here",
-    "dragImageInserted": "Inserted {{count}} image path(s)",
     "dropFilesIntoAgent": "Drop into {{agent}}",
     "dropFilesIntoAgentHint": "Insert file references into the current input",
     "agentFallback": "Agent",

@@ -18,7 +18,7 @@ export function ProjectIconEditor({ onClosed }: { onClosed?: () => void }) {
   const invalid = !!editor && ((editor.draft.mode === "emoji" && !isProjectIconEmoji(editor.draft.emoji ?? "")) || (editor.draft.mode === "image" && !editor.draft.image));
 
   return (
-    <Modal afterClose={onClosed} title={t("projectIcons.title")} open={!!editor} onCancel={close} onOk={() => void save()} confirmLoading={editor?.saving} okText={t("common.save")} cancelText={t("common.cancel")} okButtonProps={{ disabled: busy || invalid }} cancelButtonProps={{ disabled: editor?.saving }} closable={!editor?.saving} maskClosable={false} keyboard={!editor?.saving} width={440}>
+    <Modal afterClose={onClosed} title={t("projectIcons.title")} open={!!editor} onCancel={close} onOk={() => void save()} confirmLoading={editor?.saving} okText={t("common.save")} cancelText={t("common.cancel")} okButtonProps={{ disabled: busy || invalid }} cancelButtonProps={{ disabled: editor?.saving }} closable={!editor?.saving} mask={{ closable: false }} keyboard={!editor?.saving} width={440}>
       {editor ? (
         <div className="app-project-icon-editor" aria-busy={editor.loading || editor.saving || editor.importing}>
           <div className="app-project-icon-editor__preview">

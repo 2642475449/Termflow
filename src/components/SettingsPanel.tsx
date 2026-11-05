@@ -3308,7 +3308,7 @@ function SettingsPanel() {
         className="app-settings-scroll"
       >
         <div className={`app-settings-content ${contentLayout}`} data-settings-page={activePage}>
-          {activePage === "about" ? <AboutPage onNavigate={(page) => selectPage(page as SettingsPage)} /> : <PageComponent />}
+          <PageComponent />
         </div>
       </div>
     </div>

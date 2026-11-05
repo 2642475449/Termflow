@@ -99,6 +99,7 @@ import {
   readTerminalPasteEvent,
   type TerminalClipboardContent,
 } from "@/lib/terminalClipboard";
+import { buildAgentFileReferencePrompt, sanitizePromptPath, type AgentFileDropEntry } from "@/lib/terminalFileDrop";
 import type { AgentCliInfo } from "@/types";
 import { useTranslation } from "react-i18next";
 import "@xterm/xterm/css/xterm.css";
@@ -161,12 +162,6 @@ interface TerminalProps {
   };
   onClose?: () => void;
 }
-
-type AgentFileDropEntry = {
-  path: string;
-  kind: "file" | "directory";
-  name?: string;
-};
 
 type AgentFileDropPayload = {
   type: "termflow-agent-files";
@@ -247,7 +242,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
   const outputFrameGateRef = useRef<ReturnType<typeof createTerminalOutputFrameGate> | null>(null);
   const suppressedFocusSequenceUntilRef = useRef(0);
   const processedResourceDropStartedAtRef = useRef<number | null>(null);
-  const [isImageDragOver, setIsImageDragOver] = useState(false);
+  const [isExternalFileDragOver, setIsExternalFileDragOver] = useState(false);
   const [isAgentFileDragOver, setIsAgentFileDragOver] = useState(false);
   const [contextMenuSelection, setContextMenuSelection] = useState("");
   const [installedAgents, setInstalledAgents] = useState<AgentCliInfo[]>([]);
@@ -723,6 +718,8 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     setIsAgentFileDragOver(false);
   }, []);
 
+  const insertFileReferencesRef = useRef<((payload: Pick<AgentFileDropPayload, "projectPath" | "entries">) => Promise<void>) | null>(null);
+
   const handleAgentFileDrop = useCallback(
     async (event: ReactDragEvent<HTMLDivElement>) => {
       const payload = readAgentFileDragPayload(event.dataTransfer);
@@ -732,28 +729,18 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       event.stopPropagation();
       setIsAgentFileDragOver(false);
 
-      const agentId = currentSession?.agentId;
-      const hasDirectory = payload.entries.some((entry) => entry.kind === "directory");
-      if (agentId === "antigravity" && hasDirectory) {
-        const confirmed = await confirmAntigravityDirectoryDrop(t);
-        if (!confirmed) return;
+      try {
+        await insertFileReferencesRef.current?.(payload);
+      } catch (error) {
+        message.error(error instanceof Error ? error.message : t("terminal.dropFilesFailed"));
       }
-
-      const text = buildAgentFileReferencePrompt({
-        agentId,
-        projectPath: payload.projectPath,
-        entries: payload.entries,
-      });
-      if (!text) return;
-
-      await ptyInput(sessionId, text);
-      message.success(t("terminal.agentFilesInserted", { count: payload.entries.length }));
     },
     [currentSession?.agentId, sessionId, t]
   );
 
   const insertAgentFileReferences = useCallback(
     async (payload: Pick<AgentFileDropPayload, "projectPath" | "entries">) => {
+      const sessionPath = currentSessionPathRef.current;
       const agentId = currentSession?.agentId;
       const hasDirectory = payload.entries.some((entry) => entry.kind === "directory");
       if (agentId === "antigravity" && hasDirectory) {
@@ -767,12 +754,19 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
         entries: payload.entries,
       });
       if (!text) return;
+      if (currentSessionPathRef.current !== sessionPath) return;
 
-      await ptyInput(sessionId, text);
+      if (enqueueInputRef.current) {
+        await enqueueInputRef.current(() => ptyInput(sessionId, text));
+      } else {
+        await ptyInput(sessionId, text);
+      }
       message.success(t("terminal.agentFilesInserted", { count: payload.entries.length }));
     },
     [currentSession?.agentId, sessionId, t]
   );
+
+  insertFileReferencesRef.current = insertAgentFileReferences;
 
   useEffect(() => {
     if (!resourceDragState || resourceDragState.type !== "agent-resource") {
@@ -801,12 +795,13 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     void insertAgentFileReferences({
       projectPath: resourceDragState.projectPath,
       entries: resourceDragState.entries,
-    });
+    }).catch((error) => message.error(error instanceof Error ? error.message : t("terminal.dropFilesFailed")));
   }, [
     insertAgentFileReferences,
     isClientPointInsideTerminal,
     resourceDragState,
     setResourceDragState,
+    t,
   ]);
 
   // Keep refs in sync with latest props
@@ -1546,25 +1541,35 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     const currentWindow = getCurrentWindow();
     const dropPromise = currentWindow.onDragDropEvent((event) => {
       if (event.payload.type === "leave") {
-        setIsImageDragOver(false);
+        setIsExternalFileDragOver(false);
         return;
       }
 
       if (event.payload.type === "enter" || event.payload.type === "over") {
-        setIsImageDragOver(isDropPositionInsideTerminalRef.current?.(event.payload.position) ?? false);
+        setIsExternalFileDragOver(isDropPositionInsideTerminalRef.current?.(event.payload.position) ?? false);
         return;
       }
 
       if (event.payload.type === "drop") {
         const insideTerminal = isDropPositionInsideTerminalRef.current?.(event.payload.position) ?? false;
-        setIsImageDragOver(false);
+        setIsExternalFileDragOver(false);
         if (!insideTerminal) {
           return;
         }
 
-        insertDroppedImagePaths(sessionId, event.payload.paths, t).catch((error) => {
+        const projectPath = currentSessionPathRef.current;
+        const workingDirectory = currentTerminalDirectoryRef.current;
+        void Promise.all(event.payload.paths.map(async (path): Promise<AgentFileDropEntry> => {
+          const resolution = await resolveTerminalLink(projectPath, workingDirectory, path);
+          const target = resolution.targets[0];
+          if (!target) throw new Error(t("terminal.dropFilesFailed"));
+          return { path, kind: target.kind };
+        })).then(async (entries) => {
+          if (isTerminalDisposed || currentSessionPathRef.current !== projectPath || entries.length === 0) return;
+          await insertFileReferencesRef.current?.({ projectPath, entries });
+        }).catch((error) => {
           const errorMessage =
-            error instanceof Error ? error.message : t("terminal.dropImageFailed");
+            error instanceof Error ? error.message : t("terminal.dropFilesFailed");
           message.error(errorMessage);
         });
       }
@@ -1713,8 +1718,8 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
           className="app-terminal-surface min-h-0 w-full flex-1 p-1"
           style={{
             background: termTheme.cssBackground,
-            outline: isImageDragOver || isAgentFileDragOver ? "2px dashed var(--cs-accent)" : "none",
-            outlineOffset: isImageDragOver || isAgentFileDragOver ? "-4px" : "0",
+            outline: isExternalFileDragOver || isAgentFileDragOver ? "2px dashed var(--cs-accent)" : "none",
+            outlineOffset: isExternalFileDragOver || isAgentFileDragOver ? "-4px" : "0",
             position: "relative",
           }}
           onDragEnter={handleAgentFileDragEnter}
@@ -1722,7 +1727,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
           onDragLeave={handleAgentFileDragLeave}
           onDrop={handleAgentFileDrop}
         >
-          {isAgentFileDragOver ? (
+          {isAgentFileDragOver || isExternalFileDragOver ? (
             <div
               className="pointer-events-none absolute inset-x-3 bottom-3 z-10 rounded-sm border px-3 py-2 text-xs shadow-xs"
               style={{
@@ -1812,31 +1817,6 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
 
 export default Terminal;
 
-function quotePathForShell(path: string): string {
-  const escaped = path.replace(/"/g, '\\"');
-  return `"${escaped}"`;
-}
-
-async function insertDroppedImagePaths(
-  sessionId: string,
-  paths: string[],
-  t: (key: string, options?: Record<string, unknown>) => string
-) {
-  const imagePaths = paths.filter(isSupportedImagePath);
-  if (imagePaths.length === 0) {
-    message.warning(t("terminal.dragImageUnsupported"));
-    return;
-  }
-
-  const payload = imagePaths.map((path) => quotePathForShell(path)).join(" ");
-  await ptyInput(sessionId, payload);
-  message.success(t("terminal.dragImageInserted", { count: imagePaths.length }));
-}
-
-function isSupportedImagePath(path: string): boolean {
-  return /\.(png|jpe?g|webp|gif)$/i.test(path);
-}
-
 function hasAgentFileDragPayload(dataTransfer: DataTransfer): boolean {
   return Array.from(dataTransfer.types).includes(AGENT_FILE_DRAG_MIME);
 }
@@ -1872,69 +1852,6 @@ function readAgentFileDragPayload(dataTransfer: DataTransfer): AgentFileDropPayl
   } catch {
     return null;
   }
-}
-
-function buildAgentFileReferencePrompt({
-  agentId,
-  projectPath,
-  entries,
-}: {
-  agentId: string | undefined;
-  projectPath: string;
-  entries: AgentFileDropEntry[];
-}): string {
-  const references = entries.map((entry) => formatAgentFileReference(agentId, projectPath, entry));
-  if (references.length === 0) return "";
-
-  if (agentId === "powershell" || agentId === "cmd") {
-    return references.join(" ");
-  }
-
-  return references.join(" ");
-}
-
-function formatAgentFileReference(
-  agentId: string | undefined,
-  projectPath: string,
-  entry: AgentFileDropEntry
-): string {
-  const path = buildAgentReferencePath(projectPath, entry.path);
-
-  switch (agentId) {
-    case "claude":
-    case "antigravity":
-    case "opencode":
-      return `@${path}`;
-    case "codex":
-    case "qoder":
-      return entry.kind === "directory"
-        ? `${path} (${entry.kind})`
-        : path;
-    case "powershell":
-    case "cmd":
-      return quotePathForShell(entry.path);
-    default:
-      return path;
-  }
-}
-
-function buildAgentReferencePath(projectPath: string, entryPath: string): string {
-  const normalizedProject = normalizePromptPath(projectPath);
-  const normalizedEntry = normalizePromptPath(entryPath);
-  const prefix = `${normalizedProject}/`;
-  const path = normalizedEntry.startsWith(prefix)
-    ? normalizedEntry.slice(prefix.length)
-    : normalizedEntry;
-
-  return path || ".";
-}
-
-function normalizePromptPath(path: string): string {
-  return sanitizePromptPath(path).replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/$/, "");
-}
-
-function sanitizePromptPath(path: string): string {
-  return path.replace(/[\r\n]/g, " ").trim();
 }
 
 function formatTerminalAgentName(agentId: string): string {

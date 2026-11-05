@@ -1,11 +1,12 @@
-use git2::{ErrorCode, Repository, StatusOptions};
+use git2::{ErrorCode, Repository};
 use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::path::Path;
 
 use super::types::{GitBranchInfo, GitFileStatus, GitRepoInfo};
 use super::utils::{
-    collect_numstat, open_repo, repository_operation_state, run_git_read, run_git_write,
+    collect_numstat, git_command, open_repo, repository_operation_state, run_git_read,
+    run_git_write,
 };
 
 #[tauri::command]
@@ -24,53 +25,77 @@ pub async fn git_init_repository(project_path: String) -> Result<(), String> {
     .await
 }
 
-fn map_index_status(status: git2::Status) -> &'static str {
-    if status.contains(git2::Status::INDEX_TYPECHANGE) {
-        "typechange"
-    } else if status.contains(git2::Status::INDEX_RENAMED) {
-        "renamed"
-    } else if status.contains(git2::Status::INDEX_NEW) {
-        "added"
-    } else if status.contains(git2::Status::INDEX_DELETED) {
-        "deleted"
-    } else {
-        "modified"
+/// Porcelain v1 uses NUL-delimited paths; rename records contain destination first.
+/// Parse bytes before decoding paths so spaces, tabs and newlines stay intact.
+fn parse_status_output(output: &[u8]) -> Result<Vec<GitFileStatus>, String> {
+    let mut records = output.split(|byte| *byte == 0);
+    let mut result = Vec::new();
+    while let Some(record) = records.next() {
+        if record.is_empty() {
+            continue;
+        }
+        if record.len() < 4 || record[2] != b' ' {
+            return Err("Invalid git status record".to_string());
+        }
+        let x = record[0];
+        let y = record[1];
+        let path = String::from_utf8_lossy(&record[3..]).into_owned();
+        let old_path = if matches!(x, b'R' | b'C') || matches!(y, b'R' | b'C') {
+            let old = records
+                .next()
+                .filter(|old| !old.is_empty())
+                .ok_or_else(|| "Missing source path in git status rename".to_string())?;
+            Some(String::from_utf8_lossy(old).into_owned())
+        } else {
+            None
+        };
+        let conflict = matches!(
+            (x, y),
+            (b'D', b'D')
+                | (b'A', b'U')
+                | (b'U', b'D')
+                | (b'U', b'A')
+                | (b'D', b'U')
+                | (b'A', b'A')
+                | (b'U', b'U')
+        );
+        if conflict || (x == b'?' && y == b'?') {
+            result.push(GitFileStatus {
+                path,
+                old_path: None,
+                status_type: if conflict { "conflicted" } else { "untracked" }.to_string(),
+                staged: false,
+                insertions: None,
+                deletions: None,
+            });
+            continue;
+        }
+        for (code, staged) in [(x, true), (y, false)] {
+            let status_type = match code {
+                b' ' | b'!' => continue,
+                b'A' => "added",
+                b'M' => "modified",
+                b'D' => "deleted",
+                b'R' => "renamed",
+                b'C' => "added",
+                b'T' => "typechange",
+                _ => return Err(format!("Unsupported git status code: {}", code as char)),
+            };
+            result.push(GitFileStatus {
+                path: path.clone(),
+                old_path: if matches!(code, b'R' | b'C') {
+                    old_path.clone()
+                } else {
+                    None
+                },
+                status_type: status_type.to_string(),
+                staged,
+                insertions: None,
+                deletions: None,
+            });
+        }
     }
-}
-
-fn map_worktree_status(status: git2::Status) -> &'static str {
-    if status.contains(git2::Status::CONFLICTED) {
-        "conflicted"
-    } else if status.contains(git2::Status::WT_TYPECHANGE) {
-        "typechange"
-    } else if status.contains(git2::Status::WT_RENAMED) {
-        "renamed"
-    } else if status.contains(git2::Status::WT_NEW) {
-        "untracked"
-    } else if status.contains(git2::Status::WT_DELETED) {
-        "deleted"
-    } else {
-        "modified"
-    }
-}
-
-fn rename_paths(delta: Option<git2::DiffDelta<'_>>, fallback: &str) -> (String, Option<String>) {
-    let Some(delta) = delta else {
-        return (fallback.to_string(), None);
-    };
-    let old_path = delta
-        .old_file()
-        .path()
-        .map(|path| path.to_string_lossy().to_string());
-    let new_path = delta
-        .new_file()
-        .path()
-        .map(|path| path.to_string_lossy().to_string());
-    let path = new_path
-        .or_else(|| old_path.clone())
-        .unwrap_or_else(|| fallback.to_string());
-    let previous = old_path.filter(|old| old != &path);
-    (path, previous)
+    Ok(result)
 }
 
 fn count_untracked_lines(
@@ -150,13 +175,13 @@ fn case_insensitive_index_collisions(repo: &Repository) -> Result<HashSet<String
 }
 
 fn is_case_insensitive_phantom_deletion(
-    status: git2::Status,
+    status: &str,
     relative_path: &str,
     collision_keys: &HashSet<String>,
     worktree_root: &Path,
 ) -> bool {
     cfg!(target_os = "windows")
-        && status.contains(git2::Status::WT_DELETED)
+        && status == "deleted"
         && collision_keys.contains(&relative_path.replace('\\', "/").to_lowercase())
         && worktree_root.join(relative_path).exists()
 }
@@ -262,82 +287,43 @@ fn git_status_sync(project_path: String) -> Result<Vec<GitFileStatus>, String> {
     let unstaged_numstat = collect_numstat(&project_path, false)?;
     let case_collision_keys = case_insensitive_index_collisions(&repo)?;
 
-    let mut opts = StatusOptions::new();
-    opts.include_untracked(true)
-        .recurse_untracked_dirs(true)
-        .renames_head_to_index(true)
-        .renames_index_to_workdir(true)
-        .renames_from_rewrites(true)
-        .include_ignored(false);
-
-    let statuses = repo
-        .statuses(Some(&mut opts))
-        .map_err(|e| format!("获取 Git 状态失败: {}", e))?;
-
-    let mut result = Vec::new();
-
-    for entry in statuses.iter() {
-        let s = entry.status();
-        let path = match entry.path() {
-            Some(p) => p.to_string(),
-            None => continue,
-        };
-
-        // Staged changes (in index)
-        if s.intersects(
-            git2::Status::INDEX_NEW
-                | git2::Status::INDEX_MODIFIED
-                | git2::Status::INDEX_DELETED
-                | git2::Status::INDEX_RENAMED
-                | git2::Status::INDEX_TYPECHANGE,
-        ) {
-            let (staged_path, old_path) = rename_paths(entry.head_to_index(), &path);
-            let (insertions, deletions) = staged_numstat
-                .get(&staged_path)
-                .cloned()
-                .unwrap_or((None, None));
-            result.push(GitFileStatus {
-                path: staged_path,
-                old_path,
-                status_type: map_index_status(s).to_string(),
-                staged: true,
-                insertions,
-                deletions,
-            });
-        }
-
-        // Unstaged changes (in working tree)
-        if s.intersects(
-            git2::Status::WT_MODIFIED
-                | git2::Status::WT_DELETED
-                | git2::Status::WT_RENAMED
-                | git2::Status::WT_TYPECHANGE
-                | git2::Status::WT_NEW
-                | git2::Status::CONFLICTED,
-        ) && !is_case_insensitive_phantom_deletion(
-            s,
-            &path,
-            &case_collision_keys,
-            &worktree_root,
-        ) {
-            let (worktree_path, old_path) = rename_paths(entry.index_to_workdir(), &path);
-            let (insertions, deletions) = if s.contains(git2::Status::WT_NEW) {
-                count_untracked_lines(&worktree_root, &worktree_path)
+    let output = git_command()
+        .args(["status", "--porcelain=v1", "-z", "-uall", "--renames"])
+        .env("GIT_OPTIONAL_LOCKS", "0")
+        .current_dir(&worktree_root)
+        .output()
+        .map_err(|error| format!("Failed to execute git status: {error}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "git status failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    let mut result = parse_status_output(&output.stdout)?;
+    // Keep the existing Windows workaround for repositories containing paths
+    // that differ only in case and cannot coexist on the local filesystem.
+    result.retain(|entry| {
+        entry.staged
+            || !is_case_insensitive_phantom_deletion(
+                &entry.status_type,
+                &entry.path,
+                &case_collision_keys,
+                &worktree_root,
+            )
+    });
+    for entry in &mut result {
+        let (insertions, deletions) = if entry.status_type == "untracked" {
+            count_untracked_lines(&worktree_root, &entry.path)
+        } else {
+            let stats = if entry.staged {
+                &staged_numstat
             } else {
-                unstaged_numstat
-                    .get(&worktree_path)
-                    .cloned()
-                    .unwrap_or((None, None))
+                &unstaged_numstat
             };
-            result.push(GitFileStatus {
-                path: worktree_path,
-                old_path,
-                status_type: map_worktree_status(s).to_string(),
-                staged: false,
-                insertions,
-                deletions,
-            });
-        }
+            stats.get(&entry.path).copied().unwrap_or((None, None))
+        };
+        entry.insertions = insertions;
+        entry.deletions = deletions;
     }
 
     Ok(result)
@@ -347,10 +333,9 @@ fn git_status_sync(project_path: String) -> Result<Vec<GitFileStatus>, String> {
 mod tests {
     use super::{
         collect_case_insensitive_index_collisions, count_untracked_lines, git_status_sync,
-        is_case_insensitive_phantom_deletion, map_index_status, map_worktree_status, rename_paths,
-        resolve_branch_info,
+        is_case_insensitive_phantom_deletion, parse_status_output, resolve_branch_info,
     };
-    use git2::{Repository, Signature, StatusOptions};
+    use git2::{Repository, Signature};
     use std::collections::HashSet;
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -387,16 +372,38 @@ mod tests {
     }
 
     #[test]
-    fn maps_staged_and_worktree_status_independently() {
-        let mixed = git2::Status::INDEX_NEW | git2::Status::WT_MODIFIED;
-        assert_eq!(map_index_status(mixed), "added");
-        assert_eq!(map_worktree_status(mixed), "modified");
+    fn parses_both_sides_and_special_paths() {
+        let entries =
+            parse_status_output(b"AM folder/space \t\n.txt\0?? new.txt\0T  type.txt\0").unwrap();
+        assert_eq!(entries.len(), 4);
+        assert_eq!(entries[0].path, "folder/space \t\n.txt");
+        assert_eq!(entries[0].status_type, "added");
+        assert!(entries[0].staged);
+        assert_eq!(entries[1].status_type, "modified");
+        assert!(!entries[1].staged);
+        assert_eq!(entries[2].status_type, "untracked");
+        assert_eq!(entries[3].status_type, "typechange");
     }
 
     #[test]
-    fn rename_takes_precedence_within_each_side() {
-        assert_eq!(map_index_status(git2::Status::INDEX_RENAMED), "renamed");
-        assert_eq!(map_worktree_status(git2::Status::WT_RENAMED), "renamed");
+    fn parses_all_unmerged_pairs_as_one_conflict() {
+        for pair in ["DD", "AU", "UD", "UA", "DU", "AA", "UU"] {
+            let entries = parse_status_output(format!("{pair} conflict.txt\0").as_bytes()).unwrap();
+            assert_eq!(entries.len(), 1);
+            assert_eq!(entries[0].status_type, "conflicted");
+            assert!(!entries[0].staged);
+        }
+    }
+
+    #[test]
+    fn parses_rename_destination_before_source() {
+        let entries = parse_status_output(b"RM new name.txt\0old name.txt\0").unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].path, "new name.txt");
+        assert_eq!(entries[0].old_path.as_deref(), Some("old name.txt"));
+        assert_eq!(entries[0].status_type, "renamed");
+        assert!(entries[1].old_path.is_none());
+        assert!(parse_status_output(b"R  dest\0").is_err());
     }
 
     #[test]
@@ -425,13 +432,13 @@ mod tests {
         let collisions = collect_case_insensitive_index_collisions([upper_path, lower_path]);
 
         assert!(is_case_insensitive_phantom_deletion(
-            git2::Status::WT_DELETED,
+            "deleted",
             lower_path,
             &collisions,
             &root,
         ));
         assert!(!is_case_insensitive_phantom_deletion(
-            git2::Status::WT_MODIFIED,
+            "modified",
             lower_path,
             &collisions,
             &root,
@@ -439,7 +446,7 @@ mod tests {
 
         fs::remove_file(root.join(upper_path)).unwrap();
         assert!(!is_case_insensitive_phantom_deletion(
-            git2::Status::WT_DELETED,
+            "deleted",
             lower_path,
             &collisions,
             &root,
@@ -455,18 +462,21 @@ mod tests {
         commit_file(&repo, &root, "before.txt");
         fs::rename(root.join("before.txt"), root.join("after.txt")).unwrap();
 
-        let mut options = StatusOptions::new();
-        options
-            .include_untracked(true)
-            .renames_index_to_workdir(true);
-        let statuses = repo.statuses(Some(&mut options)).unwrap();
-        let entry = statuses.iter().next().unwrap();
-        assert!(entry.status().contains(git2::Status::WT_RENAMED));
-        let (path, old_path) = rename_paths(entry.index_to_workdir(), entry.path().unwrap());
-        assert_eq!(path, "after.txt");
-        assert_eq!(old_path.as_deref(), Some("before.txt"));
+        let output = super::git_command()
+            .args(["add", "--all"])
+            .current_dir(&root)
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        let statuses = git_status_sync(root.to_string_lossy().into_owned()).unwrap();
+        let renamed = statuses
+            .iter()
+            .find(|entry| entry.status_type == "renamed")
+            .unwrap();
+        assert_eq!(renamed.path, "after.txt");
+        assert_eq!(renamed.old_path.as_deref(), Some("before.txt"));
+        assert!(renamed.staged);
 
-        drop(statuses);
         drop(repo);
         fs::remove_dir_all(root).unwrap();
     }
@@ -518,6 +528,87 @@ mod tests {
 
         drop(repo);
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn cli_status_preserves_partial_staging_and_special_path_numstat() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let repo = Repository::init(temp.path()).unwrap();
+        let name = "中文 file.txt";
+        commit_file(&repo, temp.path(), name);
+        let run = |args: &[&str]| {
+            let output = super::git_command()
+                .args(args)
+                .current_dir(temp.path())
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        fs::write(temp.path().join(name), "staged content\n").unwrap();
+        run(&["add", "--", name]);
+        fs::write(temp.path().join(name), "working content\nsecond line\n").unwrap();
+        fs::write(temp.path().join(".gitignore"), "ignored.txt\n").unwrap();
+        fs::write(temp.path().join("ignored.txt"), "ignored\n").unwrap();
+        let entries = git_status_sync(temp.path().to_string_lossy().into_owned()).unwrap();
+        let entries: Vec<_> = entries.iter().filter(|entry| entry.path == name).collect();
+        assert_eq!(entries.len(), 2);
+        let staged = entries.iter().find(|entry| entry.staged).unwrap();
+        assert_eq!((staged.insertions, staged.deletions), (Some(1), Some(1)));
+        let unstaged = entries.iter().find(|entry| !entry.staged).unwrap();
+        assert_eq!(
+            (unstaged.insertions, unstaged.deletions),
+            (Some(2), Some(1))
+        );
+        let all = git_status_sync(temp.path().to_string_lossy().into_owned()).unwrap();
+        assert!(!all.iter().any(|entry| entry.path == "ignored.txt"));
+    }
+
+    #[test]
+    fn cli_status_respects_lf_attributes_after_crlf_checkout() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let repo = Repository::init(temp.path()).unwrap();
+        repo.config()
+            .unwrap()
+            .set_bool("core.autocrlf", true)
+            .unwrap();
+        commit_file(&repo, temp.path(), "config.toml");
+        // Record a CRLF worktree in the index stat cache, then restore LF bytes
+        // and add an LF rule without touching the index, as code generators do.
+        fs::write(temp.path().join("config.toml"), "same content\r\n").unwrap();
+        let output = super::git_command()
+            .args(["add", "--", "config.toml"])
+            .current_dir(temp.path())
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        fs::write(temp.path().join("config.toml"), "same content\n").unwrap();
+        fs::write(
+            temp.path().join(".gitattributes"),
+            "config.toml text eol=lf\n",
+        )
+        .unwrap();
+        let before = fs::read(repo.path().join("index")).unwrap();
+        let entries = git_status_sync(temp.path().to_string_lossy().into_owned()).unwrap();
+        let output = super::git_command()
+            .args(["status", "--porcelain=v1", "-z", "-uall", "--renames"])
+            .env("GIT_OPTIONAL_LOCKS", "0")
+            .current_dir(temp.path())
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        let expected = parse_status_output(&output.stdout).unwrap();
+        let summary = |entries: &[super::GitFileStatus]| {
+            entries
+                .iter()
+                .map(|entry| (entry.path.clone(), entry.status_type.clone(), entry.staged))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(summary(&entries), summary(&expected));
+        assert_eq!(before, fs::read(repo.path().join("index")).unwrap());
     }
 
     #[test]

@@ -1,4 +1,11 @@
 {
+  "errorBoundary": {
+    "title": "このビューでエラーが発生しました",
+    "description": "再試行できます。再発する場合は、以下のエラー情報を保存してください。",
+    "retry": "再試行",
+    "closeTab": "タブを閉じる",
+    "reload": "アプリを再読み込み"
+  },
   "runtimeCli": {
     "description": "実行中の Termflow のプロジェクト、ターミナル、リアルタイム出力を照会します。",
     "usage": "使用方法（アプリの実行ファイルに cli <コマンド> を付けても実行できます）：",
@@ -1292,7 +1299,7 @@
     "metaEnvironment": "シェル",
     "untitledSession": "名称未設定のセッション",
     "clipboardReadFailed": "クリップボードの内容を読み取れませんでした",
-    "dropImageFailed": "ドロップされた画像を処理できませんでした",
+    "dropFilesFailed": "ドロップされたファイルを処理できません。ファイルの存在とアクセス権を確認してください",
     "imageInserted": "画像パスを入力欄に挿入しました",
     "openPastedImagePreview": "貼り付けた画像を表示",
     "closePastedImagePreview": "画像プレビューを閉じる",
@@ -1306,8 +1313,6 @@
     "clipboardCacheFull": "画像キャッシュが 500 MiB に達しました。保存済みの画像ファイルを使用してください",
     "clipboardImageAgentOnly": "エージェントのタブにスクリーンショットを貼り付けてください",
     "clipboardSessionChanged": "セッションが変更されました。画像を再度貼り付けてください",
-    "dragImageUnsupported": "ここにドロップできる画像は PNG / JPG / WEBP / GIF のみです",
-    "dragImageInserted": "{{count}} 件の画像パスを挿入しました",
     "dropFilesIntoAgent": "{{agent}} にドロップ",
     "dropFilesIntoAgentHint": "現在の入力へファイル参照を挿入",
     "agentFallback": "エージェント",

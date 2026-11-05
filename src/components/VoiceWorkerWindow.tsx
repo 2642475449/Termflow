@@ -136,12 +136,8 @@ function VoiceWorkerWindow() {
         });
       });
     },
-    onError: (err) => {
-      if (err.code === "empty_audio") {
-        return;
-      }
-      void emit("voice-worker-error", err);
-    },
+    // 录音/识别错误由 errorMessage 同步到语音胶囊，避免再触发全局通知。
+    // voice-worker-error 仅用于胶囊未展示的窗口和文字投递故障。
   });
   const voiceRef = useRef(voice);
   voiceRef.current = voice;

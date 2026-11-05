@@ -33,6 +33,35 @@ it("keeps theme lookup safe without a browser", () => {
   expect(getMonacoThemeName(true)).toBe("vs-dark");
 });
 
+it("inherits base token colors when theme CSS is missing or incomplete", () => {
+  vi.stubGlobal("document", { documentElement: {} });
+  vi.stubGlobal("getComputedStyle", () => ({
+    getPropertyValue: (key: string) => key === "--cs-code-keyword" ? "#123456" : "",
+  }));
+  expect(getMonacoThemeName(false)).toBe("termflow-light");
+  const definition = vi.mocked(monaco.editor.defineTheme).mock.calls[0][1];
+  expect(definition.rules).toEqual([
+    { token: "keyword", foreground: "123456" },
+    { token: "tag", foreground: "123456" },
+  ]);
+});
+
+it("expands minified CSS colors before passing token and surface colors to Monaco", () => {
+  const colors: Record<string, string> = {
+    "--cs-code-keyword": "#abc", "--cs-code-comment": "#abcd",
+    "--cs-text-primary": "#fff", "--cs-bg-card-solid": "#000", "--cs-primary": "#09f",
+  };
+  vi.stubGlobal("document", { documentElement: {} });
+  vi.stubGlobal("getComputedStyle", () => ({ getPropertyValue: (key: string) => colors[key] ?? "" }));
+  getMonacoThemeName(true);
+  const definition = vi.mocked(monaco.editor.defineTheme).mock.calls[0][1];
+  expect(definition.rules).toContainEqual({ token: "keyword", foreground: "aabbcc" });
+  expect(definition.rules).toContainEqual({ token: "comment", foreground: "aabbccdd", fontStyle: "" });
+  expect(definition.colors["editor.foreground"]).toBe("#ffffff");
+  expect(definition.colors["editor.background"]).toBe("#000000");
+  expect(definition.colors["editor.selectionBackground"]).toBe("#0099ff30");
+});
+
 it.each(["light-glass", "light-warm", "dark-starry", "dark-mocha"])("uses %s colors for readable code, guides and highlights", (theme) => {
   mockThemeStyles(theme);
   getMonacoThemeName(theme.startsWith("dark"));

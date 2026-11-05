@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Terminal } from "@xterm/xterm";
 import {
   FilePathLinkProvider,
+  MAX_TERMINAL_LINK_LINE_LENGTH,
   detectTerminalFilePaths,
   parseTerminalFilePath,
   resolveTerminalFilePath,
@@ -31,6 +32,52 @@ async function expectRealBufferFileLink(terminal: Terminal, expectedPath: string
 }
 
 describe("terminal file path links", () => {
+  it("handles unmatched and deeply nested labels while retaining adjacent file links", () => {
+    const unmatched = "[".repeat(12_000);
+    expect(detectTerminalFilePaths(`${unmatched} src/file.ts`)).toEqual([
+      { filePath: "src/file.ts", text: "src/file.ts", startIndex: unmatched.length + 1 },
+    ]);
+    const nested = `${"[".repeat(4_000)}label${"]".repeat(4_000)}(src/file.ts)`;
+    expect(detectTerminalFilePaths(nested)).toEqual([
+      { filePath: "src/file.ts", text: nested, startIndex: 0 },
+    ]);
+    const malformed = "[x](".repeat(3_000);
+    expect(detectTerminalFilePaths(`${malformed} src/file.ts`).some((link) => link.filePath === "src/file.ts")).toBe(true);
+  });
+
+  it("skips oversized lines without exposing truncated paths and accepts the length boundary", () => {
+    expect(detectTerminalFilePaths("[".repeat(80_000))).toEqual([]);
+    const path = "src/file.ts";
+    const line = " ".repeat(MAX_TERMINAL_LINK_LINE_LENGTH - path.length) + path;
+    expect(detectTerminalFilePaths(line)).toEqual([
+      { filePath: path, text: path, startIndex: line.length - path.length },
+    ]);
+    expect(detectTerminalFilePaths(`${line}x`)).toEqual([]);
+  });
+
+  it("skips oversized real wrapped lines from either end and preserves the next hard line", async () => {
+    const terminal = new Terminal({ cols: 80, rows: 24, scrollback: 2_000, allowProposedApi: true });
+    const validated: string[] = [];
+    try {
+      await writeRealTerminal(terminal, "[".repeat(80_000));
+      const lastWrappedRow = terminal.buffer.active.baseY + terminal.buffer.active.cursorY + 1;
+      await writeRealTerminal(terminal, "\r\nsrc/file.ts");
+      const provider = new FilePathLinkProvider(terminal, () => undefined, async ({ filePath }) => {
+        validated.push(filePath);
+        return true;
+      });
+      for (const row of [1, Math.floor(lastWrappedRow / 2), lastWrappedRow]) {
+        expect(await new Promise<ProvidedLinks>((resolve) => provider.provideLinks(row, resolve))).toBeUndefined();
+      }
+      expect(validated).toEqual([]);
+      const nextRow = terminal.buffer.active.baseY + terminal.buffer.active.cursorY + 1;
+      const links = await new Promise<ProvidedLinks>((resolve) => provider.provideLinks(nextRow, resolve));
+      expect(links?.map((link) => link.text)).toEqual(["src/file.ts"]);
+    } finally {
+      terminal.dispose();
+    }
+  });
+
   it("reassembles real xterm soft wraps without inserting null padding before wide characters", async () => {
     const terminal = new Terminal({ cols: 10, rows: 15, allowProposedApi: true });
     try {

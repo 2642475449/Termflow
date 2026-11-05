@@ -2,6 +2,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import "@/i18n";
+import i18n from "@/i18n";
 import packageJson from "../../../package.json";
 import { AboutPage } from "./AboutPage";
 
@@ -30,8 +31,11 @@ describe("AboutPage", () => {
     expect(markup).toContain("com.termflow.desktop");
   });
 
-  it("renders navigation action when onNavigate is provided", () => {
-    const markup = renderToStaticMarkup(React.createElement(AboutPage, { onNavigate: () => {} }));
-    expect(markup).toContain("ant-btn");
+  it("keeps the hero GitHub button and removes the legal section shortcuts", () => {
+    const markup = renderToStaticMarkup(React.createElement(AboutPage));
+    expect(markup.match(/aria-label="github"/g)).toHaveLength(1);
+    expect(markup).not.toContain(i18n.t("settings.about.managePrivacy"));
+    expect(markup).toContain(i18n.t("settings.about.viewLicense"));
+    expect(markup).toContain(i18n.t("settings.about.privacyPolicyDesc"));
   });
 });

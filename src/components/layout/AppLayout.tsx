@@ -3,6 +3,7 @@ import { useBottomRunnerStore } from "@/store/slices/bottomRunner";
 import { closeRunnerTab, findRunnerTab } from "@/store/slices/bottomRunnerRuntime";
 import { useShortcutStore } from "@/store/slices/shortcutSlice";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Layout, message, Spin } from "antd";
 import dayjs from "dayjs";
 import TitleBar from "./TitleBar";
@@ -249,6 +250,7 @@ function WorkspacePane({ paneId }: { paneId: string }) {
                   className="app-workspace-tab-content"
                   data-active={tabId === pane.activeTabId ? "true" : "false"}
                 >
+                  <ErrorBoundary key={`${tab?.kind}:${tab?.resourceId}`} scope={`tab:${tabId}`} onClose={() => closeTab(tabId)}>
                   <Suspense fallback={isSettings ? <SettingsPanelSkeleton /> : <WorkspaceContentFallback />}>
                     {isSettings ? (
                       <SettingsPanel />
@@ -275,6 +277,7 @@ function WorkspacePane({ paneId }: { paneId: string }) {
                       <SessionResumeView session={session} onResume={() => void resumeSession(tabId)} />
                     ) : null}
                   </Suspense>
+                  </ErrorBoundary>
                 </div>
               );
             })}
@@ -1041,12 +1044,7 @@ function AppLayout() {
   useEffect(() => {
     const unlistenPromise = listen<{ code: string; message: string }>("voice-worker-error", (event) => {
       const err = event.payload;
-      if (err.code === "no_api_key") {
-        void message.warning(err.message);
-      } else if (err.code === "empty_audio") {
-        // 静默处理，不展示全局 Toast 提示
-        return;
-      } else if (err.code === "shortcut_register_failed") {
+      if (err.code === "shortcut_register_failed") {
         void message.warning({
           key: "voice-shortcut-register-failed",
           content: err.message,

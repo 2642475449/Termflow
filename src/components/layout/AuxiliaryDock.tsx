@@ -10,6 +10,7 @@ import {
 } from "@ant-design/icons";
 import { Dropdown, Empty, Input, Modal, Spin, Tooltip, message } from "antd";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useTranslation } from "react-i18next";
 import { AgentActivityIcon } from "@/components/AgentActivityIcon";
 import CheckpointReviewDrawer from "@/components/CheckpointReviewDrawer";
@@ -440,6 +441,7 @@ export default function AuxiliaryDock({
                     <Empty className="mt-16" description={t("auxiliaryDock.sessionUnavailable")} />
                   )
                 ) : tab.kind === "file" ? (
+                  <ErrorBoundary key={`${tab.projectPath}:${tab.resourceId}`} scope={`auxiliary:${tab.id}`} onClose={() => void handleCloseTab(tab)}>
                   <Suspense
                     fallback={(
                       <div className="flex h-full items-center justify-center">
@@ -456,6 +458,7 @@ export default function AuxiliaryDock({
                       onPromoteToWorkspace={() => closeTab(tab.id)}
                     />
                   </Suspense>
+                  </ErrorBoundary>
                 ) : tab.kind === "task-monitor" ? (
                   <TaskMonitorPanel active={open && active} embedded />
                 ) : (
