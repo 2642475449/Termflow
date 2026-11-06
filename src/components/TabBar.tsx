@@ -625,6 +625,11 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
                   transform: isDragging ? "scale(0.98)" : "none",
                 }}
                 onPointerDown={(event) => {
+                  if (event.button === 1) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    return;
+                  }
                   if (event.button !== 0) return;
                   cleanupPressState();
                   suppressClickRef.current = false;
@@ -662,6 +667,15 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
                     startY: event.clientY,
                     timer,
                   };
+                }}
+                onMouseDown={(event) => {
+                  if (event.button === 1) event.preventDefault();
+                }}
+                onAuxClick={(event) => {
+                  if (event.button !== 1) return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  void requestCloseTabs([tabId]);
                 }}
                 onClick={(event) => {
                   if (suppressClickRef.current) {

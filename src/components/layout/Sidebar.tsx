@@ -1,3 +1,4 @@
+import { useGitAutoFetch } from "@/hooks/useGitAutoFetch";
 import { useShortcutStore } from "@/store/slices/shortcutSlice";
 import { getAppShortcut } from "@/lib/appShortcuts";
 import { formatShortcutDisplay } from "@/lib/shortcut";
@@ -142,6 +143,8 @@ function Sidebar({ collapsed, section }: SidebarProps) {
       setGitSyncCounts(0, 0);
     }
   }, [currentProject, setGitChangeCount, setGitSyncCounts]);
+
+  useGitAutoFetch(currentProject?.path ?? null);
 
   // 使用 Git 刷新控制器（防抖 + 冷却 + 操作保护）
   const { requestRefresh, refreshNow, markOperationStart, markOperationEnd } = useGitRefreshController(

@@ -44,6 +44,8 @@ pub struct CodexRateLimitResetCredits {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexRateLimits {
+    #[serde(flatten)]
+    pub quota: crate::usage_quota::QuotaDetails,
     pub session: Option<CodexRateLimitWindow>,
     pub weekly: Option<CodexRateLimitWindow>,
     pub rate_limit_reset_credits: Option<CodexRateLimitResetCredits>,
@@ -139,6 +141,19 @@ fn fetch_codex_rate_limits() -> Result<CodexRateLimits, String> {
         return Ok(unavailable_result("Codex not signed in", identity));
     }
 
+    if fs::read(&auth_path)
+        .ok()
+        .and_then(|raw| serde_json::from_slice::<Value>(&raw).ok())
+        .as_ref()
+        .is_some_and(uses_api_key)
+    {
+        let mut result = unavailable_result("", identity);
+        result.status = "ok".into();
+        result.error = None;
+        result.quota.empty_reason = Some("apiBilling".into());
+        return Ok(result);
+    }
+
     let executable = match find_agent_executable("codex") {
         Ok(path) => path,
         Err(_) => return Ok(unavailable_result("Codex CLI not found", identity)),
@@ -147,8 +162,23 @@ fn fetch_codex_rate_limits() -> Result<CodexRateLimits, String> {
     Ok(fetch_via_rpc(&executable, identity))
 }
 
+fn uses_api_key(auth: &Value) -> bool {
+    match auth.get("auth_mode").and_then(Value::as_str) {
+        Some("apikey") => true,
+        Some(_) => false,
+        None => {
+            auth.get("tokens").is_none_or(Value::is_null)
+                && auth
+                    .get("OPENAI_API_KEY")
+                    .and_then(Value::as_str)
+                    .is_some_and(|key| !key.is_empty())
+        }
+    }
+}
+
 fn unavailable_result(error: &str, identity: CodexIdentity) -> CodexRateLimits {
     CodexRateLimits {
+        quota: crate::usage_quota::QuotaDetails::default(),
         session: None,
         weekly: None,
         rate_limit_reset_credits: None,
@@ -162,6 +192,7 @@ fn unavailable_result(error: &str, identity: CodexIdentity) -> CodexRateLimits {
 
 fn error_result(error: String, identity: CodexIdentity) -> CodexRateLimits {
     CodexRateLimits {
+        quota: crate::usage_quota::QuotaDetails::default(),
         session: None,
         weekly: None,
         rate_limit_reset_credits: None,
@@ -531,28 +562,42 @@ fn rpc_error_message(message: &Value) -> Option<String> {
 }
 
 fn map_rate_limits_response(result: Option<&Value>, identity: CodexIdentity) -> CodexRateLimits {
+    let quota = crate::usage_quota::codex_rpc(result.unwrap_or(&Value::Null));
     let rate_limits = result
         .and_then(|result| result.get("rateLimits"))
         .or(result);
     let primary = rate_limits
         .and_then(|limits| limits.get("primary"))
-        .and_then(|window| map_rpc_window(window, 300));
+        .and_then(|window| map_rpc_window(window, 0));
     let secondary = rate_limits
         .and_then(|limits| limits.get("secondary"))
-        .and_then(|window| map_rpc_window(window, 10_080));
+        .and_then(|window| map_rpc_window(window, 0));
     let (session, weekly) = classify_rate_limit_windows(primary, secondary);
     let rate_limit_reset_credits = result
         .and_then(|result| result.get("rateLimitResetCredits"))
         .and_then(map_reset_credits);
 
-    if session.is_none() && weekly.is_none() && rate_limit_reset_credits.is_none() {
-        return error_result(
-            "Codex quota response contains no usable data".into(),
-            identity,
-        );
+    if !result.is_some_and(|v| {
+        v.is_object()
+            && [
+                "rateLimits",
+                "rateLimitsByLimitId",
+                "rateLimitResetCredits",
+                "primary",
+                "secondary",
+                "credits",
+            ]
+            .iter()
+            .any(|key| {
+                v.get(key)
+                    .is_some_and(|value| value.is_object() || value.is_null())
+            })
+    }) {
+        return error_result("Invalid Codex quota response".into(), identity);
     }
 
     CodexRateLimits {
+        quota,
         session,
         weekly,
         rate_limit_reset_credits,
@@ -584,23 +629,18 @@ fn classify_rate_limit_windows(
     primary: Option<CodexRateLimitWindow>,
     secondary: Option<CodexRateLimitWindow>,
 ) -> (Option<CodexRateLimitWindow>, Option<CodexRateLimitWindow>) {
-    match (primary, secondary) {
-        (Some(primary), Some(secondary)) => {
-            if primary.window_minutes <= secondary.window_minutes {
-                (Some(primary), Some(secondary))
-            } else {
-                (Some(secondary), Some(primary))
-            }
+    // Legacy consumers get only the exact canonical periods. All other windows
+    // remain available through quota_windows, without being mislabeled as weekly.
+    let mut session = None;
+    let mut weekly = None;
+    for window in [primary, secondary].into_iter().flatten() {
+        match window.window_minutes {
+            300 if session.is_none() => session = Some(window),
+            10_080 if weekly.is_none() => weekly = Some(window),
+            _ => {}
         }
-        (Some(window), None) | (None, Some(window)) => {
-            if window.window_minutes >= 10_080 {
-                (None, Some(window))
-            } else {
-                (Some(window), None)
-            }
-        }
-        (None, None) => (None, None),
     }
+    (session, weekly)
 }
 
 fn map_reset_credits(value: &Value) -> Option<CodexRateLimitResetCredits> {
@@ -632,7 +672,7 @@ fn map_reset_credits(value: &Value) -> Option<CodexRateLimitResetCredits> {
 fn json_f64(value: Option<&Value>) -> Option<f64> {
     match value {
         Some(Value::Number(number)) => number.as_f64().filter(|value| value.is_finite()),
-        Some(Value::String(value)) => value.trim().parse::<f64>().ok(),
+        Some(Value::String(value)) => value.trim().parse::<f64>().ok().filter(|v| v.is_finite()),
         _ => None,
     }
 }
@@ -701,6 +741,43 @@ fn now_ms() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn api_billing_is_distinct_from_subscription_and_does_not_override_chatgpt_mode() {
+        assert!(uses_api_key(&json!({"auth_mode":"apikey"})));
+        assert!(uses_api_key(&json!({"OPENAI_API_KEY":"test-only"})));
+        assert!(!uses_api_key(
+            &json!({"auth_mode":"chatgpt", "OPENAI_API_KEY":"test-only"})
+        ));
+    }
+
+    #[test]
+    fn valid_balance_only_and_absent_quota_are_successful_snapshots() {
+        let balance = map_rate_limits_response(
+            Some(&json!({"rateLimits":{"credits":{"balance":"0"}}})),
+            CodexIdentity::default(),
+        );
+        assert_eq!(balance.status, "ok");
+        assert_eq!(balance.quota.balances[0].balance, Some(0.0));
+        let empty =
+            map_rate_limits_response(Some(&json!({"rateLimits": null})), CodexIdentity::default());
+        assert_eq!(empty.status, "ok");
+        assert_eq!(empty.quota.empty_reason.as_deref(), Some("noQuota"));
+    }
+
+    #[test]
+    fn monthly_go_quota_is_preserved_without_populating_legacy_weekly_slot() {
+        let value = map_rate_limits_response(
+            Some(&json!({"rateLimits": {
+                "planType": "go", "primary": {"usedPercent": 42, "windowDurationMins": 43200}
+            }})),
+            CodexIdentity::default(),
+        );
+        assert!(value.session.is_none());
+        assert!(value.weekly.is_none());
+        assert_eq!(value.quota.quota_windows[0].window_minutes, 43200);
+        assert_eq!(value.quota.plan_type.as_deref(), Some("go"));
+    }
 
     #[test]
     fn empty_rpc_response_cannot_overwrite_a_successful_snapshot() {
@@ -853,10 +930,10 @@ mod tests {
     }
 
     #[test]
-    fn keeps_legacy_fallback_when_window_duration_is_missing() {
-        let window = map_rpc_window(&json!({ "usedPercent": 7 }), 300).expect("window");
+    fn keeps_unknown_duration_when_window_duration_is_missing() {
+        let window = map_rpc_window(&json!({ "usedPercent": 7 }), 0).expect("window");
 
-        assert_eq!(window.window_minutes, 300);
+        assert_eq!(window.window_minutes, 0);
     }
 
     #[test]

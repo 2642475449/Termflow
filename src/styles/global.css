@@ -781,13 +781,27 @@ html, body, #root {
 }
 
 .app-file-tree-row[data-selected="true"] {
-  background: color-mix(in srgb, var(--cs-primary) 10%, transparent);
+  background: color-mix(in srgb, var(--cs-text-secondary) 10%, transparent);
   color: var(--cs-text-primary);
 }
 
 .app-file-tree-row[data-active="true"] {
-  background: color-mix(in srgb, var(--cs-primary) 16%, transparent);
+  background: color-mix(in srgb, var(--cs-text-secondary) 14%, transparent);
   color: var(--cs-text-primary);
+}
+
+.app-project-tree-scroll:focus-within .app-file-tree-row[data-selected="true"] {
+  background: color-mix(in srgb, var(--cs-primary) 14%, transparent);
+}
+
+.app-project-tree-scroll:focus-within .app-file-tree-row[data-active="true"] {
+  background: color-mix(in srgb, var(--cs-primary) 20%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--cs-primary) 45%, transparent);
+  outline-offset: -1px;
+}
+
+.app-project-tree-scroll[aria-activedescendant]:focus-visible {
+  outline: none;
 }
 
 .app-file-tree-row[data-cut="true"] {
@@ -823,7 +837,7 @@ html, body, #root {
   justify-content: center;
   width: 18px;
   flex-shrink: 0;
-  font-size: 17px;
+  font-size: 16px;
 }
 
 .app-seti-file-icon {
@@ -849,13 +863,13 @@ html, body, #root {
 }
 
 .app-file-tree-icon .app-seti-file-icon {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
 }
 
 .app-file-tree-icon .app-markdown-file-icon {
-  width: 19px;
-  height: 19px;
+  width: 18px;
+  height: 18px;
 }
 
 .app-sidebar-section-header:hover {

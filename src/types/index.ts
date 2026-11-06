@@ -74,6 +74,7 @@ export interface NetworkProxyTestResult {
 
 export interface PersistentSettings {
   auxiliaryDockWidth?: number | null;
+  auxiliaryDockWidths?: Partial<Record<"task-monitor" | "file" | "review" | "terminal" | "task", number>> | null;
   lightTheme: string;
   darkTheme: string;
   themeCategory: string;
@@ -124,6 +125,8 @@ export interface PersistentSettings {
   voiceTriggerVisible: boolean;
   terminalQuickCommands: TerminalQuickCommand[];
   defaultAgentId: AiAgentId | null;
+  gitAutoFetch: boolean;
+  gitAutoFetchIntervalMinutes: number;
   gitCommitMessageProfiles: GitCommitMessageProfile[];
   defaultGitCommitMessageProfileId: string;
 }
@@ -513,7 +516,46 @@ export interface UsageRefreshState {
   checkedAt?: number;
 }
 
-export interface CodexRateLimits extends UsageRefreshState {
+export interface UsageQuotaWindow extends CodexRateLimitWindow {
+  id: string;
+  label: string | null;
+  bucketId: string;
+  bucketName: string | null;
+  usedAmount?: number | null;
+  limitAmount?: number | null;
+  currency?: string | null;
+}
+
+export interface UsageQuotaBalance {
+  bucketId: string;
+  bucketName: string | null;
+  balance: number | null;
+  unlimited: boolean;
+  hasCredits: boolean | null;
+}
+
+export interface UsageQuotaDetails {
+  quotaWindows?: UsageQuotaWindow[];
+  balances?: UsageQuotaBalance[];
+  planType?: string | null;
+  limitReached?: string | null;
+  emptyReason?: string | null;
+}
+
+export interface OpenCodeUsageAccount extends UsageQuotaDetails {
+  provider: string;
+  status: "ok" | "error" | "unavailable";
+  error: string | null;
+}
+
+export interface OpenCodeUsage extends UsageRefreshState {
+  accounts: OpenCodeUsageAccount[];
+  status: "ok" | "error" | "unavailable";
+  error: string | null;
+  updatedAt: number;
+}
+
+export interface CodexRateLimits extends UsageRefreshState, UsageQuotaDetails {
   session: CodexRateLimitWindow | null;
   weekly: CodexRateLimitWindow | null;
   rateLimitResetCredits?: CodexRateLimitResetCredits | null;
@@ -570,7 +612,7 @@ export interface AntigravityUsage extends UsageRefreshState {
 
 export type ClaudeRateLimitStatus = "ok" | "unavailable";
 
-export interface ClaudeRateLimits extends UsageRefreshState {
+export interface ClaudeRateLimits extends UsageRefreshState, UsageQuotaDetails {
   session: CodexRateLimitWindow | null;
   weekly: CodexRateLimitWindow | null;
   updatedAt: number;

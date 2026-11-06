@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { GitRemoteState } from "@/lib/gitRemoteAction";
 vi.mock("@/lib/api", () => ({ gitRemoteState: vi.fn(), gitFetch: vi.fn(), gitRepoInfo: vi.fn(), gitStatus: vi.fn() }));
 vi.mock("@/lib/gitGraphEvents", () => ({ dispatchGitGraphRefresh: vi.fn() }));
@@ -15,7 +15,7 @@ const state: GitRemoteState = {
 };
 beforeEach(() => {
   vi.resetAllMocks();
-  useGitRemoteStore.setState({ entries: {}, busy: {}, fetchErrors: {}, fetching: {}, fetchedAt: {} });
+  useGitRemoteStore.setState({ entries: {}, busy: {}, fetchErrors: {}, fetching: {}, fetchedAt: {}, attemptedAt: {}, fetchFailures: {} });
 });
 
 it("keeps errors distinct from an empty remote list", async () => {
@@ -75,7 +75,7 @@ it("coalesces concurrent refreshes and manual refresh bypasses the automatic int
   expect(gitFetch).toHaveBeenCalledTimes(2);
 });
 
-it("retains refresh errors for the refresh icon and clears them after retry", async () => {
+it("retains remote errors separately from local state and clears them after retry", async () => {
   vi.mocked(gitFetch).mockResolvedValue({ success: false, message: "offline" });
   await useGitRemoteStore.getState().fetchUpdates("a", true);
   expect(useGitRemoteStore.getState().fetchErrors.a).toContain("offline");
@@ -92,4 +92,30 @@ it("does not start an automatic fetch while a user operation owns the project", 
   useGitRemoteStore.getState().setBusy("a", "sync");
   await useGitRemoteStore.getState().fetchUpdates("a");
   expect(gitFetch).not.toHaveBeenCalled();
+});
+
+afterEach(() => vi.useRealTimers());
+
+it("backs off failed automatic fetches without marking them successful, while manual retry bypasses backoff", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(100_000);
+  vi.mocked(gitFetch).mockResolvedValue({ success: false, message: "proxy unavailable" });
+  await useGitRemoteStore.getState().fetchUpdates("backoff", false, 60_000);
+  expect(useGitRemoteStore.getState().fetchedAt.backoff).toBeUndefined();
+  expect(useGitRemoteStore.getState().attemptedAt.backoff).toBe(100_000);
+  vi.advanceTimersByTime(60_000);
+  await useGitRemoteStore.getState().fetchUpdates("backoff", false, 60_000);
+  expect(gitFetch).toHaveBeenCalledTimes(1);
+  vi.advanceTimersByTime(60_000);
+  await useGitRemoteStore.getState().fetchUpdates("backoff", false, 60_000);
+  expect(gitFetch).toHaveBeenCalledTimes(2);
+  vi.mocked(gitFetch).mockResolvedValue({ success: true, message: "ok" });
+  vi.mocked(gitRemoteState).mockResolvedValue(state);
+  vi.mocked(gitRepoInfo).mockResolvedValue({ isRepo: true, branchInfo: null });
+  vi.mocked(gitStatus).mockResolvedValue([]);
+  await useGitRemoteStore.getState().fetchUpdates("backoff", true);
+  expect(gitFetch).toHaveBeenCalledTimes(3);
+  expect(useGitRemoteStore.getState().fetchedAt.backoff).toBe(220_000);
+  expect(useGitRemoteStore.getState().fetchFailures.backoff).toBe(0);
+  expect(useGitRemoteStore.getState().fetchErrors.backoff).toBeNull();
 });

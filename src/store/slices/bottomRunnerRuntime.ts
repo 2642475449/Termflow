@@ -160,6 +160,11 @@ export async function launchRunner(projectPath: string, command: Pick<TerminalQu
   if (existing) {
     store.activateTab(projectPath, existing.id);
     store.setOpen(true);
+    if (!isRunnerRunning(existing)) {
+      // 从快捷命令入口重跑时使用最新配置，沿用重跑流程的清理和并发保护。
+      await rerunRunner({ ...existing, commandLabel: command.label, commandText: command.command, shell });
+      return;
+    }
     // 复用已有任务也属于使用；等待启动中的任务由 spawn 成功后记录。
     if (existing.status !== "starting") {
       void useQuickCommandUsageStore.getState().setCommandUsed(projectPath, command.id);

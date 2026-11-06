@@ -1562,3 +1562,22 @@ it("persistent settings normalize network proxy values", () => {
     applyPersistentSettingsToStore(original);
   }
 });
+
+describe("git automatic fetch settings", () => {
+  it("persists opt-in and interval and defaults old settings to disabled", () => {
+    const original = getPersistentSettingsSnapshot();
+    try {
+      useAppStore.getState().setGitAutoFetch(true, 20);
+      const saved = getPersistentSettingsSnapshot();
+      expect(saved.gitAutoFetch).toBe(true);
+      expect(saved.gitAutoFetchIntervalMinutes).toBe(20);
+      applyPersistentSettingsToStore(saved);
+      expect(useAppStore.getState().gitAutoFetchIntervalMinutes).toBe(20);
+      const legacy = { ...saved } as Partial<typeof saved>;
+      delete legacy.gitAutoFetch; delete legacy.gitAutoFetchIntervalMinutes;
+      applyPersistentSettingsToStore(legacy as typeof saved);
+      expect(useAppStore.getState().gitAutoFetch).toBe(false);
+      expect(useAppStore.getState().gitAutoFetchIntervalMinutes).toBe(5);
+    } finally { applyPersistentSettingsToStore(original); }
+  });
+});

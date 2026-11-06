@@ -1,4 +1,4 @@
-import { CloseOutlined, DatabaseOutlined, LoadingOutlined, ReloadOutlined, RightOutlined, WarningOutlined } from "@ant-design/icons";
+import { CloseOutlined, DatabaseOutlined, LoadingOutlined, ReloadOutlined, WarningOutlined } from "@ant-design/icons";
 import { listen } from "@tauri-apps/api/event";
 import { message, Popover } from "antd";
 import type { TFunction } from "i18next";
@@ -6,6 +6,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AgentIcon } from "@/components/AgentIcon";
 import { FileStatusDetails, FileStatusPath } from "./FileStatusBar";
+import { QuotaUsageStatus } from "./QuotaUsageStatus";
+import { WorkbenchFeedback } from "./WorkbenchFeedback";
 import { getSearchIndexStatus, gitCancelCloneTask, inspectAgentClis } from "@/lib/api";
 import { summarizeBackgroundTasks } from "@/lib/backgroundTasks";
 import {
@@ -18,7 +20,7 @@ import { useProjectLauncher } from "@/hooks/useProjectLauncher";
 import { useAppStore } from "@/store";
 import { useAgentUsage } from "@/hooks/useAgentUsage";
 import { hasUsageData } from "@/lib/agentUsage";
-import type { AiAgentId, AntigravityQuotaWindow, AntigravityUsage, ClaudeRateLimits, CodexRateLimitResetCredit, CodexRateLimits, CodexRateLimitWindow, GitCloneEventPayload, GitCloneTask, ProjectSearchIndexStatus, QoderQuotaBucket, QoderUsage } from "@/types";
+import type { AiAgentId, AntigravityQuotaWindow, AntigravityUsage, GitCloneEventPayload, GitCloneTask, ProjectSearchIndexStatus, QoderQuotaBucket, QoderUsage } from "@/types";
 import { antigravityQuotaLabel, antigravityQuotaPeriodLabel, antigravityQuotaScopeLabel, getAntigravityGeminiQuotaWindows } from "@/lib/antigravityQuota";
 const GIT_CLONE_EVENT = "git-clone-task-event";
 const SEARCH_INDEX_EVENT = "search-index-status";
@@ -62,6 +64,8 @@ function StatusBar() {
   const loadClaudeUsage = shouldLoadClaudeRateLimits(activeSession);
   const showClaudeUsage = loadClaudeUsage;
   const showQoderUsage = shouldLoadQoderUsage(activeSession);
+  const showOpenCodeUsage = activeSession?.active === true && activeSession.agentId === "opencode";
+  const { value: openCodeUsage, loading: openCodeUsageLoading, error: openCodeUsageError, refresh: refreshOpenCodeUsage } = useAgentUsage("opencode", showOpenCodeUsage);
   const showAntigravityUsage = activeSession?.active === true && activeSession.agentId === "antigravity";
   const { value: codexRateLimits, loading: codexUsageLoading, error: codexUsageError, refresh: handleRefreshCodexUsage } = useAgentUsage("codex", showCodexUsage);
   const { value: claudeRateLimits, loading: claudeUsageLoading, error: claudeUsageError, refresh: handleRefreshClaudeUsage } = useAgentUsage("claude", showClaudeUsage, activeSession?.id);
@@ -498,14 +502,17 @@ function StatusBar() {
       }}
     >
       <div className="flex min-w-0 flex-1 items-center justify-start">
+        <WorkbenchFeedback>
         {fileTab ? <FileStatusPath path={fileTab.resourceId} projectPath={currentProject?.path} /> : showCodexUsage ? (
-          <RateLimitUsageStatus
+          <QuotaUsageStatus
             agentId="codex"
             limits={codexRateLimits}
             isLoading={codexUsageLoading}
             error={codexUsageError}
             onRefresh={handleRefreshCodexUsage}
           />
+        ) : showOpenCodeUsage ? (
+          <QuotaUsageStatus agentId="opencode" limits={openCodeUsage} isLoading={openCodeUsageLoading} error={openCodeUsageError} onRefresh={refreshOpenCodeUsage} />
         ) : showAntigravityUsage ? (
           <AntigravityUsageStatus
             usage={antigravityUsage}
@@ -521,7 +528,7 @@ function StatusBar() {
             onRefresh={handleRefreshQoderUsage}
           />
         ) : showClaudeUsage ? (
-          <RateLimitUsageStatus
+          <QuotaUsageStatus
             agentId="claude"
             limits={claudeRateLimits}
             isLoading={claudeUsageLoading}
@@ -529,6 +536,7 @@ function StatusBar() {
             onRefresh={handleRefreshClaudeUsage}
           />
         ) : null}
+        </WorkbenchFeedback>
       </div>
       <div className="app-statusbar-right flex min-w-0 items-center justify-end gap-3">
         {backgroundTaskSummary.totalCount > 0 ? (
@@ -957,393 +965,6 @@ function AntigravityUsageWindowRow({ window }: { window: AntigravityQuotaWindow 
       <div className="text-[11px]" style={{ color: "var(--cs-text-tertiary)" }}>{resetLabel}</div>
     </div>
   );
-}
-
-function RateLimitUsageStatus({
-  agentId,
-  limits,
-  isLoading,
-  error,
-  onRefresh,
-}: {
-  agentId: "claude" | "codex";
-  limits: ClaudeRateLimits | CodexRateLimits | null;
-  isLoading: boolean;
-  error: string | null;
-  onRefresh: () => void;
-}) {
-  const { t, i18n } = useTranslation();
-  const [resetCreditsExpanded, setResetCreditsExpanded] = useState(false);
-  const translationRoot = agentId === "claude" ? "statusBar.claudeUsage" : "statusBar.codexUsage";
-  const codexLimits = agentId === "codex" ? limits as CodexRateLimits | null : null;
-  const hasData = Boolean(limits?.session || limits?.weekly);
-  const statusError = error
-    ?? limits?.error
-    ?? (limits?.status === "unavailable" ? t(`${translationRoot}.unavailable`) : null);
-  const summary = formatRateLimitUsageSummary(limits, t, translationRoot);
-  const resetCredits = codexLimits?.rateLimitResetCredits?.availableCount;
-  const resetCreditDetails = codexLimits?.rateLimitResetCredits;
-  // Keep the compact progress bar in sync with the first window shown in the
-  // summary. Some Codex accounts only return a weekly limit, so reading the
-  // session window alone incorrectly rendered a 0% gray bar next to "99% 周".
-  const compactWindow = limits?.session ?? limits?.weekly ?? null;
-  const compactRemaining = compactWindow ? remainingPercent(compactWindow) : null;
-  const compactBarColor = compactRemaining == null
-    ? "var(--cs-text-tertiary)"
-    : codexUsageBarColor(compactRemaining);
-
-  const popoverContent = (
-    <div
-      className="w-[300px] overflow-hidden rounded-[8px] border"
-      style={{
-        background: "var(--cs-bg-elevated, var(--cs-bg-sidebar))",
-        borderColor: "var(--cs-border-sidebar)",
-        boxShadow: "0 18px 44px rgba(0, 0, 0, 0.30)",
-      }}
-    >
-      <div
-        className="flex items-center justify-between gap-3 px-3 py-2"
-        style={{ borderBottom: "1px solid color-mix(in srgb, var(--cs-border-sidebar) 82%, transparent)" }}
-      >
-        <div className="flex min-w-0 items-center gap-2">
-          <AgentIcon agentId={agentId} size={15} />
-          <div className="min-w-0">
-            <div className="truncate text-[12px] font-medium" style={{ color: "var(--cs-text-primary)" }}>
-              {t(`${translationRoot}.title`)}
-            </div>
-            <div className="text-[10px]" style={{ color: "var(--cs-text-tertiary)" }}>
-              {statusError && hasData ? `${t("statusBar.usage.stale")} · ` : ""}
-              {limits?.updatedAt ? formatUpdatedAt(limits.updatedAt, t) : t(`${translationRoot}.pending`)}
-            </div>
-          </div>
-        </div>
-        <button
-          type="button"
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[5px] transition-colors"
-          style={{
-            color: "var(--cs-text-tertiary)",
-            background: "transparent",
-            border: "0",
-            cursor: isLoading ? "wait" : "pointer",
-          }}
-          disabled={isLoading}
-          title={t("common.refresh")}
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onRefresh();
-          }}
-        >
-          {isLoading ? <LoadingOutlined style={{ fontSize: 12 }} /> : <ReloadOutlined style={{ fontSize: 12 }} />}
-        </button>
-      </div>
-
-      <div className="space-y-3 px-3 py-3">
-        {hasData ? (
-          <>
-            {limits?.session ? (
-              <CodexUsageWindowRow
-                label={t("statusBar.codexUsage.session")}
-                window={limits.session}
-              />
-            ) : null}
-            {limits?.weekly ? (
-              <CodexUsageWindowRow
-                label={t("statusBar.codexUsage.weekly")}
-                window={limits.weekly}
-              />
-            ) : null}
-          </>
-        ) : (
-          <div className="flex items-start gap-2 text-[12px]" style={{ color: "var(--cs-text-tertiary)" }}>
-            {isLoading ? (
-              <LoadingOutlined style={{ fontSize: 12, marginTop: 2 }} />
-            ) : (
-              <WarningOutlined style={{ fontSize: 12, marginTop: 2 }} />
-            )}
-            <span className="min-w-0 max-h-[96px] flex-1 overflow-y-auto whitespace-pre-wrap break-all">
-              {statusError || t(`${translationRoot}.unavailable`)}
-            </span>
-          </div>
-        )}
-
-        {(resetCredits != null || agentId === "codex" || (statusError && hasData)) ? (
-          <div
-            className="space-y-1.5 border-t pt-2 text-[11px]"
-            style={{ borderColor: "color-mix(in srgb, var(--cs-border-sidebar) 76%, transparent)" }}
-          >
-            {resetCredits != null ? (
-              <CodexResetCreditList
-                count={resetCredits}
-                credits={resetCreditDetails?.credits ?? []}
-                fallbackExpiresAt={resetCreditDetails?.nextExpiresAt ?? null}
-                locale={i18n.language}
-                expanded={resetCreditsExpanded}
-                onToggle={() => setResetCreditsExpanded((expanded) => !expanded)}
-              />
-            ) : null}
-
-            {agentId === "codex" ? (
-              <div className="flex items-center justify-between gap-3">
-                <span style={{ color: "var(--cs-text-tertiary)" }}>{t("statusBar.codexUsage.account")}</span>
-                <span
-                  className="min-w-0 truncate text-right"
-                  style={{ color: "var(--cs-text-secondary)" }}
-                  title={codexLimits?.accountLabel ?? undefined}
-                >
-                  {codexLimits?.accountLabel ?? t("statusBar.codexUsage.systemDefault")}
-                </span>
-              </div>
-            ) : null}
-
-            {statusError && hasData ? (
-              <div className="flex items-start gap-1.5" style={{ color: "var(--cs-text-tertiary)" }}>
-                <WarningOutlined style={{ fontSize: 11, marginTop: 2 }} />
-                <span className="min-w-0 max-h-[96px] flex-1 overflow-y-auto whitespace-pre-wrap break-all">
-                  {statusError}
-                </span>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
-
-  return (
-    <Popover
-      trigger={["click"]}
-      placement="topLeft"
-      content={popoverContent}
-      onOpenChange={(open) => {
-        if (!open) setResetCreditsExpanded(false);
-      }}
-      arrow={false}
-
-      styles={{ container: { padding: 0, background: "transparent", boxShadow: "none" } }}
-      getPopupContainer={() => document.body}
-    >
-      <button
-        type="button"
-        className="flex h-7 min-w-[154px] shrink-0 items-center justify-start gap-2 rounded-[5px] px-2 text-left text-[13px] font-medium leading-none transition-colors"
-        style={{
-          background: "transparent",
-          border: "0",
-          color: hasData ? "var(--cs-text-secondary)" : "var(--cs-text-tertiary)",
-          cursor: "pointer",
-        }}
-        title={summary}
-      >
-        <AgentIcon agentId={agentId} size={15} />
-        {compactRemaining != null ? (
-        <div
-          aria-hidden="true"
-          className="h-[6px] w-14 shrink-0 overflow-hidden rounded-full"
-          style={{
-            background: "color-mix(in srgb, var(--cs-text-tertiary) 24%, transparent)",
-            opacity: compactRemaining == null ? 0.55 : 1,
-          }}
-        >
-          <div
-            className="h-full rounded-full transition-[width] duration-200"
-            style={{
-              width: `${compactRemaining ?? 0}%`,
-              background: compactBarColor,
-              boxShadow: compactRemaining == null
-                ? "none"
-                : `0 0 5px color-mix(in srgb, ${compactBarColor} 55%, transparent)`,
-            }}
-          />
-        </div>
-        ) : null}
-        <span className="truncate tabular-nums">{summary}</span>
-
-      </button>
-    </Popover>
-  );
-}
-
-function CodexUsageWindowRow({
-  label,
-  window,
-}: {
-  label: string;
-  window: CodexRateLimitWindow;
-}) {
-  const { t } = useTranslation();
-  const remaining = remainingPercent(window);
-  const resetLabel = formatResetLabel(window, t);
-  const barColor = codexUsageBarColor(remaining);
-
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between gap-3 text-[12px]">
-        <span className="font-medium" style={{ color: "var(--cs-text-primary)" }}>
-          {label}
-        </span>
-        <span className="tabular-nums" style={{ color: "var(--cs-text-secondary)" }}>
-          {t("statusBar.codexUsage.remaining", { value: remaining })}
-        </span>
-      </div>
-      <div
-        className="h-[6px] overflow-hidden rounded-full"
-        style={{ background: "color-mix(in srgb, var(--cs-text-tertiary) 24%, transparent)" }}
-      >
-        <div
-          className="h-full rounded-full transition-[width] duration-200"
-          style={{
-            width: `${remaining}%`,
-            background: barColor,
-            boxShadow: `0 0 5px color-mix(in srgb, ${barColor} 55%, transparent)`,
-          }}
-        />
-      </div>
-      <div className="text-[11px]" style={{ color: "var(--cs-text-tertiary)" }}>
-        {resetLabel}
-      </div>
-    </div>
-  );
-}
-
-function CodexResetCreditList({
-  count,
-  credits,
-  fallbackExpiresAt,
-  locale,
-  expanded,
-  onToggle,
-}: {
-  count: number;
-  credits: CodexRateLimitResetCredit[];
-  fallbackExpiresAt: number | null;
-  locale: string;
-  expanded: boolean;
-  onToggle: () => void;
-}) {
-  const { t } = useTranslation();
-  const hasExpiryDetails = credits.length > 0 || fallbackExpiresAt != null;
-  const sortedCredits = [...credits].sort((left, right) => {
-    if (left.expiresAt == null) return 1;
-    if (right.expiresAt == null) return -1;
-    return left.expiresAt - right.expiresAt;
-  });
-  const formatExpiry = (expiresAt: number) => new Intl.DateTimeFormat(locale, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(expiresAt);
-
-  return (
-    <div className="space-y-1">
-      {hasExpiryDetails ? (
-        <button
-          type="button"
-          aria-expanded={expanded}
-          className="flex w-full items-center justify-between gap-2 rounded-sm px-1 py-0.5 text-left font-medium text-[var(--cs-text-secondary)] hover:bg-[var(--cs-bg-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--cs-text-secondary)]"
-          onClick={(event) => {
-            event.stopPropagation();
-            onToggle();
-          }}
-        >
-          <span>{t("statusBar.codexUsage.resetCredits", { count })}</span>
-          <RightOutlined aria-hidden="true" className={`shrink-0 text-[10px] transition-transform ${expanded ? "rotate-90" : ""}`} />
-        </button>
-      ) : (
-        <div className="font-medium text-[var(--cs-text-secondary)]">
-          {t("statusBar.codexUsage.resetCredits", { count })}
-        </div>
-      )}
-      {expanded && sortedCredits.length > 0 ? (
-        <div className="space-y-0.5 border-l border-[var(--cs-border-sidebar)] pl-2 text-[var(--cs-text-tertiary)]">
-          {sortedCredits.map((credit, index) => (
-            <div key={`${credit.expiresAt ?? "unknown"}-${index}`} className="tabular-nums">
-              {credit.expiresAt == null
-                ? t("statusBar.codexUsage.resetCreditExpiryUnknown", { index: index + 1 })
-                : t("statusBar.codexUsage.resetCreditExpiresAt", {
-                  index: index + 1,
-                  time: formatExpiry(credit.expiresAt),
-                })}
-            </div>
-          ))}
-        </div>
-      ) : expanded && fallbackExpiresAt != null ? (
-        <div className="text-[var(--cs-text-tertiary)]">
-          {t("statusBar.codexUsage.resetCreditNextExpiresAt", { time: formatExpiry(fallbackExpiresAt) })}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function formatRateLimitUsageSummary(
-  limits: ClaudeRateLimits | CodexRateLimits | null,
-  t: TFunction,
-  translationRoot: "statusBar.claudeUsage" | "statusBar.codexUsage",
-): string {
-  const parts: string[] = [];
-  if (limits?.session) {
-    parts.push(`${remainingPercent(limits.session)}% ${formatWindowCompact(limits.session, t)}`);
-  }
-  if (limits?.weekly) {
-    parts.push(`${remainingPercent(limits.weekly)}% ${formatWindowCompact(limits.weekly, t)}`);
-  }
-  if (parts.length > 0) {
-    return parts.join(" · ");
-  }
-  return t(`${translationRoot}.title`);
-}
-
-function remainingPercent(window: CodexRateLimitWindow): number {
-  return Math.max(0, Math.min(100, Math.round(100 - window.usedPercent)));
-}
-
-function formatWindowCompact(
-  window: CodexRateLimitWindow,
-  t: TFunction,
-): string {
-  if (window.windowMinutes === 300) {
-    return t("statusBar.codexUsage.sessionCompact");
-  }
-  if (window.windowMinutes === 10_080) {
-    return t("statusBar.codexUsage.weeklyCompact");
-  }
-  return t("statusBar.codexUsage.hoursCompact", {
-    hours: Math.round(window.windowMinutes / 60),
-  });
-}
-
-function formatResetLabel(
-  window: CodexRateLimitWindow,
-  t: TFunction,
-): string {
-  if (window.resetsAt) {
-    const diffMs = window.resetsAt - Date.now();
-    if (diffMs <= 0) {
-      return t("statusBar.codexUsage.resetsSoon");
-    }
-    const totalMinutes = Math.max(1, Math.round(diffMs / 60_000));
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-    if (hours <= 0) {
-      return t("statusBar.codexUsage.resetsInMinutes", { minutes });
-    }
-    if (hours < 48) {
-      return minutes > 0
-        ? t("statusBar.codexUsage.resetsInHoursMinutes", { hours, minutes })
-        : t("statusBar.codexUsage.resetsInHours", { hours });
-    }
-    return t("statusBar.codexUsage.resetsAt", {
-      time: new Date(window.resetsAt).toLocaleString(undefined, {
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      }),
-    });
-  }
-  if (window.resetDescription) {
-    return t("statusBar.codexUsage.resetsAt", { time: window.resetDescription });
-  }
-  return t("statusBar.codexUsage.resetUnknown");
 }
 
 function formatUpdatedAt(updatedAt: number, t: TFunction): string {

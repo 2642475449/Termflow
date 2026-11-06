@@ -130,6 +130,10 @@ fn default_remote_notifications() -> serde_json::Value {
     serde_json::Value::Object(Default::default())
 }
 
+fn default_git_auto_fetch_interval_minutes() -> u32 {
+    5
+}
+
 fn default_git_commit_message_profiles() -> serde_json::Value {
     serde_json::json!([
         {
@@ -203,6 +207,8 @@ fn infer_asr_auth_mode(api_key: &str) -> String {
 pub struct PersistentSettingsRecord {
     #[serde(default)]
     pub auxiliary_dock_width: Option<f64>,
+    #[serde(default)]
+    pub auxiliary_dock_widths: Option<BTreeMap<String, f64>>,
     pub light_theme: String,
     pub dark_theme: String,
     pub theme_category: String,
@@ -282,6 +288,10 @@ pub struct PersistentSettingsRecord {
     pub default_agent_id: Option<String>,
     #[serde(default = "default_git_commit_message_profiles")]
     pub git_commit_message_profiles: serde_json::Value,
+    #[serde(default)]
+    pub git_auto_fetch: bool,
+    #[serde(default = "default_git_auto_fetch_interval_minutes")]
+    pub git_auto_fetch_interval_minutes: u32,
     #[serde(default = "default_git_commit_message_profile_id")]
     pub default_git_commit_message_profile_id: String,
 }
@@ -290,6 +300,7 @@ impl Default for PersistentSettingsRecord {
     fn default() -> Self {
         Self {
             auxiliary_dock_width: None,
+            auxiliary_dock_widths: None,
             light_theme: "light-glass".into(),
             dark_theme: "dark-starry".into(),
             theme_category: "dark".into(),
@@ -339,6 +350,8 @@ impl Default for PersistentSettingsRecord {
             voice_trigger_visible: true,
             terminal_quick_commands: serde_json::Value::Array(vec![]),
             default_agent_id: None,
+            git_auto_fetch: false,
+            git_auto_fetch_interval_minutes: default_git_auto_fetch_interval_minutes(),
             git_commit_message_profiles: default_git_commit_message_profiles(),
             default_git_commit_message_profile_id: default_git_commit_message_profile_id(),
         }
@@ -950,6 +963,7 @@ impl Database {
         settings.editor_font_size =
             read_setting(&conn, "editor.fontSize")?.unwrap_or(settings.editor_font_size);
         settings.auxiliary_dock_width = read_setting(&conn, "layout.auxiliaryDockWidth")?;
+        settings.auxiliary_dock_widths = read_setting(&conn, "layout.auxiliaryDockWidths")?;
         settings.terminal_font_size =
             read_setting(&conn, "terminal.fontSize")?.unwrap_or(settings.terminal_font_size);
         settings.terminal_cursor_blink =
@@ -1019,6 +1033,11 @@ impl Database {
             .unwrap_or(settings.terminal_quick_commands);
         settings.default_agent_id =
             read_setting(&conn, "agents.defaultAgentId")?.unwrap_or(settings.default_agent_id);
+        settings.git_auto_fetch = read_setting(&conn, "git.autoFetch")?.unwrap_or(false);
+        settings.git_auto_fetch_interval_minutes =
+            read_setting::<u32>(&conn, "git.autoFetchIntervalMinutes")?
+                .unwrap_or(5)
+                .clamp(1, 60);
         settings.git_commit_message_profiles = read_setting(&conn, "git.commitMessageProfiles")?
             .unwrap_or(settings.git_commit_message_profiles);
         settings.default_git_commit_message_profile_id =
@@ -1217,6 +1236,13 @@ impl Database {
         if let Some(width) = settings.auxiliary_dock_width.filter(|width| width.is_finite()) {
             write_setting(&conn, "layout.auxiliaryDockWidth", &width.clamp(220.0, 880.0))?;
         }
+        if let Some(widths) = &settings.auxiliary_dock_widths {
+            let widths: BTreeMap<_, _> = widths.iter()
+                .filter(|(kind, width)| matches!(kind.as_str(), "task-monitor" | "file" | "review" | "terminal" | "task") && width.is_finite())
+                .map(|(kind, width)| (kind.clone(), width.clamp(220.0, 880.0)))
+                .collect();
+            write_setting(&conn, "layout.auxiliaryDockWidths", &widths)?;
+        }
         write_setting(&conn, "terminal.fontSize", &settings.terminal_font_size)?;
         write_setting(
             &conn,
@@ -1311,6 +1337,12 @@ impl Database {
                 &settings.terminal_quick_commands,
             )?;
         }
+        write_setting(&conn, "git.autoFetch", &settings.git_auto_fetch)?;
+        write_setting(
+            &conn,
+            "git.autoFetchIntervalMinutes",
+            &settings.git_auto_fetch_interval_minutes.clamp(1, 60),
+        )?;
         write_setting(&conn, "agents.defaultAgentId", &settings.default_agent_id)?;
         write_setting(
             &conn,
@@ -1823,6 +1855,40 @@ mod tests {
     }
 
     #[test]
+    fn auxiliary_dock_content_widths_round_trip_and_preserve_missing_values() -> Result<(), String> {
+        use std::collections::BTreeMap;
+
+        let database = Database::open_in_memory();
+        let mut settings = PersistentSettingsRecord {
+            auxiliary_dock_widths: Some(BTreeMap::from([
+                ("task-monitor".into(), 300.0),
+                ("file".into(), 620.0),
+                ("review".into(), 10000.0),
+                ("unknown".into(), 400.0),
+            ])),
+            ..PersistentSettingsRecord::default()
+        };
+        database.save_general_persistent_settings(&settings)?;
+        let expected = Some(BTreeMap::from([
+            ("task-monitor".into(), 300.0),
+            ("file".into(), 620.0),
+            ("review".into(), 880.0),
+        ]));
+        assert_eq!(database.load_persistent_settings()?.auxiliary_dock_widths, expected);
+        settings.auxiliary_dock_widths = None;
+        database.save_general_persistent_settings(&settings)?;
+        assert_eq!(database.load_persistent_settings()?.auxiliary_dock_widths, expected);
+        settings.auxiliary_dock_widths = Some(BTreeMap::new());
+        database.save_general_persistent_settings_patch(&settings, &["auxiliaryDockWidths".into()])?;
+        assert_eq!(database.load_persistent_settings()?.auxiliary_dock_widths, Some(BTreeMap::new()));
+        let mut legacy = serde_json::to_value(&settings).map_err(|error| error.to_string())?;
+        legacy.as_object_mut().unwrap().remove("auxiliaryDockWidths");
+        let restored: PersistentSettingsRecord = serde_json::from_value(legacy).map_err(|error| error.to_string())?;
+        assert_eq!(restored.auxiliary_dock_widths, None);
+        Ok(())
+    }
+
+    #[test]
     fn auxiliary_dock_width_round_trips_and_preserves_older_settings() -> Result<(), String> {
         let database = Database::open_in_memory();
         assert_eq!(database.load_persistent_settings()?.auxiliary_dock_width, None);
@@ -1990,6 +2056,24 @@ mod tests {
             restored.remote_notifications,
             serde_json::Value::Object(Default::default())
         );
+    }
+
+    #[test]
+    fn git_auto_fetch_settings_are_opt_in_and_round_trip() {
+        let mut legacy = serde_json::to_value(PersistentSettingsRecord::default()).unwrap();
+        legacy.as_object_mut().unwrap().remove("gitAutoFetch");
+        legacy.as_object_mut().unwrap().remove("gitAutoFetchIntervalMinutes");
+        let restored: PersistentSettingsRecord = serde_json::from_value(legacy).unwrap();
+        assert!(!restored.git_auto_fetch);
+        assert_eq!(restored.git_auto_fetch_interval_minutes, 5);
+        let database = Database::open_in_memory();
+        let mut settings = PersistentSettingsRecord::default();
+        settings.git_auto_fetch = true;
+        settings.git_auto_fetch_interval_minutes = 20;
+        database.save_persistent_settings(&settings).unwrap();
+        let restored = database.load_persistent_settings().unwrap();
+        assert!(restored.git_auto_fetch);
+        assert_eq!(restored.git_auto_fetch_interval_minutes, 20);
     }
 
     #[test]

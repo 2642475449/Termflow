@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  DEFAULT_AUXILIARY_DOCK_WIDTH,
+  defaultAuxiliaryDockWidth,
+  effectiveAuxiliaryDockWidth,
   MAX_AUXILIARY_DOCK_WIDTH,
   MIN_AUXILIARY_DOCK_WIDTH,
   useAuxiliaryDockStore,
@@ -25,7 +26,8 @@ describe("auxiliary dock store", () => {
   beforeEach(() => {
     useAuxiliaryDockStore.setState({
       open: false,
-      width: DEFAULT_AUXILIARY_DOCK_WIDTH,
+      widths: {},
+      initialWidths: {},
       tabs: [],
       activeTabId: null,
     });
@@ -72,9 +74,9 @@ describe("auxiliary dock store", () => {
   it("clamps width and activates the nearest tab after closing", () => {
     const store = useAuxiliaryDockStore.getState();
     store.setWidth(10);
-    expect(useAuxiliaryDockStore.getState().width).toBe(MIN_AUXILIARY_DOCK_WIDTH);
+    expect(useAuxiliaryDockStore.getState().widths["task-monitor"]).toBe(MIN_AUXILIARY_DOCK_WIDTH);
     store.setWidth(10_000);
-    expect(useAuxiliaryDockStore.getState().width).toBe(MAX_AUXILIARY_DOCK_WIDTH);
+    expect(useAuxiliaryDockStore.getState().widths["task-monitor"]).toBe(MAX_AUXILIARY_DOCK_WIDTH);
 
     store.openFile({ projectPath: "D:/repo", path: "D:/repo/one.md", preview: false });
     const first = useAuxiliaryDockStore.getState().activeTabId!;
@@ -146,36 +148,86 @@ describe("auxiliary dock store", () => {
 
 });
 
-it("starts at 280px and remembers the chosen width across reopening, project resets and restarts", async () => {
+it("remembers separate widths across reopening, project resets and restarts", async () => {
   const values = stubDockStorage();
   vi.resetModules();
   const { useAuxiliaryDockStore: store } = await import("./auxiliaryDock");
   store.getState().toggle();
-  expect(store.getState().width).toBe(280);
-
-  store.getState().setWidth(250);
+  expect(defaultAuxiliaryDockWidth("task-monitor", 1600)).toBe(300);
+  store.getState().setWidth(260);
+  store.getState().openFile({ projectPath: "D:/repo", path: "D:/repo/one.md" });
+  store.getState().setWidth(610);
+  store.getState().openFile({ projectPath: "D:/repo", path: "D:/repo/two.md" });
+  expect(store.getState().widths.file).toBe(610);
+  store.getState().activateTab("aux:task-monitor");
+  expect(store.getState().widths["task-monitor"]).toBe(260);
   store.getState().toggle();
   store.getState().toggle();
-  expect(store.getState().width).toBe(250);
   store.getState().reset();
   store.getState().toggle();
-  expect(store.getState().width).toBe(250);
-  expect(JSON.parse(values.get("termflow-auxiliary-dock") ?? "{}").state).toEqual({ width: 250 });
-
+  const widths = { "task-monitor": 260, file: 610 };
+  expect(store.getState().widths).toEqual(widths);
+  expect(JSON.parse(values.get("termflow-auxiliary-dock") ?? "{}").state).toEqual({ widths });
   vi.resetModules();
   const { useAuxiliaryDockStore: reloaded } = await import("./auxiliaryDock");
-  expect(reloaded.getState()).toMatchObject({ width: 250, open: false, tabs: [], activeTabId: null });
+  expect(reloaded.getState()).toMatchObject({ widths, initialWidths: {}, open: false, tabs: [], activeTabId: null });
 });
 
-it.each([
-  [10, 220],
-  [10_000, MAX_AUXILIARY_DOCK_WIDTH],
-  ["invalid", 280],
-  [null, 280],
-])("normalizes saved width %j to %i on startup", async (savedWidth, expectedWidth) => {
+it("ignores the legacy shared width so a wide document cannot become the monitor default", async () => {
   const values = stubDockStorage();
-  values.set("termflow-auxiliary-dock", JSON.stringify({ state: { width: savedWidth }, version: 0 }));
+  values.set("termflow-auxiliary-dock", JSON.stringify({ state: { width: 880 }, version: 0 }));
   vi.resetModules();
   const { useAuxiliaryDockStore: store } = await import("./auxiliaryDock");
-  expect(store.getState().width).toBe(expectedWidth);
+  expect(store.getState().widths).toEqual({});
+  expect(defaultAuxiliaryDockWidth("task-monitor", 1600)).toBe(300);
+  expect(defaultAuxiliaryDockWidth("file", 1600)).toBe(608);
+});
+
+it("validates persisted widths independently and ignores unknown content types", async () => {
+  const values = stubDockStorage();
+  values.set("termflow-auxiliary-dock", JSON.stringify({ state: { widths: {
+    "task-monitor": 10, file: 10000, review: "invalid", task: null, terminal: 510, unknown: 600,
+  } }, version: 0 }));
+  vi.resetModules();
+  const { useAuxiliaryDockStore: store } = await import("./auxiliaryDock");
+  expect(store.getState().widths).toEqual({ "task-monitor": 220, file: 880, terminal: 510 });
+});
+
+describe("adaptive dock layout", () => {
+  beforeEach(() => useAuxiliaryDockStore.setState({ widths: {}, initialWidths: {}, tabs: [], activeTabId: null, open: false }));
+
+  it("keeps the first reading width stable across updates and temporary window constraints", () => {
+    const store = useAuxiliaryDockStore.getState();
+    store.openFile({ projectPath: "D:/repo", path: "D:/repo/one.md" });
+    store.initializeWidth("file", 1600);
+    store.initializeWidth("file", 1000);
+    expect(useAuxiliaryDockStore.getState().initialWidths.file).toBe(608);
+    expect(effectiveAuxiliaryDockWidth(608, 800)).toBeCloseTo(319.6);
+    expect(effectiveAuxiliaryDockWidth(608, 1600)).toBe(608);
+    expect(useAuxiliaryDockStore.getState().widths).toEqual({});
+    store.setWidth(700);
+    expect(effectiveAuxiliaryDockWidth(useAuxiliaryDockStore.getState().widths.file!, 700)).toBeCloseTo(279.6);
+    expect(useAuxiliaryDockStore.getState().widths.file).toBe(700);
+  });
+
+  it("restores the monitor on document close and resets only the active category", () => {
+    const store = useAuxiliaryDockStore.getState();
+    store.toggle();
+    store.setWidth(270);
+    store.openFile({ projectPath: "D:/repo", path: "D:/repo/one.md" });
+    store.setWidth(650);
+    store.resetWidth(1500);
+    expect(useAuxiliaryDockStore.getState().widths).toEqual({ "task-monitor": 270 });
+    expect(useAuxiliaryDockStore.getState().initialWidths.file).toBe(570);
+    store.closeTab(useAuxiliaryDockStore.getState().activeTabId!);
+    expect(useAuxiliaryDockStore.getState().activeTabId).toBe("aux:task-monitor");
+    expect(useAuxiliaryDockStore.getState().widths["task-monitor"]).toBe(270);
+  });
+
+  it.each([0, 200, 500, 800, 1200, 1800])("reserves usable main workspace at host width %i", (hostWidth) => {
+    const width = effectiveAuxiliaryDockWidth(880, hostWidth);
+    expect(width).toBeGreaterThanOrEqual(0);
+    const available = Math.max(0, hostWidth - 1);
+    expect(available - width).toBeGreaterThanOrEqual(Math.min(480, available * 0.6) - 0.001);
+  });
 });

@@ -15,7 +15,6 @@ import {
 } from "@ant-design/icons";
 import {
   gitGraphCommitDetail,
-  gitFetch,
   gitGraphFileDiff,
   gitGraphHistory,
 } from "@/lib/api";
@@ -148,7 +147,6 @@ export function GitGraphSection({
   const openGitDiffTab = useAppStore((state) => state.openGitDiffTab);
   const [graphCommits, setGraphCommits] = useState<GitGraphCommit[]>([]);
   const [graphLoading, setGraphLoading] = useState(false);
-  const [graphFetching, setGraphFetching] = useState(false);
   const [graphHasMore, setGraphHasMore] = useState(true);
   const [graphInitialized, setGraphInitialized] = useState(false);
   const [graphVisible, setGraphVisible] = useState(false);
@@ -175,7 +173,6 @@ export function GitGraphSection({
   const graphLoadMoreSentinelRef = useRef<HTMLDivElement>(null);
   const graphLoadingRef = useRef(false);
   const graphLoadRequestRef = useRef(0);
-  const graphFetchingRef = useRef(false);
   const graphProjectPathRef = useRef(projectPath);
   const previousCollapsedRef = useRef(collapsed);
   graphProjectPathRef.current = projectPath;
@@ -256,30 +253,10 @@ export function GitGraphSection({
     setGraphHasMore(true);
     void loadGraphData(true);
   }, [loadGraphData]);
-  const fetchAndReloadGraph = useCallback(async () => {
-    if (!projectPath || graphFetchingRef.current || graphLoadingRef.current) return;
-
-    const fetchProjectPath = projectPath;
-    graphFetchingRef.current = true;
-    setGraphFetching(true);
-    try {
-      const result = await gitFetch(fetchProjectPath);
-      if (graphProjectPathRef.current === fetchProjectPath && !result.success) {
-        message.warning(`${t("sidebar.gitGraphFetchFailed")}: ${result.message}`);
-      }
-    } catch (error) {
-      if (graphProjectPathRef.current === fetchProjectPath) {
-        const detail = error instanceof Error ? error.message : String(error);
-        message.warning(`${t("sidebar.gitGraphFetchFailed")}: ${detail}`);
-      }
-    } finally {
-      if (graphProjectPathRef.current === fetchProjectPath) {
-        graphFetchingRef.current = false;
-        setGraphFetching(false);
-        resetAndLoadGraphData();
-      }
-    }
-  }, [projectPath, resetAndLoadGraphData, t]);
+  const refreshGraph = useCallback(() => {
+    if (!projectPath || graphLoadingRef.current) return;
+    resetAndLoadGraphData();
+  }, [projectPath, resetAndLoadGraphData]);
 
   useEffect(() => {
     if (graphVisible && !graphInitialized && !graphLoading) {
@@ -432,8 +409,6 @@ export function GitGraphSection({
     setSelectedCommitDetail(null);
     setSelectedCommitLoading(false);
     setSelectedCommitError(false);
-    graphFetchingRef.current = false;
-    setGraphFetching(false);
     setSelectedGraphFileKey(null);
     setOpeningGraphDiffKey(null);
     setGraphHasMore(true);
@@ -673,15 +648,15 @@ export function GitGraphSection({
             <Button
               type="text"
               size="small"
-              icon={graphLoading || graphFetching ? <LoadingOutlined /> : <ReloadOutlined />}
+              icon={graphLoading ? <LoadingOutlined /> : <ReloadOutlined />}
               style={{
                 width: 24,
                 height: 24,
                 padding: 0,
                 color: "var(--cs-text-secondary)",
               }}
-              onClick={() => void fetchAndReloadGraph()}
-              disabled={graphLoading || graphFetching}
+              onClick={() => void refreshGraph()}
+              disabled={graphLoading}
             />
           </Tooltip>
         </div>

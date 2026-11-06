@@ -52,15 +52,57 @@ it("starts outside the workspace and never changes its active session, focus or 
   expect(tab().status).toBe("running");
   expect(mocks.spawn.mock.calls[0].at(-1)).toEqual({ label: "Build", kind: "runner" });
 });
-it("reuses the same command in a project and automatically expands it, even after completion", async () => {
+it("focuses and expands a running command without spawning again", async () => {
   await start().promise;
-  completeRunner(tab().sessionId, 0, true);
+  const original = tab();
+  await start("other").promise;
   runner().setOpen(false);
   await launchRunner(path, command, "powershell");
-  expect(mocks.spawn).toHaveBeenCalledTimes(1);
-  expect(runner().tabsByProject[path]).toHaveLength(1);
-  expect(runner().activeTabIdByProject[path]).toBe(tab().id);
+  expect(mocks.spawn).toHaveBeenCalledTimes(2);
+  expect(runner().tabsByProject[path]).toHaveLength(2);
+  expect(runner().activeTabIdByProject[path]).toBe(original.id);
   expect(runner().open).toBe(true);
+});
+
+it.each(["success", "error", "stopped", "completed"] as const)("reruns a %s command on click using its latest configuration", async (status) => {
+  await start().promise;
+  const original = tab();
+  runner().updateTabStatus(path, original.id, status);
+  runner().setOpen(false);
+  const updated = { ...command, label: "Updated build", command: "echo updated" };
+  const promise = launchRunner(path, updated, "cmd");
+  expect(runner().open).toBe(true);
+  await flush();
+  const replacement = tab();
+  expect(replacement.sessionId).not.toBe(original.sessionId);
+  expect(replacement).toMatchObject({ commandLabel: updated.label, commandText: updated.command, shell: "cmd" });
+  markRunnerTerminalReady(replacement.sessionId);
+  await promise;
+  completeRunner(original.sessionId, 9, true);
+  expect(tab().status).toBe("running");
+  expect(mocks.spawn).toHaveBeenCalledTimes(2);
+  expect(mocks.close).toHaveBeenCalledWith(original.sessionId);
+  expect(runner().tabsByProject[path]).toHaveLength(1);
+  expect(runner().activeTabIdByProject[path]).toBe(replacement.id);
+  expect(useAppStore.getState().sessions.some((session) => session.id === original.sessionId)).toBe(false);
+});
+
+it("does not duplicate a rerun when clicked during cleanup or terminal initialization", async () => {
+  await start().promise;
+  completeRunner(tab().sessionId, 0, true);
+  let resolve!: () => void;
+  mocks.close.mockImplementationOnce(() => new Promise<void>((done) => { resolve = done; }));
+  const promise = launchRunner(path, command, "powershell");
+  await launchRunner(path, command, "powershell");
+  expect(mocks.close).toHaveBeenCalledTimes(1);
+  resolve();
+  await flush();
+  expect(tab().status).toBe("starting");
+  await launchRunner(path, command, "powershell");
+  markRunnerTerminalReady(tab().sessionId);
+  await promise;
+  expect(mocks.spawn).toHaveBeenCalledTimes(2);
+  expect(runner().tabsByProject[path]).toHaveLength(1);
 });
 
 it("moves a reused command ahead of a more recently opened task without spawning again", async () => {

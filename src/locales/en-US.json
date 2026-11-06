@@ -461,7 +461,7 @@
       "title": "Claude Code Usage",
       "loading": "Claude Code usage…",
       "pending": "Waiting for first response",
-      "unavailable": "Pro/Max plan usage appears after the first response; API-key accounts have no plan limit",
+      "unavailable": "Waiting for Claude Code quota. Some plans or billing modes do not report quota. Spend limits require a supporting CLI and gateway.",
       "unavailableShort": "Usage unavailable"
     },
     "qoderUsage": {
@@ -519,6 +519,48 @@
         "user-env": "Source: user settings.json env",
         "user-settings": "Source: user settings.json"
       }
+    },
+    "quota": {
+      "unknownWindow": "Unknown period",
+      "weekly": "Weekly",
+      "monthly": "Monthly",
+      "days": "{{value}} days",
+      "hours": "{{value}} hours",
+      "minutes": "{{value}} minutes",
+      "monthlySpend": "Monthly spend limit",
+      "dailySpend": "Daily spend limit",
+      "weeklySpend": "Weekly spend limit",
+      "spendLimit": "Spend limit",
+      "extraUsage": "Extra usage",
+      "plan": "Plan",
+      "credits": "Credits balance",
+      "unlimited": "Unlimited",
+      "balanceAvailable": "Credits available; amount not reported",
+      "balanceUnknown": "Balance not reported",
+      "estimatedSpend": "Estimated spend {{used}} / {{limit}} {{currency}}",
+      "noQuota": "The service did not report quota. This does not mean zero remaining or unlimited usage.",
+      "apiBilling": "API / metered billing: this connection does not report subscription quota.",
+      "consoleQuota": "No Zen / Console allowance or budget was returned. Check your balance in the OpenCode console.",
+      "unsupportedProvider": "Quota queries are not yet supported for this provider.",
+      "notSignedIn": "Not signed in to this provider.",
+      "loginExpired": "Credentials expired. Run OpenCode to refresh sign-in, or reconnect with /connect.",
+      "accessDenied": "This credential cannot read quota or has no applicable subscription.",
+      "invalidCredentials": "Could not parse OpenCode sign-in information.",
+      "network": "Could not reach the usage service. Check your network or proxy.",
+      "rateLimited": "Too many usage queries. Retrying later.",
+      "serviceError": "The usage service is temporarily unavailable.",
+      "invalidResponse": "The usage service returned an unrecognized response.",
+      "loading": "Loading usage?",
+      "attention": "Usage needs attention",
+      "limitReached": "The service reports a reached usage limit.",
+      "creditsDepleted": "The service reports depleted credits.",
+      "noCredits": "No credits available"
+    },
+    "opencodeUsage": {
+      "title": "OpenCode usage",
+      "pending": "Pending",
+      "accountsHint": "Shown per connected provider; these are not necessarily the active session?s billing accounts.",
+      "unavailable": "No saved OpenCode sign-in found. Use /connect for Go, Zen or another provider."
     }
   },
   "home": {
@@ -648,6 +690,14 @@
     }
   },
   "sidebar": {
+    "gitLocalRefresh": "Refresh local changes",
+    "gitRefreshSettings": "Refresh and remote updates",
+    "gitRefreshSettingsHint": "Local changes refresh automatically. Background fetch downloads remote commits without pulling, merging, or pushing.",
+    "gitAutoFetch": "Fetch remote updates automatically",
+    "gitAutoFetchInterval": "Fetch interval",
+    "gitFetchMinutes": "{{count}} minutes",
+    "gitErrorDetails": "View error details",
+
     "titleInvalidResponse": "The model returned an empty or invalid title",
     "titleRetryScheduled": "Title generation failed; retry scheduled",
     "titleRetryFailed": "Title generation failed; retry now",
@@ -2535,7 +2585,7 @@
       "headerDesc": "Configure voice recognition service, shortcuts, and transcription tests.",
       "polishingLabel": "Smart cleanup",
       "polishingSectionTitle": "Smart transcription cleanup",
-      "polishingDesc": "After transcription, calls the text model below to remove filler words, handle corrections, fix clear errors, and format the result. This adds one request; failures use the original transcript.",
+      "polishingDesc": "Removes fillers, handles corrections, and cleans up wording, then checks that edits preserve your meaning. Usually adds two model requests and extra waiting time, or one if the text is unchanged. If cleanup or review fails, the original transcript is kept.",
       "polishingEnabled": "Enabled",
       "polishingModelLabel": "Cleanup model",
       "polishingModelDesc": "Choose from the provided models only. DeepSeek uses non-thinking mode. Provider usage charges apply, including test requests.",

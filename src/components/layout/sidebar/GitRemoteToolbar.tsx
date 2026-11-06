@@ -33,9 +33,12 @@ export function GitRemoteToolbar({
   const { t } = useTranslation();
   const entry = useGitRemoteStore((s) => s.entries[projectPath]);
   const busy = useGitRemoteStore((s) => s.busy[projectPath]);
+  const fetching = useGitRemoteStore((s) => !!s.fetching[projectPath]);
+  const fetchError = useGitRemoteStore((s) => s.fetchErrors[projectPath]);
   const refreshRemote = useGitRemoteStore((s) => s.refresh);
   const setBusy = useGitRemoteStore((s) => s.setBusy);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [errorDetails, setErrorDetails] = useState<string | null>(null);
   const [dialog, setDialog] = useState<
     "add" | "manage" | "upstream" | "publish" | null
   >(null);
@@ -47,7 +50,7 @@ export function GitRemoteToolbar({
     void refreshRemote(projectPath);
   }, [projectPath, branch, refreshRemote]);
   const state = entry?.data ?? null;
-  const blocked = disabled || !!busy;
+  const blocked = disabled || !!busy || fetching;
   const openDialog = (mode: "add" | "manage" | "upstream" | "publish") => {
     setMenuOpen(false);
     const remote =
@@ -82,6 +85,22 @@ export function GitRemoteToolbar({
       } finally {
         setBusy(projectPath, null);
       }
+    }
+  };
+  const fetchRemote = async () => {
+    if (disabled || useGitRemoteStore.getState().busy[projectPath] || useGitRemoteStore.getState().fetching[projectPath]) return;
+    await useGitRemoteStore.getState().fetchUpdates(projectPath, true);
+    const error = useGitRemoteStore.getState().fetchErrors[projectPath];
+    if (error) {
+      message.error({
+        key: `git-fetch:${projectPath}`,
+        content: <span>{t("sidebar.gitFetchFailed")} <button type="button"
+          className="text-[var(--cs-primary)] underline" onClick={() => setErrorDetails(error)}>
+          {t("sidebar.gitErrorDetails")}
+        </button></span>,
+      });
+    } else {
+      message.success(t("sidebar.remoteActions.fetched"));
     }
   };
   const save = () => {
@@ -133,6 +152,13 @@ export function GitRemoteToolbar({
         menu={{
           items: [
             {
+              key: "remote-fetch",
+              label: t(fetching ? "sidebar.remoteActions.fetchWorking" : "sidebar.remoteActions.fetch"),
+              disabled: blocked || !state?.remotes.length,
+            },
+            ...(fetchError ? [{ key: "remote-error", label: t("sidebar.gitErrorDetails") }] : []),
+            { type: "divider" },
+            {
               key: "remote-add",
               label: t("sidebar.remoteActions.add"),
               disabled: blocked || !state,
@@ -162,7 +188,9 @@ export function GitRemoteToolbar({
           ],
           onClick: (event) => {
             setMenuOpen(false);
-            if (event.key === "remote-add") openDialog("add");
+            if (event.key === "remote-fetch") void fetchRemote();
+            else if (event.key === "remote-error") setErrorDetails(fetchError ?? null);
+            else if (event.key === "remote-add") openDialog("add");
             else if (event.key === "remote-manage") openDialog("manage");
             else if (event.key === "remote-upstream") openDialog("upstream");
             else if (event.key === "remote-publish") openDialog("publish");
@@ -178,6 +206,10 @@ export function GitRemoteToolbar({
           <EllipsisOutlined />
         </button>
       </Dropdown>
+      <Modal open={errorDetails !== null} title={t("sidebar.gitFetchFailed")}
+        onCancel={() => setErrorDetails(null)} footer={null}>
+        <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-all select-text">{errorDetails}</pre>
+      </Modal>
       <Modal
         open={dialog !== null}
         title={t(`sidebar.remoteActions.${dialog ?? "add"}`)}

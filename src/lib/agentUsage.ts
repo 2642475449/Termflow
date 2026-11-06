@@ -1,6 +1,9 @@
-import type { AntigravityUsage, ClaudeRateLimits, CodexRateLimits, QoderUsage } from "@/types";
+import type { AntigravityUsage, OpenCodeUsage, ClaudeRateLimits, CodexRateLimits, QoderUsage } from "@/types";
+
+import { hasQuotaData } from "./usageQuota";
 
 export interface UsageDataByAgent {
+  opencode: OpenCodeUsage;
   codex: CodexRateLimits;
   claude: ClaudeRateLimits;
   qoder: QoderUsage;
@@ -20,11 +23,12 @@ export function usageFailureDelay(failures: number): number {
 
 export function hasUsageData(value: AgentUsageSnapshot | null): boolean {
   if (!value) return false;
+  if ("accounts" in value) return value.accounts.some(hasQuotaData);
   if ("windows" in value) return value.windows.length > 0;
   if ("userQuota" in value) {
     return value.totalUsagePercentage != null || Boolean(value.userQuota || value.addOnQuota || value.orgResourcePackage);
   }
-  return Boolean(value.session || value.weekly);
+  return hasQuotaData(value);
 }
 
 // 后端控制实际查询频率；定时检查仍允许发现新快照与凭据变化。

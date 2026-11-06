@@ -1,17 +1,19 @@
 import { useCallback, useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { getAntigravityUsage, getClaudeRateLimits, getCodexRateLimits, getQoderUsage, isUsageWindowVisible } from "@/lib/api";
+import { getAntigravityUsage, getOpenCodeUsage, getClaudeRateLimits, getCodexRateLimits, getQoderUsage, isUsageWindowVisible } from "@/lib/api";
 import { usageMonitorDelay, usageViewKey, type AgentUsageSnapshot, type UsageAgentId, type UsageDataByAgent } from "@/lib/agentUsage";
 import { EMPTY_USAGE_VIEW, useAgentUsageStore } from "@/store/slices/agentUsageSlice";
 import type { ClaudeRateLimitsUpdatePayload } from "@/types";
 
 const USAGE_EVENTS: Record<UsageAgentId, string> = {
+  opencode: "opencode-usage-updated",
   codex: "codex-rate-limits-updated", claude: "claude-rate-limits-update",
   qoder: "qoder-usage-updated", antigravity: "antigravity-usage-updated",
 };
 
 function requestUsage(agent: UsageAgentId, sessionId: string | undefined, forceRefresh: boolean): Promise<AgentUsageSnapshot> {
   switch (agent) {
+    case "opencode": return getOpenCodeUsage({ forceRefresh });
     case "codex": return getCodexRateLimits({ forceRefresh });
     case "qoder": return getQoderUsage({ forceRefresh });
     case "antigravity": return getAntigravityUsage({ forceRefresh });

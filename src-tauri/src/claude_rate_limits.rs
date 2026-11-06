@@ -22,6 +22,8 @@ pub struct ClaudeRateLimitWindow {
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ClaudeRateLimits {
+    #[serde(flatten)]
+    pub quota: crate::usage_quota::QuotaDetails,
     pub session: Option<ClaudeRateLimitWindow>,
     pub weekly: Option<ClaudeRateLimitWindow>,
     pub updated_at: i64,
@@ -44,6 +46,7 @@ struct ClaudeStatusLineRateLimits {
     five_hour: Option<ClaudeStatusLineWindow>,
     seven_day: Option<ClaudeStatusLineWindow>,
     updated_at: Option<i64>,
+    rate_limits: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -58,6 +61,10 @@ impl UsageSnapshot for ClaudeRateLimits {
         &self.status
     }
     fn with_failure(&self, failure: Self) -> Self {
+        // A successful hook snapshot with no quota is authoritative (e.g. reset or billing change).
+        if failure.error.is_none() {
+            return failure;
+        }
         Self {
             status: failure.status,
             error: failure.error,
@@ -119,6 +126,7 @@ impl ClaudeRateLimitStore {
         self.update(
             session_id,
             ClaudeRateLimits {
+                quota: crate::usage_quota::QuotaDetails::default(),
                 session: None,
                 weekly: None,
                 updated_at: 0,
@@ -146,8 +154,14 @@ pub fn ingest_status_line_rate_limits(
     let weekly = payload
         .seven_day
         .and_then(|window| map_window(window, SEVEN_DAY_WINDOW_MINUTES));
-    let has_data = session.is_some() || weekly.is_some();
+    let legacy = serde_json::json!({
+        "five_hour": session.as_ref().map(|w| serde_json::json!({"used_percentage": w.used_percent, "resets_at": w.resets_at})),
+        "seven_day": weekly.as_ref().map(|w| serde_json::json!({"used_percentage": w.used_percent, "resets_at": w.resets_at})),
+    });
+    let quota = crate::usage_quota::claude_windows(payload.rate_limits.as_ref().unwrap_or(&legacy));
+    let has_data = session.is_some() || weekly.is_some() || quota.has_data();
     let limits = ClaudeRateLimits {
+        quota,
         session,
         weekly,
         updated_at: payload.updated_at.unwrap_or_else(now_ms),
@@ -229,11 +243,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn hook_updates_recover_paused_queries_and_keep_success_when_empty() {
+    fn hook_updates_recover_and_clear_windows_when_source_omits_them() {
         let store = ClaudeRateLimitStore::default();
         let missing = store.query("one", false, now_ms()).expect("missing");
         assert_eq!(missing.next_retry_at, None);
         let success = ClaudeRateLimits {
+            quota: crate::usage_quota::QuotaDetails::default(),
             session: Some(ClaudeRateLimitWindow {
                 used_percent: 20.0,
                 window_minutes: 300,
@@ -254,6 +269,7 @@ mod tests {
             .update(
                 "one",
                 ClaudeRateLimits {
+                    quota: crate::usage_quota::QuotaDetails::default(),
                     session: None,
                     weekly: None,
                     updated_at: 9999,
@@ -262,8 +278,8 @@ mod tests {
                 },
             )
             .expect("empty push");
-        assert_eq!(retained.snapshot.updated_at, 1234);
-        assert!(retained.snapshot.session.is_some());
+        assert_eq!(retained.snapshot.updated_at, 9999);
+        assert!(retained.snapshot.session.is_none());
         assert_eq!(retained.snapshot.status, "unavailable");
         assert_eq!(retained.next_retry_at, None);
         assert!(store

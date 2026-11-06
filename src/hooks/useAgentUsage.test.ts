@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { UsageAgentId, UsageDataByAgent } from "@/lib/agentUsage";
 
 const api = vi.hoisted(() => ({
-  getCodexRateLimits: vi.fn(), getClaudeRateLimits: vi.fn(),
+  getOpenCodeUsage: vi.fn(), getCodexRateLimits: vi.fn(), getClaudeRateLimits: vi.fn(),
   getQoderUsage: vi.fn(), getAntigravityUsage: vi.fn(), isUsageWindowVisible: vi.fn(),
 }));
 vi.mock("@/lib/api", () => api);
@@ -11,6 +11,7 @@ import { useAgentUsageStore } from "@/store/slices/agentUsageSlice";
 
 const window = { usedPercent: 20, windowMinutes: 300, resetsAt: null, resetDescription: null };
 const fixtures: UsageDataByAgent = {
+  opencode: { accounts: [], status: "ok", error: null, updatedAt: 1, checkedAt: 1 },
   codex: { session: window, weekly: null, updatedAt: 1, checkedAt: 1, status: "ok", error: null, accountId: "a", accountLabel: "a" },
   claude: { session: window, weekly: null, updatedAt: 1, checkedAt: 1, status: "ok", error: null },
   qoder: { userType: null, totalUsagePercentage: 20, expiresAt: null, userQuota: null, addOnQuota: null,
@@ -20,7 +21,7 @@ const fixtures: UsageDataByAgent = {
     updatedAt: 1, checkedAt: 1, status: "ok", error: null },
 };
 const request = (agent: UsageAgentId) => ({
-  codex: api.getCodexRateLimits, claude: api.getClaudeRateLimits,
+  opencode: api.getOpenCodeUsage, codex: api.getCodexRateLimits, claude: api.getClaudeRateLimits,
   qoder: api.getQoderUsage, antigravity: api.getAntigravityUsage,
 })[agent];
 
@@ -32,7 +33,7 @@ beforeEach(() => {
 });
 afterEach(() => { vi.useRealTimers(); });
 
-test.each<UsageAgentId>(["codex", "claude", "qoder", "antigravity"])("%s retains success on IPC failure, backs off and recovers", async (agent) => {
+test.each<UsageAgentId>(["codex", "claude", "qoder", "antigravity", "opencode"])("%s retains success on IPC failure, backs off and recovers", async (agent) => {
   const key = agent === "claude" ? "claude:session" : agent;
   const mock = request(agent);
   mock.mockResolvedValueOnce(fixtures[agent]);

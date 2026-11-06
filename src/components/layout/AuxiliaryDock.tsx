@@ -9,7 +9,7 @@ import {
   SafetyCertificateOutlined,
 } from "@ant-design/icons";
 import { Dropdown, Empty, Input, Modal, Spin, Tooltip, message } from "antd";
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useTranslation } from "react-i18next";
 import { AgentActivityIcon } from "@/components/AgentActivityIcon";
@@ -26,8 +26,8 @@ import { useAppStore } from "@/store";
 import { getFileIconByName } from "@/lib/fileIcon";
 import {
   clampAuxiliaryDockWidth,
-  DEFAULT_AUXILIARY_DOCK_WIDTH,
-  MIN_AUXILIARY_DOCK_WIDTH,
+  defaultAuxiliaryDockWidth,
+  effectiveAuxiliaryDockWidth,
   type AuxiliaryTab,
   useAuxiliaryDockStore,
 } from "@/store/auxiliaryDock";
@@ -60,7 +60,10 @@ export default function AuxiliaryDock({
   const updateSession = useAppStore((state) => state.updateSession);
   const removeSession = useAppStore((state) => state.removeSession);
   const open = useAuxiliaryDockStore((state) => state.open);
-  const width = useAuxiliaryDockStore((state) => state.width);
+  const widths = useAuxiliaryDockStore((state) => state.widths);
+  const initialWidths = useAuxiliaryDockStore((state) => state.initialWidths);
+  const initializeWidth = useAuxiliaryDockStore((state) => state.initializeWidth);
+  const resetStoredWidth = useAuxiliaryDockStore((state) => state.resetWidth);
   const tabs = useAuxiliaryDockStore((state) => state.tabs);
   const activeTabId = useAuxiliaryDockStore((state) => state.activeTabId);
   const setWidth = useAuxiliaryDockStore((state) => state.setWidth);
@@ -75,11 +78,11 @@ export default function AuxiliaryDock({
   const [fileQuery, setFileQuery] = useState("");
   const [fileResults, setFileResults] = useState<FileTreeEntry[]>([]);
   const [fileSearching, setFileSearching] = useState(false);
-  const [hostWidth, setHostWidth] = useState(() => window.innerWidth);
+  const [hostWidth, setHostWidth] = useState(0);
   const dockRef = useRef<HTMLElement>(null);
   const closingSessionIdsRef = useRef(new Set<string>());
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const host = dockRef.current?.parentElement;
     if (!host) return;
 
@@ -95,6 +98,15 @@ export default function AuxiliaryDock({
     observer.observe(host);
     return () => observer.disconnect();
   }, []);
+
+  const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null;
+  const kind = activeTab?.kind ?? "task-monitor";
+  const width = widths[kind] ?? initialWidths[kind] ?? defaultAuxiliaryDockWidth(kind, hostWidth);
+  const effectiveWidth = effectiveAuxiliaryDockWidth(width, hostWidth);
+
+  useLayoutEffect(() => {
+    if (open && hostWidth > 0) initializeWidth(kind, hostWidth);
+  }, [open, kind, hostWidth, initializeWidth]);
 
   useEffect(() => {
     reset();
@@ -174,7 +186,9 @@ export default function AuxiliaryDock({
     document.body.style.userSelect = "none";
 
     const onMove = (moveEvent: PointerEvent) => {
-      const nextWidth = clampAuxiliaryDockWidth(startWidth + startX - moveEvent.clientX);
+      const nextWidth = effectiveAuxiliaryDockWidth(
+        clampAuxiliaryDockWidth(startWidth + startX - moveEvent.clientX), hostWidth,
+      );
       setWidth(nextWidth);
       syncTerminalLayouts();
     };
@@ -187,13 +201,12 @@ export default function AuxiliaryDock({
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onEnd, { once: true });
-  }, [setWidth, syncTerminalLayouts, width]);
+  }, [setWidth, syncTerminalLayouts, width, hostWidth]);
 
   useEffect(() => {
-    if (!open) return;
     const frame = window.requestAnimationFrame(() => syncTerminalLayouts());
     return () => window.cancelAnimationFrame(frame);
-  }, [activeTabId, open, syncTerminalLayouts]);
+  }, [activeTabId, open, effectiveWidth, syncTerminalLayouts]);
 
   const handleCloseTab = useCallback(async (tab: AuxiliaryTab) => {
     if (tab.kind !== "terminal" && tab.kind !== "task") {
@@ -220,15 +233,9 @@ export default function AuxiliaryDock({
     }
   }, [closeTab, removeSession]);
 
-  const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null;
-  const effectiveWidth = Math.min(
-    width,
-    Math.max(MIN_AUXILIARY_DOCK_WIDTH, hostWidth - 24),
-  );
-
   const resetWidth = useCallback(() => {
-    setWidth(DEFAULT_AUXILIARY_DOCK_WIDTH);
-  }, [setWidth]);
+    resetStoredWidth(hostWidth);
+  }, [resetStoredWidth, hostWidth]);
 
   return (
     <>

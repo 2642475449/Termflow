@@ -258,6 +258,8 @@ export function getPersistentSettingsSnapshot(): PersistentSettings {
     terminalRenderer: state.terminalRenderer,
     terminalQuickCommands: state.terminalQuickCommands,
     defaultAgentId: state.defaultAgentId,
+    gitAutoFetch: state.gitAutoFetch,
+    gitAutoFetchIntervalMinutes: state.gitAutoFetchIntervalMinutes,
     gitCommitMessageProfiles: state.gitCommitMessageProfiles,
     defaultGitCommitMessageProfileId: state.defaultGitCommitMessageProfileId,
     agentPermissionDefaults: state.agentPermissionDefaults,
@@ -318,6 +320,8 @@ export function applyPersistentSettingsToStore(settings: PersistentSettings) {
     terminalRenderer: normalizeTerminalRendererValue(settings.terminalRenderer),
     terminalQuickCommands: normalizeQuickCommands(settings.terminalQuickCommands),
     defaultAgentId: normalizeDefaultAgentId(settings.defaultAgentId),
+    gitAutoFetch: settings.gitAutoFetch ?? false,
+    gitAutoFetchIntervalMinutes: Math.min(60, Math.max(1, Math.round(settings.gitAutoFetchIntervalMinutes || 5))),
     gitCommitMessageProfiles,
     defaultGitCommitMessageProfileId: normalizeDefaultGitCommitMessageProfileId(
       settings.defaultGitCommitMessageProfileId,
@@ -756,6 +760,8 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
       defaultTerminalShell: "powershell",
       terminalQuickCommands: [],
       defaultAgentId: null,
+      gitAutoFetch: false,
+      gitAutoFetchIntervalMinutes: 5,
       gitCommitMessageProfiles: createDefaultGitCommitMessageProfiles(),
       defaultGitCommitMessageProfileId: DEFAULT_GIT_COMMIT_MESSAGE_PROFILE_ID,
       agentPermissionDefaults: {},
@@ -784,6 +790,10 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
 
       setClaudeCliInfo: (claudeCliInfo) => set({ claudeCliInfo }),
       setDefaultAgentId: (defaultAgentId) => set({ defaultAgentId }),
+      setGitAutoFetch: (enabled, intervalMinutes) => set((state) => ({
+        gitAutoFetch: enabled,
+        gitAutoFetchIntervalMinutes: Math.min(60, Math.max(1, Math.round(intervalMinutes || state.gitAutoFetchIntervalMinutes))),
+      })),
       setGitCommitMessageProfiles: (profiles, defaultProfileId) => {
         const normalizedProfiles = normalizeGitCommitMessageProfiles(profiles);
         set({

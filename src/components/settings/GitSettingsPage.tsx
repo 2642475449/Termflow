@@ -7,7 +7,7 @@ import {
   ReloadOutlined,
   UndoOutlined,
 } from "@ant-design/icons";
-import { Button, Input, Modal, Switch, Tag, Tooltip, message } from "antd";
+import { Button, Input, Modal, Select, Switch, Tag, Tooltip, message } from "antd";
 import { useTranslation } from "react-i18next";
 import type { GitCommitMessageProfile } from "@/types";
 import {
@@ -27,6 +27,9 @@ import { SettingsSection } from "./SettingsSection";
 /** Manages the reusable AI commit-message profiles used by the Git workspace. */
 export function GitSettingsPage() {
   const { t } = useTranslation();
+  const autoFetch = useAppStore((s) => s.gitAutoFetch);
+  const interval = useAppStore((s) => s.gitAutoFetchIntervalMinutes);
+  const setAutoFetch = useAppStore((s) => s.setGitAutoFetch);
   const gitCommitMessageProfiles = useAppStore((state) => state.gitCommitMessageProfiles);
   const defaultGitCommitMessageProfileId = useAppStore(
     (state) => state.defaultGitCommitMessageProfileId,
@@ -195,6 +198,18 @@ export function GitSettingsPage() {
           </Button>
         </div>
       } />
+      <SettingsSection title={t("sidebar.gitRefreshSettings")} description={t("sidebar.gitRefreshSettingsHint")}>
+        <div className="flex items-center justify-between gap-4 py-2">
+          <span>{t("sidebar.gitAutoFetch")}</span>
+          <Switch checked={autoFetch} onChange={(enabled) => setAutoFetch(enabled)} aria-label={t("sidebar.gitAutoFetch")} />
+        </div>
+        <div className="flex items-center justify-between gap-4 py-2">
+          <span>{t("sidebar.gitAutoFetchInterval")}</span>
+          <Select value={interval} disabled={!autoFetch} aria-label={t("sidebar.gitAutoFetchInterval")}
+            options={[1, 3, 5, 10, 20, 30, 60].map((value) => ({ value, label: t("sidebar.gitFetchMinutes", { count: value }) }))}
+            onChange={(value) => setAutoFetch(autoFetch, value)} style={{ width: 130 }} />
+        </div>
+      </SettingsSection>
       <SettingsSection title={t("settings.agents.gitProfiles.layout.title")}
         description={t("settings.agents.gitProfiles.layout.description")}>
 

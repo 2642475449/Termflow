@@ -16,7 +16,9 @@ interface RemoteStore {
   refresh: (path: string) => Promise<void>;
   fetching: Record<string, boolean>;
   fetchedAt: Record<string, number>;
-  fetchUpdates: (path: string, force?: boolean) => Promise<void>;
+  attemptedAt: Record<string, number>;
+  fetchFailures: Record<string, number>;
+  fetchUpdates: (path: string, force?: boolean, intervalMs?: number) => Promise<void>;
 }
 
 const requests = new Map<string, number>();
@@ -24,20 +26,28 @@ const pendingFetches = new Map<string, Promise<void>>();
 export const useGitRemoteStore = create<RemoteStore>((set, get) => ({
   fetching: {},
   fetchedAt: {},
-  fetchUpdates: (path, force = false) => {
+  attemptedAt: {},
+  fetchFailures: {},
+  fetchUpdates: (path, force = false, intervalMs = 5 * 60 * 1000) => {
     const pending = pendingFetches.get(path);
     if (pending) return pending;
-    if (get().busy[path] || (!force && Date.now() - (get().fetchedAt[path] ?? 0) < 5 * 60 * 1000)) return Promise.resolve();
-    set((s) => ({ fetching: { ...s.fetching, [path]: true }, fetchedAt: { ...s.fetchedAt, [path]: Date.now() } }));
+    const retryDelay = Math.min(60 * 60 * 1000, intervalMs * 2 ** Math.min(get().fetchFailures[path] ?? 0, 4));
+    const attemptedAt = get().attemptedAt[path];
+    if (get().busy[path] || (!force && attemptedAt !== undefined && Date.now() - attemptedAt < retryDelay)) return Promise.resolve();
+    set((s) => ({ fetching: { ...s.fetching, [path]: true }, attemptedAt: { ...s.attemptedAt, [path]: Date.now() } }));
     const task = Promise.resolve().then(async () => {
       try {
         const result = await gitFetch(path);
         if (!result.success) throw new Error(result.message);
+        set((s) => ({ fetchedAt: { ...s.fetchedAt, [path]: Date.now() }, fetchFailures: { ...s.fetchFailures, [path]: 0 } }));
         get().setFetchError(path, null);
         await useGitStatusStore.getState().refresh(path);
         await get().refresh(path);
         dispatchGitGraphRefresh(path);
-      } catch (error) { get().setFetchError(path, String(error)); }
+      } catch (error) {
+        get().setFetchError(path, error instanceof Error ? error.message : String(error));
+        set((s) => ({ fetchFailures: { ...s.fetchFailures, [path]: (s.fetchFailures[path] ?? 0) + 1 } }));
+      }
       finally { pendingFetches.delete(path); set((s) => ({ fetching: { ...s.fetching, [path]: false } })); }
     });
     pendingFetches.set(path, task);

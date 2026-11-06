@@ -22,6 +22,7 @@ import type {
   AgentUsageOverview,
   AgentUsageStorageStatus,
   CodexRateLimits,
+  OpenCodeUsage,
   QoderUsage,
   ClaudeRateLimits,
   ClaudeCliInfo,
@@ -528,6 +529,14 @@ export async function getCodexRateLimits(options?: {
     });
 
   return await codexRateLimitsRequest;
+}
+
+let opencodeUsageRequest: Promise<OpenCodeUsage> | null = null;
+export async function getOpenCodeUsage(options?: { forceRefresh?: boolean }): Promise<OpenCodeUsage> {
+  if (opencodeUsageRequest) return opencodeUsageRequest;
+  opencodeUsageRequest = invoke<OpenCodeUsage>("get_opencode_usage", { forceRefresh: options?.forceRefresh ?? false })
+    .finally(() => { opencodeUsageRequest = null; });
+  return opencodeUsageRequest;
 }
 
 let qoderUsageRequest: Promise<QoderUsage> | null = null;

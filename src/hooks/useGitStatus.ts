@@ -3,7 +3,6 @@ import {
   GIT_STATUS_SNAPSHOT_EVENT,
   type GitStatusSnapshot,
 } from "@/lib/gitStatusEvents";
-import { useGitRemoteStore } from "@/store/slices/gitRemote";
 import { EMPTY_GIT_STATUS, useGitStatusStore } from "@/store/slices/gitStatus";
 
 interface UseGitStatusOptions {
@@ -21,26 +20,10 @@ export function useGitStatus({
   );
   const refreshStore = useGitStatusStore((s) => s.refresh);
   const generation = useRef(0);
-  const refreshWithRemote = useCallback(async (force: boolean) => {
-    if (!path) return;
-    await refreshStore(path);
-    const status = useGitStatusStore.getState().entries[path];
-    if (status?.isRepo && !status.error) await useGitRemoteStore.getState().fetchUpdates(path, force);
+  const refresh = useCallback(async () => {
+    if (path) await refreshStore(path);
   }, [path, refreshStore]);
-  const refresh = useCallback(() => refreshWithRemote(false), [refreshWithRemote]);
-  const refreshAll = useCallback(() => refreshWithRemote(true), [refreshWithRemote]);
-  useEffect(() => {
-    void refresh();
-    const check = () => { if (document.visibilityState === "visible") void refresh(); };
-    const timer = window.setInterval(check, 60_000);
-    document.addEventListener("visibilitychange", check);
-    window.addEventListener("focus", check);
-    return () => {
-      window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", check);
-      window.removeEventListener("focus", check);
-    };
-  }, [refresh]);
+  useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
     generation.current = 0;
     const handler = (event: Event) => {
@@ -76,6 +59,5 @@ export function useGitStatus({
       (branchInfo?.ahead ?? 0) > 0 || (branchInfo?.behind ?? 0) > 0,
     syncChangeCount: (branchInfo?.ahead ?? 0) + (branchInfo?.behind ?? 0),
     refresh,
-    refreshAll,
   };
 }

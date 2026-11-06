@@ -9,6 +9,7 @@ mod events;
 mod hook_ingest;
 mod network_proxy;
 mod opencode_control;
+mod opencode_usage;
 mod path_utils;
 mod powershell_integration;
 mod pty;
@@ -23,6 +24,7 @@ mod runtime_skill;
 mod scheduled_tasks;
 mod usage_cache;
 mod usage_process;
+mod usage_quota;
 
 use claude_rate_limits::ClaudeRateLimitStore;
 use commands::content_search::ContentSearchState;
@@ -38,22 +40,7 @@ use scheduled_tasks::ScheduledTaskScheduler;
 use std::sync::Arc;
 use tauri::{Emitter, Manager, WindowEvent};
 
-fn clear_inherited_proxy_environment() {
-    // Termflow、更新器与其启动的 CLI 都不应继承启动器临时注入的本地代理。
-    for key in [
-        "HTTP_PROXY",
-        "HTTPS_PROXY",
-        "ALL_PROXY",
-        "http_proxy",
-        "https_proxy",
-        "all_proxy",
-    ] {
-        std::env::remove_var(key);
-    }
-}
-
 pub fn run() {
-    clear_inherited_proxy_environment();
     let startup_args = std::env::args().skip(1).collect::<Vec<_>>();
     let startup_cwd = std::env::current_dir()
         .map(|path| path.to_string_lossy().into_owned())
@@ -364,6 +351,7 @@ pub fn run() {
             commands::agent_usage::clear_agent_usage_history,
             commands::agent_usage::rebuild_agent_usage_history,
             codex_rate_limits::get_codex_rate_limits,
+            opencode_usage::get_opencode_usage,
             antigravity_usage::get_antigravity_usage,
             qoder_usage::get_qoder_usage,
             claude_rate_limits::get_claude_rate_limits,

@@ -5,7 +5,6 @@ import {
   CompressOutlined,
   CopyOutlined,
   DeleteOutlined,
-  DownOutlined,
   EditOutlined,
   ExportOutlined,
   FileOutlined,
@@ -13,14 +12,13 @@ import {
   FolderOutlined,
   HistoryOutlined,
   ReloadOutlined,
-  RightOutlined,
   SearchOutlined,
   ScissorOutlined,
   SnippetsOutlined,
 } from "@ant-design/icons";
 import { open as openDirectoryDialog } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue, useId } from "react";
 import type {
   KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
@@ -46,6 +44,9 @@ import {
 } from "@/lib/explorer";
 import type { ExplorerRevealPathDetail } from "@/lib/explorer";
 import { getFileIcon } from "@/lib/fileIcon";
+import { showWorkbenchFeedback } from "@/lib/workbenchFeedback";
+import { getTreeNavigation } from "./treeNavigation";
+import { TreeDisclosure } from "./TreeDisclosure";
 import { openGlobalTextSearch } from "@/lib/globalSearch";
 import { dispatchGitFileHistoryOpen } from "@/lib/gitGraphEvents";
 import { useAppStore } from "@/store";
@@ -411,7 +412,14 @@ function SidebarProjectPanel({
   const suppressNextClickPathRef = useRef<string | null>(null);
   const [dragOverPath, setDragOverPath] = useState<string | null>(null);
   const [isExternalDragOver, setIsExternalDragOver] = useState(false);
+  const [contextMenuPath, setContextMenuPathState] = useState<string | null>(null);
+  const contextMenuPathRef = useRef<string | null>(null);
+  const setContextMenuPath = useCallback((path: string | null) => {
+    contextMenuPathRef.current = path;
+    setContextMenuPathState(path);
+  }, []);
   const treeContainerRef = useRef<HTMLDivElement | null>(null);
+  const treeId = useId();
   const setResourceDragState = useAppStore((s) => s.setResourceDragState);
 
   const normalizedSelectedPaths = useMemo(
@@ -471,6 +479,7 @@ function SidebarProjectPanel({
   );
 
   useEffect(() => {
+    setContextMenuPath(null);
     if (!currentProject) return;
     setExpandedPaths({});
     setLoadedDirectories({});
@@ -677,15 +686,18 @@ function SidebarProjectPanel({
 
   const handleToggleDirectory = useCallback(
     async (entry: FileTreeEntry) => {
+      selectOnlyPath(entry.path);
       if (!!expandedPaths[entry.path]) {
-        selectOnlyPath(entry.path);
         setExpandedPaths((prev) => ({ ...prev, [entry.path]: false }));
         return;
       }
 
-      await revealPath(entry.path, true);
+      setExpandedPaths((prev) => ({ ...prev, [entry.path]: true }));
+      if (!loadedDirectories[entry.path] && !loadingDirectories[entry.path]) {
+        await loadDirectory(entry.path);
+      }
     },
-    [expandedPaths, revealPath, selectOnlyPath]
+    [expandedPaths, loadedDirectories, loadingDirectories, loadDirectory, selectOnlyPath]
   );
 
   const buildVisibleTree = useCallback(
@@ -718,6 +730,20 @@ function SidebarProjectPanel({
     () => collectVisiblePaths(isSearchMode ? searchTree : visibleTree),
     [isSearchMode, searchTree, visibleTree]
   );
+  useEffect(() => {
+    if (loadingRoot || searchLoading || error ||
+      (contextMenuPath && contextMenuPath !== "__background__" && !visibleSelectablePaths.includes(contextMenuPath))) {
+      setContextMenuPath(null);
+    }
+  }, [contextMenuPath, visibleSelectablePaths, loadingRoot, searchLoading, error]);
+
+  const handleContextMenuOpenChange = useCallback((path: string, open: boolean) => {
+    if (!open && contextMenuPathRef.current !== path) return;
+    setContextMenuPath(open ? path : null);
+    if (!open && document.activeElement?.closest(".ant-dropdown")) {
+      treeContainerRef.current?.focus({ preventScroll: true });
+    }
+  }, [setContextMenuPath]);
   const projectRootPath = currentProject?.path ?? "";
   const knownEntries = useMemo(
     () => [
@@ -1026,7 +1052,6 @@ function SidebarProjectPanel({
       setRenamingEntry(null);
       setRenameValue("");
       await refreshProjectView(nextPath, renamingEntry.kind === "directory");
-      message.success(t("sidebar.resourceRenamed"));
       if (shouldOpenCreatedFile) {
         onOpenFile(nextPath);
       }
@@ -1051,7 +1076,7 @@ function SidebarProjectPanel({
       if (nextPaths.length === 0) return;
       setClipboardPaths(nextPaths);
       setClipboardOperation(operation);
-      message.success(
+      showWorkbenchFeedback(
         t(operation === "cut" ? "sidebar.selectionCut" : "sidebar.selectionCopied", {
           count: nextPaths.length,
         })
@@ -1517,6 +1542,8 @@ function SidebarProjectPanel({
         const visual = getFileIcon(entry.name, isDirectory, isExpanded);
 
         const handleMenuClick: NonNullable<MenuProps["onClick"]> = async ({ key, domEvent }) => {
+          setContextMenuPath(null);
+          treeContainerRef.current?.focus({ preventScroll: true });
           domEvent.preventDefault();
           domEvent.stopPropagation();
           if (!(isSelected && selectionCount > 1)) {
@@ -1576,13 +1603,13 @@ function SidebarProjectPanel({
 
           if (key === "copy-relative-path") {
             await navigator.clipboard.writeText(relativePath);
-            message.success(copyPathSuccessText);
+            showWorkbenchFeedback(copyPathSuccessText);
             return;
           }
 
           if (key === "copy-absolute-path") {
             await navigator.clipboard.writeText(entry.path);
-            message.success(copyPathSuccessText);
+            showWorkbenchFeedback(copyPathSuccessText);
             return;
           }
 
@@ -1690,7 +1717,15 @@ function SidebarProjectPanel({
         ];
 
         return (
-          <div key={entry.path}>
+          <div key={entry.path}
+            id={`${treeId}-${encodeURIComponent(entry.path)}`}
+            role="treeitem"
+            aria-label={entry.name}
+            aria-level={depth + 1}
+            aria-selected={isSelected}
+            aria-expanded={isDirectory ? isExpanded : undefined}
+            aria-busy={isLoadingChildren || undefined}
+          >
             {isRenaming ? (
               <div
                 className="app-file-tree-row w-full text-left"
@@ -1701,9 +1736,7 @@ function SidebarProjectPanel({
                 style={{ paddingLeft: 8 + depth * 16 }}
                 onClick={(event) => event.stopPropagation()}
               >
-                <span className="app-file-tree-arrow">
-                  {isDirectory ? (isExpanded ? <DownOutlined /> : <RightOutlined />) : null}
-                </span>
+                {isDirectory ? <TreeDisclosure expanded={isExpanded} loading={isLoadingChildren} /> : <span className="app-file-tree-arrow" aria-hidden="true" />}
                 <span
                   className="app-file-tree-icon"
                   style={{ color: visual.color }}
@@ -1733,9 +1766,12 @@ function SidebarProjectPanel({
                 />
               </div>
             ) : (
-              <Dropdown menu={{ items: menuItems, onClick: handleMenuClick }} trigger={["contextMenu"]}>
+              <Dropdown autoFocus open={contextMenuPath === entry.path}
+                onOpenChange={(open) => handleContextMenuOpenChange(entry.path, open)}
+                menu={{ items: menuItems, onClick: handleMenuClick }} trigger={["contextMenu"]}>
                 <button
                   type="button"
+                  tabIndex={-1}
                   className="app-file-tree-row w-full text-left"
                   data-active={isActive ? "true" : "false"}
                   data-selected={isSelected ? "true" : "false"}
@@ -1745,6 +1781,10 @@ function SidebarProjectPanel({
                   data-path={entry.path}
                   data-drag-over={isDirectory && dragOverPath === entry.path ? "true" : "false"}
                   style={{ paddingLeft: 8 + depth * 16 }}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    treeContainerRef.current?.focus({ preventScroll: true });
+                  }}
                   onContextMenu={(event) => {
                     event.stopPropagation();
                     if (!(isSelected && selectionCount > 1)) {
@@ -1776,9 +1816,7 @@ function SidebarProjectPanel({
                     }
                   }}
                 >
-                  <span className="app-file-tree-arrow">
-                    {isDirectory ? (isExpanded ? <DownOutlined /> : <RightOutlined />) : null}
-                  </span>
+                  {isDirectory ? <TreeDisclosure expanded={isExpanded} loading={isLoadingChildren} /> : <span className="app-file-tree-arrow" aria-hidden="true" />}
                   <span
                     className="app-file-tree-icon"
                     style={{ color: visual.color }}
@@ -1790,27 +1828,8 @@ function SidebarProjectPanel({
               </Dropdown>
             )}
 
-            {isDirectory && isExpanded && (
-              <div>
-                {isLoadingChildren ? (
-                  <div
-                    className="flex items-center gap-2 py-1 text-[11px]"
-                    style={{ paddingLeft: 28 + depth * 16, color: "var(--cs-text-tertiary)" }}
-                  >
-                    <Spin size="small" />
-                    <span>{loadingText}</span>
-                  </div>
-                ) : children.length > 0 ? (
-                  renderNodes(children, depth + 1, searchMode)
-                ) : !searchMode ? (
-                  <div
-                    className="py-1 text-[11px]"
-                    style={{ paddingLeft: 28 + depth * 16, color: "var(--cs-text-tertiary)" }}
-                  >
-                    {emptyFolderText}
-                  </div>
-                ) : null}
-              </div>
+            {isDirectory && isExpanded && children.length > 0 && (
+              <div role="group">{renderNodes(children, depth + 1, searchMode)}</div>
             )}
           </div>
         );
@@ -1821,7 +1840,6 @@ function SidebarProjectPanel({
       copyPathSuccessText,
       copyRelativePathText,
       currentProject,
-      emptyFolderText,
       filterValue,
       handleCancelRename,
       actionableSelectedEntries,
@@ -1836,7 +1854,9 @@ function SidebarProjectPanel({
       handleOpenRename,
       handleToggleDirectory,
       canPaste,
-      loadingText,
+      treeId,
+      contextMenuPath,
+      handleContextMenuOpenChange,
       normalizedSelectedPaths,
       onOpenInAssociatedApp,
       onOpenInFileManager,
@@ -1854,8 +1874,41 @@ function SidebarProjectPanel({
 
   const handleTreeKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      const target = event.target as HTMLElement;
+      // Portaled context menus belong to this React subtree, but own their keys.
+      if (!event.currentTarget.contains(target) ||
+        target.closest("input, textarea, [contenteditable='true']") || event.nativeEvent.isComposing ||
+        loadingRoot || searchLoading || error || contextMenuPath !== null) return;
       const hasPrimaryModifier = event.ctrlKey || event.metaKey;
       const lowerKey = event.key.toLowerCase();
+
+      if (!hasPrimaryModifier && !event.altKey &&
+        ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End", "Enter"].includes(event.key)) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.key === "Enter" && (event.repeat || event.shiftKey)) return;
+        const action = getTreeNavigation(isSearchMode ? searchTree : visibleTree, selectedPath, event.key, isSearchMode);
+        if (!action) return;
+        if (action.type === "select") {
+          if (event.shiftKey) {
+            const anchor = selectionAnchorPath ?? selectedPath ?? action.path;
+            const anchorIndex = visibleSelectablePaths.indexOf(anchor);
+            const nextIndex = visibleSelectablePaths.indexOf(action.path);
+            setSelectedPaths(anchorIndex < 0 ? [action.path] :
+              visibleSelectablePaths.slice(Math.min(anchorIndex, nextIndex), Math.max(anchorIndex, nextIndex) + 1));
+            setSelectionAnchorPath(anchorIndex < 0 ? action.path : anchor);
+            setSelectedPath(action.path);
+          } else {
+            selectOnlyPath(action.path);
+          }
+        } else if (action.type === "open") {
+          onOpenFile(action.path, { preview: false });
+        } else {
+          const entry = knownEntries.find((item) => item.path === action.path);
+          if (entry) void handleToggleDirectory(entry);
+        }
+        return;
+      }
 
       if (hasPrimaryModifier && !event.shiftKey && !event.altKey && lowerKey === "c") {
         if (!canCopySelection) return;
@@ -1909,6 +1962,18 @@ function SidebarProjectPanel({
       selectOnlyPath,
       selectedPath,
       selectedPaths.length,
+      isSearchMode,
+      searchTree,
+      visibleTree,
+      selectionAnchorPath,
+      visibleSelectablePaths,
+      knownEntries,
+      handleToggleDirectory,
+      onOpenFile,
+      loadingRoot,
+      searchLoading,
+      error,
+      contextMenuPath,
     ]
   );
 
@@ -1961,13 +2026,29 @@ function SidebarProjectPanel({
           />
         </div>
 
-        <Dropdown menu={{ items: backgroundMenuItems, onClick: handleBackgroundMenuClick }} trigger={["contextMenu"]}>
+        <Dropdown autoFocus open={contextMenuPath === "__background__"}
+          onOpenChange={(open) => handleContextMenuOpenChange("__background__", open)}
+          menu={{ items: backgroundMenuItems, onClick: (info) => {
+            setContextMenuPath(null);
+            treeContainerRef.current?.focus({ preventScroll: true });
+            handleBackgroundMenuClick(info);
+          } }} trigger={["contextMenu"]}>
           <div
             ref={treeContainerRef}
             className="app-project-tree-scroll mt-1 flex-1 min-h-0 overflow-y-auto"
             data-explorer-shortcuts="true"
+            role="tree"
+            aria-label={panelTitle}
+            aria-multiselectable="true"
+            aria-activedescendant={!loadingRoot && !searchLoading && !error && selectedPath && visibleSelectablePaths.includes(selectedPath)
+              ? `${treeId}-${encodeURIComponent(selectedPath)}` : undefined}
             data-drag-over={isExternalDragOver && !dragOverPath ? "true" : "false"}
             tabIndex={0}
+            onFocus={(event) => {
+              if (!loadingRoot && !searchLoading && !error && event.target === event.currentTarget && !visibleSelectablePaths.includes(selectedPath ?? "")) {
+                selectOnlyPath(visibleSelectablePaths[0] ?? null);
+              }
+            }}
             onMouseDown={(event) => {
               const target = event.target as HTMLElement | null;
               if (!target?.closest(".app-file-tree-row")) {

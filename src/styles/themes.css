@@ -45,6 +45,7 @@
   --cs-border-secondary: var(--cs-border-card);
   --cs-shadow-overlay: rgba(31, 42, 68, 0.18);
   --cs-primary: #4263eb;
+  --cs-folder-icon: #6b83b5;
   --cs-primary-light: rgba(66,99,235,0.09);
   --cs-accent: #4263eb;
   --cs-accent-primary: var(--cs-primary);
@@ -125,6 +126,7 @@
   --cs-border-secondary: var(--cs-border-card);
   --cs-shadow-overlay: rgba(61, 50, 40, 0.18);
   --cs-primary: #a75d2b;
+  --cs-folder-icon: #a18355;
   --cs-primary-light: rgba(167,93,43,0.08);
   --cs-accent: #6b8e5e;
   --cs-accent-primary: var(--cs-primary);
@@ -205,6 +207,7 @@
   --cs-border-secondary: var(--cs-border-card);
   --cs-shadow-overlay: rgba(0, 0, 0, 0.28);
   --cs-primary: #8198ff;
+  --cs-folder-icon: #8b9fc7;
   --cs-primary-light: rgba(129,152,255,0.12);
   --cs-accent: #8198ff;
   --cs-accent-primary: var(--cs-primary);
@@ -285,6 +288,7 @@
   --cs-border-secondary: var(--cs-border-card);
   --cs-shadow-overlay: rgba(0, 0, 0, 0.28);
   --cs-primary: #f5bd69;
+  --cs-folder-icon: #baa076;
   --cs-primary-light: rgba(245,189,105,0.1);
   --cs-accent: #cba6f7;
   --cs-accent-primary: var(--cs-primary);

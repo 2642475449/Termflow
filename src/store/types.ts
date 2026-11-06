@@ -359,6 +359,8 @@ export interface AppState
   terminalQuickCommands: TerminalQuickCommand[];
   // Agents
   defaultAgentId: AiAgentId | null;
+  gitAutoFetch: boolean;
+  gitAutoFetchIntervalMinutes: number;
   gitCommitMessageProfiles: GitCommitMessageProfile[];
   defaultGitCommitMessageProfileId: string;
   // Security
@@ -459,6 +461,7 @@ export interface AppState
   removeTerminalQuickCommand: (id: string) => void;
   // Agent actions
   setDefaultAgentId: (agentId: AiAgentId | null) => void;
+  setGitAutoFetch: (enabled: boolean, intervalMinutes?: number) => void;
   setGitCommitMessageProfiles: (
     profiles: GitCommitMessageProfile[],
     defaultProfileId: string,

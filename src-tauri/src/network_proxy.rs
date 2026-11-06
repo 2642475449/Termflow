@@ -106,8 +106,8 @@ pub fn apply_proxy_to_pty_command(
     command: &mut portable_pty::CommandBuilder,
     proxy: &ResolvedNetworkProxy,
 ) {
-    // portable-pty inherits the already-sanitized Termflow environment. Only
-    // explicitly resolved settings are added to the child shell.
+    // portable-pty inherits Termflow's environment. Explicitly resolved proxy
+    // settings override inherited values in the child shell.
     if let Some(value) = proxy.http_proxy.as_deref() {
         command.env("HTTP_PROXY", value);
         command.env("http_proxy", value);

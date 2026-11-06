@@ -3905,7 +3905,7 @@ function resolveOriginalStatusLine() {
 }
 
 function normalizeWindow(window) {
-  if (!window || !Number.isFinite(Number(window.used_percentage))) return null;
+  if (!window || window.used_percentage == null || !Number.isFinite(Number(window.used_percentage))) return null;
   const resetsAt = Number(window.resets_at);
   return {
     usedPercent: Number(window.used_percentage),
@@ -3923,6 +3923,16 @@ function reportRateLimits() {
     sessionId,
     fiveHour: normalizeWindow(input?.rate_limits?.five_hour),
     sevenDay: normalizeWindow(input?.rate_limits?.seven_day),
+    // Forward only quota fields, never arbitrary status-line/session contents.
+    rateLimits: Object.fromEntries(Object.entries(input?.rate_limits || {}).slice(0, 64).map(([key, value]) => [key, {
+      used_percentage: value?.used_percentage,
+      utilization: value?.utilization,
+      resets_at: value?.resets_at,
+      window_minutes: value?.window_minutes,
+      used_usd: value?.used_usd,
+      limit_usd: value?.limit_usd,
+      period: value?.period,
+    }])),
     updatedAt: Date.now(),
   });
   const request = http.request({

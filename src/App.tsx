@@ -85,7 +85,7 @@ function isPersistentExplorerContextMenuUpdate(
 
 function App() {
   const keyboardShortcuts = useShortcutStore((s) => s.overrides);
-  const auxiliaryDockWidth = useAuxiliaryDockStore((s) => s.width);
+  const auxiliaryDockWidths = useAuxiliaryDockStore((s) => s.widths);
   const lightTheme = useAppStore((s) => s.lightTheme);
   const darkTheme = useAppStore((s) => s.darkTheme);
   const themeCategory = useAppStore((s) => s.themeCategory);
@@ -108,6 +108,8 @@ function App() {
   const terminalRenderer = useAppStore((s) => s.terminalRenderer);
   const terminalQuickCommands = useAppStore((s) => s.terminalQuickCommands);
   const defaultAgentId = useAppStore((s) => s.defaultAgentId);
+  const gitAutoFetch = useAppStore((s) => s.gitAutoFetch);
+  const gitAutoFetchIntervalMinutes = useAppStore((s) => s.gitAutoFetchIntervalMinutes);
   const gitCommitMessageProfiles = useAppStore((s) => s.gitCommitMessageProfiles);
   const defaultGitCommitMessageProfileId = useAppStore(
     (s) => s.defaultGitCommitMessageProfileId,
@@ -167,7 +169,7 @@ function App() {
     new URLSearchParams(window.location.search).get("worker") === "voice";
   const persistentSettings = useMemo(
     () => ({
-      auxiliaryDockWidth: isVoiceWorkerWindow ? undefined : auxiliaryDockWidth,
+      auxiliaryDockWidths: isVoiceWorkerWindow ? undefined : auxiliaryDockWidths,
       lightTheme,
       darkTheme,
       themeCategory,
@@ -187,6 +189,8 @@ function App() {
       terminalRenderer,
       terminalQuickCommands,
       defaultAgentId,
+      gitAutoFetch,
+      gitAutoFetchIntervalMinutes,
       gitCommitMessageProfiles,
       defaultGitCommitMessageProfileId,
       agentPermissionDefaults,
@@ -216,7 +220,7 @@ function App() {
       keyboardShortcuts,
     }),
     [
-      auxiliaryDockWidth,
+      auxiliaryDockWidths,
       isVoiceWorkerWindow,
       keyboardShortcuts,
       asrApiKey,
@@ -258,6 +262,8 @@ function App() {
       terminalRenderer,
       terminalQuickCommands,
       defaultAgentId,
+      gitAutoFetch,
+      gitAutoFetchIntervalMinutes,
       gitCommitMessageProfiles,
       defaultGitCommitMessageProfileId,
       themeCategory,
@@ -345,15 +351,15 @@ function App() {
     }
 
     let disposed = false;
-    const initialDockWidth = useAuxiliaryDockStore.getState().width;
+    const initialDockWidths = useAuxiliaryDockStore.getState().widths;
     initializePersistentSettings(getPersistentSettingsSnapshot())
       .then((settings) => {
         if (!disposed) {
           message.destroy(PERSISTENT_SETTINGS_LOAD_ERROR_KEY);
           applyPersistentSettingsToStore(settings);
-          if (!isVoiceWorkerWindow && typeof settings.auxiliaryDockWidth === "number"
-            && useAuxiliaryDockStore.getState().width === initialDockWidth) {
-            useAuxiliaryDockStore.getState().setWidth(settings.auxiliaryDockWidth);
+          if (!isVoiceWorkerWindow && settings.auxiliaryDockWidths
+            && useAuxiliaryDockStore.getState().widths === initialDockWidths) {
+            useAuxiliaryDockStore.getState().restoreWidths(settings.auxiliaryDockWidths);
           }
           useShortcutStore.getState().setPersistedOverrides(settings.keyboardShortcuts);
           persistentSettingsSync.initialize(settings);
@@ -396,7 +402,7 @@ function App() {
     const timer = window.setTimeout(() => {
       // 串行保存，并在真正开始时读取最新值，避免旧请求晚完成后回写旧快照。
       void persistentSettingsSync.save(() => ({ ...getPersistentSettingsSnapshot(),
-          auxiliaryDockWidth: isVoiceWorkerWindow ? undefined : useAuxiliaryDockStore.getState().width }), savePersistentSettings)
+          auxiliaryDockWidths: isVoiceWorkerWindow ? undefined : useAuxiliaryDockStore.getState().widths }), savePersistentSettings)
         .then((snapshot) => {
           if (!snapshot) return;
           const shortcuts = useShortcutStore.getState();

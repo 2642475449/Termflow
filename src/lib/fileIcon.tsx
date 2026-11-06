@@ -19,7 +19,7 @@ const resolveSetiIcon = themeIcons({
   ignore: "#94a3b8",
 });
 
-const folderColor = "#5b7cfa";
+const folderColor = "var(--cs-folder-icon, var(--cs-text-secondary))";
 const archiveIconColor = "#b79a2f";
 const archiveExtensions = new Set([
   "zip",

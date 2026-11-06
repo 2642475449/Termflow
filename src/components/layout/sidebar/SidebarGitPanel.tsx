@@ -152,7 +152,6 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
     hasSyncChanges,
     syncChangeCount,
     refresh: loadGitData,
-    refreshAll,
   } = useGitStatus({
     currentProject,
     onStatusChange: useCallback(
@@ -212,9 +211,6 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
     const remote = s.entries[currentProject?.path ?? ""]?.data;
     return !remote?.requiresFetch && !!remote?.upstream && remote.branchName === rawBranchName && !branchInfo?.isDetached;
   });
-  const remoteFetching = useGitRemoteStore((s) => !!s.fetching[currentProject?.path ?? ""]);
-  const remoteFetchError = useGitRemoteStore((s) => s.fetchErrors[currentProject?.path ?? ""]);
-  const remoteStateError = useGitRemoteStore((s) => s.entries[currentProject?.path ?? ""]?.error);
   const remoteBusy = useGitRemoteStore((s) => !!s.busy[currentProject?.path ?? ""]);
 
   const gitActionsBlocked = gitOperationInProgress || !!statusError || remoteBusy;
@@ -374,7 +370,6 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
       const operationId = controller?.markOperationStart();
       try {
         await gitStageFiles(currentProject!.path, getGitOperationPaths(file));
-        message.success(t("sidebar.gitStageSuccess"));
         await loadGitData();
       } catch {
         message.error(t("sidebar.gitStageFailed"));
@@ -417,7 +412,6 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
       const operationId = controller?.markOperationStart();
       try {
         await gitUnstageFiles(currentProject!.path, getGitOperationPaths(file));
-        message.success(t("sidebar.gitUnstageSuccess"));
         await loadGitData();
       } catch {
         message.error(t("sidebar.gitUnstageFailed"));
@@ -440,7 +434,6 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
     try {
       const files = Array.from(new Set(unstagedFiles.flatMap(getGitOperationPaths)));
       await gitStageFiles(currentProject.path, files);
-      message.success(t("sidebar.gitStageSuccess"));
       await loadGitData();
     } catch {
       message.error(t("sidebar.gitStageFailed"));
@@ -471,7 +464,6 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
     try {
       const files = Array.from(new Set(stagedFiles.flatMap(getGitOperationPaths)));
       await gitUnstageFiles(currentProject.path, files);
-      message.success(t("sidebar.gitUnstageSuccess"));
       await loadGitData();
     } catch {
       message.error(t("sidebar.gitUnstageFailed"));
@@ -816,19 +808,19 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
                 <span>{t("sidebar.gitChangesPanel")}</span>
               </button>
               <div className="flex items-center gap-1">
-                <Tooltip title={remoteFetchError || remoteStateError || t("sidebar.gitRefresh")} mouseEnterDelay={0.4}>
+                <Tooltip title={statusError || t("sidebar.gitLocalRefresh")} mouseEnterDelay={0.4}>
                   <Button
                     type="text"
                     size="small"
-                    icon={loading || remoteFetching ? <LoadingOutlined /> : <ReloadOutlined />}
+                    icon={loading ? <LoadingOutlined /> : <ReloadOutlined />}
                     style={{
                       width: 24,
                       height: 24,
                       padding: 0,
-                      color: remoteFetchError || remoteStateError ? "var(--cs-error)" : "var(--cs-text-secondary)",
+                      color: statusError ? "var(--cs-error)" : "var(--cs-text-secondary)",
                     }}
-                    onClick={() => void refreshAll()}
-                    disabled={loading || remoteFetching || remoteBusy}
+                    onClick={() => void loadGitData()}
+                    disabled={loading || committing || remoteBusy || gitOperationInProgress}
                   />
                 </Tooltip>
               </div>

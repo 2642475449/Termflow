@@ -11,6 +11,6 @@ export function getRuntimePersistentSettingsSnapshot(): PersistentSettings {
   return {
     ...getPersistentSettingsSnapshot(),
     keyboardShortcuts: useShortcutStore.getState().overrides,
-    auxiliaryDockWidth: useAuxiliaryDockStore.getState().width,
+    auxiliaryDockWidths: useAuxiliaryDockStore.getState().widths,
   };
 }

@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
 export type AuxiliaryTabKind = "terminal" | "task" | "file" | "review" | "task-monitor";
+export type AuxiliaryDockWidths = Partial<Record<AuxiliaryTabKind, number>>;
 
 export interface AuxiliaryTab {
   id: string;
@@ -15,12 +16,16 @@ export interface AuxiliaryTab {
 
 interface AuxiliaryDockState {
   open: boolean;
-  width: number;
+  widths: AuxiliaryDockWidths;
+  initialWidths: AuxiliaryDockWidths;
   tabs: AuxiliaryTab[];
   activeTabId: string | null;
   setOpen: (open: boolean) => void;
   toggle: () => void;
   setWidth: (width: number) => void;
+  restoreWidths: (widths: unknown) => void;
+  initializeWidth: (kind: AuxiliaryTabKind, hostWidth: number) => void;
+  resetWidth: (hostWidth: number) => void;
   activateTab: (tabId: string) => void;
   openSession: (input: {
     sessionId: string;
@@ -41,13 +46,43 @@ interface AuxiliaryDockState {
   reset: () => void;
 }
 
-export const DEFAULT_AUXILIARY_DOCK_WIDTH = 280;
+export const DEFAULT_AUXILIARY_DOCK_WIDTH = 300;
 export const MIN_AUXILIARY_DOCK_WIDTH = 220;
 export const MAX_AUXILIARY_DOCK_WIDTH = 880;
 
 export function clampAuxiliaryDockWidth(width: number) {
   if (!Number.isFinite(width)) return DEFAULT_AUXILIARY_DOCK_WIDTH;
   return Math.min(MAX_AUXILIARY_DOCK_WIDTH, Math.max(MIN_AUXILIARY_DOCK_WIDTH, width));
+}
+
+export function normalizeAuxiliaryDockWidths(value: unknown): AuxiliaryDockWidths {
+  const widths: AuxiliaryDockWidths = {};
+  if (!value || typeof value !== "object") return widths;
+  for (const kind of ["task-monitor", "file", "review", "terminal", "task"] as const) {
+    const width = (value as AuxiliaryDockWidths)[kind];
+    if (typeof width === "number" && Number.isFinite(width)) {
+      widths[kind] = clampAuxiliaryDockWidth(width);
+    }
+  }
+  return widths;
+}
+
+export function defaultAuxiliaryDockWidth(kind: AuxiliaryTabKind, hostWidth: number) {
+  return kind === "task-monitor"
+    ? DEFAULT_AUXILIARY_DOCK_WIDTH
+    : clampAuxiliaryDockWidth(Math.round(hostWidth * 0.38));
+}
+
+// Keep 480px for the main workspace when possible; on small windows reserve 60%.
+// This is a rendering constraint, never a saved preference.
+export function effectiveAuxiliaryDockWidth(width: number, hostWidth: number) {
+  const available = Math.max(0, hostWidth - 1);
+  const mainWidth = Math.min(480, available * 0.6);
+  return Math.min(width, Math.max(0, available - mainWidth));
+}
+
+function activeKind(state: Pick<AuxiliaryDockState, "tabs" | "activeTabId">): AuxiliaryTabKind {
+  return state.tabs.find((tab) => tab.id === state.activeTabId)?.kind ?? "task-monitor";
 }
 
 function fileName(path: string) {
@@ -68,7 +103,8 @@ function createTaskMonitorTab(title = "", projectPath = ""): AuxiliaryTab {
 
 export const useAuxiliaryDockStore = create<AuxiliaryDockState>()(persist((set) => ({
   open: false,
-  width: DEFAULT_AUXILIARY_DOCK_WIDTH,
+  widths: {},
+  initialWidths: {},
   tabs: [],
   activeTabId: null,
   setOpen: (open) =>
@@ -88,7 +124,20 @@ export const useAuxiliaryDockStore = create<AuxiliaryDockState>()(persist((set) 
       }
       return { open: nextOpen };
     }),
-  setWidth: (width) => set({ width: clampAuxiliaryDockWidth(width) }),
+  setWidth: (width) => set((state) => ({
+    widths: { ...state.widths, [activeKind(state)]: clampAuxiliaryDockWidth(width) },
+  })),
+  restoreWidths: (widths) => set({ widths: normalizeAuxiliaryDockWidths(widths) }),
+  initializeWidth: (kind, hostWidth) => set((state) => {
+    if (state.initialWidths[kind] !== undefined || hostWidth <= 0) return state;
+    return { initialWidths: { ...state.initialWidths, [kind]: defaultAuxiliaryDockWidth(kind, hostWidth) } };
+  }),
+  resetWidth: (hostWidth) => set((state) => {
+    const kind = activeKind(state);
+    const widths = { ...state.widths };
+    delete widths[kind];
+    return { widths, initialWidths: { ...state.initialWidths, [kind]: defaultAuxiliaryDockWidth(kind, hostWidth) } };
+  }),
   activateTab: (activeTabId) => set({ activeTabId, open: true }),
   openSession: ({ sessionId, projectPath, title, kind }) =>
     set((state) => {
@@ -201,14 +250,14 @@ export const useAuxiliaryDockStore = create<AuxiliaryDockState>()(persist((set) 
     getItem: () => null, setItem: () => {}, removeItem: () => {},
   }),
   // 只记住用户选择的宽度，标签与展开状态仍随项目重置。
-  partialize: (state) => ({ width: state.width }),
+  partialize: (state) => ({ widths: state.widths }),
   merge: (persistedState, currentState) => {
-    const savedWidth = persistedState && typeof persistedState === "object" && "width" in persistedState
-      ? persistedState.width
-      : currentState.width;
+    // The legacy shared width has no content type; start with the new defaults.
+    const savedWidths = persistedState && typeof persistedState === "object" && "widths" in persistedState
+      ? persistedState.widths : {};
     return {
       ...currentState,
-      width: clampAuxiliaryDockWidth(typeof savedWidth === "number" ? savedWidth : DEFAULT_AUXILIARY_DOCK_WIDTH),
+      widths: normalizeAuxiliaryDockWidths(savedWidths),
     };
   },
 }));
